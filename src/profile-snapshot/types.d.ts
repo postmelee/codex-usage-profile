@@ -65,8 +65,20 @@ export interface ProfileSnapshotValidationResult {
   errors: string[];
 }
 
+export interface NormalizeCodexProfileSnapshotOptions {
+  capturedAt?: string | Date;
+  planLabel?: string | null;
+  avatarAsset?: SnapshotAsset | null;
+  petAsset?: SnapshotAsset | null;
+}
+
 export declare function validateProfileSnapshot(value: unknown): ProfileSnapshotValidationResult;
 
 export declare function assertProfileSnapshot(value: unknown): ProfileSnapshot;
 
 export declare function isProfileSnapshot(value: unknown): value is ProfileSnapshot;
+
+export declare function normalizeCodexProfileSnapshot(
+  raw: unknown,
+  options?: NormalizeCodexProfileSnapshotOptions
+): ProfileSnapshot;

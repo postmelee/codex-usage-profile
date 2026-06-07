@@ -4,3 +4,5 @@ export {
   isProfileSnapshot,
   validateProfileSnapshot
 } from "./schema.js";
+
+export { normalizeCodexProfileSnapshot } from "./normalize.js";
