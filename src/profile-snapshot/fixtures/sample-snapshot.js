@@ -84,7 +84,7 @@ export const sampleProfileSnapshot = Object.freeze({
   assets: {
     avatar: {
       kind: "remote-url",
-      url: "https://example.com/codex-profile-avatar.png",
+      url: "/assets/postmelee-avatar.png",
       assetRef: null,
       contentType: "image/png"
     },

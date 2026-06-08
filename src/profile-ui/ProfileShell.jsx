@@ -7,9 +7,10 @@ export function ProfileShell({ children }) {
         <header className="profile-topbar">
           <h1>Profile</h1>
           <div className="profile-actions" aria-label="Profile actions">
-            <button type="button"><Icon name="share" /><span>Share</span></button>
-            <button type="button"><Icon name="lock" /><span>Private</span></button>
-            <button type="button"><Icon name="edit" /><span>Edit</span></button>
+            <button aria-label="Share profile" type="button">
+              <Icon name="share" />
+              <span>Share</span>
+            </button>
           </div>
         </header>
         {children}
