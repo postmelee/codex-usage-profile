@@ -23,6 +23,30 @@ test.describe("Codex profile UI", () => {
     );
     expect(bodyHasHorizontalOverflow).toBe(false);
 
+    await expect.poll(async () => page.locator(".token-grid-wrap").evaluate((wrap) => {
+      const grid = wrap.querySelector(".token-grid");
+
+      return grid.getBoundingClientRect().width;
+    })).toBeGreaterThan(850);
+
+    const desktopHeatmapMetrics = await page.locator(".token-grid-wrap").evaluate((wrap) => {
+      const grid = wrap.querySelector(".token-grid");
+      const firstCell = grid.querySelector("[data-token-cell]");
+      const gridRect = grid.getBoundingClientRect();
+
+      return {
+        cellWidth: firstCell.getBoundingClientRect().width,
+        gridWidth: gridRect.width,
+        maxScrollLeft: wrap.scrollWidth - wrap.clientWidth,
+        wrapWidth: wrap.clientWidth
+      };
+    });
+
+    expect(desktopHeatmapMetrics.cellWidth).toBeGreaterThan(13);
+    expect(desktopHeatmapMetrics.gridWidth).toBeGreaterThan(850);
+    expect(Math.abs(desktopHeatmapMetrics.gridWidth - desktopHeatmapMetrics.wrapWidth)).toBeLessThanOrEqual(1);
+    expect(desktopHeatmapMetrics.maxScrollLeft).toBeLessThanOrEqual(1);
+
     await page.screenshot({ path: testInfo.outputPath("desktop.png") });
   });
 

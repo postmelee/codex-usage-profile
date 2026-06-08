@@ -367,14 +367,12 @@ button {
 }
 
 .token-grid {
-  --heatmap-cell-gap: 3px;
-  --heatmap-cell-size: 13px;
   display: grid;
-  gap: var(--heatmap-cell-gap);
-  grid-auto-columns: var(--heatmap-cell-size);
+  gap: var(--heatmap-cell-gap, 3px);
+  grid-auto-columns: var(--heatmap-cell-size, 13px);
   grid-auto-flow: column;
-  grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell-size));
-  grid-template-rows: repeat(7, var(--heatmap-cell-size));
+  grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell-size, 13px));
+  grid-template-rows: repeat(7, var(--heatmap-cell-size, 13px));
   justify-content: start;
   overflow: visible;
   position: relative;
@@ -386,11 +384,11 @@ button {
   border: 0;
   border-radius: 4px;
   display: block;
-  height: var(--heatmap-cell-size);
+  height: var(--heatmap-cell-size, 13px);
   min-width: 0;
   padding: 0;
   position: relative;
-  width: var(--heatmap-cell-size);
+  width: var(--heatmap-cell-size, 13px);
 }
 
 .token-level-0 {

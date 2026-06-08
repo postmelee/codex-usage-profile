@@ -5,7 +5,8 @@ import { buildTokenHeatmap, HEATMAP_MODES } from "./heatmap.js";
 const TOOLTIP_GAP = 8;
 const TOOLTIP_MARGIN = 8;
 const HEATMAP_CELL_GAP = 3;
-const HEATMAP_CELL_SIZE = 13;
+const HEATMAP_MIN_CELL_SIZE = 13;
+const HEATMAP_MAX_CELL_SIZE = 16;
 
 const MODE_LABELS = {
   cumulative: "Cumulative",
@@ -13,8 +14,28 @@ const MODE_LABELS = {
   weekly: "Weekly"
 };
 
+function calculateHeatmapWidth(columnCount, cellSize) {
+  return columnCount * cellSize + Math.max(columnCount - 1, 0) * HEATMAP_CELL_GAP;
+}
+
+function calculateHeatmapCellSize(containerWidth, columnCount) {
+  if (containerWidth <= 0 || columnCount <= 0) {
+    return HEATMAP_MIN_CELL_SIZE;
+  }
+
+  const gapWidth = Math.max(columnCount - 1, 0) * HEATMAP_CELL_GAP;
+  const availableCellSize = (containerWidth - gapWidth) / columnCount;
+  const clampedCellSize = Math.min(
+    Math.max(availableCellSize, HEATMAP_MIN_CELL_SIZE),
+    HEATMAP_MAX_CELL_SIZE
+  );
+
+  return Math.round(clampedCellSize * 100) / 100;
+}
+
 export function TokenActivityChart({ tokenActivity }) {
   const [mode, setMode] = useState("daily");
+  const [heatmapCellSize, setHeatmapCellSize] = useState(HEATMAP_MIN_CELL_SIZE);
   const [tooltip, setTooltip] = useState(null);
   const gridWrapRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -22,9 +43,7 @@ export function TokenActivityChart({ tokenActivity }) {
     () => buildTokenHeatmap(tokenActivity, { mode }),
     [mode, tokenActivity]
   );
-  const heatmapWidth =
-    heatmap.columnCount * HEATMAP_CELL_SIZE +
-    (heatmap.columnCount - 1) * HEATMAP_CELL_GAP;
+  const heatmapWidth = calculateHeatmapWidth(heatmap.columnCount, heatmapCellSize);
 
   const hideTooltip = useCallback(() => {
     setTooltip(null);
@@ -107,6 +126,42 @@ export function TokenActivityChart({ tokenActivity }) {
     const gridWrap = gridWrapRef.current;
 
     if (!gridWrap) {
+      return undefined;
+    }
+
+    const updateCellSize = () => {
+      const nextCellSize = calculateHeatmapCellSize(
+        gridWrap.clientWidth,
+        heatmap.columnCount
+      );
+
+      setHeatmapCellSize((currentCellSize) => (
+        Math.abs(currentCellSize - nextCellSize) < 0.01 ? currentCellSize : nextCellSize
+      ));
+    };
+
+    updateCellSize();
+
+    if (!window.ResizeObserver) {
+      window.addEventListener("resize", updateCellSize);
+
+      return () => {
+        window.removeEventListener("resize", updateCellSize);
+      };
+    }
+
+    const observer = new window.ResizeObserver(updateCellSize);
+    observer.observe(gridWrap);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [heatmap.columnCount]);
+
+  useLayoutEffect(() => {
+    const gridWrap = gridWrapRef.current;
+
+    if (!gridWrap) {
       return;
     }
 
@@ -135,6 +190,8 @@ export function TokenActivityChart({ tokenActivity }) {
         className="token-grid-wrap"
         ref={gridWrapRef}
         style={{
+          "--heatmap-cell-gap": `${HEATMAP_CELL_GAP}px`,
+          "--heatmap-cell-size": `${heatmapCellSize}px`,
           "--heatmap-columns": heatmap.columnCount,
           "--heatmap-width": `${heatmapWidth}px`
         }}
