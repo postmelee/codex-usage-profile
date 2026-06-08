@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { buildTokenHeatmap, HEATMAP_MODES } from "./heatmap.js";
+
+const TOOLTIP_GAP = 8;
+const TOOLTIP_MARGIN = 8;
 
 const MODE_LABELS = {
   cumulative: "Cumulative",
@@ -10,10 +13,89 @@ const MODE_LABELS = {
 
 export function TokenActivityChart({ tokenActivity }) {
   const [mode, setMode] = useState("daily");
+  const [tooltip, setTooltip] = useState(null);
+  const tooltipRef = useRef(null);
   const heatmap = useMemo(
     () => buildTokenHeatmap(tokenActivity, { mode }),
     [mode, tokenActivity]
   );
+
+  const hideTooltip = useCallback(() => {
+    setTooltip(null);
+  }, []);
+
+  const showTooltip = useCallback((cell, target) => {
+    const rect = target.getBoundingClientRect();
+
+    setTooltip({
+      anchor: {
+        bottom: rect.bottom,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width
+      },
+      left: rect.left + rect.width / 2,
+      measured: false,
+      placement: "top",
+      text: cell.tooltip,
+      top: rect.top
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!tooltip || !tooltipRef.current) {
+      return;
+    }
+
+    const { offsetHeight: height, offsetWidth: width } = tooltipRef.current;
+    const anchorCenter = tooltip.anchor.left + tooltip.anchor.width / 2;
+    const minLeft = TOOLTIP_MARGIN + width / 2;
+    const maxLeft = window.innerWidth - TOOLTIP_MARGIN - width / 2;
+    const left = Math.min(Math.max(anchorCenter, minLeft), maxLeft);
+    let nextTop = tooltip.anchor.top - height - TOOLTIP_GAP;
+    let placement = "top";
+
+    if (nextTop < TOOLTIP_MARGIN) {
+      nextTop = tooltip.anchor.bottom + TOOLTIP_GAP;
+      placement = "bottom";
+    }
+
+    if (nextTop + height > window.innerHeight - TOOLTIP_MARGIN) {
+      nextTop = Math.max(TOOLTIP_MARGIN, window.innerHeight - TOOLTIP_MARGIN - height);
+    }
+
+    if (
+      tooltip.left === left &&
+      tooltip.top === nextTop &&
+      tooltip.placement === placement &&
+      tooltip.measured
+    ) {
+      return;
+    }
+
+    setTooltip({
+      ...tooltip,
+      left,
+      measured: true,
+      placement,
+      top: nextTop
+    });
+  }, [tooltip]);
+
+  useEffect(() => {
+    if (!tooltip) {
+      return undefined;
+    }
+
+    window.addEventListener("resize", hideTooltip);
+    window.addEventListener("scroll", hideTooltip, true);
+
+    return () => {
+      window.removeEventListener("resize", hideTooltip);
+      window.removeEventListener("scroll", hideTooltip, true);
+    };
+  }, [hideTooltip, tooltip]);
 
   return (
     <section className="token-activity" aria-label="Token activity">
@@ -48,16 +130,33 @@ export function TokenActivityChart({ tokenActivity }) {
               data-token-cell=""
               data-tooltip={cell.tooltip}
               key={cell.key}
+              onBlur={hideTooltip}
+              onFocus={(event) => showTooltip(cell, event.currentTarget)}
+              onPointerEnter={(event) => showTooltip(cell, event.currentTarget)}
+              onPointerLeave={hideTooltip}
               type="button"
-            >
-              <span className="token-tooltip" role="tooltip">{cell.tooltip}</span>
-            </button>
+            />
           ))}
         </div>
         <div className="month-labels" aria-hidden="true">
           {heatmap.monthLabels.map((label) => <span key={label}>{label}</span>)}
         </div>
       </div>
+      {tooltip ? (
+        <span
+          className="token-tooltip"
+          data-placement={tooltip.placement}
+          ref={tooltipRef}
+          role="tooltip"
+          style={{
+            left: tooltip.left,
+            top: tooltip.top,
+            visibility: tooltip.measured ? "visible" : "hidden"
+          }}
+        >
+          {tooltip.text}
+        </span>
+      ) : null}
     </section>
   );
 }

@@ -50,12 +50,33 @@ test.describe("Codex profile UI", () => {
     const emptyDay = page.locator('[data-token-cell][data-date="2025-07-20"]');
     await expect(emptyDay).toHaveAttribute("data-tooltip", "0 tokens on Jul 20, 2025");
     await emptyDay.hover();
-    await expect(emptyDay.locator(".token-tooltip")).toBeVisible();
+    await expect(page.locator(".token-tooltip")).toBeVisible();
 
     await page.getByRole("button", { name: "Weekly" }).click();
     await expect(page.locator(".token-grid")).toHaveAttribute("data-heatmap-mode", "weekly");
 
     await page.getByRole("button", { name: "Cumulative" }).click();
     await expect(page.locator(".token-grid")).toHaveAttribute("data-heatmap-mode", "cumulative");
+  });
+
+  test("keeps the mobile heatmap tooltip inside the viewport near the right edge", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(PROFILE_ROUTE);
+
+    await page.locator(".token-grid-wrap").evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+    });
+
+    await page.locator('[data-token-cell][data-date="2026-06-06"]').hover();
+
+    const tooltip = page.locator(".token-tooltip");
+    await expect(tooltip).toBeVisible();
+
+    const tooltipBox = await tooltip.boundingBox();
+    expect(tooltipBox).not.toBeNull();
+    expect(tooltipBox.x).toBeGreaterThanOrEqual(0);
+    expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(390);
+
+    await page.screenshot({ path: testInfo.outputPath("mobile-tooltip.png") });
   });
 });

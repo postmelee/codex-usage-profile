@@ -305,6 +305,7 @@ button {
 .token-activity {
   margin-top: 50px;
   min-width: 0;
+  position: relative;
   width: 100%;
 }
 
@@ -407,24 +408,18 @@ button {
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   color: var(--text);
-  display: none;
+  display: inline-flex;
   font-size: 14px;
   font-weight: 500;
   height: 32px;
-  left: 50%;
   line-height: 1;
+  max-width: calc(100vw - 16px);
   padding: 0 10px;
   pointer-events: none;
-  position: absolute;
-  top: -40px;
+  position: fixed;
   transform: translateX(-50%);
   white-space: nowrap;
-  z-index: 5;
-}
-
-.token-cell:hover .token-tooltip,
-.token-cell:focus-visible .token-tooltip {
-  display: inline-flex;
+  z-index: 30;
 }
 
 .month-labels {
