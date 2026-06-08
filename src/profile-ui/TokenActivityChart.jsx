@@ -4,6 +4,8 @@ import { buildTokenHeatmap, HEATMAP_MODES } from "./heatmap.js";
 
 const TOOLTIP_GAP = 8;
 const TOOLTIP_MARGIN = 8;
+const HEATMAP_CELL_GAP = 3;
+const HEATMAP_CELL_SIZE = 13;
 
 const MODE_LABELS = {
   cumulative: "Cumulative",
@@ -14,11 +16,15 @@ const MODE_LABELS = {
 export function TokenActivityChart({ tokenActivity }) {
   const [mode, setMode] = useState("daily");
   const [tooltip, setTooltip] = useState(null);
+  const gridWrapRef = useRef(null);
   const tooltipRef = useRef(null);
   const heatmap = useMemo(
     () => buildTokenHeatmap(tokenActivity, { mode }),
     [mode, tokenActivity]
   );
+  const heatmapWidth =
+    heatmap.columnCount * HEATMAP_CELL_SIZE +
+    (heatmap.columnCount - 1) * HEATMAP_CELL_GAP;
 
   const hideTooltip = useCallback(() => {
     setTooltip(null);
@@ -97,6 +103,16 @@ export function TokenActivityChart({ tokenActivity }) {
     };
   }, [hideTooltip, tooltip]);
 
+  useLayoutEffect(() => {
+    const gridWrap = gridWrapRef.current;
+
+    if (!gridWrap) {
+      return;
+    }
+
+    gridWrap.scrollLeft = gridWrap.scrollWidth - gridWrap.clientWidth;
+  }, [heatmapWidth, mode]);
+
   return (
     <section className="token-activity" aria-label="Token activity">
       <div className="token-activity-header">
@@ -115,11 +131,17 @@ export function TokenActivityChart({ tokenActivity }) {
           ))}
         </div>
       </div>
-      <div className="token-grid-wrap">
+      <div
+        className="token-grid-wrap"
+        ref={gridWrapRef}
+        style={{
+          "--heatmap-columns": heatmap.columnCount,
+          "--heatmap-width": `${heatmapWidth}px`
+        }}
+      >
         <div
           className="token-grid"
           data-heatmap-mode={mode}
-          style={{ "--heatmap-columns": heatmap.columnCount }}
         >
           {heatmap.cells.map((cell) => (
             <button

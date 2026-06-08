@@ -355,30 +355,42 @@ button {
 .token-grid-wrap {
   max-width: 100%;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 8px;
+  scrollbar-width: none;
   width: 100%;
 }
 
+.token-grid-wrap::-webkit-scrollbar {
+  display: none;
+}
+
 .token-grid {
+  --heatmap-cell-gap: 3px;
+  --heatmap-cell-size: 13px;
   display: grid;
-  gap: 3px;
-  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--heatmap-cell-gap);
+  grid-auto-columns: var(--heatmap-cell-size);
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 13px);
-  justify-content: stretch;
+  grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell-size));
+  grid-template-rows: repeat(7, var(--heatmap-cell-size));
+  justify-content: start;
   overflow: visible;
   position: relative;
+  width: var(--heatmap-width);
 }
 
 .token-cell {
-  aspect-ratio: 1;
   background: var(--cell-empty);
   border: 0;
   border-radius: 4px;
   display: block;
-  height: 13px;
+  height: var(--heatmap-cell-size);
   min-width: 0;
   padding: 0;
   position: relative;
+  width: var(--heatmap-cell-size);
 }
 
 .token-level-0 {
@@ -429,6 +441,7 @@ button {
   justify-content: space-between;
   line-height: 18px;
   margin-top: 8px;
+  width: var(--heatmap-width);
 }
 
 .activity-grid {
@@ -625,16 +638,6 @@ button {
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
-  }
-
-  .token-grid-wrap {
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-
-  .token-grid,
-  .month-labels {
-    min-width: 820px;
   }
 
   .activity-grid {

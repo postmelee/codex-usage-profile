@@ -41,6 +41,43 @@ test.describe("Codex profile UI", () => {
     await page.screenshot({ path: testInfo.outputPath("mobile.png") });
   });
 
+  test("keeps fixed heatmap cell geometry before the mobile breakpoint", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 900, height: 982 });
+    await page.goto(PROFILE_ROUTE);
+
+    const metrics = await page.locator(".token-grid-wrap").evaluate((wrap) => {
+      const grid = wrap.querySelector(".token-grid");
+      const cells = Array.from(grid.querySelectorAll("[data-token-cell]"));
+      const first = cells[0].getBoundingClientRect();
+      const secondRow = cells[1].getBoundingClientRect();
+      const secondColumn = cells[7].getBoundingClientRect();
+      const gridRect = grid.getBoundingClientRect();
+
+      return {
+        cellHeight: first.height,
+        cellWidth: first.width,
+        columnGap: secondColumn.left - first.right,
+        gridWidth: gridRect.width,
+        maxScrollLeft: wrap.scrollWidth - wrap.clientWidth,
+        rowGap: secondRow.top - first.bottom,
+        scrollLeft: wrap.scrollLeft,
+        wrapWidth: wrap.clientWidth
+      };
+    });
+
+    expect(Math.round(metrics.cellWidth)).toBe(13);
+    expect(Math.round(metrics.cellHeight)).toBe(13);
+    expect(Math.round(metrics.columnGap)).toBe(3);
+    expect(Math.round(metrics.rowGap)).toBe(3);
+    expect(Math.round(metrics.gridWidth)).toBe(829);
+
+    if (metrics.maxScrollLeft > 0) {
+      expect(Math.abs(metrics.scrollLeft - metrics.maxScrollLeft)).toBeLessThanOrEqual(1);
+    }
+
+    await page.screenshot({ path: testInfo.outputPath("tablet-heatmap.png") });
+  });
+
   test("switches heatmap modes and exposes the daily tooltip text", async ({ page }) => {
     await page.setViewportSize({ width: 1512, height: 982 });
     await page.goto(PROFILE_ROUTE);
@@ -63,9 +100,14 @@ test.describe("Codex profile UI", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
 
-    await page.locator(".token-grid-wrap").evaluate((element) => {
-      element.scrollLeft = element.scrollWidth;
+    const scrollMetrics = await page.locator(".token-grid-wrap").evaluate((element) => {
+      return {
+        maxScrollLeft: element.scrollWidth - element.clientWidth,
+        scrollLeft: element.scrollLeft
+      };
     });
+    expect(scrollMetrics.scrollLeft).toBeGreaterThan(0);
+    expect(Math.abs(scrollMetrics.scrollLeft - scrollMetrics.maxScrollLeft)).toBeLessThanOrEqual(1);
 
     await page.locator('[data-token-cell][data-date="2026-06-06"]').hover();
 
