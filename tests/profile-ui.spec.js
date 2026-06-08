@@ -102,6 +102,21 @@ test.describe("Codex profile UI", () => {
     await page.screenshot({ path: testInfo.outputPath("tablet-heatmap.png") });
   });
 
+  test("keeps the latest heatmap columns visible after the viewport narrows", async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 982 });
+    await page.goto(PROFILE_ROUTE);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await expect.poll(async () => (
+      page.locator(".token-grid-wrap").evaluate((wrap) => {
+        const maxScrollLeft = wrap.scrollWidth - wrap.clientWidth;
+
+        return Math.round(maxScrollLeft - wrap.scrollLeft);
+      })
+    )).toBeLessThanOrEqual(1);
+  });
+
   test("switches heatmap modes and exposes the daily tooltip text", async ({ page }) => {
     await page.setViewportSize({ width: 1512, height: 982 });
     await page.goto(PROFILE_ROUTE);

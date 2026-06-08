@@ -36,6 +36,7 @@ function calculateHeatmapCellSize(containerWidth, columnCount) {
 export function TokenActivityChart({ tokenActivity }) {
   const [mode, setMode] = useState("daily");
   const [heatmapCellSize, setHeatmapCellSize] = useState(HEATMAP_MIN_CELL_SIZE);
+  const [heatmapContainerWidth, setHeatmapContainerWidth] = useState(0);
   const [tooltip, setTooltip] = useState(null);
   const gridWrapRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -130,11 +131,15 @@ export function TokenActivityChart({ tokenActivity }) {
     }
 
     const updateCellSize = () => {
+      const containerWidth = gridWrap.clientWidth;
       const nextCellSize = calculateHeatmapCellSize(
-        gridWrap.clientWidth,
+        containerWidth,
         heatmap.columnCount
       );
 
+      setHeatmapContainerWidth((currentWidth) => (
+        currentWidth === containerWidth ? currentWidth : containerWidth
+      ));
       setHeatmapCellSize((currentCellSize) => (
         Math.abs(currentCellSize - nextCellSize) < 0.01 ? currentCellSize : nextCellSize
       ));
@@ -166,7 +171,7 @@ export function TokenActivityChart({ tokenActivity }) {
     }
 
     gridWrap.scrollLeft = gridWrap.scrollWidth - gridWrap.clientWidth;
-  }, [heatmapWidth, mode]);
+  }, [heatmapContainerWidth, heatmapWidth, mode]);
 
   return (
     <section className="token-activity" aria-label="Token activity">
