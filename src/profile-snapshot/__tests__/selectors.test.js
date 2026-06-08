@@ -93,7 +93,7 @@ test("builds a full profile view model from the sample fixture", () => {
   assert.equal(viewModel.stats.length, 5);
   assert.equal(viewModel.tokenActivity.dailyUsage.length, 14);
   assert.equal(viewModel.activityInsights.totalThreads, 1735);
-  assert.equal(viewModel.mostUsedInvocations.length, 3);
+  assert.equal(viewModel.mostUsedInvocations.length, 5);
 });
 
 test("builds a share card view model from the sample fixture", () => {

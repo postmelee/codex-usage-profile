@@ -63,12 +63,28 @@ export const sampleProfileSnapshot = Object.freeze({
       skillId: "task-register",
       skillName: "task-register",
       usageCount: 404
+    },
+    {
+      type: "skill",
+      pluginId: null,
+      pluginName: null,
+      skillId: "task-final-report",
+      skillName: "task-final-report",
+      usageCount: 314
+    },
+    {
+      type: "skill",
+      pluginId: null,
+      pluginName: null,
+      skillId: "task-stage-report",
+      skillName: "task-stage-report",
+      usageCount: 304
     }
   ],
   assets: {
     avatar: {
       kind: "remote-url",
-      url: "https://example.com/codex-profile-avatar.png",
+      url: "/assets/postmelee-avatar.png",
       assetRef: null,
       contentType: "image/png"
     },
