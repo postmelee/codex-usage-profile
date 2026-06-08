@@ -5,7 +5,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 
 ## 목적
 
-최신 Codex Profile 설정 화면을 웹페이지에서 확인할 수 있도록 snapshot 기반 프로필 화면을 구현한다. 이번 task의 결과물은 사용자가 제공한 Codex 앱 스크린샷과 `codex-extracted/` 분석 결과를 기준으로, 설정 사이드바와 Profile 본문 UI를 웹에서 재현하는 것이다.
+최신 Codex Profile 화면을 웹페이지에서 확인할 수 있도록 snapshot 기반 프로필 화면을 구현한다. 이번 task의 결과물은 사용자가 제공한 Codex 앱 스크린샷과 `codex-extracted/` 분석 결과를 기준으로 하되, 웹페이지 용도에 맞춰 Profile 본문 UI를 중심으로 재현하는 것이다.
 
 이번 task는 #2에서 만든 `profile-snapshot` schema, fixture, selector를 화면 렌더링 입력으로 사용한다. pairing API, 로컬 CLI push, README PNG 생성, OpenAI 로그인은 후속 issue 범위로 남기고, 우선 sample snapshot으로 재현 가능한 사용자 화면과 상호작용을 고정한다.
 
@@ -29,7 +29,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 ### 포함
 
 - sample snapshot 기반 Profile preview route 구현
-- Codex 설정 화면과 유사한 sidebar, top action, main content shell 구현
+- Profile 본문 중심 app shell과 top action 구현
 - avatar, display name, username, plan pill, 5개 stat bar 렌더링
 - Daily / Weekly / Cumulative token activity heatmap 변환과 탭 전환
 - daily cell hover tooltip: `{tokens} tokens on {date}`
@@ -48,6 +48,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 - 프로필 edit/photo upload 기능
 - Codex 앱 전체 기능 복제
 - Codex 앱 내부 bundle을 그대로 embed하거나 런타임 의존성으로 사용하는 방식
+- Codex 설정 sidebar/navigation 전체 재현
 
 ## 설계 방향
 
@@ -55,7 +56,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 - 화면 입력은 `src/profile-snapshot`의 sample snapshot과 selector를 사용한다. UI 컴포넌트가 raw Codex 응답이나 인증 파일에 직접 접근하지 않도록 한다.
 - route는 `/u/:handle`을 우선 구현하고, 개발/검증 편의를 위해 필요하면 동등한 preview route를 함께 둔다.
 - 시각 기준은 작업지시자가 첨부한 Codex Profile 화면 스크린샷과 추출 bundle 분석 결과다. 랜딩 페이지나 마케팅 hero가 아니라 실제 앱 설정 화면을 첫 화면으로 만든다.
-- desktop에서는 sidebar + content shell 구조를 유지하고, mobile에서는 sidebar를 접거나 상단 compact navigation으로 바꿔 텍스트 겹침 없이 프로필 본문을 우선 노출한다.
+- desktop과 mobile 모두 Profile 본문 중심 single-column shell을 유지한다. Codex settings sidebar는 사용자가 불필요하다고 판단했으므로 제외하고, top action과 profile content에 집중한다.
 - heatmap은 selector 또는 UI 전용 변환 함수에서 daily, weekly, cumulative mode를 분리한다. daily tooltip은 날짜와 token 값을 snapshot 기준으로 계산한다.
 - UI 색상, spacing, radius, typography는 Codex dark settings 화면의 조용한 tool surface에 맞춘다. CSS token을 두되, 과도한 장식 배경이나 별도 landing composition은 만들지 않는다.
 - Playwright screenshot은 검증 산출물로 사용하되, 생성된 이미지 파일을 저장소에 남길지는 구현계획서에서 결정한다.
@@ -81,7 +82,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 - `src/main.jsx`
 - `src/App.jsx`
 - `src/profile-ui/ProfilePage.jsx`
-- `src/profile-ui/SettingsShell.jsx`
+- `src/profile-ui/ProfileShell.jsx`
 - `src/profile-ui/ProfileHeader.jsx`
 - `src/profile-ui/ProfileStats.jsx`
 - `src/profile-ui/TokenActivityChart.jsx`

@@ -1,11 +1,11 @@
-import { SettingsShell } from "./SettingsShell.jsx";
 import { ActivityInsights, MostUsedPlugins } from "./ActivityInsights.jsx";
 import { ProfileHeader } from "./ProfileHeader.jsx";
+import { ProfileShell } from "./ProfileShell.jsx";
 import { ProfileStats } from "./ProfileStats.jsx";
 
 export function ProfilePage({ handle, status, viewModel }) {
   return (
-    <SettingsShell>
+    <ProfileShell>
       <section className="profile-view" aria-label="Codex profile">
         {status === "ready" && viewModel ? (
           <ReadyProfile viewModel={viewModel} />
@@ -13,7 +13,7 @@ export function ProfilePage({ handle, status, viewModel }) {
           <ProfileState handle={handle} status={status} />
         )}
       </section>
-    </SettingsShell>
+    </ProfileShell>
   );
 }
 

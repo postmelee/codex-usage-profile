@@ -5,9 +5,7 @@
   text-rendering: optimizeLegibility;
   --bg: #000;
   --surface: #171717;
-  --sidebar: #464749;
-  --sidebar-border: #555659;
-  --sidebar-active: #5a5b5d;
+  --frame-border: #3f4042;
   --text: #f2f2f2;
   --muted: #a5a5a7;
   --faint: #77787b;
@@ -60,72 +58,21 @@ button {
 
 .app-frame {
   background: var(--surface);
-  border: 1px solid var(--sidebar-border);
+  border: 1px solid var(--frame-border);
   border-radius: 16px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
   margin: 36px auto;
-  max-width: 1420px;
+  max-width: 1120px;
   min-height: min(900px, calc(100vh - 72px));
   overflow: hidden;
   width: calc(100vw - 72px);
 }
 
-.settings-sidebar {
-  background: var(--sidebar);
-  border-right: 1px solid var(--line-strong);
-  color: var(--text);
-  min-width: 0;
-  padding: 14px 8px 20px;
-}
-
-.window-controls {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  height: 26px;
-  padding: 2px 8px;
-}
-
-.window-dot {
-  border-radius: 999px;
-  display: block;
-  height: 12px;
-  width: 12px;
-}
-
-.window-dot-red {
-  background: #ff5f57;
-}
-
-.window-dot-yellow {
-  background: #febc2e;
-}
-
-.window-dot-green {
-  background: #28c840;
-}
-
-.back-button,
-.settings-nav-item,
-.settings-actions button {
+.profile-actions button {
   appearance: none;
   background: transparent;
   border: 0;
   cursor: default;
-}
-
-.back-button {
-  align-items: center;
-  color: var(--muted);
-  display: flex;
-  font-size: 14px;
-  gap: 8px;
-  line-height: 28px;
-  padding: 6px 12px;
-  text-align: left;
-  width: 100%;
 }
 
 .icon {
@@ -133,96 +80,33 @@ button {
   flex: 0 0 auto;
 }
 
-.search-shell {
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  display: flex;
-  gap: 8px;
-  height: 28px;
-  margin: 8px 0 16px;
-  padding: 0 10px;
-}
-
-.search-shell .icon {
-  color: var(--muted);
-}
-
-.search-shell input {
-  background: transparent;
-  border: 0;
-  color: var(--text);
-  min-width: 0;
-  outline: 0;
-  width: 100%;
-}
-
-.search-shell input::placeholder {
-  color: var(--muted);
-}
-
-.settings-nav {
-  display: grid;
-  gap: 12px;
-}
-
-.settings-nav-heading {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 20px;
-  padding: 0 12px 4px;
-}
-
-.settings-nav-item {
-  align-items: center;
-  border-radius: 8px;
-  color: #f0f0f1;
-  display: flex;
-  font-size: 14px;
-  gap: 9px;
-  height: 30px;
-  line-height: 1;
-  padding: 0 11px;
-  text-align: left;
-  width: 100%;
-}
-
-.settings-nav-item.is-active {
-  background: var(--sidebar-active);
-}
-
-.settings-nav-item .icon {
-  color: #ededee;
-  opacity: 0.94;
-}
-
-.settings-main {
+.profile-shell {
   background: var(--surface);
   min-width: 0;
-  padding: 0 18px 40px;
+  padding: 0 24px 42px;
 }
 
-.settings-topbar {
+.profile-topbar {
   align-items: center;
   display: flex;
   height: 50px;
   justify-content: space-between;
 }
 
-.settings-topbar h1 {
+.profile-topbar h1 {
   font-size: 15px;
   font-weight: 500;
   line-height: 1;
   margin: 0;
 }
 
-.settings-actions {
+.profile-actions {
   align-items: center;
   display: flex;
   gap: 22px;
 }
 
-.settings-actions button {
+.profile-actions button {
   align-items: center;
   color: #d6d6d7;
   display: inline-flex;
@@ -665,35 +549,20 @@ button {
 @media (max-width: 760px) {
   .app-frame {
     border-radius: 0;
-    grid-template-columns: 1fr;
     margin: 0;
     min-height: 100vh;
     width: 100vw;
   }
 
-  .settings-sidebar {
-    border-bottom: 1px solid var(--line-strong);
-    border-right: 0;
-    padding-bottom: 10px;
-  }
-
-  .settings-nav {
-    display: none;
-  }
-
-  .search-shell {
-    display: none;
-  }
-
-  .settings-main {
+  .profile-shell {
     padding: 0 16px 32px;
   }
 
-  .settings-actions {
+  .profile-actions {
     gap: 14px;
   }
 
-  .settings-actions button {
+  .profile-actions button {
     font-size: 13px;
   }
 

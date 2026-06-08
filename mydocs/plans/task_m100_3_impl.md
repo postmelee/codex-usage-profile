@@ -9,7 +9,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 | Stage | 제목 | 주요 산출 | 검증 |
 |---|---|---|---|
 | 1 | 프론트엔드 scaffold와 route 기반 | `package.json`, `package-lock.json`, `index.html`, `vite.config.js`, `src/main.jsx`, `src/App.jsx`, route/state shell | `npm test`, `npm run build`, `git diff --check` |
-| 2 | Profile 본문 정적 구조 재현 | `src/profile-ui/ProfilePage.jsx`, shell/header/stats/insights/plugins components, `src/styles.css` | `npm test`, `npm run build`, browser desktop/mobile 확인, `git diff --check` |
+| 2 | Profile 본문 정적 구조 재현 | `src/profile-ui/ProfilePage.jsx`, `ProfileShell.jsx`, header/stats/insights/plugins components, `src/styles.css` | `npm test`, `npm run build`, browser desktop/mobile 확인, `git diff --check` |
 | 3 | Token activity heatmap 상호작용 | `src/profile-ui/heatmap.js`, `TokenActivityChart.jsx`, heatmap unit tests | `npm test`, Playwright tab/tooltip 확인, `git diff --check` |
 | 4 | 시각 검증과 최종 정리 | `playwright.config.js`, `tests/profile-ui.spec.js`, 최종 stage/report | `npm test`, `npm run build`, `npm run test:e2e`, CSS token 검토, `git diff --check` |
 
@@ -50,7 +50,7 @@ GitHub Issue: [#3](https://github.com/postmelee/codex-usage-profile/issues/3)
 - `src/App.jsx`
 - `src/profile-ui/profileRoutes.js`
 - `src/profile-ui/ProfilePage.jsx`
-- `src/profile-ui/SettingsShell.jsx`
+- `src/profile-ui/ProfileShell.jsx`
 - `src/styles.css`
 - `mydocs/working/task_m100_3_stage1.md`
 
@@ -96,13 +96,13 @@ Task #3 Stage 1: 프론트엔드 scaffold와 route 기반 추가
 수정:
 
 - `src/profile-ui/ProfilePage.jsx`
-- `src/profile-ui/SettingsShell.jsx`
+- `src/profile-ui/ProfileShell.jsx`
 - `src/styles.css`
 - 필요 시 `src/profile-snapshot/fixtures/sample-snapshot.js`
 
 ### 변경 내용
 
-- settings sidebar, window chrome dots, top action row, main content shell을 스크린샷 구조에 맞춘다.
+- 사용자의 피드백에 따라 settings sidebar/navigation은 제거하고, Profile 본문 중심 shell과 top action row를 구현한다.
 - avatar, display name, username, plan pill을 snapshot header 값으로 렌더링한다.
 - Lifetime tokens, Peak tokens, Longest task, Current streak, Longest streak stat bar를 구현한다.
 - Activity insights와 Most used plugins 리스트를 snapshot 값으로 렌더링한다.
@@ -250,7 +250,7 @@ Task #3 Stage 4: profile UI 시각 검증과 최종 정리
 - **Playwright browser 부재**: `@playwright/test`는 설치되어도 Chromium binary가 없을 수 있다. 설치 필요 여부를 확인하고, 필요하면 승인 후 설치한다.
 - **Codex reference fidelity**: 실제 Codex bundle을 embed하지 않으므로 pixel-perfect clone은 제한된다. 스크린샷 기반 skeleton, spacing, color token, typography, information hierarchy를 우선 맞추고 차이는 fidelity ledger에 기록한다.
 - **sample snapshot 데이터 부족**: #2 fixture는 chart가 14일만 포함한다. 12개월 chart 재현을 위해 UI 변환에서 missing day를 0 token cell로 채우고, 필요하면 fixture 보강은 Stage 2 또는 Stage 3에서 최소 범위로 수행한다.
-- **mobile layout 재해석**: 원본 스크린샷은 desktop 중심이다. mobile은 같은 정보 구조를 유지하되 sidebar를 compact 처리하는 승인된 responsive variant로 구현한다.
+- **mobile layout 재해석**: 원본 스크린샷은 desktop 중심이다. mobile은 같은 정보 구조를 유지하되 single-column profile shell로 구현한다.
 
 ## 승인 요청 사항
 

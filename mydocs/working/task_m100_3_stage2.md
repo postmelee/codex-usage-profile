@@ -16,10 +16,10 @@ Profile 본문 정적 구조를 snapshot 값으로 렌더링한다. 이번 단�
 | `src/profile-ui/ProfileStats.jsx` | 5개 profile stat bar 컴포넌트를 추가했다. |
 | `src/profile-ui/ActivityInsights.jsx` | Activity insights와 Most used plugins 리스트 렌더링을 추가했다. |
 | `src/profile-ui/PluginIcon.jsx` | Most used plugins 행에 쓰는 작은 plugin icon을 추가했다. |
-| `src/profile-ui/Icons.jsx` | sidebar/top action용 inline SVG icon set을 추가했다. |
+| `src/profile-ui/Icons.jsx` | top action용 inline SVG icon set을 추가했다. |
 | `src/profile-ui/formatters.js` | compact token, duration, percent, integer, reasoning effort formatter를 추가했다. |
 | `src/profile-ui/ProfilePage.jsx` | placeholder grid를 제거하고 header/stat/token preview/activity grid를 조합했다. |
-| `src/profile-ui/SettingsShell.jsx` | sidebar와 top action에 icon을 붙이고 reference에 가까운 button structure로 조정했다. |
+| `src/profile-ui/ProfileShell.jsx` | 사용자의 sidebar 제거 피드백에 맞춰 Profile 본문 중심 shell과 top action structure로 조정했다. |
 | `src/styles.css` | 실제 Profile layout, stat bar, static token activity preview, activity/plugin 2열, mobile collapse 스타일을 추가했다. |
 | `src/profile-snapshot/fixtures/sample-snapshot.js` | Most used plugins가 reference처럼 5행으로 보이도록 sample top invocation 2개를 보강했다. |
 | `src/profile-snapshot/__tests__/selectors.test.js` | sample fixture의 default most used invocation 개수 변경을 반영했다. |
@@ -27,6 +27,12 @@ Profile 본문 정적 구조를 snapshot 값으로 렌더링한다. 이번 단�
 ## 본문 변경 정도 / 본문 무손실 여부
 
 코드 작업이므로 문서 본문 무손실 여부는 해당 없음이다. 기존 snapshot schema와 selector API는 변경하지 않았고, sample fixture의 `topInvocations`만 reference 화면에 맞춰 5행으로 보강했다.
+
+추가 피드백 반영:
+
+- Stage 2 최초 완료 후 작업지시자가 "사이드 바는 없어도 될 것 같다"고 피드백했다.
+- 이에 따라 수행계획서와 구현계획서의 sidebar 포함 범위를 Profile 본문 중심 shell로 갱신했다.
+- `SettingsShell.jsx`는 제거하고 `ProfileShell.jsx`로 대체했다.
 
 ## 검증 결과
 
@@ -37,6 +43,7 @@ npm test
 npm run build
 git diff --check
 node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({ headless: true }); async function inspect(width, height) { const page = await browser.newPage({ viewport: { width, height } }); await page.goto("http://127.0.0.1:5173/u/meleeisdeveloping", { waitUntil: "load" }); const data = await page.evaluate(() => ({ title: document.querySelector(".profile-heading h2")?.textContent, stats: [...document.querySelectorAll(".profile-stat dd")].map((node) => node.textContent), plugins: [...document.querySelectorAll(".plugin-name")].map((node) => node.textContent), bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth, activityGridColumns: getComputedStyle(document.querySelector(".activity-grid")).gridTemplateColumns, activityGridWidth: Math.round(document.querySelector(".activity-grid").getBoundingClientRect().width) })); await page.close(); return { width, height, ...data }; } const result = [await inspect(1512, 982), await inspect(390, 844)]; await browser.close(); console.log(JSON.stringify(result, null, 2));'
+node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({ headless: true }); async function inspect(width, height) { const page = await browser.newPage({ viewport: { width, height } }); await page.goto("http://127.0.0.1:5173/u/meleeisdeveloping", { waitUntil: "load" }); const data = await page.evaluate(() => ({ title: document.querySelector(".profile-heading h2")?.textContent, hasSidebar: Boolean(document.querySelector("aside")), frameWidth: Math.round(document.querySelector(".app-frame").getBoundingClientRect().width), bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth, activityGridColumns: getComputedStyle(document.querySelector(".activity-grid")).gridTemplateColumns, stats: [...document.querySelectorAll(".profile-stat dd")].map((node) => node.textContent) })); await page.close(); return { width, height, ...data }; } const result = [await inspect(1512, 982), await inspect(390, 844)]; await browser.close(); console.log(JSON.stringify(result, null, 2));'
 ```
 
 결과:
@@ -47,6 +54,7 @@ node --input-type=module -e 'import { chromium } from "playwright"; const browse
 - OK: desktop 1512x982 검사에서 title/stat/plugin 값이 snapshot과 일치하고 `bodyOverflow=false`였다.
 - OK: mobile 390x844 검사에서 title/stat/plugin 값이 snapshot과 일치하고 `bodyOverflow=false`였다.
 - OK: mobile activity grid 폭이 `356px`로 정상 collapse됐다.
+- OK: sidebar 제거 후 desktop/mobile 모두 `hasSidebar=false`, `bodyOverflow=false`였다.
 
 검증된 주요 값:
 
