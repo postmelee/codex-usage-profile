@@ -331,14 +331,21 @@ button {
   background: transparent;
   border: 0;
   color: var(--faint);
-  cursor: default;
+  cursor: pointer;
   font-size: 15px;
   line-height: 20px;
   padding: 0;
 }
 
-.token-tabs button.is-selected {
+.token-tabs button.is-selected,
+.token-tabs button:focus-visible {
   color: var(--text);
+}
+
+.token-tabs button:focus-visible,
+.token-cell:focus-visible {
+  outline: 1px solid var(--blue);
+  outline-offset: 3px;
 }
 
 .token-grid-wrap {
@@ -350,18 +357,24 @@ button {
 .token-grid {
   display: grid;
   gap: 3px;
+  grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
   grid-template-rows: repeat(7, 13px);
   justify-content: stretch;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .token-cell {
   aspect-ratio: 1;
   background: var(--cell-empty);
+  border: 0;
   border-radius: 4px;
   display: block;
+  height: 13px;
   min-width: 0;
+  padding: 0;
+  position: relative;
 }
 
 .token-level-0 {
@@ -382,6 +395,33 @@ button {
 
 .token-level-4 {
   background: var(--cell-4);
+}
+
+.token-tooltip {
+  align-items: center;
+  background: #3f4042;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  display: none;
+  font-size: 14px;
+  font-weight: 500;
+  height: 32px;
+  left: 50%;
+  line-height: 1;
+  padding: 0 10px;
+  pointer-events: none;
+  position: absolute;
+  top: -40px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.token-cell:hover .token-tooltip,
+.token-cell:focus-visible .token-tooltip {
+  display: inline-flex;
 }
 
 .month-labels {
