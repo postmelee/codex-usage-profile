@@ -73,8 +73,9 @@ GitHub Issue: [#4](https://github.com/postmelee/codex-usage-profile/issues/4)
 | `mydocs/working/task_m100_4_stage{N}.md` | 단계 보고서 | 내부 작업자/에이전트 | `mydocs/working/` | `docs/` | 단계별 구현/검증 로그는 작업 기록이다. |
 | `mydocs/report/task_m100_4_report.md` | 최종 보고서 | 내부 작업자/에이전트/리뷰어 | `mydocs/report/` | `docs/` | PR 전 최종 결과와 검증 결과 보관용이다. |
 | `src/profile-backend/*` | 제품 코드 | 개발자/에이전트 | repository source tree | `mydocs/` | 실행되는 backend 계약과 검증은 제품 코드로 유지해야 한다. |
+| `README.md` | 최소 보안 고지 | 사용자/기여자 | repository root | `docs/` | 네트워크/API 경계가 생겼으므로 작업지시자 승인에 따라 CLI submit/public lookup의 보안·개인정보 주의사항을 루트 README에 최소 범위로 남긴다. |
 
-공식 사용자/기여자/API 문서는 이번 task에서 만들지 않는다. CLI 사용법, GitHub login setup, API 소비자 문서가 필요해지면 #4 구현 후 별도 docs task에서 위치를 확정한다.
+CLI 사용법, GitHub login setup, API 소비자 문서, 배포 보안 체크리스트가 필요해지면 #4 구현 후 별도 docs task에서 위치를 확정한다.
 
 ## 예상 변경 파일
 
@@ -91,6 +92,7 @@ GitHub Issue: [#4](https://github.com/postmelee/codex-usage-profile/issues/4)
 - `src/profile-backend/security.js`
 - `src/profile-backend/__tests__/*.test.js`
 - 필요 시 `src/profile-api/client.js`
+- `README.md` 최소 보안 고지
 
 수정:
 
@@ -154,7 +156,7 @@ GitHub Issue: [#4](https://github.com/postmelee/codex-usage-profile/issues/4)
   - `npm test`
   - `npm run build`
   - 필요 시 `npm run test:e2e`
-  - `rg -n "access_token|refresh_token|auth.json|CODEX_ACCESS_TOKEN" src tests mydocs`
+  - secret-like token pattern grep
   - `git diff --check`
 
 ### 통합 검증
