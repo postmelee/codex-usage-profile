@@ -245,6 +245,54 @@ test("validates required record fields", () => {
   );
 });
 
+test("exports and hydrates memory store state", () => {
+  const store = createMemoryProfileBackendStore();
+  const snapshot = createLatestSnapshotRecord();
+
+  store.saveOwner(owner);
+  store.saveOAuthState({
+    id: "oauth_state_1",
+    status: "pending",
+    expiresAt: "2026-06-08T00:10:00.000Z"
+  });
+  store.saveSession({
+    id: "session_1",
+    ownerId: owner.id,
+    expiresAt: "2026-07-08T00:00:00.000Z"
+  });
+  store.saveCliLoginChallenge({
+    id: "cli_login_1",
+    status: "pending",
+    expiresAt: "2026-06-08T00:10:00.000Z"
+  });
+  store.saveCliToken({
+    id: "cli_token_1",
+    ownerId: owner.id,
+    tokenDigest: "digest_1"
+  });
+  store.saveLatestSnapshot(snapshot);
+
+  const hydrated = createMemoryProfileBackendStore(store.exportState());
+
+  assert.deepEqual(hydrated.getOwnerById(owner.id), owner);
+  assert.equal(hydrated.getOAuthState("oauth_state_1").status, "pending");
+  assert.equal(hydrated.getSession("session_1").ownerId, owner.id);
+  assert.equal(hydrated.getCliLoginChallenge("cli_login_1").status, "pending");
+  assert.equal(hydrated.getCliTokenByDigest("digest_1").id, "cli_token_1");
+  assert.deepEqual(hydrated.getLatestSnapshotByHandle(owner.handle), snapshot);
+});
+
+test("validates memory store initial state shape", () => {
+  assertBackendError(
+    () => createMemoryProfileBackendStore({ schemaVersion: 999, owners: [] }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
+  assertBackendError(
+    () => createMemoryProfileBackendStore({ owners: ["not-object"] }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
+});
+
 function assertBackendError(callback, code) {
   assert.throws(callback, (error) => {
     assert.equal(error instanceof ProfileBackendError, true);

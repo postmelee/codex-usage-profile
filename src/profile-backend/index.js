@@ -6,6 +6,13 @@ export {
 } from "./errors.js";
 
 export {
+  DEFAULT_DURABLE_STORE_FILE,
+  createFileProfileBackendStore,
+  readStoreState,
+  writeStoreState
+} from "./durable-store.js";
+
+export {
   createProfileBackendHttpHandler,
   errorResponse,
   okResponse,
@@ -68,6 +75,7 @@ export {
 } from "./session.js";
 
 export {
+  PROFILE_BACKEND_STORE_SCHEMA_VERSION,
   PROFILE_VISIBILITY,
   createMemoryProfileBackendStore
 } from "./store.js";

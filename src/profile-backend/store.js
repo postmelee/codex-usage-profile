@@ -8,7 +8,9 @@ export const PROFILE_VISIBILITY = Object.freeze({
   PUBLIC: "public"
 });
 
-export function createMemoryProfileBackendStore() {
+export const PROFILE_BACKEND_STORE_SCHEMA_VERSION = 1;
+
+export function createMemoryProfileBackendStore(initialState = {}) {
   const ownersById = new Map();
   const ownerIdByProvider = new Map();
   const ownerIdByHandle = new Map();
@@ -20,7 +22,7 @@ export function createMemoryProfileBackendStore() {
   const latestSnapshotsByOwnerId = new Map();
   const ownerIdBySnapshotHandle = new Map();
 
-  return {
+  const store = {
     clear() {
       ownersById.clear();
       ownerIdByProvider.clear();
@@ -200,8 +202,24 @@ export function createMemoryProfileBackendStore() {
       ownerIdByHandle.set(owner.handle, owner.id);
 
       return clone(owner);
+    },
+
+    exportState() {
+      return {
+        schemaVersion: PROFILE_BACKEND_STORE_SCHEMA_VERSION,
+        owners: Array.from(ownersById.values(), clone),
+        oauthStates: Array.from(oauthStatesById.values(), clone),
+        sessions: Array.from(sessionsById.values(), clone),
+        cliLoginChallenges: Array.from(loginChallengesById.values(), clone),
+        cliTokens: Array.from(cliTokensById.values(), clone),
+        latestSnapshots: Array.from(latestSnapshotsByOwnerId.values(), clone)
+      };
     }
   };
+
+  hydrateStore(store, initialState);
+
+  return store;
 }
 
 function clone(value) {
@@ -232,6 +250,90 @@ function requireFields(label, record, fields) {
       );
     }
   }
+}
+
+function hydrateStore(store, initialState) {
+  const state = normalizeStoreState(initialState);
+
+  for (const owner of state.owners) {
+    store.saveOwner(owner);
+  }
+  for (const oauthState of state.oauthStates) {
+    store.saveOAuthState(oauthState);
+  }
+  for (const session of state.sessions) {
+    store.saveSession(session);
+  }
+  for (const challenge of state.cliLoginChallenges) {
+    store.saveCliLoginChallenge(challenge);
+  }
+  for (const token of state.cliTokens) {
+    store.saveCliToken(token);
+  }
+  for (const snapshot of state.latestSnapshots) {
+    store.saveLatestSnapshot(snapshot);
+  }
+}
+
+function normalizeStoreState(value) {
+  if (value === undefined || value === null) {
+    return emptyStoreState();
+  }
+
+  if (!isRecord(value)) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "Store state must be an object"
+    );
+  }
+
+  if (
+    value.schemaVersion !== undefined &&
+    value.schemaVersion !== PROFILE_BACKEND_STORE_SCHEMA_VERSION
+  ) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "Store state schema version is unsupported"
+    );
+  }
+
+  return {
+    owners: normalizeRecordArray(value.owners, "owners"),
+    oauthStates: normalizeRecordArray(value.oauthStates, "oauthStates"),
+    sessions: normalizeRecordArray(value.sessions, "sessions"),
+    cliLoginChallenges: normalizeRecordArray(
+      value.cliLoginChallenges,
+      "cliLoginChallenges"
+    ),
+    cliTokens: normalizeRecordArray(value.cliTokens, "cliTokens"),
+    latestSnapshots: normalizeRecordArray(value.latestSnapshots, "latestSnapshots")
+  };
+}
+
+function emptyStoreState() {
+  return {
+    owners: [],
+    oauthStates: [],
+    sessions: [],
+    cliLoginChallenges: [],
+    cliTokens: [],
+    latestSnapshots: []
+  };
+}
+
+function normalizeRecordArray(value, label) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value) || value.some((record) => !isRecord(record))) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      `Store state ${label} must be an object array`
+    );
+  }
+
+  return value;
 }
 
 function isRecord(value) {
