@@ -6,6 +6,8 @@ import {
   ProfileBackendError,
   isProfileBackendError
 } from "./errors.js";
+import { createOAuthRuntimeService } from "./oauth-runtime.js";
+import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
 import { createCliTokenService } from "./tokens.js";
 
@@ -37,6 +39,24 @@ export function createProfileBackendHttpHandler(options = {}) {
     store,
     now
   });
+  const sessionService = options.sessionService ?? createSessionService({
+    store,
+    now,
+    createId,
+    secureCookies: options.secureCookies
+  });
+  const oauthRuntimeService = options.oauthRuntimeService ?? createOAuthRuntimeService({
+    store,
+    githubClient,
+    accountService,
+    sessionService,
+    now,
+    createId,
+    githubClientId: options.githubClientId,
+    githubAuthorizationUrl: options.githubAuthorizationUrl,
+    publicBaseUrl: options.publicBaseUrl,
+    callbackPath: options.githubCallbackPath
+  });
   const cliLoginService = options.cliLoginService ?? createCliLoginService({
     store,
     now,
@@ -54,6 +74,60 @@ export function createProfileBackendHttpHandler(options = {}) {
     try {
       const url = new URL(request.url);
       const route = `${request.method.toUpperCase()} ${url.pathname}`;
+
+      if (route === "GET /api/auth/github/login") {
+        const result = oauthRuntimeService.startGitHubLogin({
+          cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
+          redirectTo: url.searchParams.get("redirect_to")
+        });
+
+        return redirectResponse(result.authorizationUrl);
+      }
+
+      if (route === "GET /api/auth/github/callback") {
+        const result = await oauthRuntimeService.completeGitHubCallback({
+          code: url.searchParams.get("code"),
+          state: url.searchParams.get("state")
+        });
+        const challenge = result.oauthState.cliLoginChallengeId
+          ? cliLoginService.approveCliLogin({
+            challengeId: result.oauthState.cliLoginChallengeId,
+            ownerId: result.owner.id
+          })
+          : null;
+
+        return okResponse({
+          owner: serializeOwner(result.owner),
+          session: serializeSession(result.session),
+          challenge: serializeChallenge(challenge),
+          redirectTo: result.oauthState.redirectTo ?? null
+        }, 200, {
+          "set-cookie": result.sessionCookie
+        });
+      }
+
+      if (route === "GET /api/auth/me") {
+        const { owner, session } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+
+        return okResponse({
+          owner: serializeOwner(owner),
+          session: serializeSession(session)
+        });
+      }
+
+      if (route === "POST /api/auth/logout") {
+        const result = oauthRuntimeService.logout({
+          cookieHeader: readCookieHeader(request)
+        });
+
+        return okResponse({
+          session: serializeSession(result.session)
+        }, 200, {
+          "set-cookie": result.cookie
+        });
+      }
 
       if (route === "POST /api/auth/github/callback") {
         const body = await readJsonBody(request);
@@ -93,9 +167,12 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/cli/login/approve") {
         const body = await readJsonBody(request);
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
         const challenge = cliLoginService.approveCliLogin({
           challengeId: body.challengeId,
-          ownerId: body.ownerId
+          ownerId: owner.id
         });
 
         return okResponse({
@@ -188,10 +265,10 @@ export function readBearerToken(request) {
   return match[1].trim();
 }
 
-export function okResponse(data, status = 200) {
+export function okResponse(data, status = 200, headers = {}) {
   return new Response(JSON.stringify({ ok: true, data }), {
     status,
-    headers: JSON_HEADERS
+    headers: createHeaders(headers)
   });
 }
 
@@ -200,8 +277,34 @@ export function errorResponse(error) {
 
   return new Response(JSON.stringify(normalized.toResponseBody()), {
     status: normalized.status,
-    headers: JSON_HEADERS
+    headers: createHeaders()
   });
+}
+
+export function redirectResponse(location, status = 302) {
+  const headers = new Headers();
+  headers.set("location", location);
+
+  return new Response(null, {
+    status,
+    headers
+  });
+}
+
+function createHeaders(extraHeaders = {}) {
+  const headers = new Headers(JSON_HEADERS);
+
+  for (const [name, value] of Object.entries(extraHeaders)) {
+    if (value !== undefined && value !== null) {
+      headers.set(name, value);
+    }
+  }
+
+  return headers;
+}
+
+function readCookieHeader(request) {
+  return request.headers.get("cookie") ?? "";
 }
 
 function normalizeError(error) {
@@ -250,6 +353,18 @@ function serializeChallenge(challenge) {
   };
 }
 
+function serializeSession(session) {
+  if (!session) return null;
+
+  return {
+    id: session.id,
+    ownerId: session.ownerId,
+    createdAt: session.createdAt ?? null,
+    expiresAt: session.expiresAt,
+    revokedAt: session.revokedAt ?? null
+  };
+}
+
 function serializeCliTokenRecord(tokenRecord) {
   if (!tokenRecord) return null;
 
@@ -279,4 +394,3 @@ function serializeLatestSnapshot(record) {
     snapshot: record.snapshot
   };
 }
-
