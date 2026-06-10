@@ -12,6 +12,8 @@ export function createMemoryProfileBackendStore() {
   const ownersById = new Map();
   const ownerIdByProvider = new Map();
   const ownerIdByHandle = new Map();
+  const oauthStatesById = new Map();
+  const sessionsById = new Map();
   const loginChallengesById = new Map();
   const cliTokensById = new Map();
   const cliTokenIdByDigest = new Map();
@@ -23,6 +25,8 @@ export function createMemoryProfileBackendStore() {
       ownersById.clear();
       ownerIdByProvider.clear();
       ownerIdByHandle.clear();
+      oauthStatesById.clear();
+      sessionsById.clear();
       loginChallengesById.clear();
       cliTokensById.clear();
       cliTokenIdByDigest.clear();
@@ -63,6 +67,10 @@ export function createMemoryProfileBackendStore() {
       return clone(latestSnapshotsByOwnerId.get(ownerId)) ?? null;
     },
 
+    getOAuthState(id) {
+      return clone(oauthStatesById.get(id)) ?? null;
+    },
+
     getOwnerByHandle(handle) {
       const id = ownerIdByHandle.get(handle);
       return id ? clone(ownersById.get(id)) : null;
@@ -79,6 +87,10 @@ export function createMemoryProfileBackendStore() {
 
     listOwners() {
       return Array.from(ownersById.values(), clone);
+    },
+
+    getSession(id) {
+      return clone(sessionsById.get(id)) ?? null;
     },
 
     saveCliLoginChallenge(challenge) {
@@ -107,6 +119,18 @@ export function createMemoryProfileBackendStore() {
       cliTokenIdByDigest.set(token.tokenDigest, token.id);
 
       return clone(token);
+    },
+
+    saveOAuthState(state) {
+      requireFields("OAuth state", state, ["id", "status", "expiresAt"]);
+      oauthStatesById.set(state.id, clone(state));
+      return clone(state);
+    },
+
+    saveSession(session) {
+      requireFields("session", session, ["id", "ownerId", "expiresAt"]);
+      sessionsById.set(session.id, clone(session));
+      return clone(session);
     },
 
     saveLatestSnapshot(record) {

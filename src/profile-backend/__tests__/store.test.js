@@ -95,6 +95,40 @@ test("saves and reads CLI login challenges as cloned records", () => {
   });
 });
 
+test("saves and reads OAuth states and sessions as cloned records", () => {
+  const store = createMemoryProfileBackendStore();
+  const oauthState = {
+    id: "oauth_state_1",
+    status: "pending",
+    expiresAt: "2026-06-08T00:10:00.000Z"
+  };
+  const session = {
+    id: "session_1",
+    ownerId: owner.id,
+    expiresAt: "2026-07-08T00:00:00.000Z",
+    revokedAt: null
+  };
+
+  const savedState = store.saveOAuthState(oauthState);
+  const savedSession = store.saveSession(session);
+  oauthState.status = "changed-input";
+  session.ownerId = "changed-input";
+  savedState.status = "changed-output";
+  savedSession.ownerId = "changed-output";
+
+  assert.deepEqual(store.getOAuthState("oauth_state_1"), {
+    id: "oauth_state_1",
+    status: "pending",
+    expiresAt: "2026-06-08T00:10:00.000Z"
+  });
+  assert.deepEqual(store.getSession("session_1"), {
+    id: "session_1",
+    ownerId: owner.id,
+    expiresAt: "2026-07-08T00:00:00.000Z",
+    revokedAt: null
+  });
+});
+
 test("saves, reads, updates, and deletes CLI tokens by id and digest", () => {
   const store = createMemoryProfileBackendStore();
   const token = {
@@ -195,6 +229,14 @@ test("validates required record fields", () => {
   );
   assertBackendError(
     () => store.saveCliToken({ id: "cli_token_1" }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
+  assertBackendError(
+    () => store.saveOAuthState({ id: "oauth_state_1" }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
+  assertBackendError(
+    () => store.saveSession({ id: "session_1" }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
   assertBackendError(
