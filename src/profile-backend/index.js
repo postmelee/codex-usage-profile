@@ -6,6 +6,14 @@ export {
 } from "./errors.js";
 
 export {
+  createProfileBackendHttpHandler,
+  errorResponse,
+  okResponse,
+  readBearerToken,
+  readJsonBody
+} from "./http.js";
+
+export {
   AUTH_PROVIDERS,
   normalizeGitHubIdentity,
   resolveGitHubIdentityFromCode

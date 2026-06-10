@@ -38,8 +38,8 @@ export function normalizeGitHubIdentity(payload) {
     throw invalidRequest("GitHub identity payload must be an object");
   }
 
-  const providerUserId = normalizeProviderUserId(payload.id);
-  const githubLogin = normalizeString(payload.login);
+  const providerUserId = normalizeProviderUserId(payload.id ?? payload.providerUserId);
+  const githubLogin = normalizeString(payload.login ?? payload.githubLogin);
 
   if (!providerUserId) {
     throw invalidRequest("GitHub identity id is required");
@@ -53,9 +53,9 @@ export function normalizeGitHubIdentity(payload) {
     authProvider: AUTH_PROVIDERS.GITHUB,
     providerUserId,
     githubLogin,
-    displayName: normalizeString(payload.name) || githubLogin,
-    avatarUrl: normalizeNullableUrl(payload.avatar_url),
-    profileUrl: normalizeNullableUrl(payload.html_url)
+    displayName: normalizeString(payload.name ?? payload.displayName) || githubLogin,
+    avatarUrl: normalizeNullableUrl(payload.avatar_url ?? payload.avatarUrl),
+    profileUrl: normalizeNullableUrl(payload.html_url ?? payload.profileUrl)
   };
 }
 
@@ -94,4 +94,3 @@ function isNonEmptyString(value) {
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-
