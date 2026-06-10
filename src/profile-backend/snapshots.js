@@ -1,0 +1,155 @@
+import {
+  PROFILE_SNAPSHOT_SCHEMA_VERSION,
+  validateProfileSnapshot
+} from "../profile-snapshot/index.js";
+import {
+  PROFILE_BACKEND_ERROR_CODES,
+  ProfileBackendError
+} from "./errors.js";
+import {
+  normalizeVisibility,
+  slugifyHandleCandidate
+} from "./accounts.js";
+import { assertNoForbiddenSecrets } from "./security.js";
+import { PROFILE_VISIBILITY } from "./store.js";
+import { createCliTokenService } from "./tokens.js";
+
+const SUBMIT_PAYLOAD_KEYS = new Set([
+  "capturedAt",
+  "handle",
+  "snapshot",
+  "visibility"
+]);
+
+export function createSnapshotSubmitService(options = {}) {
+  const {
+    store,
+    now = () => new Date()
+  } = options;
+
+  if (!store) {
+    throw new TypeError("store is required");
+  }
+
+  const tokenService = options.tokenService ?? createCliTokenService({ store, now });
+
+  return {
+    submitSnapshot(submitOptions = {}) {
+      const { owner } = tokenService.verifyCliToken(submitOptions.token);
+      const payload = normalizeSnapshotSubmitPayload(submitOptions.payload);
+      const uploadedAt = normalizeDate(now()).toISOString();
+      const ownerForSnapshot = updateOwnerHandleIfRequested(store, owner, {
+        handle: payload.handle,
+        uploadedAt
+      });
+      const visibility = normalizeVisibility(
+        payload.visibility ?? ownerForSnapshot.visibility ?? PROFILE_VISIBILITY.PRIVATE
+      );
+
+      return store.saveLatestSnapshot({
+        ownerId: ownerForSnapshot.id,
+        handle: ownerForSnapshot.handle,
+        visibility,
+        capturedAt: payload.capturedAt,
+        uploadedAt,
+        schemaVersion: payload.snapshot.schemaVersion,
+        snapshot: payload.snapshot
+      });
+    },
+
+    getLatestSnapshotByOwnerId(ownerId) {
+      return store.getLatestSnapshotByOwnerId(ownerId);
+    },
+
+    getPublicSnapshotByHandle(handle) {
+      const normalizedHandle = slugifyHandleCandidate(handle);
+      const record = store.getLatestSnapshotByHandle(normalizedHandle);
+
+      if (!record || record.visibility !== PROFILE_VISIBILITY.PUBLIC) {
+        return null;
+      }
+
+      return record;
+    }
+  };
+}
+
+export function normalizeSnapshotSubmitPayload(payload) {
+  assertNoForbiddenSecrets(payload);
+
+  if (!isRecord(payload)) {
+    throw validationError("Snapshot submit payload must be an object");
+  }
+
+  for (const key of Object.keys(payload)) {
+    if (!SUBMIT_PAYLOAD_KEYS.has(key)) {
+      throw validationError(`Snapshot submit payload contains unknown field: ${key}`);
+    }
+  }
+
+  if (!Object.hasOwn(payload, "snapshot")) {
+    throw validationError("Snapshot submit payload is missing snapshot");
+  }
+
+  if (!Object.hasOwn(payload, "capturedAt")) {
+    throw validationError("Snapshot submit payload is missing capturedAt");
+  }
+
+  const snapshotResult = validateProfileSnapshot(payload.snapshot);
+  if (!snapshotResult.ok) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "Snapshot payload is invalid",
+      { details: snapshotResult.errors }
+    );
+  }
+
+  if (payload.snapshot.schemaVersion !== PROFILE_SNAPSHOT_SCHEMA_VERSION) {
+    throw validationError("Unsupported snapshot schema version");
+  }
+
+  return {
+    snapshot: payload.snapshot,
+    capturedAt: normalizeDate(payload.capturedAt).toISOString(),
+    visibility: payload.visibility === undefined
+      ? undefined
+      : normalizeVisibility(payload.visibility),
+    handle: payload.handle === undefined
+      ? undefined
+      : slugifyHandleCandidate(payload.handle)
+  };
+}
+
+function updateOwnerHandleIfRequested(store, owner, options) {
+  if (!options.handle || options.handle === owner.handle) {
+    return owner;
+  }
+
+  return store.saveOwner({
+    ...owner,
+    handle: options.handle,
+    updatedAt: options.uploadedAt
+  });
+}
+
+function validationError(message) {
+  return new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+    message
+  );
+}
+
+function normalizeDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw validationError("Expected a valid date");
+  }
+
+  return date;
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
