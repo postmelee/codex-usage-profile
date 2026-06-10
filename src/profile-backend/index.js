@@ -34,6 +34,11 @@ export {
 } from "./security.js";
 
 export {
+  createSnapshotSubmitService,
+  normalizeSnapshotSubmitPayload
+} from "./snapshots.js";
+
+export {
   PROFILE_VISIBILITY,
   createMemoryProfileBackendStore
 } from "./store.js";

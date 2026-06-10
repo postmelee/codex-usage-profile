@@ -110,7 +110,15 @@ export function createMemoryProfileBackendStore() {
     },
 
     saveLatestSnapshot(record) {
-      requireFields("latest snapshot", record, ["ownerId", "handle", "snapshot"]);
+      requireFields("latest snapshot", record, [
+        "ownerId",
+        "handle",
+        "visibility",
+        "capturedAt",
+        "uploadedAt",
+        "schemaVersion",
+        "snapshot"
+      ]);
 
       const previous = latestSnapshotsByOwnerId.get(record.ownerId);
       const ownerIdForHandle = ownerIdBySnapshotHandle.get(record.handle);

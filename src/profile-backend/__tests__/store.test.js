@@ -150,12 +150,7 @@ test("enforces CLI token digest conflicts", () => {
 
 test("saves and reads latest snapshots by owner id and handle", () => {
   const store = createMemoryProfileBackendStore();
-  const record = {
-    ownerId: owner.id,
-    handle: owner.handle,
-    visibility: PROFILE_VISIBILITY.PUBLIC,
-    snapshot: sampleProfileSnapshot
-  };
+  const record = createLatestSnapshotRecord();
 
   const saved = store.saveLatestSnapshot(record);
   saved.snapshot.profile.displayName = "changed-output";
@@ -170,16 +165,8 @@ test("saves and reads latest snapshots by owner id and handle", () => {
 test("updates latest snapshot handle index", () => {
   const store = createMemoryProfileBackendStore();
 
-  store.saveLatestSnapshot({
-    ownerId: owner.id,
-    handle: "old-handle",
-    snapshot: sampleProfileSnapshot
-  });
-  store.saveLatestSnapshot({
-    ownerId: owner.id,
-    handle: "new-handle",
-    snapshot: sampleProfileSnapshot
-  });
+  store.saveLatestSnapshot(createLatestSnapshotRecord({ handle: "old-handle" }));
+  store.saveLatestSnapshot(createLatestSnapshotRecord({ handle: "new-handle" }));
 
   assert.equal(store.getLatestSnapshotByHandle("old-handle"), null);
   assert.equal(store.getLatestSnapshotByHandle("new-handle").ownerId, owner.id);
@@ -188,18 +175,13 @@ test("updates latest snapshot handle index", () => {
 test("enforces latest snapshot handle conflicts", () => {
   const store = createMemoryProfileBackendStore();
 
-  store.saveLatestSnapshot({
-    ownerId: owner.id,
-    handle: owner.handle,
-    snapshot: sampleProfileSnapshot
-  });
+  store.saveLatestSnapshot(createLatestSnapshotRecord());
 
   assertBackendError(
-    () => store.saveLatestSnapshot({
+    () => store.saveLatestSnapshot(createLatestSnapshotRecord({
       ownerId: "owner_2",
-      handle: owner.handle,
-      snapshot: sampleProfileSnapshot
-    }),
+      handle: owner.handle
+    })),
     PROFILE_BACKEND_ERROR_CODES.CONFLICT
   );
 });
@@ -227,4 +209,17 @@ function assertBackendError(callback, code) {
     assert.equal(error.code, code);
     return true;
   });
+}
+
+function createLatestSnapshotRecord(overrides = {}) {
+  return {
+    ownerId: owner.id,
+    handle: owner.handle,
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    capturedAt: sampleProfileSnapshot.capturedAt,
+    uploadedAt: "2026-06-08T00:00:00.000Z",
+    schemaVersion: sampleProfileSnapshot.schemaVersion,
+    snapshot: sampleProfileSnapshot,
+    ...overrides
+  };
 }
