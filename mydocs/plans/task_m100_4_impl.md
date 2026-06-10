@@ -12,7 +12,7 @@ GitHub Issue: [#4](https://github.com/postmelee/codex-usage-profile/issues/4)
 | 2 | GitHub identity와 CLI token lifecycle | `auth.js`, `accounts.js`, `cli-login.js`, `tokens.js` | owner upsert, login challenge, token lifecycle tests |
 | 3 | Snapshot submit과 latest snapshot repository | snapshot submit service, latest snapshot repository methods | submit success/failure, audit metadata, token-like payload tests |
 | 4 | HTTP API와 public handle 조회 | `http.js`, endpoint-level tests | GitHub callback, CLI token exchange, submit, public/private HTTP tests |
-| 5 | Web integration 경계와 최종 검증 | `src/profile-api/client.js`, optional profile route integration, final stage report | `npm test`, `npm run build`, optional e2e, secret grep, `git diff --check` |
+| 5 | Web integration 경계와 최종 검증 | `src/profile-api/client.js`, optional profile route integration, `README.md` Security note, final stage report | `npm test`, `npm run build`, optional e2e, secret grep, `git diff --check` |
 
 ## 문서 위치 확인
 
@@ -22,7 +22,7 @@ GitHub Issue: [#4](https://github.com/postmelee/codex-usage-profile/issues/4)
 | `mydocs/working/task_m100_4_stage{N}.md` | `mydocs/working/` | `mydocs/working/task_m100_4_stage{N}.md` | OK | 단계 보고서 |
 | `src/profile-backend/*` | repository source tree | `src/profile-backend/` | OK | backend domain/API 코드 |
 | `src/profile-api/client.js` | repository source tree | `src/profile-api/client.js` | OK | frontend/backend 조회 경계 |
-| 공식 사용자/API 문서 | 해당 없음 | 해당 없음 | OK | 이번 task에서는 만들지 않는다. CLI 사용법/API 문서는 후속 docs task에서 결정한다. |
+| `README.md` | repository root | `README.md` | OK | 작업지시자 승인에 따라 Stage 5에서 네트워크/API 보안 고지를 최소 범위로 추가한다. CLI 상세 사용법/API 레퍼런스는 후속 docs task에서 결정한다. |
 
 ## 구현 방식 결정
 
@@ -247,6 +247,7 @@ Task #4 Stage 4: HTTP API와 public snapshot 조회 구현
 
 수정:
 
+- `README.md`
 - `src/App.jsx`
 - `src/profile-ui/profileRoutes.js`
 - 필요 시 `tests/profile-ui.spec.js`
@@ -255,6 +256,7 @@ Task #4 Stage 4: HTTP API와 public snapshot 조회 구현
 
 - frontend가 latest snapshot API를 조회할 때 사용할 client/adapter 경계를 만든다.
 - #3 preview UX를 깨지 않도록 sample fixture fallback 또는 explicit preview mode 정책을 구현계획서 기준으로 고정한다.
+- `README.md`에는 CLI submit/public lookup에 대한 최소 Security/Privacy note를 추가한다.
 - `README` PNG renderer는 구현하지 않고, 후속 renderer가 사용할 public JSON endpoint와 view-model 연결 지점만 기록한다.
 - 최종 검증에서 secret grep, build, unit/e2e 필요성을 확인한다.
 
@@ -263,7 +265,7 @@ Task #4 Stage 4: HTTP API와 public snapshot 조회 구현
 ```bash
 npm test
 npm run build
-rg -n "access_token|refresh_token|auth.json|CODEX_ACCESS_TOKEN" src tests mydocs
+rg -n --glob '!src/**/__tests__/**' --glob '!mydocs/working/**' --glob '!mydocs/plans/**' "(^|[^A-Za-z0-9])(sk-[A-Za-z0-9_-]{10,}|gh[opsu]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|CODEX_ACCESS_TOKEN=|\"access_token\"\\s*:\\s*\"[^\"]{8,}|\"refresh_token\"\\s*:\\s*\"[^\"]{8,})" src README.md mydocs
 git diff --check
 ```
 
@@ -285,7 +287,7 @@ Task #4 Stage 5: web integration 경계와 최종 검증 정리
 - 실패한 검증은 단계 완료로 처리하지 않는다.
 - 계획 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자 승인을 받는다.
 - 문서 위치가 수행계획서 판단과 달라지면 구현 전에 수행계획서 또는 구현계획서를 갱신하고 작업지시자 승인을 받는다.
-- `rg -n "access_token|refresh_token|auth.json|CODEX_ACCESS_TOKEN" src tests mydocs`는 실제 credential 저장이 없음을 확인하기 위한 보안 점검으로 실행한다. 문서의 금지어 설명 때문에 match가 발생하면 위치와 맥락을 단계 보고서에 명시한다.
+- secret grep은 실제 token-like 값이 source/docs에 남지 않았는지 확인하기 위한 보안 점검으로 실행한다. 테스트 fixture의 가짜 토큰과 단계 보고서는 제외한다.
 
 ## 커밋
 

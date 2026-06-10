@@ -27,16 +27,44 @@ export function resolveProfileRoute(location, sampleSnapshot) {
 
   const requestedHandle = decodeURIComponent(profileMatch[1]);
   if (!isSampleHandle(requestedHandle, sampleSnapshot)) {
-    return createState("unavailable", requestedHandle, null);
+    return createState("loading", requestedHandle, null, { source: "api" });
   }
 
   return createState("ready", requestedHandle, sampleSnapshot);
 }
 
-function createState(status, handle, snapshot) {
+export async function loadProfileRouteSnapshot(location, options = {}) {
+  const { client, sampleSnapshot } = options;
+  const route = resolveProfileRoute(location, sampleSnapshot);
+
+  if (route.source !== "api") {
+    return route;
+  }
+
+  if (!client || typeof client.getPublicSnapshot !== "function") {
+    return createState("unavailable", route.handle, null, { source: "api" });
+  }
+
+  try {
+    const record = await client.getPublicSnapshot(route.handle);
+
+    if (!record?.snapshot) {
+      return createState("unavailable", route.handle, null, { source: "api" });
+    }
+
+    return createState("ready", record.handle ?? route.handle, record.snapshot, {
+      source: "api"
+    });
+  } catch {
+    return createState("unavailable", route.handle, null, { source: "api" });
+  }
+}
+
+function createState(status, handle, snapshot, options = {}) {
   return {
     handle,
     snapshot,
+    source: options.source ?? "sample",
     status
   };
 }
