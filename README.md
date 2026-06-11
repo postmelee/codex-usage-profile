@@ -40,13 +40,13 @@ The runtime uses the GitHub access token only to fetch the authenticated GitHub 
 
 When `.env` is missing, `npm run dev:runtime` still starts with safe defaults for frontend and non-OAuth API smoke checks. GitHub login redirect needs `GITHUB_CLIENT_ID`; callback completion needs both GitHub OAuth settings.
 
-The MVP login and submit runtime flow is:
+This local runtime currently verifies the browser GitHub OAuth and session boundary. The MVP CLI auth flow is planned as a device-code flow so users can run `npx codex-usage-profile@latest submit` without configuring a local callback:
 
-1. CLI calls `POST /api/cli/login/start` and opens the returned `browserUrl`.
-2. Browser visits `GET /api/auth/github/login?cli_login_challenge=...`.
-3. GitHub redirects to `GET /api/auth/github/callback`.
-4. Callback upserts the GitHub owner, sets an `HttpOnly` session cookie, and approves the CLI challenge for the signed-in owner.
-5. CLI calls `POST /api/cli/login/exchange` once to receive a raw CLI token.
+1. CLI calls a device login start endpoint and receives a verification URL, user code, device code, expiry, and poll interval.
+2. CLI displays the verification URL and user code, then polls the device login status endpoint.
+3. Browser opens the verification URL. If needed, the user signs in with GitHub and approves the pending CLI device code.
+4. The poll response returns a raw CLI API token once after approval.
+5. CLI stores the token locally with restrictive permissions.
 6. Future CLI submit requests use `Authorization: Bearer ...` against `POST /api/snapshots/submit`.
 
 ## Security And Privacy

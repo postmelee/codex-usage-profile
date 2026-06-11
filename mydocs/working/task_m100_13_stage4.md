@@ -60,9 +60,9 @@ PORT=5174 PUBLIC_BASE_URL=http://127.0.0.1:5174 GITHUB_CLIENT_ID=github_client_s
 
 ### #5 CLI submit flow
 
-- CLI login start endpoint는 `POST /api/cli/login/start`다.
-- 브라우저 승인 URL은 start 응답의 `browserUrl`을 같은 origin으로 열면 된다.
-- CLI token 수령은 `POST /api/cli/login/exchange`다.
+- 현재 local runtime은 GitHub OAuth/session smoke 경계를 제공한다.
+- MVP CLI auth는 별도 후속 이슈에서 device-code API로 구현한다.
+- CLI는 device login start 응답의 verification URL과 user code를 표시하고, poll endpoint에서 승인 완료와 raw CLI token 1회 반환을 기다리는 흐름으로 진행한다.
 - snapshot submit은 `POST /api/snapshots/submit`에 `Authorization: Bearer ...`로 보낸다.
 - local runtime이 같은 origin API를 제공하므로 CLI smoke는 `http://127.0.0.1:{PORT}` 기준으로 진행할 수 있다.
 

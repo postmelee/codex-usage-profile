@@ -193,7 +193,7 @@ Task #13 Stage 3: local dev runtime 통합
   - `/api/auth/me`
   - logout
   - settings shell 진입 전제
-- #5 CLI가 사용할 local runtime URL과 login start/exchange/submit endpoint를 정리한다.
+- #5 CLI가 사용할 local runtime URL과 device-code login/submit handoff를 정리한다.
 - #15 token/device 관리와 #6 card endpoint가 같은 host adapter에 route를 추가할 때의 주의점을 기록한다.
 
 ### 검증
