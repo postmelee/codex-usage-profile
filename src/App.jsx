@@ -11,9 +11,39 @@ import {
 
 export function App() {
   const profileApiClient = useMemo(() => createProfileApiClient(), []);
+  const [authState, setAuthState] = useState({
+    account: null,
+    status: "loading"
+  });
   const [route, setRoute] = useState(() => (
     resolveProfileRoute(window.location, sampleProfileSnapshot)
   ));
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    profileApiClient.getCurrentAccount().then((account) => {
+      if (!isCurrent) {
+        return;
+      }
+
+      setAuthState({
+        account,
+        status: account ? "authenticated" : "anonymous"
+      });
+    }).catch(() => {
+      if (isCurrent) {
+        setAuthState({
+          account: null,
+          status: "unavailable"
+        });
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [profileApiClient]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -48,6 +78,7 @@ export function App() {
 
   return (
     <ProfilePage
+      authState={authState}
       handle={route.handle}
       status={route.status}
       viewModel={viewModel}

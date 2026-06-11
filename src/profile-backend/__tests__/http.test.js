@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   CLI_LOGIN_STATUS,
   CLI_TOKEN_PREFIX,
+  DEFAULT_SESSION_COOKIE_NAME,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
   createCliTokenService,
@@ -42,17 +43,76 @@ test("handles GitHub callback owner upsert and optional CLI challenge approval",
   ]);
 });
 
+test("handles GitHub browser login redirect, callback session, and me lookup", async () => {
+  const fixture = createFixture();
+  const started = await requestJson(fixture.handler, "POST", "/api/cli/login/start", {
+    label: "macbook"
+  });
+  const loginResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    `/api/auth/github/login?cli_login_challenge=${started.body.data.challenge.id}&redirect_to=/u/postmelee`
+  );
+  const location = loginResponse.headers.get("location");
+  const authorizationUrl = new URL(location);
+
+  assert.equal(loginResponse.status, 302);
+  assert.equal(
+    `${authorizationUrl.origin}${authorizationUrl.pathname}`,
+    "https://github.com/login/oauth/authorize"
+  );
+  assert.equal(authorizationUrl.searchParams.get("client_id"), "github_client_1");
+  assert.equal(
+    authorizationUrl.searchParams.get("redirect_uri"),
+    "http://localhost/api/auth/github/callback"
+  );
+  assert.equal(authorizationUrl.searchParams.get("scope"), "read:user");
+
+  const state = authorizationUrl.searchParams.get("state");
+  const callback = await requestJson(
+    fixture.handler,
+    "GET",
+    `/api/auth/github/callback?code=oauth_code_1&state=${state}`
+  );
+  const cookie = callback.headers.get("set-cookie");
+  const me = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/auth/me",
+    undefined,
+    { cookie }
+  );
+
+  assert.equal(callback.status, 200);
+  assert.match(cookie, new RegExp(`${DEFAULT_SESSION_COOKIE_NAME}=session_`));
+  assert.equal(callback.body.data.owner.id, "owner_github_12345");
+  assert.equal(callback.body.data.session.ownerId, "owner_github_12345");
+  assert.equal(callback.body.data.challenge.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(callback.body.data.challenge.ownerId, "owner_github_12345");
+  assert.equal(callback.body.data.redirectTo, "/u/postmelee");
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.owner.handle, "postmelee");
+  assert.equal(me.body.data.session.ownerId, "owner_github_12345");
+});
+
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
+  const cookie = fixture.saveSession();
 
   const started = await requestJson(fixture.handler, "POST", "/api/cli/login/start", {
     label: "macbook"
   });
-  const approved = await requestJson(fixture.handler, "POST", "/api/cli/login/approve", {
-    challengeId: started.body.data.challenge.id,
-    ownerId: "owner_1"
-  });
+  const approved = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/cli/login/approve",
+    {
+      challengeId: started.body.data.challenge.id,
+      ownerId: "attacker_owner"
+    },
+    { cookie }
+  );
   const exchanged = await requestJson(fixture.handler, "POST", "/api/cli/login/exchange", {
     challengeId: started.body.data.challenge.id
   });
@@ -60,11 +120,74 @@ test("handles CLI login start, approve, and exchange without exposing token dige
   assert.equal(started.status, 201);
   assert.equal(started.body.data.browserUrl, "/api/auth/github/login?cli_login_challenge=cli_login_1");
   assert.equal(approved.body.data.challenge.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(approved.body.data.challenge.ownerId, "owner_1");
   assert.equal(exchanged.status, 200);
   assert.equal(exchanged.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
   assert.equal(exchanged.body.data.challenge.status, CLI_LOGIN_STATUS.EXCHANGED);
   assert.equal(Object.hasOwn(exchanged.body.data.tokenRecord, "tokenDigest"), false);
   assert.equal(Object.hasOwn(exchanged.body.data.tokenRecord, "token"), false);
+});
+
+test("rejects CLI login approval without a session cookie", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const started = await requestJson(fixture.handler, "POST", "/api/cli/login/start", {
+    label: "macbook"
+  });
+
+  const response = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/cli/login/approve",
+    {
+      challengeId: started.body.data.challenge.id,
+      ownerId: "owner_1"
+    }
+  );
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(response.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED,
+      message: "Session cookie is required"
+    }
+  });
+});
+
+test("handles session logout and revokes subsequent me lookup", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const me = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/auth/me",
+    undefined,
+    { cookie }
+  );
+  const logout = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/logout",
+    {},
+    { cookie }
+  );
+  const afterLogout = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/auth/me",
+    undefined,
+    { cookie }
+  );
+
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.owner.id, "owner_1");
+  assert.equal(logout.status, 200);
+  assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
+  assert.equal(logout.body.data.session.revokedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(afterLogout.status, 401);
+  assert.equal(afterLogout.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
 });
 
 test("handles bearer snapshot submit and public handle lookup", async () => {
@@ -206,6 +329,8 @@ function createFixture() {
     now: () => current,
     createId,
     createToken,
+    githubClientId: "github_client_1",
+    publicBaseUrl: BASE_URL,
     githubClient: {
       async exchangeCodeForToken(code) {
         githubCalls.push(["exchange", code]);
@@ -245,6 +370,17 @@ function createFixture() {
         ...overrides
       });
     },
+    saveSession(ownerId = "owner_1", overrides = {}) {
+      const session = store.saveSession({
+        id: overrides.id ?? "session_1",
+        ownerId,
+        createdAt: overrides.createdAt ?? "2026-06-10T00:00:00.000Z",
+        expiresAt: overrides.expiresAt ?? "2026-07-10T00:00:00.000Z",
+        revokedAt: overrides.revokedAt ?? null
+      });
+
+      return `${DEFAULT_SESSION_COOKIE_NAME}=${session.id}`;
+    },
     setNow(value) {
       current = value;
     }
@@ -265,17 +401,21 @@ async function requestJson(handler, method, path, body, headers = {}) {
 }
 
 async function requestRaw(handler, method, path, body = "", headers = {}) {
-  const response = await handler(new Request(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: method === "GET" || method === "HEAD" ? undefined : body
-  }));
+  const response = await requestResponse(handler, method, path, body, headers);
 
   return {
     status: response.status,
     headers: response.headers,
     body: await response.json()
   };
+}
+
+async function requestResponse(handler, method, path, body = "", headers = {}) {
+  return handler(new Request(`${BASE_URL}${path}`, {
+    method,
+    headers,
+    body: method === "GET" || method === "HEAD" ? undefined : body
+  }));
 }
 
 function createIdFactory() {
@@ -295,4 +435,3 @@ function createTokenFactory() {
     return token;
   };
 }
-

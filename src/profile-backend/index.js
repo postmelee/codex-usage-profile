@@ -6,11 +6,19 @@ export {
 } from "./errors.js";
 
 export {
+  DEFAULT_DURABLE_STORE_FILE,
+  createFileProfileBackendStore,
+  readStoreState,
+  writeStoreState
+} from "./durable-store.js";
+
+export {
   createProfileBackendHttpHandler,
   errorResponse,
   okResponse,
   readBearerToken,
-  readJsonBody
+  readJsonBody,
+  redirectResponse
 } from "./http.js";
 
 export {
@@ -34,6 +42,17 @@ export {
 } from "./cli-login.js";
 
 export {
+  DEFAULT_GITHUB_AUTHORIZATION_URL,
+  DEFAULT_GITHUB_CALLBACK_PATH,
+  DEFAULT_GITHUB_OAUTH_SCOPE,
+  DEFAULT_OAUTH_STATE_TTL_MS,
+  OAUTH_STATE_STATUS,
+  buildGitHubAuthorizationUrl,
+  createOAuthRuntimeService,
+  resolveCallbackUrl
+} from "./oauth-runtime.js";
+
+export {
   assertNoForbiddenSecrets,
   detectForbiddenSecrets,
   hasForbiddenSecrets,
@@ -47,6 +66,17 @@ export {
 } from "./snapshots.js";
 
 export {
+  DEFAULT_SESSION_COOKIE_NAME,
+  DEFAULT_SESSION_TTL_MS,
+  createSessionService,
+  parseCookieHeader,
+  readSessionIdFromCookie,
+  serializeExpiredSessionCookie,
+  serializeSessionCookie
+} from "./session.js";
+
+export {
+  PROFILE_BACKEND_STORE_SCHEMA_VERSION,
   PROFILE_VISIBILITY,
   createMemoryProfileBackendStore
 } from "./store.js";
