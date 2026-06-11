@@ -69,7 +69,7 @@ PORT=5174 PUBLIC_BASE_URL=http://127.0.0.1:5174 GITHUB_CLIENT_ID=github_client_s
 
 - Stage 4에서는 전체 통합 검증과 secret scan, #14/#5/#15/#6 handoff 메모를 정리한다.
 - #14는 `npm run dev:runtime`과 `/api/auth/me`, `/api/auth/logout`을 사용해 account/settings UI smoke를 진행할 수 있다.
-- #5 CLI는 같은 origin runtime의 `/api/cli/login/start`, `/api/cli/login/exchange`, `/api/snapshots/submit`을 사용할 수 있다.
+- MVP CLI auth는 후속 #17 device-code API가 담당하고, #5 CLI는 같은 origin runtime에서 device login과 `POST /api/snapshots/submit`을 이어받을 수 있다.
 
 ## 승인 요청
 
