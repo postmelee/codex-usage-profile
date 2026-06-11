@@ -107,7 +107,7 @@ Task #13 Stage 1: host adapter contract 구현
 
 ```bash
 npm test -- src/profile-runtime/__tests__/github-oauth-client.test.js src/profile-runtime/__tests__/config.test.js
-rg -n "(gh[opsu]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|GITHUB_CLIENT_SECRET=.*[A-Za-z0-9]{8,})" README.md .env.example src || true
+rg -n "(gh[opsu]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|GITHUB_CLIENT_SECRET=.*[A-Za-z0-9]{8,})" README.md .env.example src/profile-runtime
 git diff --check
 ```
 

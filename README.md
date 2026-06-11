@@ -19,6 +19,8 @@ The Vite dev server renders the frontend preview only. Auth, CLI login, snapshot
 
 The backend package exposes a framework-neutral `Request`/`Response` handler instead of a standalone server. A host adapter should pass runtime configuration into `createProfileBackendHttpHandler()`:
 
+Copy `.env.example` to `.env` for local runtime work. `.env` is ignored by git and must contain real local secrets only on your machine.
+
 | Setting | Purpose |
 |---|---|
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client id used by `/api/auth/github/login` |
@@ -26,6 +28,14 @@ The backend package exposes a framework-neutral `Request`/`Response` handler ins
 | `PUBLIC_BASE_URL` | Public origin used to build the OAuth callback URL |
 | `PROFILE_STORE_FILE` | Local durable store path when using `createFileProfileBackendStore()` |
 | `SESSION_SECURE_COOKIES` | Enable secure cookies behind HTTPS production hosting |
+
+For local GitHub OAuth testing, configure the OAuth App callback URL to:
+
+```text
+{PUBLIC_BASE_URL}/api/auth/github/callback
+```
+
+The runtime uses the GitHub access token only to fetch the authenticated GitHub user, then discards it.
 
 The MVP login and submit runtime flow is:
 
