@@ -7,17 +7,20 @@ Codex Usage Profile renders a Codex-style usage profile page and defines the bac
 ```bash
 npm install
 npm run dev
+npm run dev:runtime
 npm test
 npm run build
 ```
 
 The local preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` routes are wired to the public snapshot API client and fall back to an unavailable state when no public snapshot exists.
 
-The Vite dev server renders the frontend preview only. Auth, CLI login, snapshot submit, and public snapshot lookup need a host adapter that mounts `createProfileBackendHttpHandler()` on the same origin or proxies `/api/*` to that handler.
+`npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
 ## Runtime Configuration
 
 The backend package exposes a framework-neutral `Request`/`Response` handler instead of a standalone server. A host adapter should pass runtime configuration into `createProfileBackendHttpHandler()`:
+
+Copy `.env.example` to `.env` for local runtime work. `.env` is ignored by git and must contain real local secrets only on your machine.
 
 | Setting | Purpose |
 |---|---|
@@ -27,13 +30,23 @@ The backend package exposes a framework-neutral `Request`/`Response` handler ins
 | `PROFILE_STORE_FILE` | Local durable store path when using `createFileProfileBackendStore()` |
 | `SESSION_SECURE_COOKIES` | Enable secure cookies behind HTTPS production hosting |
 
-The MVP login and submit runtime flow is:
+For local GitHub OAuth testing, configure the OAuth App callback URL to:
 
-1. CLI calls `POST /api/cli/login/start` and opens the returned `browserUrl`.
-2. Browser visits `GET /api/auth/github/login?cli_login_challenge=...`.
-3. GitHub redirects to `GET /api/auth/github/callback`.
-4. Callback upserts the GitHub owner, sets an `HttpOnly` session cookie, and approves the CLI challenge for the signed-in owner.
-5. CLI calls `POST /api/cli/login/exchange` once to receive a raw CLI token.
+```text
+{PUBLIC_BASE_URL}/api/auth/github/callback
+```
+
+The runtime uses the GitHub access token only to fetch the authenticated GitHub user, then discards it.
+
+When `.env` is missing, `npm run dev:runtime` still starts with safe defaults for frontend and non-OAuth API smoke checks. GitHub login redirect needs `GITHUB_CLIENT_ID`; callback completion needs both GitHub OAuth settings.
+
+This local runtime currently verifies the browser GitHub OAuth and session boundary. The MVP CLI auth flow is planned as a device-code flow so users can run `npx codex-usage-profile@latest submit` without configuring a local callback:
+
+1. CLI calls a device login start endpoint and receives a verification URL, user code, device code, expiry, and poll interval.
+2. CLI displays the verification URL and user code, then polls the device login status endpoint.
+3. Browser opens the verification URL. If needed, the user signs in with GitHub and approves the pending CLI device code.
+4. The poll response returns a raw CLI API token once after approval.
+5. CLI stores the token locally with restrictive permissions.
 6. Future CLI submit requests use `Authorization: Bearer ...` against `POST /api/snapshots/submit`.
 
 ## Security And Privacy
