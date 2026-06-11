@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:runtime": "node src/profile-runtime/dev-server.js",
     "build": "vite build",
     "test": "node --test",
     "test:e2e": "playwright test"

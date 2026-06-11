@@ -7,13 +7,14 @@ Codex Usage Profile renders a Codex-style usage profile page and defines the bac
 ```bash
 npm install
 npm run dev
+npm run dev:runtime
 npm test
 npm run build
 ```
 
 The local preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` routes are wired to the public snapshot API client and fall back to an unavailable state when no public snapshot exists.
 
-The Vite dev server renders the frontend preview only. Auth, CLI login, snapshot submit, and public snapshot lookup need a host adapter that mounts `createProfileBackendHttpHandler()` on the same origin or proxies `/api/*` to that handler.
+`npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
 ## Runtime Configuration
 
@@ -36,6 +37,8 @@ For local GitHub OAuth testing, configure the OAuth App callback URL to:
 ```
 
 The runtime uses the GitHub access token only to fetch the authenticated GitHub user, then discards it.
+
+When `.env` is missing, `npm run dev:runtime` still starts with safe defaults for frontend and non-OAuth API smoke checks. GitHub login redirect needs `GITHUB_CLIENT_ID`; callback completion needs both GitHub OAuth settings.
 
 The MVP login and submit runtime flow is:
 
