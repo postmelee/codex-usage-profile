@@ -1,9 +1,11 @@
 import { Icon } from "./Icons.jsx";
 
-export function ProfileShell({ children }) {
+export function ProfileShell({ authState, children }) {
+  const authStatus = authState?.status ?? "unknown";
+
   return (
     <div className="app-frame">
-      <main className="profile-shell">
+      <main className="profile-shell" data-auth-status={authStatus}>
         <header className="profile-topbar">
           <h1>Profile</h1>
           <div className="profile-actions" aria-label="Profile actions">
@@ -13,8 +15,20 @@ export function ProfileShell({ children }) {
             </button>
           </div>
         </header>
+        <p className="sr-only" aria-live="polite">
+          {getSessionStatusLabel(authStatus)}
+        </p>
         {children}
       </main>
     </div>
   );
+}
+
+function getSessionStatusLabel(status) {
+  return {
+    anonymous: "No signed-in account",
+    authenticated: "Signed-in account loaded",
+    loading: "Checking signed-in account",
+    unavailable: "Signed-in account unavailable"
+  }[status] ?? "Signed-in account status unknown";
 }

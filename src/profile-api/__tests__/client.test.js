@@ -4,9 +4,55 @@ import test from "node:test";
 import {
   ProfileApiError,
   buildApiUrl,
+  buildGitHubLoginUrl,
   createProfileApiClient
 } from "../client.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
+
+test("loads the current account with session credentials", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          owner: {
+            id: "owner_1",
+            handle: "postmelee",
+            githubLogin: "postmelee"
+          },
+          session: {
+            id: "session_1",
+            ownerId: "owner_1"
+          }
+        }
+      });
+    }
+  });
+
+  const account = await client.getCurrentAccount();
+
+  assert.equal(requests[0].url, "/api/auth/me");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[0].options.headers.accept, "application/json");
+  assert.equal(account.owner.handle, "postmelee");
+  assert.equal(account.session.ownerId, "owner_1");
+});
+
+test("returns null when current account has no valid session", async () => {
+  const client = createProfileApiClient({
+    fetchImpl: async () => jsonResponse({
+      ok: false,
+      error: {
+        code: "unauthorized",
+        message: "Session cookie is required"
+      }
+    }, { status: 401 })
+  });
+
+  assert.equal(await client.getCurrentAccount(), null);
+});
 
 test("loads a public snapshot from the API envelope", async () => {
   const requests = [];
@@ -81,6 +127,33 @@ test("submits snapshots with bearer auth and JSON body", async () => {
   assert.equal(record.handle, "postmelee");
 });
 
+test("logs out with session credentials", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          session: {
+            id: "session_1",
+            ownerId: "owner_1",
+            revokedAt: "2026-06-10T00:00:00.000Z"
+          }
+        }
+      });
+    }
+  });
+
+  const result = await client.logout();
+
+  assert.equal(requests[0].url, "/api/auth/logout");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[0].options.headers["content-type"], "application/json");
+  assert.equal(result.session.revokedAt, "2026-06-10T00:00:00.000Z");
+});
+
 test("throws ProfileApiError for API error envelopes", async () => {
   const client = createProfileApiClient({
     fetchImpl: async () => jsonResponse({
@@ -140,6 +213,28 @@ test("builds API URLs for relative and absolute bases", () => {
   );
 });
 
+test("builds GitHub login URLs for browser and CLI approval flows", () => {
+  assert.equal(
+    buildGitHubLoginUrl("", {
+      cliLoginChallengeId: "cli_login_1",
+      redirectTo: "/u/postmelee"
+    }),
+    "/api/auth/github/login?cli_login_challenge=cli_login_1&redirect_to=%2Fu%2Fpostmelee"
+  );
+  assert.equal(
+    buildGitHubLoginUrl("https://profiles.example.test/app", {
+      redirectTo: "/u/postmelee"
+    }),
+    "https://profiles.example.test/api/auth/github/login?redirect_to=%2Fu%2Fpostmelee"
+  );
+
+  const client = createProfileApiClient({ fetchImpl: async () => jsonResponse({}) });
+  assert.equal(
+    client.buildGitHubLoginUrl({ cliLoginChallengeId: "cli_login_1" }),
+    "/api/auth/github/login?cli_login_challenge=cli_login_1"
+  );
+});
+
 function jsonResponse(body, options = {}) {
   return new Response(JSON.stringify(body), {
     status: options.status ?? 200,
@@ -148,4 +243,3 @@ function jsonResponse(body, options = {}) {
     }
   });
 }
-

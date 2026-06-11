@@ -20,6 +20,29 @@ export function createProfileApiClient(options = {}) {
   }
 
   return {
+    buildGitHubLoginUrl(loginOptions = {}) {
+      return buildGitHubLoginUrl(baseUrl, loginOptions);
+    },
+
+    async getCurrentAccount() {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/me"), {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json"
+        }
+      });
+
+      if (response.status === 401) {
+        return null;
+      }
+
+      const envelope = await readApiEnvelope(response);
+      return {
+        owner: envelope.data.owner,
+        session: envelope.data.session
+      };
+    },
+
     async getPublicSnapshot(handle) {
       const normalizedHandle = requireHandle(handle);
       const response = await fetchImpl(
@@ -56,6 +79,22 @@ export function createProfileApiClient(options = {}) {
       const envelope = await readApiEnvelope(response);
 
       return envelope.data.snapshot;
+    },
+
+    async logout() {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/logout"), {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return {
+        session: envelope.data.session
+      };
     }
   };
 }
@@ -66,6 +105,32 @@ export function buildApiUrl(baseUrl, path) {
   }
 
   return new URL(path, ensureTrailingSlash(baseUrl)).toString();
+}
+
+export function buildGitHubLoginUrl(baseUrl = "", options = {}) {
+  const url = new URL(
+    buildApiUrl(baseUrl, "/api/auth/github/login"),
+    "http://localhost"
+  );
+  const cliLoginChallengeId = normalizeOptionalString(
+    options.cliLoginChallengeId,
+    "cliLoginChallengeId"
+  );
+  const redirectTo = normalizeOptionalString(options.redirectTo, "redirectTo");
+
+  if (cliLoginChallengeId) {
+    url.searchParams.set("cli_login_challenge", cliLoginChallengeId);
+  }
+
+  if (redirectTo) {
+    url.searchParams.set("redirect_to", redirectTo);
+  }
+
+  if (baseUrl) {
+    return url.toString();
+  }
+
+  return `${url.pathname}${url.search}`;
 }
 
 async function readApiEnvelope(response) {
@@ -144,3 +209,16 @@ function requireToken(token) {
   return token.trim();
 }
 
+function normalizeOptionalString(value, label) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ProfileApiError(`${label} must be a non-empty string`, {
+      code: "validation_failed"
+    });
+  }
+
+  return value.trim();
+}
