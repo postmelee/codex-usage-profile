@@ -1,5 +1,7 @@
 export declare const PROFILE_SNAPSHOT_SCHEMA_VERSION: 1;
 
+export * from "./v2-types.js";
+
 export interface ProfileSnapshot {
   schemaVersion: typeof PROFILE_SNAPSHOT_SCHEMA_VERSION;
   capturedAt: string;

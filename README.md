@@ -16,6 +16,17 @@ The local preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` r
 
 `npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
+## Usage Snapshot Contract
+
+`UsageSnapshot v2` is the shared data contract for analyzer-produced usage data. The contract is documented in [`docs/usage-snapshot-v2.md`](docs/usage-snapshot-v2.md).
+
+The intended boundary is:
+
+- `codex-usage-analyzer` reads local usage data and emits a `UsageSnapshot v2` JSON object.
+- `codex-usage-profile` authenticates users, receives snapshots, stores latest public/private state, and renders profile/card UI.
+- GitHub-facing fields such as login, avatar URL, display name, bio, profile URL, visibility, sessions, tokens, and devices belong to the web service account/profile layer, not to the analyzer snapshot.
+- Product-specific CLIs can wrap the analyzer SDK and submit the resulting snapshot, but should keep rendered UI-only values and account identity outside `payload.snapshot`.
+
 ## Runtime Configuration
 
 The backend package exposes a framework-neutral `Request`/`Response` handler instead of a standalone server. A host adapter should pass runtime configuration into `createProfileBackendHttpHandler()`:
@@ -57,5 +68,6 @@ This local runtime currently verifies the browser GitHub OAuth and session bound
 - CLI submit sends a profile snapshot JSON payload with a CLI API token in the `Authorization: Bearer ...` header.
 - A raw CLI API token is returned only at issue/exchange time. Backend storage keeps a digest and metadata, not the raw token.
 - Snapshot submit rejects credential-like fields and values such as OAuth access tokens, refresh tokens, local auth files, API keys, and `CODEX_ACCESS_TOKEN` environment assignments.
+- Analyzer snapshots must not include GitHub-facing profile data such as GitHub login, avatar URL, bio, profile URL, service visibility, session ids, CLI tokens, or device metadata. The web service merges GitHub account/profile records with usage snapshots after submit.
 - Public profile lookup returns only the latest snapshot whose visibility is `public`; private or missing snapshots are treated as not found.
 - The HTTP handler in this repository is a contract-level adapter. Real deployment still needs rate limiting, CSRF review for state-changing browser routes, production database selection, backup policy, and secret management.
