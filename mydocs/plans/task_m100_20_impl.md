@@ -108,7 +108,7 @@ Task #20 Stage 1: analyzer 분리 경계 정리
 
 ```bash
 node packages/codex-usage-analyzer/bin/codex-usage-analyzer.js analyze --json
-npm test -- packages/codex-usage-analyzer
+npm --workspace codex-usage-analyzer test
 git diff --check
 ```
 
@@ -152,7 +152,8 @@ Task #20 Stage 2: analyzer workspace package 스캐폴드
 ### 검증
 
 ```bash
-npm test -- packages/codex-usage-analyzer src/profile-snapshot
+npm --workspace codex-usage-analyzer test
+npm test -- src/profile-snapshot
 node --test src/profile-snapshot/__tests__/v2-schema.test.js
 git diff --check
 ```
