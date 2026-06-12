@@ -106,3 +106,92 @@ Stage 2에서는 이 metadata를 standalone repository root에 그대로 사용�
 - `.github/workflows/ci.yml`을 추가한다.
 - README를 standalone repository 문맥으로 갱신한다.
 - 새 tree에서 `npm test`와 CLI smoke를 통과시킨 뒤 local initial commit을 만든다.
+
+## Stage 2 — standalone source tree 구성
+
+### 생성 경로
+
+```text
+/private/tmp/codex-usage-analyzer-standalone
+```
+
+### 포함 파일
+
+Stage 2 기준 standalone tree는 15개 파일로 구성했다.
+
+```text
+.github/workflows/ci.yml
+README.md
+bin/codex-usage-analyzer.js
+package.json
+src/__tests__/analyze.test.js
+src/__tests__/cli.test.js
+src/__tests__/snapshot-v2.test.js
+src/analyze.js
+src/cli.js
+src/fixtures/sample-v2-snapshot.js
+src/index.d.ts
+src/index.js
+src/snapshot/index.js
+src/snapshot/v2-schema.js
+src/snapshot/v2-types.d.ts
+```
+
+### README 조정
+
+workspace staging 문구를 standalone repository 문맥으로 바꿨다.
+
+- analyzer는 product-specific CLI와 web service가 재사용하는 package로 설명한다.
+- GitHub login, submit token, public profile URL, rendered card는 wrapper product 책임으로 분리했다.
+- local smoke command와 `npm test`를 root 기준으로 명시했다.
+- npm publish, release automation, real local source parser는 follow-up work로 남겼다.
+
+### CI 구성
+
+`.github/workflows/ci.yml`을 추가했다.
+
+- trigger: `pull_request`, `push` to `main`
+- runtime: Node 20
+- commands:
+  - `npm test`
+  - `node bin/codex-usage-analyzer.js analyze --json`
+
+### package-lock 판단
+
+`package-lock.json`은 추가하지 않았다.
+
+이유:
+
+- 현재 package에는 runtime/dev dependency가 없다.
+- `npm test`와 CLI smoke가 install 없이 실행된다.
+- npm publish/release automation은 이번 task 범위 밖이다.
+
+### standalone local git 상태
+
+```text
+branch: main
+commit: 9a67be4 Initial codex-usage-analyzer package
+status: clean
+```
+
+### 검증 결과
+
+`npm test`
+
+- tests: 6
+- pass: 6
+- fail: 0
+
+`node bin/codex-usage-analyzer.js analyze --json`
+
+- exit code: 0
+- stdout: `schemaVersion: 2`, `producer.name: codex-usage-analyzer`를 포함한 sample-backed `UsageSnapshot v2` JSON
+
+`git diff --cached --check`
+
+- OK: whitespace 경고 없음
+
+### Stage 3 인계
+
+- `/private/tmp/codex-usage-analyzer-standalone`은 commit `9a67be4`를 가진 clean local repository 상태다.
+- Stage 3에서 `postmelee/codex-usage-analyzer` remote repository를 생성하고 이 commit을 push한다.
