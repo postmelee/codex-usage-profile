@@ -27,6 +27,18 @@ The intended boundary is:
 - GitHub-facing fields such as login, avatar URL, display name, bio, profile URL, visibility, sessions, tokens, and devices belong to the web service account/profile layer, not to the analyzer snapshot.
 - Product-specific CLIs can wrap the analyzer SDK and submit the resulting snapshot, but should keep rendered UI-only values and account identity outside `payload.snapshot`.
 
+## Analyzer Package
+
+This repository currently includes `codex-usage-analyzer` as a workspace package at [`packages/codex-usage-analyzer`](packages/codex-usage-analyzer/README.md).
+
+The analyzer CLI smoke path is:
+
+```bash
+node packages/codex-usage-analyzer/bin/codex-usage-analyzer.js analyze --json
+```
+
+The analyzer package is contract-first at this stage. It exposes the SDK/CLI boundary and canonical `UsageSnapshot v2` validator, but the real local usage parser is still a follow-up. See [`docs/codex-usage-analyzer.md`](docs/codex-usage-analyzer.md) for SDK exports, wrapper compatibility, and the later standalone repository split plan.
+
 ## Runtime Configuration
 
 The backend package exposes a framework-neutral `Request`/`Response` handler instead of a standalone server. A host adapter should pass runtime configuration into `createProfileBackendHttpHandler()`:
