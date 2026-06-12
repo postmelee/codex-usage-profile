@@ -14,6 +14,8 @@ The contract intentionally separates local usage analysis from web account ident
 
 `UsageSnapshot v2` is the value submitted as `payload.snapshot`. Submit wrapper metadata such as `handle`, `visibility`, bearer token, device id, and service session is not part of this contract.
 
+The analyzer SDK/CLI boundary is documented in [`codex-usage-analyzer.md`](codex-usage-analyzer.md).
+
 ## Top-Level Shape
 
 ```json

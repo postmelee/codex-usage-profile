@@ -3,4 +3,4 @@ export {
   assertUsageSnapshotV2,
   isUsageSnapshotV2,
   validateUsageSnapshotV2
-} from "codex-usage-analyzer";
+} from "./v2-schema.js";

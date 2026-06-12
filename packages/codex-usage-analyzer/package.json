@@ -1,0 +1,27 @@
+{
+  "name": "codex-usage-analyzer",
+  "version": "0.1.0",
+  "description": "Analyze local Codex usage and emit UsageSnapshot v2 JSON.",
+  "type": "module",
+  "types": "./src/index.d.ts",
+  "bin": {
+    "codex-usage-analyzer": "./bin/codex-usage-analyzer.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
