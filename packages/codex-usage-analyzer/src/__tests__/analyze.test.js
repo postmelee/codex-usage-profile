@@ -5,9 +5,9 @@ import {
   ANALYZER_NAME,
   ANALYZER_VERSION,
   analyzeUsage,
-  createSampleUsageSnapshotV2
+  createSampleUsageSnapshotV2,
+  validateUsageSnapshotV2
 } from "../index.js";
-import { validateUsageSnapshotV2 } from "../../../../src/profile-snapshot/v2-schema.js";
 
 test("analyzes usage into a UsageSnapshot v2 shaped object", async () => {
   const snapshot = await analyzeUsage();

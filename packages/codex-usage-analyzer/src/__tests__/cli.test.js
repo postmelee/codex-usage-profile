@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { validateUsageSnapshotV2 } from "../../../../src/profile-snapshot/v2-schema.js";
+import { validateUsageSnapshotV2 } from "../index.js";
 
 const binPath = fileURLToPath(new URL("../../bin/codex-usage-analyzer.js", import.meta.url));
 
