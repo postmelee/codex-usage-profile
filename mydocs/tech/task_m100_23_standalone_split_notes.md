@@ -195,3 +195,61 @@ status: clean
 
 - `/private/tmp/codex-usage-analyzer-standalone`은 commit `9a67be4`를 가진 clean local repository 상태다.
 - Stage 3에서 `postmelee/codex-usage-analyzer` remote repository를 생성하고 이 commit을 push한다.
+
+## Stage 3 — GitHub repository 생성과 초기 push
+
+### 생성 결과
+
+```text
+repository: postmelee/codex-usage-analyzer
+url: https://github.com/postmelee/codex-usage-analyzer
+visibility: PUBLIC
+default branch: main
+initial commit: 9a67be481766f198db5e1029192ac96bef6c2604
+```
+
+### 실행 명령
+
+```bash
+gh repo create postmelee/codex-usage-analyzer --public --source /private/tmp/codex-usage-analyzer-standalone --remote origin --push
+```
+
+결과:
+
+- repository 생성 성공
+- `HEAD -> main` push 성공
+- local branch `main`이 `origin/main`을 tracking하도록 설정됨
+
+### 검증 결과
+
+`gh repo view postmelee/codex-usage-analyzer --json nameWithOwner,visibility,url,defaultBranchRef`
+
+```json
+{
+  "defaultBranchRef": { "name": "main" },
+  "nameWithOwner": "postmelee/codex-usage-analyzer",
+  "url": "https://github.com/postmelee/codex-usage-analyzer",
+  "visibility": "PUBLIC"
+}
+```
+
+`git ls-remote https://github.com/postmelee/codex-usage-analyzer.git`
+
+```text
+9a67be481766f198db5e1029192ac96bef6c2604 HEAD
+9a67be481766f198db5e1029192ac96bef6c2604 refs/heads/main
+```
+
+Standalone local repository status:
+
+```text
+origin: https://github.com/postmelee/codex-usage-analyzer.git
+branch: main...origin/main
+status: clean
+```
+
+### Stage 4 인계
+
+- profile repo 문서에 standalone repository URL을 반영한다.
+- workspace copy는 이번 task에서 유지하고, standalone repository가 canonical distribution target임을 문서화한다.
+- 후속 task에서 npm publish 또는 pinned GitHub dependency 방식으로 profile dependency 전환을 결정한다.
