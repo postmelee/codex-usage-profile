@@ -29,7 +29,9 @@ The intended boundary is:
 
 ## Analyzer Package
 
-This repository currently includes `codex-usage-analyzer` as a workspace package at [`packages/codex-usage-analyzer`](packages/codex-usage-analyzer/README.md).
+The analyzer now has a standalone repository at [`postmelee/codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer).
+
+This repository still includes `codex-usage-analyzer` as a temporary workspace compatibility copy at [`packages/codex-usage-analyzer`](packages/codex-usage-analyzer/README.md).
 
 The analyzer CLI smoke path is:
 
@@ -37,7 +39,7 @@ The analyzer CLI smoke path is:
 node packages/codex-usage-analyzer/bin/codex-usage-analyzer.js analyze --json
 ```
 
-The analyzer package is contract-first at this stage. It exposes the SDK/CLI boundary and canonical `UsageSnapshot v2` validator, but the real local usage parser is still a follow-up. See [`docs/codex-usage-analyzer.md`](docs/codex-usage-analyzer.md) for SDK exports, wrapper compatibility, and the later standalone repository split plan.
+The analyzer package is contract-first at this stage. It exposes the SDK/CLI boundary and canonical `UsageSnapshot v2` validator, but the real local usage parser is still a follow-up. See [`docs/codex-usage-analyzer.md`](docs/codex-usage-analyzer.md) for SDK exports, wrapper compatibility, the standalone repository, and dependency transition options.
 
 ## Runtime Configuration
 

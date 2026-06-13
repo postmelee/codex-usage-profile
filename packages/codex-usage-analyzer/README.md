@@ -2,7 +2,15 @@
 
 `codex-usage-analyzer` is the local usage analysis package that emits `UsageSnapshot v2` JSON.
 
-This package is currently scaffolded as a workspace package inside `codex-usage-profile`. It is designed to move to its own repository after the SDK, CLI, and contract tests are stable.
+This directory is a temporary workspace compatibility copy inside `codex-usage-profile`.
+
+The standalone repository is:
+
+```text
+https://github.com/postmelee/codex-usage-analyzer
+```
+
+The standalone repository is the canonical distribution target. This workspace copy remains until the profile submit CLI can safely depend on a published package or a pinned GitHub dependency.
 
 ## CLI
 
@@ -60,6 +68,12 @@ Wrapper metadata such as bearer tokens, device ids, account handles, visibility,
 
 ## Repository Split
 
-This package is expected to move to a standalone `codex-usage-analyzer` repository after the workspace package is merged and before the profile submit CLI depends on it.
+The standalone repository has been created from this package root with a clean initial import.
 
-The standalone repository should keep this package root as its starting point, then add repository metadata, CI, release policy, and eventually npm publish automation.
+Follow-up work should decide when `codex-usage-profile` stops using this workspace copy:
+
+- npm semver dependency after parser and submit smoke verification
+- pinned GitHub dependency before npm publish, if needed
+- workspace copy until the profile submit flow no longer needs local package stability
+
+npm publishing, release automation, and the real local source parser remain follow-up work.
