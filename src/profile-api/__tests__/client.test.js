@@ -154,6 +154,40 @@ test("logs out with session credentials", async () => {
   assert.equal(result.session.revokedAt, "2026-06-10T00:00:00.000Z");
 });
 
+test("authorizes device login with session credentials", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          challenge: {
+            id: "cli_login_1",
+            ownerId: "owner_1",
+            status: "approved"
+          },
+          status: "approved"
+        }
+      });
+    }
+  });
+
+  const result = await client.authorizeDeviceLogin({
+    userCode: "ABCD-1234"
+  });
+
+  assert.equal(requests[0].url, "/api/auth/device/authorize");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[0].options.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    userCode: "ABCD-1234"
+  });
+  assert.equal(result.status, "approved");
+  assert.equal(result.challenge.ownerId, "owner_1");
+});
+
 test("throws ProfileApiError for API error envelopes", async () => {
   const client = createProfileApiClient({
     fetchImpl: async () => jsonResponse({
@@ -197,6 +231,14 @@ test("validates required client inputs", async () => {
   );
   await assert.rejects(
     () => client.submitSnapshot({ token: "", payload: {} }),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => client.authorizeDeviceLogin({ userCode: "" }),
     (error) => {
       assert.equal(error instanceof ProfileApiError, true);
       assert.equal(error.code, "validation_failed");

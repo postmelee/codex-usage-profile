@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createProfileApiClient } from "./profile-api/client.js";
 import { sampleProfileSnapshot } from "./profile-snapshot/fixtures/sample-snapshot.js";
 import { selectProfileViewModel } from "./profile-snapshot/index.js";
+import { DeviceApprovalPage } from "./profile-ui/DeviceApprovalPage.jsx";
 import { ProfilePage } from "./profile-ui/ProfilePage.jsx";
 import {
   loadProfileRouteSnapshot,
@@ -76,6 +77,16 @@ export function App() {
     ? selectProfileViewModel(route.snapshot)
     : null;
 
+  if (isDeviceApprovalRoute(window.location)) {
+    return (
+      <DeviceApprovalPage
+        authState={authState}
+        client={profileApiClient}
+        location={window.location}
+      />
+    );
+  }
+
   return (
     <ProfilePage
       authState={authState}
@@ -84,4 +95,8 @@ export function App() {
       viewModel={viewModel}
     />
   );
+}
+
+function isDeviceApprovalRoute(location) {
+  return location.pathname.replace(/\/+$/, "") === "/device";
 }

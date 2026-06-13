@@ -81,6 +81,28 @@ export function createProfileApiClient(options = {}) {
       return envelope.data.snapshot;
     },
 
+    async authorizeDeviceLogin(options = {}) {
+      const userCode = requireDeviceUserCode(options.userCode);
+      const response = await fetchImpl(
+        buildApiUrl(baseUrl, "/api/auth/device/authorize"),
+        {
+          body: JSON.stringify({ userCode }),
+          credentials: "same-origin",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json"
+          },
+          method: "POST"
+        }
+      );
+      const envelope = await readApiEnvelope(response);
+
+      return {
+        challenge: envelope.data.challenge,
+        status: envelope.data.status
+      };
+    },
+
     async logout() {
       const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/logout"), {
         credentials: "same-origin",
@@ -207,6 +229,16 @@ function requireToken(token) {
   }
 
   return token.trim();
+}
+
+function requireDeviceUserCode(userCode) {
+  if (typeof userCode !== "string" || userCode.trim() === "") {
+    throw new ProfileApiError("Device user code is required", {
+      code: "validation_failed"
+    });
+  }
+
+  return userCode.trim();
 }
 
 function normalizeOptionalString(value, label) {
