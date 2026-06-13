@@ -253,3 +253,47 @@ status: clean
 - profile repo 문서에 standalone repository URL을 반영한다.
 - workspace copy는 이번 task에서 유지하고, standalone repository가 canonical distribution target임을 문서화한다.
 - 후속 task에서 npm publish 또는 pinned GitHub dependency 방식으로 profile dependency 전환을 결정한다.
+
+## Stage 4 — profile repo 연동 문서 정리
+
+### 문서 반영
+
+수정 파일:
+
+```text
+README.md
+docs/codex-usage-analyzer.md
+packages/codex-usage-analyzer/README.md
+```
+
+반영 내용:
+
+- standalone repository URL: `https://github.com/postmelee/codex-usage-analyzer`
+- standalone repository가 analyzer package의 canonical distribution target임을 명시
+- `packages/codex-usage-analyzer/`는 temporary workspace compatibility copy로 유지한다고 명시
+- npm publish 전까지 profile submit CLI 작업이 local workspace copy로 안정적으로 진행될 수 있음을 기록
+- 후속 dependency transition 후보를 정리
+
+### dependency transition 후보
+
+| Option | When to use | Tradeoff |
+|---|---|---|
+| npm semver dependency | analyzer parser와 submit flow가 end-to-end smoke를 통과한 뒤 | 사용자 경험이 가장 좋지만 publish/release policy가 필요하다. |
+| pinned GitHub dependency | npm publish 전 standalone repo를 직접 소비해야 할 때 | npm release 없이 가능하지만 install이 GitHub network에 묶인다. |
+| temporary workspace copy | M100 submit CLI 구현 중 local test 안정성이 더 중요할 때 | local test는 안정적이지만 standalone repo와 source drift가 생길 수 있다. |
+
+### 최종 판단
+
+이번 task에서는 workspace copy를 제거하지 않는다. npm publish가 제외되어 있고, profile submit CLI가 아직 구현 중이므로 local workspace copy를 유지하는 편이 M100 검증 안정성에 유리하다.
+
+### remote CI 확인
+
+`postmelee/codex-usage-analyzer`의 push-triggered CI도 확인했다.
+
+```text
+workflow: CI
+run: https://github.com/postmelee/codex-usage-analyzer/actions/runs/27426641635
+head: 9a67be481766f198db5e1029192ac96bef6c2604
+status: completed
+conclusion: success
+```

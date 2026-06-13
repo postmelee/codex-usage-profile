@@ -6,13 +6,19 @@ It reads local usage sources, normalizes usage information, and emits `UsageSnap
 
 ## Package Status
 
-The package currently lives inside this repository as:
+The standalone repository now exists at:
+
+```text
+https://github.com/postmelee/codex-usage-analyzer
+```
+
+The `codex-usage-profile` repository still keeps a workspace compatibility copy at:
 
 ```text
 packages/codex-usage-analyzer/
 ```
 
-This workspace package is the export-ready staging area before creating a standalone `codex-usage-analyzer` GitHub repository.
+The standalone repository is the canonical distribution target for the analyzer package. The workspace copy remains in this repository until the profile submit CLI can safely depend on a published package or a pinned GitHub dependency.
 
 The current implementation is contract-first:
 
@@ -137,17 +143,30 @@ In that design, `npx tokenmon@latest submit` owns product login, submit token st
 5. The CLI submits `{ snapshot }` to the profile service with its bearer token.
 6. The web service merges the stored GitHub account/profile record with the analyzer snapshot for public profile and README image rendering.
 
-## Standalone Repository Timing
+## Standalone Repository
 
-The standalone `codex-usage-analyzer` GitHub repository should be created after this workspace package is merged and before the profile submit CLI depends on it.
+The standalone repository was bootstrapped from the workspace package with a clean initial import:
 
-Recommended order:
+```text
+https://github.com/postmelee/codex-usage-analyzer
+```
 
-1. Merge the workspace package and contract tests.
-2. Bootstrap the standalone analyzer repository from `packages/codex-usage-analyzer/`.
-3. Add repository metadata, CI, release policy, and parser implementation issues.
-4. Point `codex-usage-profile` submit CLI work at the standalone package or a pinned git dependency.
-5. Publish to npm after the parser and submit flow pass an end-to-end smoke test.
+Current profile integration state:
+
+1. The standalone repository is public and starts from the analyzer package root.
+2. The profile repository keeps `packages/codex-usage-analyzer/` as a temporary compatibility copy.
+3. Submit CLI work can continue against the local workspace copy without relying on npm publishing.
+4. A follow-up task should switch profile dependencies to one of the supported external forms.
+
+Dependency transition options:
+
+| Option | When to use | Tradeoff |
+|---|---|---|
+| npm semver dependency | After analyzer parser and submit flow pass end-to-end smoke tests | Best consumer experience, requires publish/release policy |
+| pinned GitHub dependency | Before npm publish, when profile needs to consume standalone source directly | Avoids npm release, but couples install to GitHub network availability |
+| temporary workspace copy | During M100 profile submit implementation | Stable local tests, but source can drift from standalone repo |
+
+The preferred long-term path is npm semver dependency after the analyzer parser and submit flow are verified.
 
 ## Non-Goals
 
