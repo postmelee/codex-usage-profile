@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CLI_DEVICE_CODE_PREFIX,
+  CLI_LOGIN_STATUS,
+  CLI_TOKEN_PREFIX,
+  DEFAULT_SESSION_COOKIE_NAME,
   PROFILE_BACKEND_ERROR_CODES,
+  PROFILE_VISIBILITY,
   ProfileBackendError,
   assertNoForbiddenSecrets,
+  createCliTokenService,
+  createMemoryProfileBackendStore,
+  createProfileBackendHttpHandler,
   detectForbiddenSecrets,
   hasForbiddenSecrets,
   isForbiddenSecretKey,
@@ -69,3 +77,266 @@ test("assertNoForbiddenSecrets throws a backend error with details", () => {
     }
   );
 });
+
+test("device login responses expose raw secrets only at intended exchange points", async () => {
+  const fixture = createDeviceFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  const authorized = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: "abcd1234"
+    },
+    { cookie }
+  );
+  const polled = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const reused = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const exportedState = JSON.stringify(fixture.store.exportState());
+
+  assert.equal(started.status, 201);
+  assert.equal(started.body.data.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
+  assert.equal(started.body.data.challenge.deviceCode, undefined);
+  assertNoSerializedKeys(started.body.data.challenge, [
+    "deviceCodeDigest",
+    "token",
+    "tokenDigest"
+  ]);
+
+  assert.equal(authorized.status, 200);
+  assert.equal(authorized.body.data.challenge.status, CLI_LOGIN_STATUS.APPROVED);
+  assertNoSerializedKeys(authorized.body.data.challenge, [
+    "deviceCode",
+    "deviceCodeDigest",
+    "token",
+    "tokenDigest"
+  ]);
+
+  assert.equal(polled.status, 200);
+  assert.equal(polled.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assert.equal(polled.body.data.challenge.status, CLI_LOGIN_STATUS.EXCHANGED);
+  assertNoSerializedKeys(polled.body.data.challenge, [
+    "deviceCode",
+    "deviceCodeDigest",
+    "token",
+    "tokenDigest"
+  ]);
+  assertNoSerializedKeys(polled.body.data.tokenRecord, ["token", "tokenDigest"]);
+
+  assert.equal(reused.status, 200);
+  assert.equal(reused.body.data.status, CLI_LOGIN_STATUS.EXCHANGED);
+  assert.equal(Object.hasOwn(reused.body.data, "token"), false);
+  assert.equal(Object.hasOwn(reused.body.data, "tokenRecord"), false);
+
+  assert.equal(exportedState.includes(started.body.data.deviceCode), false);
+  assert.equal(exportedState.includes(polled.body.data.token), false);
+});
+
+test("device login rejects invalid, duplicate, expired, and unknown codes", async () => {
+  const fixture = createDeviceFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  const invalid = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: "bad"
+    },
+    { cookie }
+  );
+  const authorized = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
+  const duplicate = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
+  const unknownPoll = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: `${CLI_DEVICE_CODE_PREFIX}missing`
+    }
+  );
+
+  const expiring = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  fixture.setNow(new Date("2026-06-10T00:10:00.000Z"));
+  const expired = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: expiring.body.data.userCode
+    },
+    { cookie }
+  );
+
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+  assert.equal(authorized.status, 200);
+  assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(duplicate.status, 400);
+  assert.equal(duplicate.body.error.code, PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST);
+  assert.equal(unknownPoll.status, 404);
+  assert.equal(unknownPoll.body.error.code, PROFILE_BACKEND_ERROR_CODES.NOT_FOUND);
+  assert.equal(expired.status, 410);
+  assert.equal(expired.body.error.code, PROFILE_BACKEND_ERROR_CODES.EXPIRED);
+});
+
+const DEVICE_BASE_URL = "http://localhost";
+
+function createDeviceFixture() {
+  const store = createMemoryProfileBackendStore();
+  let current = new Date("2026-06-10T00:00:00.000Z");
+  const createId = createIdFactory();
+  const createToken = createTokenFactory();
+  const tokenService = createCliTokenService({
+    store,
+    now: () => current,
+    createId,
+    createToken
+  });
+  const handler = createProfileBackendHttpHandler({
+    store,
+    tokenService,
+    now: () => current,
+    createId,
+    createToken,
+    createDeviceCode: createDeviceCodeFactory(),
+    createUserCode: createUserCodeFactory()
+  });
+
+  return {
+    store,
+    handler,
+    saveOwner(overrides = {}) {
+      store.saveOwner({
+        id: "owner_1",
+        authProvider: "github",
+        providerUserId: "1",
+        githubLogin: "postmelee",
+        handle: "postmelee",
+        visibility: PROFILE_VISIBILITY.PRIVATE,
+        ...overrides
+      });
+    },
+    saveSession(ownerId = "owner_1", overrides = {}) {
+      const session = store.saveSession({
+        id: overrides.id ?? "session_1",
+        ownerId,
+        createdAt: overrides.createdAt ?? "2026-06-10T00:00:00.000Z",
+        expiresAt: overrides.expiresAt ?? "2026-07-10T00:00:00.000Z",
+        revokedAt: overrides.revokedAt ?? null
+      });
+
+      return `${DEFAULT_SESSION_COOKIE_NAME}=${session.id}`;
+    },
+    setNow(value) {
+      current = value;
+    }
+  };
+}
+
+async function requestJson(handler, method, path, body, headers = {}) {
+  const response = await handler(new Request(`${DEVICE_BASE_URL}${path}`, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      ...headers
+    },
+    body: method === "GET" || method === "HEAD"
+      ? undefined
+      : body === undefined
+        ? ""
+        : JSON.stringify(body)
+  }));
+
+  return {
+    status: response.status,
+    headers: response.headers,
+    body: await response.json()
+  };
+}
+
+function createIdFactory() {
+  let nextId = 1;
+  return (prefix) => {
+    const id = `${prefix}_${nextId}`;
+    nextId += 1;
+    return id;
+  };
+}
+
+function createTokenFactory() {
+  let nextToken = 1;
+  return () => {
+    const token = `${CLI_TOKEN_PREFIX}test_${nextToken}`;
+    nextToken += 1;
+    return token;
+  };
+}
+
+function createDeviceCodeFactory() {
+  let nextDeviceCode = 1;
+  return () => {
+    const deviceCode = `${CLI_DEVICE_CODE_PREFIX}test_${nextDeviceCode}`;
+    nextDeviceCode += 1;
+    return deviceCode;
+  };
+}
+
+function createUserCodeFactory() {
+  const codes = ["ABCD-1234", "WXYZ-9876", "JKLM-4567", "QRST-2345"];
+  let nextCode = 0;
+  return () => {
+    const code = codes[nextCode] ?? `ZZZZ-${nextCode}`;
+    nextCode += 1;
+    return code;
+  };
+}
+
+function assertNoSerializedKeys(value, forbiddenKeys) {
+  const serialized = JSON.stringify(value);
+
+  for (const key of forbiddenKeys) {
+    assert.equal(serialized.includes(`"${key}"`), false);
+  }
+}
