@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CLI_DEVICE_CODE_PREFIX,
   CLI_LOGIN_STATUS,
   CLI_TOKEN_PREFIX,
   DEFAULT_SESSION_COOKIE_NAME,
@@ -126,6 +127,112 @@ test("handles CLI login start, approve, and exchange without exposing token dige
   assert.equal(exchanged.body.data.challenge.status, CLI_LOGIN_STATUS.EXCHANGED);
   assert.equal(Object.hasOwn(exchanged.body.data.tokenRecord, "tokenDigest"), false);
   assert.equal(Object.hasOwn(exchanged.body.data.tokenRecord, "token"), false);
+});
+
+test("handles device login start, authorize, and poll token exchange", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "macbook"
+  });
+  const authorized = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: "abcd1234"
+    },
+    { cookie }
+  );
+  const polled = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const reused = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const storedState = JSON.stringify(fixture.store.exportState());
+
+  assert.equal(started.status, 201);
+  assert.equal(started.body.data.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
+  assert.equal(started.body.data.userCode, "ABCD-1234");
+  assert.equal(started.body.data.verificationUri, "/device");
+  assert.equal(
+    started.body.data.verificationUriComplete,
+    "/device?user_code=ABCD-1234"
+  );
+  assert.equal(started.body.data.intervalSeconds, 5);
+  assert.equal(started.body.data.challenge.userCode, "ABCD-1234");
+  assert.equal(JSON.stringify(started.body.data).includes("deviceCodeDigest"), false);
+
+  assert.equal(authorized.status, 200);
+  assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(authorized.body.data.challenge.ownerId, "owner_1");
+
+  assert.equal(polled.status, 200);
+  assert.equal(polled.body.data.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(polled.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assert.equal(polled.body.data.tokenRecord.ownerId, "owner_1");
+  assert.equal(Object.hasOwn(polled.body.data.tokenRecord, "tokenDigest"), false);
+  assert.equal(polled.body.data.challenge.status, CLI_LOGIN_STATUS.EXCHANGED);
+
+  assert.equal(reused.status, 200);
+  assert.equal(reused.body.data.status, CLI_LOGIN_STATUS.EXCHANGED);
+  assert.equal(Object.hasOwn(reused.body.data, "token"), false);
+  assert.equal(storedState.includes(polled.body.data.token), false);
+  assert.equal(storedState.includes(started.body.data.deviceCode), false);
+});
+
+test("rejects device authorization without a session cookie", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "macbook"
+  });
+
+  const response = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    }
+  );
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
+});
+
+test("returns expired status while polling an expired device login", async () => {
+  const fixture = createFixture();
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "macbook"
+  });
+
+  fixture.setNow(new Date("2026-06-10T00:10:00.000Z"));
+  const response = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.status, CLI_LOGIN_STATUS.EXPIRED);
+  assert.equal(response.body.data.challenge.status, CLI_LOGIN_STATUS.EXPIRED);
 });
 
 test("rejects CLI login approval without a session cookie", async () => {
@@ -316,6 +423,8 @@ function createFixture() {
   let current = new Date("2026-06-10T00:00:00.000Z");
   const createId = createIdFactory();
   const createToken = createTokenFactory();
+  const createDeviceCode = createDeviceCodeFactory();
+  const createUserCode = createUserCodeFactory();
   const tokenService = createCliTokenService({
     store,
     now: () => current,
@@ -329,6 +438,8 @@ function createFixture() {
     now: () => current,
     createId,
     createToken,
+    createDeviceCode,
+    createUserCode,
     githubClientId: "github_client_1",
     publicBaseUrl: BASE_URL,
     githubClient: {
@@ -433,5 +544,24 @@ function createTokenFactory() {
     const token = `${CLI_TOKEN_PREFIX}test_${nextToken}`;
     nextToken += 1;
     return token;
+  };
+}
+
+function createDeviceCodeFactory() {
+  let nextDeviceCode = 1;
+  return () => {
+    const deviceCode = `${CLI_DEVICE_CODE_PREFIX}test_${nextDeviceCode}`;
+    nextDeviceCode += 1;
+    return deviceCode;
+  };
+}
+
+function createUserCodeFactory() {
+  const codes = ["ABCD-1234", "WXYZ-9876", "JKLM-4567", "QRST-2345"];
+  let nextCode = 0;
+  return () => {
+    const code = codes[nextCode] ?? `ZZZZ-${nextCode}`;
+    nextCode += 1;
+    return code;
   };
 }
