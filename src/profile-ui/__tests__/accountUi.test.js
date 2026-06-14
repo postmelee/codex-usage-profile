@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildAccountLoginHref,
+  getAccountAuthError,
   getAccountAvatar,
   getAccountDisplayName,
   getAccountLogin,
@@ -98,4 +99,30 @@ test("builds account login redirect URLs", () => {
     buildAccountLoginHref(null, { pathname: "/settings", search: "" }),
     "/api/auth/github/login?redirect_to=%2Fsettings"
   );
+});
+
+test("maps account auth error query parameters to user-facing copy", () => {
+  assert.deepEqual(
+    getAccountAuthError({
+      search: "?auth_error=github_oauth_not_configured"
+    }),
+    {
+      action: null,
+      code: "github_oauth_not_configured",
+      message: "GitHub sign in is not configured for this environment.",
+      title: "Sign in unavailable"
+    }
+  );
+  assert.deepEqual(
+    getAccountAuthError({
+      search: "?auth_error=github_login_failed"
+    }),
+    {
+      action: "Sign in with GitHub",
+      code: "github_login_failed",
+      message: "GitHub sign in could not be completed.",
+      title: "Sign in failed"
+    }
+  );
+  assert.equal(getAccountAuthError({ search: "" }), null);
 });

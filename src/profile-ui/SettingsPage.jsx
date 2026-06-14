@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ProfileShell } from "./ProfileShell.jsx";
 import {
   buildAccountLoginHref,
+  getAccountAuthError,
   getAccountAvatar,
   getAccountDisplayName,
   getAccountLogin,
@@ -476,7 +477,8 @@ function SettingsDeviceList({
 }
 
 function SettingsState({ authStatus, client, location }) {
-  const copy = {
+  const authError = getAccountAuthError(location);
+  const copy = authError ?? {
     anonymous: {
       action: "Sign in with GitHub",
       message: "Sign in with GitHub to view account settings.",

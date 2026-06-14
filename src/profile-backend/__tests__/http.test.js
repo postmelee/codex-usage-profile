@@ -96,6 +96,55 @@ test("handles GitHub browser login redirect, callback session, and me lookup", a
   assert.equal(me.body.data.session.ownerId, "owner_github_12345");
 });
 
+test("redirects GitHub browser callback back to the app with a session cookie", async () => {
+  const fixture = createFixture();
+  const loginResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings",
+    "",
+    { accept: "text/html" }
+  );
+  const state = new URL(loginResponse.headers.get("location")).searchParams.get("state");
+  const callback = await requestResponse(
+    fixture.handler,
+    "GET",
+    `/api/auth/github/callback?code=oauth_code_1&state=${state}`,
+    "",
+    { accept: "text/html" }
+  );
+
+  assert.equal(callback.status, 302);
+  assert.equal(callback.headers.get("location"), "/settings");
+  assert.match(callback.headers.get("set-cookie"), new RegExp(`${DEFAULT_SESSION_COOKIE_NAME}=session_`));
+});
+
+test("redirects browser GitHub login configuration errors back to settings", async () => {
+  const handler = createProfileBackendHttpHandler({
+    store: createMemoryProfileBackendStore()
+  });
+  const browserResponse = await requestResponse(
+    handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings",
+    "",
+    { accept: "text/html" }
+  );
+  const apiResponse = await requestJson(
+    handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings"
+  );
+
+  assert.equal(browserResponse.status, 302);
+  assert.equal(
+    browserResponse.headers.get("location"),
+    "/settings?auth_error=github_oauth_not_configured"
+  );
+  assert.equal(apiResponse.status, 400);
+  assert.equal(apiResponse.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+});
+
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
   const fixture = createFixture();
   fixture.saveOwner();

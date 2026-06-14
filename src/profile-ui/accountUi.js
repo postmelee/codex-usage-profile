@@ -85,6 +85,27 @@ export function buildAccountLoginHref(client, location) {
   return `/api/auth/github/login?${params.toString()}`;
 }
 
+export function getAccountAuthError(location) {
+  const search = typeof location?.search === "string" ? location.search : "";
+  const params = new URLSearchParams(search);
+  const code = params.get("auth_error");
+
+  return {
+    github_login_failed: {
+      action: "Sign in with GitHub",
+      code,
+      message: "GitHub sign in could not be completed.",
+      title: "Sign in failed"
+    },
+    github_oauth_not_configured: {
+      action: null,
+      code,
+      message: "GitHub sign in is not configured for this environment.",
+      title: "Sign in unavailable"
+    }
+  }[code] ?? null;
+}
+
 function normalizeText(value) {
   if (typeof value !== "string") {
     return null;

@@ -95,12 +95,23 @@ export function createProfileBackendHttpHandler(options = {}) {
       const route = `${request.method.toUpperCase()} ${url.pathname}`;
 
       if (route === "GET /api/auth/github/login") {
-        const result = oauthRuntimeService.startGitHubLogin({
-          cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
-          redirectTo: url.searchParams.get("redirect_to")
-        });
+        try {
+          const result = oauthRuntimeService.startGitHubLogin({
+            cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
+            redirectTo: url.searchParams.get("redirect_to")
+          });
 
-        return redirectResponse(result.authorizationUrl);
+          return redirectResponse(result.authorizationUrl);
+        } catch (error) {
+          if (shouldRedirectBrowserAuthError(request, error)) {
+            return redirectResponse(buildAuthErrorRedirectPath(
+              url.searchParams.get("redirect_to"),
+              error
+            ));
+          }
+
+          throw error;
+        }
       }
 
       if (route === "GET /api/auth/github/callback") {
@@ -115,14 +126,25 @@ export function createProfileBackendHttpHandler(options = {}) {
           })
           : null;
 
-        return okResponse({
+        const payload = {
           owner: serializeOwner(result.owner),
           session: serializeSession(result.session),
           challenge: serializeChallenge(challenge),
           redirectTo: result.oauthState.redirectTo ?? null
-        }, 200, {
+        };
+        const headers = {
           "set-cookie": result.sessionCookie
-        });
+        };
+
+        if (wantsBrowserNavigation(request)) {
+          return redirectResponse(
+            sanitizeLocalRedirectPath(result.oauthState.redirectTo, "/settings"),
+            302,
+            headers
+          );
+        }
+
+        return okResponse(payload, 200, headers);
       }
 
       if (route === "GET /api/auth/me") {
@@ -423,8 +445,8 @@ export function errorResponse(error) {
   });
 }
 
-export function redirectResponse(location, status = 302) {
-  const headers = new Headers();
+export function redirectResponse(location, status = 302, extraHeaders = {}) {
+  const headers = new Headers(extraHeaders);
   headers.set("location", location);
 
   return new Response(null, {
@@ -458,6 +480,36 @@ function normalizeError(error) {
     PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
     error instanceof Error ? error.message : "Request failed"
   );
+}
+
+function shouldRedirectBrowserAuthError(request, error) {
+  return wantsBrowserNavigation(request) && isProfileBackendError(error);
+}
+
+function wantsBrowserNavigation(request) {
+  const accept = request.headers.get("accept") ?? "";
+
+  return accept.includes("text/html");
+}
+
+function buildAuthErrorRedirectPath(redirectTo, error) {
+  const path = sanitizeLocalRedirectPath(redirectTo, "/settings");
+  const url = new URL(path, "http://localhost");
+  const code = error.code === PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED &&
+    error.message === "githubClientId is required"
+    ? "github_oauth_not_configured"
+    : "github_login_failed";
+
+  url.searchParams.set("auth_error", code);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function sanitizeLocalRedirectPath(value, fallback) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+    return fallback;
+  }
+
+  return value;
 }
 
 function serializeOwner(owner) {
