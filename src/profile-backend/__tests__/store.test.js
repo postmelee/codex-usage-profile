@@ -81,6 +81,8 @@ test("saves and reads CLI login challenges as cloned records", () => {
   const challenge = {
     id: "challenge_1",
     status: "pending",
+    deviceCodeDigest: "device_digest_1",
+    userCode: "ABCD-1234",
     expiresAt: "2026-06-08T00:10:00.000Z"
   };
 
@@ -91,8 +93,76 @@ test("saves and reads CLI login challenges as cloned records", () => {
   assert.deepEqual(store.getCliLoginChallenge("challenge_1"), {
     id: "challenge_1",
     status: "pending",
+    deviceCodeDigest: "device_digest_1",
+    userCode: "ABCD-1234",
     expiresAt: "2026-06-08T00:10:00.000Z"
   });
+  assert.equal(
+    store.getCliLoginChallengeByDeviceCodeDigest("device_digest_1").id,
+    "challenge_1"
+  );
+  assert.equal(
+    store.getCliLoginChallengeByUserCode("ABCD-1234").id,
+    "challenge_1"
+  );
+});
+
+test("updates CLI login challenge device and user code indexes", () => {
+  const store = createMemoryProfileBackendStore();
+
+  store.saveCliLoginChallenge({
+    id: "challenge_1",
+    status: "pending",
+    deviceCodeDigest: "device_digest_1",
+    userCode: "ABCD-1234"
+  });
+  store.saveCliLoginChallenge({
+    id: "challenge_1",
+    status: "approved",
+    deviceCodeDigest: "device_digest_2",
+    userCode: "WXYZ-9876"
+  });
+
+  assert.equal(store.getCliLoginChallengeByDeviceCodeDigest("device_digest_1"), null);
+  assert.equal(store.getCliLoginChallengeByUserCode("ABCD-1234"), null);
+  assert.equal(
+    store.getCliLoginChallengeByDeviceCodeDigest("device_digest_2").status,
+    "approved"
+  );
+  assert.equal(
+    store.getCliLoginChallengeByUserCode("WXYZ-9876").status,
+    "approved"
+  );
+});
+
+test("enforces CLI login challenge device and user code conflicts", () => {
+  const store = createMemoryProfileBackendStore();
+
+  store.saveCliLoginChallenge({
+    id: "challenge_1",
+    status: "pending",
+    deviceCodeDigest: "device_digest_1",
+    userCode: "ABCD-1234"
+  });
+
+  assertBackendError(
+    () => store.saveCliLoginChallenge({
+      id: "challenge_2",
+      status: "pending",
+      deviceCodeDigest: "device_digest_1",
+      userCode: "WXYZ-9876"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.CONFLICT
+  );
+  assertBackendError(
+    () => store.saveCliLoginChallenge({
+      id: "challenge_3",
+      status: "pending",
+      deviceCodeDigest: "device_digest_3",
+      userCode: "ABCD-1234"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.CONFLICT
+  );
 });
 
 test("saves and reads OAuth states and sessions as cloned records", () => {

@@ -22,6 +22,8 @@ export function createProfileBackendHttpHandler(options = {}) {
     now = () => new Date(),
     createId,
     createToken,
+    createDeviceCode,
+    createUserCode,
     browserUrlBase
   } = options;
 
@@ -61,7 +63,11 @@ export function createProfileBackendHttpHandler(options = {}) {
     store,
     now,
     createId,
+    createDeviceCode,
+    createUserCode,
     browserUrlBase,
+    verificationUri: options.deviceVerificationUri,
+    pollIntervalSeconds: options.devicePollIntervalSeconds,
     tokenService
   });
   const snapshotService = options.snapshotService ?? createSnapshotSubmitService({
@@ -129,6 +135,45 @@ export function createProfileBackendHttpHandler(options = {}) {
         });
       }
 
+      if (route === "POST /api/auth/device") {
+        const body = await readJsonBody(request);
+        const result = cliLoginService.startCliLogin({
+          label: body.label,
+          redirectUri: body.redirectUri,
+          verificationUri: body.verificationUri,
+          intervalSeconds: body.intervalSeconds
+        });
+
+        return okResponse(serializeDeviceStart(result), 201);
+      }
+
+      if (route === "POST /api/auth/device/authorize") {
+        const body = await readJsonBody(request);
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const challenge = cliLoginService.approveCliLogin({
+          userCode: body.userCode ?? body.user_code,
+          challengeId: body.challengeId,
+          ownerId: owner.id
+        });
+
+        return okResponse({
+          status: challenge.status,
+          challenge: serializeChallenge(challenge)
+        });
+      }
+
+      if (route === "POST /api/auth/device/poll") {
+        const body = await readJsonBody(request);
+        const result = cliLoginService.pollCliLogin({
+          deviceCode: body.deviceCode ?? body.device_code,
+          label: body.label
+        });
+
+        return okResponse(serializeDevicePoll(result));
+      }
+
       if (route === "POST /api/auth/github/callback") {
         const body = await readJsonBody(request);
         const identity = await resolveGitHubIdentityFromCode({
@@ -161,6 +206,12 @@ export function createProfileBackendHttpHandler(options = {}) {
 
         return okResponse({
           browserUrl: result.browserUrl,
+          deviceCode: result.deviceCode,
+          userCode: result.userCode,
+          verificationUri: result.verificationUri,
+          verificationUriComplete: result.verificationUriComplete,
+          expiresAt: result.expiresAt,
+          intervalSeconds: result.intervalSeconds,
           challenge: serializeChallenge(result.challenge)
         }, 201);
       }
@@ -344,6 +395,10 @@ function serializeChallenge(challenge) {
     status: challenge.status,
     label: challenge.label ?? null,
     redirectUri: challenge.redirectUri ?? null,
+    userCode: challenge.userCode ?? null,
+    verificationUri: challenge.verificationUri ?? null,
+    verificationUriComplete: challenge.verificationUriComplete ?? null,
+    intervalSeconds: challenge.intervalSeconds ?? null,
     createdAt: challenge.createdAt,
     expiresAt: challenge.expiresAt,
     approvedAt: challenge.approvedAt ?? null,
@@ -351,6 +406,34 @@ function serializeChallenge(challenge) {
     ownerId: challenge.ownerId ?? null,
     cliTokenId: challenge.cliTokenId ?? null
   };
+}
+
+function serializeDeviceStart(result) {
+  return {
+    deviceCode: result.deviceCode,
+    userCode: result.userCode,
+    verificationUri: result.verificationUri,
+    verificationUriComplete: result.verificationUriComplete,
+    expiresAt: result.expiresAt,
+    intervalSeconds: result.intervalSeconds,
+    challenge: serializeChallenge(result.challenge)
+  };
+}
+
+function serializeDevicePoll(result) {
+  const payload = {
+    status: result.status,
+    challenge: serializeChallenge(result.challenge)
+  };
+
+  if (result.token) {
+    payload.token = result.token;
+  }
+  if (result.tokenRecord) {
+    payload.tokenRecord = serializeCliTokenRecord(result.tokenRecord);
+  }
+
+  return payload;
 }
 
 function serializeSession(session) {

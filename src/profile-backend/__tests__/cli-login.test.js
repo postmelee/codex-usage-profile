@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   CLI_LOGIN_STATUS,
+  CLI_DEVICE_CODE_PREFIX,
   CLI_TOKEN_PREFIX,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
   ProfileBackendError,
+  createDeviceCodeDigest,
   createCliLoginService,
   createCliTokenService,
   createMemoryProfileBackendStore
@@ -15,17 +17,26 @@ import {
 test("starts a CLI login challenge with a browser URL", () => {
   const { store, service } = createFixture();
 
-  const { challenge, browserUrl } = service.startCliLogin({
+  const result = service.startCliLogin({
     label: "macbook",
     redirectUri: "codex-usage-profile://callback"
   });
+  const { challenge, browserUrl } = result;
   const storedChallenge = store.getCliLoginChallenge(challenge.id);
 
   assert.equal(challenge.id, "cli_login_1");
   assert.equal(challenge.status, CLI_LOGIN_STATUS.PENDING);
+  assert.equal(result.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
+  assert.equal(result.userCode, "ABCD-1234");
+  assert.equal(result.verificationUri, "/device");
+  assert.equal(result.verificationUriComplete, "/device?user_code=ABCD-1234");
+  assert.equal(result.intervalSeconds, 5);
+  assert.equal(challenge.deviceCodeDigest, createDeviceCodeDigest(result.deviceCode));
+  assert.equal(challenge.userCode, "ABCD-1234");
   assert.equal(challenge.expiresAt, "2026-06-08T00:10:00.000Z");
   assert.equal(browserUrl, "/api/auth/github/login?cli_login_challenge=cli_login_1");
   assert.deepEqual(storedChallenge, challenge);
+  assert.equal(JSON.stringify(storedChallenge).includes(result.deviceCode), false);
 });
 
 test("approves and exchanges a CLI login challenge for a raw token", () => {
@@ -48,6 +59,46 @@ test("approves and exchanges a CLI login challenge for a raw token", () => {
   assert.equal(Object.hasOwn(storedToken, "token"), false);
   assert.equal(storedChallenge.status, CLI_LOGIN_STATUS.EXCHANGED);
   assert.equal(storedChallenge.cliTokenId, exchanged.tokenRecord.id);
+});
+
+test("approves a CLI login by user code and polls a raw token once", () => {
+  const { service } = createFixture();
+  const started = service.startCliLogin({ label: "macbook" });
+
+  const approved = service.approveCliLogin({
+    userCode: "abcd1234",
+    ownerId: "owner_1"
+  });
+  const polled = service.pollCliLogin({ deviceCode: started.deviceCode });
+  const reused = service.pollCliLogin({ deviceCode: started.deviceCode });
+
+  assert.equal(approved.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(approved.ownerId, "owner_1");
+  assert.equal(polled.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(polled.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assert.equal(polled.tokenRecord.ownerId, "owner_1");
+  assert.equal(polled.challenge.status, CLI_LOGIN_STATUS.EXCHANGED);
+  assert.equal(reused.status, CLI_LOGIN_STATUS.EXCHANGED);
+  assert.equal(Object.hasOwn(reused, "token"), false);
+});
+
+test("polls pending and expired CLI login challenges by device code", () => {
+  const fixture = createFixture();
+  const { store, service } = fixture;
+  const started = service.startCliLogin();
+  const pending = service.pollCliLogin({ deviceCode: started.deviceCode });
+
+  fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
+  const expired = service.pollCliLogin({ deviceCode: started.deviceCode });
+
+  assert.equal(pending.status, CLI_LOGIN_STATUS.PENDING);
+  assert.equal(pending.challenge.status, CLI_LOGIN_STATUS.PENDING);
+  assert.equal(expired.status, CLI_LOGIN_STATUS.EXPIRED);
+  assert.equal(expired.challenge.status, CLI_LOGIN_STATUS.EXPIRED);
+  assert.equal(
+    store.getCliLoginChallenge(started.challenge.id).status,
+    CLI_LOGIN_STATUS.EXPIRED
+  );
 });
 
 test("rejects exchange before approval and rejects exchange reuse", () => {
@@ -131,7 +182,9 @@ function createFixture() {
     store,
     now: () => current,
     createId,
-    tokenService
+    tokenService,
+    createDeviceCode: createDeviceCodeFactory(),
+    createUserCode: createUserCodeFactory()
   });
 
   return {
@@ -152,6 +205,25 @@ function createIdFactory() {
   };
 }
 
+function createDeviceCodeFactory() {
+  let nextDeviceCode = 1;
+  return () => {
+    const deviceCode = `${CLI_DEVICE_CODE_PREFIX}test_${nextDeviceCode}`;
+    nextDeviceCode += 1;
+    return deviceCode;
+  };
+}
+
+function createUserCodeFactory() {
+  const codes = ["ABCD-1234", "WXYZ-9876", "JKLM-4567", "QRST-2345"];
+  let nextCode = 0;
+  return () => {
+    const code = codes[nextCode] ?? `ZZZZ-${nextCode}`;
+    nextCode += 1;
+    return code;
+  };
+}
+
 function createTokenFactory() {
   let nextToken = 1;
   return () => {
@@ -168,4 +240,3 @@ function assertBackendError(callback, code) {
     return true;
   });
 }
-

@@ -17,6 +17,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
   const oauthStatesById = new Map();
   const sessionsById = new Map();
   const loginChallengesById = new Map();
+  const loginChallengeIdByDeviceCodeDigest = new Map();
+  const loginChallengeIdByUserCode = new Map();
   const cliTokensById = new Map();
   const cliTokenIdByDigest = new Map();
   const latestSnapshotsByOwnerId = new Map();
@@ -30,6 +32,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       oauthStatesById.clear();
       sessionsById.clear();
       loginChallengesById.clear();
+      loginChallengeIdByDeviceCodeDigest.clear();
+      loginChallengeIdByUserCode.clear();
       cliTokensById.clear();
       cliTokenIdByDigest.clear();
       latestSnapshotsByOwnerId.clear();
@@ -49,6 +53,16 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
     getCliLoginChallenge(id) {
       return clone(loginChallengesById.get(id)) ?? null;
+    },
+
+    getCliLoginChallengeByDeviceCodeDigest(deviceCodeDigest) {
+      const id = loginChallengeIdByDeviceCodeDigest.get(deviceCodeDigest);
+      return id ? clone(loginChallengesById.get(id)) : null;
+    },
+
+    getCliLoginChallengeByUserCode(userCode) {
+      const id = loginChallengeIdByUserCode.get(userCode);
+      return id ? clone(loginChallengesById.get(id)) : null;
     },
 
     getCliTokenByDigest(tokenDigest) {
@@ -97,7 +111,41 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
     saveCliLoginChallenge(challenge) {
       requireFields("CLI login challenge", challenge, ["id"]);
+      const previous = loginChallengesById.get(challenge.id);
+      const deviceCodeOwner = challenge.deviceCodeDigest
+        ? loginChallengeIdByDeviceCodeDigest.get(challenge.deviceCodeDigest)
+        : null;
+      const userCodeOwner = challenge.userCode
+        ? loginChallengeIdByUserCode.get(challenge.userCode)
+        : null;
+
+      if (deviceCodeOwner && deviceCodeOwner !== challenge.id) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+          "Device code digest already belongs to another CLI login challenge"
+        );
+      }
+      if (userCodeOwner && userCodeOwner !== challenge.id) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+          "User code already belongs to another CLI login challenge"
+        );
+      }
+
+      if (previous?.deviceCodeDigest) {
+        loginChallengeIdByDeviceCodeDigest.delete(previous.deviceCodeDigest);
+      }
+      if (previous?.userCode) {
+        loginChallengeIdByUserCode.delete(previous.userCode);
+      }
+
       loginChallengesById.set(challenge.id, clone(challenge));
+      if (challenge.deviceCodeDigest) {
+        loginChallengeIdByDeviceCodeDigest.set(challenge.deviceCodeDigest, challenge.id);
+      }
+      if (challenge.userCode) {
+        loginChallengeIdByUserCode.set(challenge.userCode, challenge.id);
+      }
       return clone(challenge);
     },
 
