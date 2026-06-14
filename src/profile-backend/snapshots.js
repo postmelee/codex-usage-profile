@@ -13,9 +13,14 @@ import {
 import { assertNoForbiddenSecrets } from "./security.js";
 import { PROFILE_VISIBILITY } from "./store.js";
 import { createCliTokenService } from "./tokens.js";
+import {
+  createSubmittedDeviceService,
+  normalizeSubmitDeviceMetadata
+} from "./devices.js";
 
 const SUBMIT_PAYLOAD_KEYS = new Set([
   "capturedAt",
+  "device",
   "handle",
   "snapshot",
   "visibility"
@@ -32,6 +37,11 @@ export function createSnapshotSubmitService(options = {}) {
   }
 
   const tokenService = options.tokenService ?? createCliTokenService({ store, now });
+  const deviceService = options.deviceService ?? createSubmittedDeviceService({
+    store,
+    now,
+    createId: options.createId
+  });
 
   return {
     submitSnapshot(submitOptions = {}) {
@@ -45,6 +55,11 @@ export function createSnapshotSubmitService(options = {}) {
       const visibility = normalizeVisibility(
         payload.visibility ?? ownerForSnapshot.visibility ?? PROFILE_VISIBILITY.PRIVATE
       );
+      deviceService.upsertSubmittedDevice({
+        ownerId: ownerForSnapshot.id,
+        device: payload.device,
+        submittedAt: uploadedAt
+      });
 
       return store.saveLatestSnapshot({
         ownerId: ownerForSnapshot.id,
@@ -116,7 +131,8 @@ export function normalizeSnapshotSubmitPayload(payload) {
       : normalizeVisibility(payload.visibility),
     handle: payload.handle === undefined
       ? undefined
-      : slugifyHandleCandidate(payload.handle)
+      : slugifyHandleCandidate(payload.handle),
+    device: normalizeSubmitDeviceMetadata(payload.device)
   };
 }
 
@@ -152,4 +168,3 @@ function normalizeDate(value) {
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-

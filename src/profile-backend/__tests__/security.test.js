@@ -58,6 +58,21 @@ test("detects nested credential-like keys and values", () => {
   );
 });
 
+test("detects credential-like values in submit device metadata", () => {
+  const findings = detectForbiddenSecrets({
+    snapshot: sampleProfileSnapshot,
+    device: {
+      id: "machine-1",
+      access_token: "gho_1234567890abcdefghijklmnopqrstuv"
+    }
+  });
+
+  assert.deepEqual(
+    findings.map((finding) => finding.path),
+    ["$.device.access_token", "$.device.access_token"]
+  );
+});
+
 test("detects OpenAI, GitHub, bearer, and private key values", () => {
   assert.equal(isForbiddenSecretValue("sk-proj-1234567890abcdef"), true);
   assert.equal(isForbiddenSecretValue("ghp_1234567890abcdefghijklmnopqrstuv"), true);

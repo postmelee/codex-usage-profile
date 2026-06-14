@@ -70,6 +70,18 @@ export {
 } from "./snapshots.js";
 
 export {
+  DEFAULT_SUBMIT_DEVICE_NAME,
+  LEGACY_SUBMIT_DEVICE_KEY,
+  LEGACY_SUBMIT_DEVICE_NAME,
+  MAX_DEVICE_DISPLAY_NAME_LENGTH,
+  MAX_DEVICE_KEY_LENGTH,
+  createSubmittedDeviceService,
+  getSubmittedDeviceDisplayName,
+  normalizeDeviceDisplayName,
+  normalizeSubmitDeviceMetadata
+} from "./devices.js";
+
+export {
   DEFAULT_SESSION_COOKIE_NAME,
   DEFAULT_SESSION_TTL_MS,
   createSessionService,

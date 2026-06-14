@@ -252,6 +252,49 @@ test("enforces CLI token digest conflicts", () => {
   );
 });
 
+test("saves and lists submitted devices by owner and device key", () => {
+  const store = createMemoryProfileBackendStore();
+  const first = createSubmittedDeviceRecord({
+    id: "device_1",
+    deviceKey: "machine-1",
+    lastSubmittedAt: "2026-06-08T00:00:00.000Z"
+  });
+  const second = createSubmittedDeviceRecord({
+    id: "device_2",
+    deviceKey: "machine-2",
+    lastSubmittedAt: "2026-06-08T00:01:00.000Z"
+  });
+
+  store.saveSubmittedDevice(first);
+  store.saveSubmittedDevice(second);
+
+  assert.deepEqual(store.getSubmittedDeviceById("device_1"), first);
+  assert.equal(
+    store.getSubmittedDeviceByOwnerAndKey(owner.id, "machine-1").id,
+    "device_1"
+  );
+  assert.deepEqual(
+    store.listSubmittedDevicesByOwnerId(owner.id).map((device) => device.id),
+    ["device_2", "device_1"]
+  );
+});
+
+test("enforces submitted device owner and key conflicts", () => {
+  const store = createMemoryProfileBackendStore();
+  store.saveSubmittedDevice(createSubmittedDeviceRecord({
+    id: "device_1",
+    deviceKey: "machine-1"
+  }));
+
+  assertBackendError(
+    () => store.saveSubmittedDevice(createSubmittedDeviceRecord({
+      id: "device_2",
+      deviceKey: "machine-1"
+    })),
+    PROFILE_BACKEND_ERROR_CODES.CONFLICT
+  );
+});
+
 test("saves and reads latest snapshots by owner id and handle", () => {
   const store = createMemoryProfileBackendStore();
   const record = createLatestSnapshotRecord();
@@ -318,6 +361,7 @@ test("validates required record fields", () => {
 test("exports and hydrates memory store state", () => {
   const store = createMemoryProfileBackendStore();
   const snapshot = createLatestSnapshotRecord();
+  const device = createSubmittedDeviceRecord();
 
   store.saveOwner(owner);
   store.saveOAuthState({
@@ -340,6 +384,7 @@ test("exports and hydrates memory store state", () => {
     ownerId: owner.id,
     tokenDigest: "digest_1"
   });
+  store.saveSubmittedDevice(device);
   store.saveLatestSnapshot(snapshot);
 
   const hydrated = createMemoryProfileBackendStore(store.exportState());
@@ -349,6 +394,7 @@ test("exports and hydrates memory store state", () => {
   assert.equal(hydrated.getSession("session_1").ownerId, owner.id);
   assert.equal(hydrated.getCliLoginChallenge("cli_login_1").status, "pending");
   assert.equal(hydrated.getCliTokenByDigest("digest_1").id, "cli_token_1");
+  assert.deepEqual(hydrated.getSubmittedDeviceById(device.id), device);
   assert.deepEqual(hydrated.getLatestSnapshotByHandle(owner.handle), snapshot);
 });
 
@@ -380,6 +426,19 @@ function createLatestSnapshotRecord(overrides = {}) {
     uploadedAt: "2026-06-08T00:00:00.000Z",
     schemaVersion: sampleProfileSnapshot.schemaVersion,
     snapshot: sampleProfileSnapshot,
+    ...overrides
+  };
+}
+
+function createSubmittedDeviceRecord(overrides = {}) {
+  return {
+    id: "submitted_device_1",
+    ownerId: owner.id,
+    deviceKey: "machine-1",
+    displayName: null,
+    createdAt: "2026-06-08T00:00:00.000Z",
+    updatedAt: "2026-06-08T00:00:00.000Z",
+    lastSubmittedAt: "2026-06-08T00:00:00.000Z",
     ...overrides
   };
 }

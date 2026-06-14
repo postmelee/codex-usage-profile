@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CLI_TOKEN_PREFIX,
+  LEGACY_SUBMIT_DEVICE_KEY,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
   ProfileBackendError,
@@ -34,6 +35,47 @@ test("submits a valid snapshot and writes latest metadata", () => {
   assert.equal(result.schemaVersion, sampleProfileSnapshot.schemaVersion);
   assert.deepEqual(stored, result);
   assert.equal(tokenRecord.lastUsedAt, "2026-06-10T00:00:00.000Z");
+});
+
+test("submits snapshot device metadata as web service metadata", () => {
+  const fixture = createFixture();
+  const result = fixture.snapshots.submitSnapshot({
+    token: fixture.token,
+    payload: {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      visibility: PROFILE_VISIBILITY.PUBLIC,
+      device: {
+        id: "pcui-macbookpro",
+        name: "pcui-MacBookPro.local"
+      }
+    }
+  });
+  const device = fixture.store.getSubmittedDeviceByOwnerAndKey(
+    "owner_1",
+    "pcui-macbookpro"
+  );
+
+  assert.equal(result.ownerId, "owner_1");
+  assert.equal(device.id, "submitted_device_1");
+  assert.equal(device.displayName, "pcui-MacBookPro.local");
+  assert.equal(device.lastSubmittedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(Object.hasOwn(result.snapshot, "device"), false);
+});
+
+test("submits legacy device metadata when no device is provided", () => {
+  const fixture = createFixture();
+
+  fixture.snapshots.submitSnapshot({
+    token: fixture.token,
+    payload: createSubmitPayload()
+  });
+
+  const device = fixture.store.getSubmittedDeviceByOwnerAndKey(
+    "owner_1",
+    LEGACY_SUBMIT_DEVICE_KEY
+  );
+  assert.equal(device.displayName, "Legacy submissions");
 });
 
 test("updates the same owner's latest snapshot and optional handle", () => {
@@ -195,12 +237,20 @@ test("normalizes submit payload metadata", () => {
     snapshot: sampleProfileSnapshot,
     capturedAt: "2026-06-06T17:22:18+09:00",
     visibility: PROFILE_VISIBILITY.PUBLIC,
-    handle: "Post Melee"
+    handle: "Post Melee",
+    device: {
+      id: " machine-1 ",
+      name: " Work laptop "
+    }
   });
 
   assert.equal(normalized.capturedAt, sampleProfileSnapshot.capturedAt);
   assert.equal(normalized.visibility, PROFILE_VISIBILITY.PUBLIC);
   assert.equal(normalized.handle, "post-melee");
+  assert.deepEqual(normalized.device, {
+    deviceKey: "machine-1",
+    displayName: "Work laptop"
+  });
 });
 
 function createFixture(options = {}) {
@@ -228,7 +278,8 @@ function createFixture(options = {}) {
   const snapshots = createSnapshotSubmitService({
     store,
     tokenService,
-    now: () => current
+    now: () => current,
+    createId: createIdFactory("submitted_device")
   });
 
   return {
@@ -251,10 +302,14 @@ function createSubmitPayload() {
   };
 }
 
-function createIdFactory() {
+function createIdFactory(label = null) {
+  return createLabeledIdFactory(label);
+}
+
+function createLabeledIdFactory(label = null) {
   let nextId = 1;
   return (prefix) => {
-    const id = `${prefix}_${nextId}`;
+    const id = label ? `${label}_${nextId}` : `${prefix}_${nextId}`;
     nextId += 1;
     return id;
   };
@@ -277,4 +332,3 @@ function assertBackendError(callback, code, inspect = () => {}) {
     return true;
   });
 }
-

@@ -446,6 +446,134 @@ test("handles bearer snapshot submit and public handle lookup", async () => {
   assert.deepEqual(publicSnapshot.body.data.snapshot.snapshot, sampleProfileSnapshot);
 });
 
+test("handles settings device list and rename after submit", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const { token } = fixture.issueToken();
+
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      visibility: PROFILE_VISIBILITY.PUBLIC,
+      device: {
+        id: "machine-1",
+        name: "Office Mac"
+      }
+    },
+    { authorization: `Bearer ${token}` }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices",
+    undefined,
+    { cookie }
+  );
+  const device = listed.body.data.devices[0];
+  const renamed = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${device.id}`,
+    {
+      name: "  Desk Mac  "
+    },
+    { cookie }
+  );
+  const reset = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${device.id}`,
+    {
+      name: ""
+    },
+    { cookie }
+  );
+
+  assert.equal(listed.status, 200);
+  assert.equal(device.deviceKey, "machine-1");
+  assert.equal(device.displayName, "Office Mac");
+  assert.equal(device.customName, "Office Mac");
+  assert.equal(device.lastSubmittedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.body.data.device.displayName, "Desk Mac");
+  assert.equal(renamed.body.data.device.customName, "Desk Mac");
+  assert.equal(reset.status, 200);
+  assert.equal(reset.body.data.device.displayName, "Unnamed device");
+  assert.equal(reset.body.data.device.customName, null);
+});
+
+test("rejects settings device management without session ownership", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const ownerCookie = fixture.saveSession();
+  fixture.store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const otherCookie = fixture.saveSession("owner_2", { id: "session_2" });
+  const { token } = fixture.issueToken();
+
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      device: {
+        id: "machine-1"
+      }
+    },
+    { authorization: `Bearer ${token}` }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices",
+    undefined,
+    { cookie: ownerCookie }
+  );
+  const missingSession = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices"
+  );
+  const crossOwner = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${listed.body.data.devices[0].id}`,
+    {
+      name: "Other"
+    },
+    { cookie: otherCookie }
+  );
+  const invalidName = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${listed.body.data.devices[0].id}`,
+    {
+      name: "bad\nname"
+    },
+    { cookie: ownerCookie }
+  );
+
+  assert.equal(missingSession.status, 401);
+  assert.equal(missingSession.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
+  assert.equal(crossOwner.status, 404);
+  assert.equal(crossOwner.body.error.code, PROFILE_BACKEND_ERROR_CODES.NOT_FOUND);
+  assert.equal(invalidName.status, 400);
+  assert.equal(invalidName.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+});
+
 test("hides private snapshots behind the same not found response", async () => {
   const fixture = createFixture();
   fixture.saveOwner();

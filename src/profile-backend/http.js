@@ -10,6 +10,10 @@ import { createOAuthRuntimeService } from "./oauth-runtime.js";
 import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
 import { createCliTokenService } from "./tokens.js";
+import {
+  createSubmittedDeviceService,
+  getSubmittedDeviceDisplayName
+} from "./devices.js";
 
 const JSON_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8"
@@ -72,10 +76,17 @@ export function createProfileBackendHttpHandler(options = {}) {
     pollIntervalSeconds: options.devicePollIntervalSeconds,
     tokenService
   });
+  const deviceService = options.deviceService ?? createSubmittedDeviceService({
+    store,
+    now,
+    createId
+  });
   const snapshotService = options.snapshotService ?? createSnapshotSubmitService({
     store,
     now,
-    tokenService
+    tokenService,
+    deviceService,
+    createId
   });
 
   return async function handleProfileBackendRequest(request) {
@@ -219,6 +230,38 @@ export function createProfileBackendHttpHandler(options = {}) {
 
         return okResponse({
           tokenRecord: serializeCliTokenRecord(tokenRecord)
+        });
+      }
+
+      if (route === "GET /api/settings/devices") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const devices = deviceService.listSubmittedDevices({ ownerId: owner.id });
+
+        return okResponse({
+          devices: devices.map(serializeSubmittedDevice)
+        });
+      }
+
+      const settingsDevicePrefix = "/api/settings/devices/";
+      if (
+        request.method.toUpperCase() === "PATCH" &&
+        url.pathname.startsWith(settingsDevicePrefix)
+      ) {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request);
+        const deviceId = decodeURIComponent(url.pathname.slice(settingsDevicePrefix.length));
+        const device = deviceService.renameSubmittedDevice({
+          ownerId: owner.id,
+          deviceId,
+          displayName: body.name ?? body.displayName
+        });
+
+        return okResponse({
+          device: serializeSubmittedDevice(device)
         });
       }
 
@@ -522,6 +565,20 @@ function serializeCliTokenRecord(tokenRecord) {
     expiresAt: tokenRecord.expiresAt,
     revokedAt: tokenRecord.revokedAt ?? null,
     lastUsedAt: tokenRecord.lastUsedAt ?? null
+  };
+}
+
+function serializeSubmittedDevice(device) {
+  if (!device) return null;
+
+  return {
+    id: device.id,
+    deviceKey: device.deviceKey,
+    displayName: getSubmittedDeviceDisplayName(device),
+    customName: device.displayName ?? null,
+    createdAt: device.createdAt,
+    updatedAt: device.updatedAt,
+    lastSubmittedAt: device.lastSubmittedAt
   };
 }
 
