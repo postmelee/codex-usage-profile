@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createProfileApiClient } from "./profile-api/client.js";
 import { sampleProfileSnapshot } from "./profile-snapshot/fixtures/sample-snapshot.js";
@@ -19,6 +19,9 @@ export function App() {
   const [route, setRoute] = useState(() => (
     resolveProfileRoute(window.location, sampleProfileSnapshot)
   ));
+  const handleAuthStateChange = useCallback((nextAuthState) => {
+    setAuthState(nextAuthState);
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -90,7 +93,9 @@ export function App() {
   return (
     <ProfilePage
       authState={authState}
+      client={profileApiClient}
       handle={route.handle}
+      onAuthStateChange={handleAuthStateChange}
       status={route.status}
       viewModel={viewModel}
     />
