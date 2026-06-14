@@ -4,9 +4,20 @@ import { ProfileShell } from "./ProfileShell.jsx";
 import { ProfileStats } from "./ProfileStats.jsx";
 import { TokenActivityChart } from "./TokenActivityChart.jsx";
 
-export function ProfilePage({ authState, handle, status, viewModel }) {
+export function ProfilePage({
+  authState,
+  client,
+  handle,
+  onAuthStateChange,
+  status,
+  viewModel
+}) {
   return (
-    <ProfileShell authState={authState}>
+    <ProfileShell
+      authState={authState}
+      client={client}
+      onAuthStateChange={onAuthStateChange}
+    >
       <section className="profile-view" aria-label="Codex profile">
         {status === "ready" && viewModel ? (
           <ReadyProfile viewModel={viewModel} />
