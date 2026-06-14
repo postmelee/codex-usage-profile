@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "./Icons.jsx";
 import {
@@ -13,6 +13,7 @@ export function AccountMenu({
   onAuthStateChange,
   settingsHref = "/settings"
 }) {
+  const menuRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [logoutState, setLogoutState] = useState({
     error: null,
@@ -22,6 +23,45 @@ export function AccountMenu({
   const isAuthenticated = authStatus === "authenticated";
   const isLoggingOut = logoutState.status === "submitting";
   const summary = getAccountMenuSummary(authState);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const root = menuRef.current;
+    const ownerDocument = root?.ownerDocument ?? globalThis.document;
+    if (!ownerDocument) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      if (root && event.target && !root.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    ownerDocument.addEventListener("pointerdown", handlePointerDown);
+    ownerDocument.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+      ownerDocument.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  function handleToggleMenu() {
+    setLogoutState((current) => (
+      current.status === "error" ? { error: null, status: "idle" } : current
+    ));
+    setIsOpen((value) => !value);
+  }
 
   async function handleLogout() {
     if (!client || typeof client.logout !== "function" || isLoggingOut) {
@@ -74,20 +114,21 @@ export function AccountMenu({
   }
 
   return (
-    <div className="account-menu">
+    <div className="account-menu" ref={menuRef}>
       <button
+        aria-controls={isOpen ? "account-menu-popover" : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-label={`Account menu for ${summary.displayName}`}
         className="account-avatar-button"
-        onClick={() => setIsOpen((value) => !value)}
+        onClick={handleToggleMenu}
         type="button"
       >
         <AccountAvatar avatar={summary.avatar} />
       </button>
 
       {isOpen ? (
-        <div className="account-popover" role="menu">
+        <div className="account-popover" id="account-menu-popover" role="menu">
           <div className="account-popover-header">
             <AccountAvatar avatar={summary.avatar} />
             <div className="account-popover-identity">
