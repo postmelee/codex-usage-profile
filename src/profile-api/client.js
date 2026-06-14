@@ -103,6 +103,55 @@ export function createProfileApiClient(options = {}) {
       };
     },
 
+    async listSettingsTokens() {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/settings/tokens"), {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json"
+        }
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data.tokens ?? [];
+    },
+
+    async createSettingsToken(options = {}) {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/settings/tokens"), {
+        body: JSON.stringify({
+          label: normalizeSettingsTokenLabelInput(options.label)
+        }),
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return {
+        token: envelope.data.token,
+        tokenRecord: envelope.data.tokenRecord
+      };
+    },
+
+    async revokeSettingsToken(tokenId) {
+      const normalizedTokenId = requireTokenId(tokenId);
+      const response = await fetchImpl(
+        buildApiUrl(baseUrl, `/api/settings/tokens/${encodeURIComponent(normalizedTokenId)}`),
+        {
+          credentials: "same-origin",
+          headers: {
+            accept: "application/json"
+          },
+          method: "DELETE"
+        }
+      );
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data.tokenRecord;
+    },
+
     async logout() {
       const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/logout"), {
         credentials: "same-origin",
@@ -229,6 +278,30 @@ function requireToken(token) {
   }
 
   return token.trim();
+}
+
+function requireTokenId(tokenId) {
+  if (typeof tokenId !== "string" || tokenId.trim() === "") {
+    throw new ProfileApiError("Token id is required", {
+      code: "validation_failed"
+    });
+  }
+
+  return tokenId.trim();
+}
+
+function normalizeSettingsTokenLabelInput(label) {
+  if (label === undefined || label === null) {
+    return undefined;
+  }
+
+  if (typeof label !== "string") {
+    throw new ProfileApiError("label must be a string", {
+      code: "validation_failed"
+    });
+  }
+
+  return label;
 }
 
 function requireDeviceUserCode(userCode) {

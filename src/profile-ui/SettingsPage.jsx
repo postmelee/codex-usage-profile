@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { ProfileShell } from "./ProfileShell.jsx";
 import {
   buildAccountLoginHref,
@@ -6,6 +8,8 @@ import {
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
+
+const DEFAULT_TOKEN_NAME = "CI token";
 
 export function SettingsPage({
   authState,
@@ -25,7 +29,7 @@ export function SettingsPage({
     >
       <section className="settings-view" aria-labelledby="settings-title">
         {authStatus === "authenticated" ? (
-          <AuthenticatedSettings authState={authState} />
+          <AuthenticatedSettings authState={authState} client={client} />
         ) : (
           <SettingsState
             authStatus={authStatus}
@@ -38,7 +42,7 @@ export function SettingsPage({
   );
 }
 
-function AuthenticatedSettings({ authState }) {
+function AuthenticatedSettings({ authState, client }) {
   const owner = getAccountOwner(authState);
   const avatar = getAccountAvatar(owner);
   const displayName = getAccountDisplayName(owner);
@@ -51,28 +55,231 @@ function AuthenticatedSettings({ authState }) {
         <h2 id="settings-title">Profile</h2>
       </header>
 
-      <div className="settings-panel">
-        <div className="settings-account">
-          <SettingsAvatar avatar={avatar} />
-          <div className="settings-account-copy">
-            <strong>{displayName}</strong>
-            {login ? <span>@{login}</span> : null}
+      <div className="settings-section-stack">
+        <div className="settings-panel">
+          <div className="settings-account">
+            <SettingsAvatar avatar={avatar} />
+            <div className="settings-account-copy">
+              <strong>{displayName}</strong>
+              {login ? <span>@{login}</span> : null}
+            </div>
           </div>
+
+          <p className="settings-note">
+            Profile information is synced from GitHub and cannot be edited here.
+          </p>
+
+          <dl className="settings-detail-list">
+            {details.map((detail) => (
+              <div className="settings-detail-row" key={detail.label}>
+                <dt>{detail.label}</dt>
+                <dd>{detail.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
-        <p className="settings-note">
-          Profile information is synced from GitHub and cannot be edited here.
-        </p>
-
-        <dl className="settings-detail-list">
-          {details.map((detail) => (
-            <div className="settings-detail-row" key={detail.label}>
-              <dt>{detail.label}</dt>
-              <dd>{detail.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <SettingsTokenPanel client={client} />
       </div>
+    </div>
+  );
+}
+
+function SettingsTokenPanel({ client }) {
+  const [tokens, setTokens] = useState([]);
+  const [loadState, setLoadState] = useState({
+    error: null,
+    status: "loading"
+  });
+  const [createState, setCreateState] = useState({
+    error: null,
+    status: "idle"
+  });
+  const [revokeState, setRevokeState] = useState({
+    error: null,
+    tokenId: null
+  });
+  const [tokenName, setTokenName] = useState(DEFAULT_TOKEN_NAME);
+  const [createdToken, setCreatedToken] = useState(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!client || typeof client.listSettingsTokens !== "function") {
+      setLoadState({
+        error: "Token settings are unavailable.",
+        status: "error"
+      });
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    setLoadState({ error: null, status: "loading" });
+    client.listSettingsTokens().then((nextTokens) => {
+      if (!isCurrent) return;
+      setTokens(nextTokens);
+      setLoadState({ error: null, status: "ready" });
+    }).catch((error) => {
+      if (!isCurrent) return;
+      setLoadState({
+        error: error instanceof Error ? error.message : "Failed to load tokens.",
+        status: "error"
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [client]);
+
+  async function handleCreateToken(event) {
+    event.preventDefault();
+    if (!client || createState.status === "submitting") {
+      return;
+    }
+
+    setCreateState({ error: null, status: "submitting" });
+
+    try {
+      const result = await client.createSettingsToken({ label: tokenName });
+      setCreatedToken(result);
+      setTokens((current) => prependTokenRecord(current, result.tokenRecord));
+      setTokenName(DEFAULT_TOKEN_NAME);
+      setCreateState({ error: null, status: "idle" });
+    } catch (error) {
+      setCreateState({
+        error: error instanceof Error ? error.message : "Failed to create token.",
+        status: "error"
+      });
+    }
+  }
+
+  async function handleCopyCreatedToken() {
+    if (!createdToken) {
+      return;
+    }
+
+    if (globalThis.navigator?.clipboard?.writeText) {
+      await globalThis.navigator.clipboard.writeText(createdToken.token);
+    }
+    setCreatedToken(null);
+  }
+
+  async function handleRevokeToken(tokenId) {
+    if (!client || revokeState.tokenId) {
+      return;
+    }
+
+    setRevokeState({ error: null, tokenId });
+
+    try {
+      await client.revokeSettingsToken(tokenId);
+      setTokens((current) => current.filter((token) => token.id !== tokenId));
+      setRevokeState({ error: null, tokenId: null });
+    } catch (error) {
+      setRevokeState({
+        error: error instanceof Error ? error.message : "Failed to revoke token.",
+        tokenId: null
+      });
+    }
+  }
+
+  return (
+    <div className="settings-panel">
+      <div className="settings-panel-heading">
+        <h3>API Tokens</h3>
+      </div>
+
+      <form className="settings-token-form" onSubmit={handleCreateToken}>
+        <label htmlFor="settings-token-name">Token name</label>
+        <div className="settings-action-row">
+          <input
+            id="settings-token-name"
+            maxLength={100}
+            onChange={(event) => setTokenName(event.target.value)}
+            type="text"
+            value={tokenName}
+          />
+          <button
+            className="settings-secondary-action"
+            disabled={createState.status === "submitting"}
+            type="submit"
+          >
+            {createState.status === "submitting" ? "Creating" : "Create token"}
+          </button>
+        </div>
+      </form>
+
+      {createState.status === "error" ? (
+        <p className="settings-error">{createState.error}</p>
+      ) : null}
+
+      {createdToken ? (
+        <div className="settings-token-reveal">
+          <strong>Copy this token now. It will not be shown again.</strong>
+          <div className="settings-token-code-row">
+            <code>{createdToken.token}</code>
+            <button
+              className="settings-secondary-action"
+              onClick={handleCopyCreatedToken}
+              type="button"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <SettingsTokenList
+        loadState={loadState}
+        onRevokeToken={handleRevokeToken}
+        revokeState={revokeState}
+        tokens={tokens}
+      />
+    </div>
+  );
+}
+
+function SettingsTokenList({
+  loadState,
+  onRevokeToken,
+  revokeState,
+  tokens
+}) {
+  if (loadState.status === "loading") {
+    return <p className="settings-list-state">Loading tokens.</p>;
+  }
+
+  if (loadState.status === "error") {
+    return <p className="settings-error">{loadState.error}</p>;
+  }
+
+  if (tokens.length === 0) {
+    return <p className="settings-list-state">No API tokens yet.</p>;
+  }
+
+  return (
+    <div className="settings-token-list">
+      {tokens.map((token) => (
+        <div className="settings-token-row" key={token.id}>
+          <div className="settings-token-info">
+            <strong>{token.label ?? "CLI token"}</strong>
+            <span>{formatTokenMeta(token)}</span>
+          </div>
+          <button
+            className="settings-danger-action"
+            disabled={revokeState.tokenId === token.id}
+            onClick={() => onRevokeToken(token.id)}
+            type="button"
+          >
+            {revokeState.tokenId === token.id ? "Revoking" : "Revoke"}
+          </button>
+        </div>
+      ))}
+      {revokeState.error ? (
+        <p className="settings-error">{revokeState.error}</p>
+      ) : null}
     </div>
   );
 }
@@ -113,6 +320,52 @@ function SettingsState({ authStatus, client, location }) {
       ) : null}
     </div>
   );
+}
+
+function prependTokenRecord(tokens, tokenRecord) {
+  if (!tokenRecord) {
+    return tokens;
+  }
+
+  return [
+    tokenRecord,
+    ...tokens.filter((token) => token.id !== tokenRecord.id)
+  ];
+}
+
+function formatTokenMeta(token) {
+  const parts = [];
+  const created = formatShortDate(token.createdAt);
+  const lastUsed = formatShortDate(token.lastUsedAt);
+
+  if (created) {
+    parts.push(`Created ${created}`);
+  }
+  if (lastUsed) {
+    parts.push(`Last used ${lastUsed}`);
+  }
+  if (token.sourceChallengeId) {
+    parts.push("Device login");
+  }
+
+  return parts.join(" · ") || "Token metadata unavailable";
+}
+
+function formatShortDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
 }
 
 function SettingsAvatar({ avatar }) {
