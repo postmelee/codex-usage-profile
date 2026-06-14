@@ -52,6 +52,46 @@ test("verifies a valid CLI token and updates lastUsedAt", () => {
   assert.equal(result.tokenRecord.lastUsedAt, "2026-06-08T00:03:00.000Z");
 });
 
+test("lists owner CLI tokens without revoked records by default", () => {
+  const store = createStoreWithOwner();
+  store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  let current = new Date("2026-06-08T00:00:00.000Z");
+  const service = createCliTokenService({
+    store,
+    now: () => current,
+    createId: createIdFactory(),
+    createToken: createTokenFactory()
+  });
+  const first = service.issueCliToken({ ownerId: "owner_1", label: "first" });
+  service.issueCliToken({ ownerId: "owner_2", label: "other" });
+  current = new Date("2026-06-08T00:01:00.000Z");
+  const second = service.issueCliToken({ ownerId: "owner_1", label: "second" });
+  service.revokeCliToken({
+    tokenId: first.tokenRecord.id,
+    ownerId: "owner_1"
+  });
+
+  const activeTokens = service.listCliTokens({ ownerId: "owner_1" });
+  const allTokens = service.listCliTokens({
+    ownerId: "owner_1",
+    includeRevoked: true
+  });
+
+  assert.deepEqual(activeTokens.map((token) => token.id), [second.tokenRecord.id]);
+  assert.deepEqual(
+    allTokens.map((token) => token.id),
+    [second.tokenRecord.id, first.tokenRecord.id]
+  );
+  assert.equal(Object.hasOwn(activeTokens[0], "token"), false);
+});
+
 test("rejects invalid, expired, revoked, and owner-mismatched CLI tokens", () => {
   const store = createStoreWithOwner();
   store.saveOwner({
@@ -189,4 +229,3 @@ function assertBackendError(callback, code) {
     return true;
   });
 }
-

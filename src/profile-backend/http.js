@@ -14,6 +14,8 @@ import { createCliTokenService } from "./tokens.js";
 const JSON_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8"
 });
+const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
+const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
 
 export function createProfileBackendHttpHandler(options = {}) {
   const {
@@ -172,6 +174,52 @@ export function createProfileBackendHttpHandler(options = {}) {
         });
 
         return okResponse(serializeDevicePoll(result));
+      }
+
+      if (route === "GET /api/settings/tokens") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const tokens = tokenService.listCliTokens({ ownerId: owner.id });
+
+        return okResponse({
+          tokens: tokens.map(serializeCliTokenRecord)
+        });
+      }
+
+      if (route === "POST /api/settings/tokens") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request);
+        const result = tokenService.issueCliToken({
+          ownerId: owner.id,
+          label: normalizeSettingsTokenLabel(body.label ?? body.name)
+        });
+
+        return okResponse({
+          token: result.token,
+          tokenRecord: serializeCliTokenRecord(result.tokenRecord)
+        }, 201);
+      }
+
+      const settingsTokenPrefix = "/api/settings/tokens/";
+      if (
+        request.method.toUpperCase() === "DELETE" &&
+        url.pathname.startsWith(settingsTokenPrefix)
+      ) {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const tokenId = decodeURIComponent(url.pathname.slice(settingsTokenPrefix.length));
+        const tokenRecord = tokenService.revokeCliToken({
+          tokenId,
+          ownerId: owner.id
+        });
+
+        return okResponse({
+          tokenRecord: serializeCliTokenRecord(tokenRecord)
+        });
       }
 
       if (route === "POST /api/auth/github/callback") {
@@ -434,6 +482,19 @@ function serializeDevicePoll(result) {
   }
 
   return payload;
+}
+
+function normalizeSettingsTokenLabel(value) {
+  if (typeof value !== "string") {
+    return DEFAULT_SETTINGS_TOKEN_LABEL;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return DEFAULT_SETTINGS_TOKEN_LABEL;
+  }
+
+  return trimmed.slice(0, MAX_SETTINGS_TOKEN_LABEL_LENGTH);
 }
 
 function serializeSession(session) {

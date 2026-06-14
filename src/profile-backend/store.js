@@ -74,6 +74,13 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       return clone(cliTokensById.get(id)) ?? null;
     },
 
+    listCliTokensByOwnerId(ownerId) {
+      return Array.from(cliTokensById.values())
+        .filter((token) => token.ownerId === ownerId)
+        .sort((a, b) => compareIsoDesc(a.createdAt, b.createdAt))
+        .map(clone);
+    },
+
     getLatestSnapshotByHandle(handle) {
       const ownerId = ownerIdBySnapshotHandle.get(handle);
       return ownerId ? clone(latestSnapshotsByOwnerId.get(ownerId)) : null;
@@ -280,6 +287,10 @@ function clone(value) {
 
 function providerKey(authProvider, providerUserId) {
   return `${authProvider}:${providerUserId}`;
+}
+
+function compareIsoDesc(left, right) {
+  return String(right ?? "").localeCompare(String(left ?? ""));
 }
 
 function requireFields(label, record, fields) {

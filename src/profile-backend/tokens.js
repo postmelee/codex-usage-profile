@@ -58,6 +58,23 @@ export function createCliTokenService(options = {}) {
       };
     },
 
+    listCliTokens(listOptions = {}) {
+      const ownerId = requireNonEmptyString(listOptions.ownerId, "ownerId");
+      const owner = store.getOwnerById(ownerId);
+
+      if (!owner) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+          "Owner not found"
+        );
+      }
+
+      const includeRevoked = Boolean(listOptions.includeRevoked);
+      return store
+        .listCliTokensByOwnerId(ownerId)
+        .filter((tokenRecord) => includeRevoked || !tokenRecord.revokedAt);
+    },
+
     verifyCliToken(rawToken, verifyOptions = {}) {
       const tokenDigest = createCliTokenDigest(
         requireNonEmptyString(rawToken, "token")
@@ -207,4 +224,3 @@ function normalizeDate(value) {
 
   return date;
 }
-

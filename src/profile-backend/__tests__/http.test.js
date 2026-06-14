@@ -194,6 +194,125 @@ test("handles device login start, authorize, and poll token exchange", async () 
   assert.equal(storedState.includes(started.body.data.deviceCode), false);
 });
 
+test("handles settings token create, list, revoke, and revoked submit failure", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const created = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/settings/tokens",
+    {
+      label: "  CI token  "
+    },
+    { cookie }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const revoked = await requestJson(
+    fixture.handler,
+    "DELETE",
+    `/api/settings/tokens/${created.body.data.tokenRecord.id}`,
+    undefined,
+    { cookie }
+  );
+  const listedAfterRevoke = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const submitAfterRevoke = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt
+    },
+    { authorization: `Bearer ${created.body.data.token}` }
+  );
+  const storedState = JSON.stringify(fixture.store.exportState());
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assert.equal(created.body.data.tokenRecord.label, "CI token");
+  assert.equal(Object.hasOwn(created.body.data.tokenRecord, "token"), false);
+  assert.equal(Object.hasOwn(created.body.data.tokenRecord, "tokenDigest"), false);
+
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data.tokens.length, 1);
+  assert.equal(listed.body.data.tokens[0].id, created.body.data.tokenRecord.id);
+  assert.equal(JSON.stringify(listed.body.data).includes(created.body.data.token), false);
+  assert.equal(JSON.stringify(listed.body.data).includes("tokenDigest"), false);
+
+  assert.equal(revoked.status, 200);
+  assert.equal(revoked.body.data.tokenRecord.id, created.body.data.tokenRecord.id);
+  assert.equal(revoked.body.data.tokenRecord.revokedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(Object.hasOwn(revoked.body.data.tokenRecord, "tokenDigest"), false);
+  assert.equal(listedAfterRevoke.body.data.tokens.length, 0);
+  assert.equal(submitAfterRevoke.status, 410);
+  assert.equal(submitAfterRevoke.body.error.code, PROFILE_BACKEND_ERROR_CODES.GONE);
+  assert.equal(storedState.includes(created.body.data.token), false);
+});
+
+test("lists device-code login tokens and rejects bearer-only settings management", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
+  const polled = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const bearerOnly = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { authorization: `Bearer ${polled.body.data.token}` }
+  );
+
+  assert.equal(polled.status, 200);
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data.tokens.length, 1);
+  assert.equal(listed.body.data.tokens[0].id, polled.body.data.tokenRecord.id);
+  assert.equal(listed.body.data.tokens[0].label, "workstation");
+  assert.equal(listed.body.data.tokens[0].sourceChallengeId, started.body.data.challenge.id);
+  assert.equal(bearerOnly.status, 401);
+  assert.equal(bearerOnly.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
+});
+
 test("rejects device authorization without a session cookie", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
