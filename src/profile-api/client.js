@@ -152,6 +152,39 @@ export function createProfileApiClient(options = {}) {
       return envelope.data.tokenRecord;
     },
 
+    async listSettingsDevices() {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/settings/devices"), {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json"
+        }
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data.devices ?? [];
+    },
+
+    async renameSettingsDevice(deviceId, name) {
+      const normalizedDeviceId = requireDeviceId(deviceId);
+      const response = await fetchImpl(
+        buildApiUrl(baseUrl, `/api/settings/devices/${encodeURIComponent(normalizedDeviceId)}`),
+        {
+          body: JSON.stringify({
+            name: normalizeSettingsDeviceNameInput(name)
+          }),
+          credentials: "same-origin",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json"
+          },
+          method: "PATCH"
+        }
+      );
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data.device;
+    },
+
     async logout() {
       const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/logout"), {
         credentials: "same-origin",
@@ -290,6 +323,16 @@ function requireTokenId(tokenId) {
   return tokenId.trim();
 }
 
+function requireDeviceId(deviceId) {
+  if (typeof deviceId !== "string" || deviceId.trim() === "") {
+    throw new ProfileApiError("Device id is required", {
+      code: "validation_failed"
+    });
+  }
+
+  return deviceId.trim();
+}
+
 function normalizeSettingsTokenLabelInput(label) {
   if (label === undefined || label === null) {
     return undefined;
@@ -302,6 +345,20 @@ function normalizeSettingsTokenLabelInput(label) {
   }
 
   return label;
+}
+
+function normalizeSettingsDeviceNameInput(name) {
+  if (name === undefined || name === null) {
+    return null;
+  }
+
+  if (typeof name !== "string") {
+    throw new ProfileApiError("name must be a string or null", {
+      code: "validation_failed"
+    });
+  }
+
+  return name;
 }
 
 function requireDeviceUserCode(userCode) {

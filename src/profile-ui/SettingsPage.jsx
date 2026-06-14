@@ -80,6 +80,7 @@ function AuthenticatedSettings({ authState, client }) {
         </div>
 
         <SettingsTokenPanel client={client} />
+        <SettingsDevicePanel client={client} />
       </div>
     </div>
   );
@@ -284,6 +285,196 @@ function SettingsTokenList({
   );
 }
 
+function SettingsDevicePanel({ client }) {
+  const [devices, setDevices] = useState([]);
+  const [loadState, setLoadState] = useState({
+    error: null,
+    status: "loading"
+  });
+  const [editState, setEditState] = useState({
+    deviceId: null,
+    name: ""
+  });
+  const [saveState, setSaveState] = useState({
+    deviceId: null,
+    error: null
+  });
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!client || typeof client.listSettingsDevices !== "function") {
+      setLoadState({
+        error: "Device settings are unavailable.",
+        status: "error"
+      });
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    setLoadState({ error: null, status: "loading" });
+    client.listSettingsDevices().then((nextDevices) => {
+      if (!isCurrent) return;
+      setDevices(nextDevices);
+      setLoadState({ error: null, status: "ready" });
+    }).catch((error) => {
+      if (!isCurrent) return;
+      setLoadState({
+        error: error instanceof Error ? error.message : "Failed to load devices.",
+        status: "error"
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [client]);
+
+  function startEditingDevice(device) {
+    setEditState({
+      deviceId: device.id,
+      name: device.customName ?? ""
+    });
+    setSaveState({ deviceId: null, error: null });
+  }
+
+  function cancelEditingDevice() {
+    setEditState({ deviceId: null, name: "" });
+    setSaveState({ deviceId: null, error: null });
+  }
+
+  async function handleSaveDevice(device) {
+    if (!client || saveState.deviceId) {
+      return;
+    }
+
+    setSaveState({ deviceId: device.id, error: null });
+
+    try {
+      const updated = await client.renameSettingsDevice(device.id, editState.name);
+      setDevices((current) => current.map((item) => (
+        item.id === updated.id ? updated : item
+      )));
+      setEditState({ deviceId: null, name: "" });
+      setSaveState({ deviceId: null, error: null });
+    } catch (error) {
+      setSaveState({
+        deviceId: null,
+        error: error instanceof Error ? error.message : "Failed to rename device."
+      });
+    }
+  }
+
+  return (
+    <div className="settings-panel">
+      <div className="settings-panel-heading">
+        <h3>Devices</h3>
+      </div>
+
+      <SettingsDeviceList
+        devices={devices}
+        editState={editState}
+        loadState={loadState}
+        onCancelEdit={cancelEditingDevice}
+        onEditNameChange={(name) => setEditState((current) => ({
+          ...current,
+          name
+        }))}
+        onSaveDevice={handleSaveDevice}
+        onStartEdit={startEditingDevice}
+        saveState={saveState}
+      />
+    </div>
+  );
+}
+
+function SettingsDeviceList({
+  devices,
+  editState,
+  loadState,
+  onCancelEdit,
+  onEditNameChange,
+  onSaveDevice,
+  onStartEdit,
+  saveState
+}) {
+  if (loadState.status === "loading") {
+    return <p className="settings-list-state">Loading devices.</p>;
+  }
+
+  if (loadState.status === "error") {
+    return <p className="settings-error">{loadState.error}</p>;
+  }
+
+  if (devices.length === 0) {
+    return <p className="settings-list-state">No devices yet.</p>;
+  }
+
+  return (
+    <div className="settings-token-list">
+      {devices.map((device) => (
+        <div className="settings-token-row" key={device.id}>
+          {editState.deviceId === device.id ? (
+            <div className="settings-device-edit-row">
+              <input
+                aria-label="Device name"
+                maxLength={120}
+                onChange={(event) => onEditNameChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onSaveDevice(device);
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    onCancelEdit();
+                  }
+                }}
+                placeholder="Device name"
+                type="text"
+                value={editState.name}
+              />
+              <button
+                className="settings-secondary-action"
+                disabled={saveState.deviceId === device.id}
+                onClick={() => onSaveDevice(device)}
+                type="button"
+              >
+                {saveState.deviceId === device.id ? "Saving" : "Save"}
+              </button>
+              <button
+                className="settings-muted-action"
+                disabled={saveState.deviceId === device.id}
+                onClick={onCancelEdit}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="settings-token-info">
+                <strong>{device.displayName ?? "Unnamed device"}</strong>
+                <span>{formatDeviceMeta(device)}</span>
+              </div>
+              <button
+                className="settings-secondary-action"
+                onClick={() => onStartEdit(device)}
+                type="button"
+              >
+                Rename
+              </button>
+            </>
+          )}
+        </div>
+      ))}
+      {saveState.error ? (
+        <p className="settings-error">{saveState.error}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function SettingsState({ authStatus, client, location }) {
   const copy = {
     anonymous: {
@@ -349,6 +540,23 @@ function formatTokenMeta(token) {
   }
 
   return parts.join(" · ") || "Token metadata unavailable";
+}
+
+function formatDeviceMeta(device) {
+  const parts = [];
+  const lastSubmittedAt = formatShortDate(device.lastSubmittedAt);
+  const createdAt = formatShortDate(device.createdAt);
+
+  if (device.deviceKey) {
+    parts.push(device.deviceKey);
+  }
+  if (lastSubmittedAt) {
+    parts.push(`Last submit ${lastSubmittedAt}`);
+  } else if (createdAt) {
+    parts.push(`Created ${createdAt}`);
+  }
+
+  return parts.join(" · ") || "Device metadata unavailable";
 }
 
 function formatShortDate(value) {

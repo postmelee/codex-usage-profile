@@ -532,6 +532,31 @@ button {
   min-width: 0;
 }
 
+.settings-device-edit-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-device-edit-row input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  flex: 1 1 auto;
+  font: inherit;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 13px;
+}
+
+.settings-device-edit-row input:focus {
+  border-color: rgba(142, 184, 235, 0.72);
+  outline: none;
+}
+
 .settings-token-code-row code {
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid var(--line);
@@ -604,6 +629,7 @@ button {
 
 .settings-primary-action,
 .settings-secondary-action,
+.settings-muted-action,
 .settings-danger-action {
   align-items: center;
   border: 0;
@@ -634,8 +660,15 @@ button {
   padding: 0 13px;
 }
 
+.settings-muted-action {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
 .settings-primary-action:disabled,
 .settings-secondary-action:disabled,
+.settings-muted-action:disabled,
 .settings-danger-action:disabled {
   cursor: default;
   opacity: 0.62;
@@ -1233,6 +1266,7 @@ button {
   }
 
   .settings-action-row,
+  .settings-device-edit-row,
   .settings-token-code-row,
   .settings-token-row {
     align-items: stretch;
@@ -1240,6 +1274,7 @@ button {
   }
 
   .settings-secondary-action,
+  .settings-muted-action,
   .settings-danger-action {
     width: 100%;
   }
