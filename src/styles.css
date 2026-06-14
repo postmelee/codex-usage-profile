@@ -70,7 +70,9 @@ button {
   width: calc(100vw - 72px);
 }
 
-.profile-actions button {
+.profile-actions > button,
+.profile-actions > a,
+.profile-actions > .account-menu > button {
   appearance: none;
   background: transparent;
   border: 0;
@@ -108,8 +110,9 @@ button {
   gap: 18px;
 }
 
-.profile-actions button,
-.profile-actions a {
+.profile-actions > button,
+.profile-actions > a,
+.profile-actions > .account-menu > button {
   align-items: center;
   color: #d6d6d7;
   display: inline-flex;
@@ -302,6 +305,154 @@ button {
   min-width: 0;
   text-align: center;
   width: 100%;
+}
+
+.settings-view {
+  display: flex;
+  justify-content: center;
+  min-height: calc(100% - 50px);
+  padding: 82px 24px 100px;
+}
+
+.settings-stage {
+  max-width: 640px;
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-heading {
+  margin-bottom: 24px;
+}
+
+.settings-heading h2 {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.settings-heading p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.settings-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px;
+}
+
+.settings-account {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.settings-avatar-image,
+.settings-avatar-fallback {
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  display: block;
+  height: 64px;
+  width: 64px;
+}
+
+.settings-avatar-image {
+  object-fit: cover;
+}
+
+.settings-avatar-fallback {
+  align-items: center;
+  background: linear-gradient(135deg, #3b4050, #232323);
+  color: var(--text);
+  display: inline-flex;
+  font-size: 24px;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.settings-account-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-account-copy strong,
+.settings-account-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account-copy strong {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.settings-account-copy span,
+.settings-note,
+.settings-detail-row dt {
+  color: var(--muted);
+}
+
+.settings-account-copy span,
+.settings-note,
+.settings-detail-row {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.settings-note {
+  background: rgba(119, 169, 223, 0.11);
+  border-radius: 7px;
+  margin: 20px 0 0;
+  padding: 12px 14px;
+}
+
+.settings-detail-list {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0 0;
+}
+
+.settings-detail-row {
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.settings-detail-row dt,
+.settings-detail-row dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.settings-detail-row dd {
+  color: var(--text);
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-primary-action {
+  align-items: center;
+  background: #f2f2f2;
+  border-radius: 999px;
+  color: #101010;
+  display: inline-flex;
+  font-size: 15px;
+  font-weight: 600;
+  min-height: 42px;
+  padding: 0 17px;
+  text-decoration: none;
 }
 
 .device-shell {
@@ -880,6 +1031,24 @@ button {
 
   .profile-view {
     padding: 52px 0 72px;
+  }
+
+  .settings-view {
+    padding: 52px 0 72px;
+  }
+
+  .settings-panel {
+    padding: 18px;
+  }
+
+  .settings-detail-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .settings-detail-row dd {
+    text-align: left;
   }
 
   .profile-stats {
