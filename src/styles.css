@@ -377,6 +377,16 @@ button {
   margin: 0;
 }
 
+.settings-token-count {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 2px 8px;
+}
+
 .settings-account {
   align-items: center;
   display: flex;
@@ -618,6 +628,13 @@ button {
 
 .settings-list-state {
   margin: 18px 0 0;
+}
+
+.settings-limit-note {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  margin: 12px 0 0;
 }
 
 .settings-error {

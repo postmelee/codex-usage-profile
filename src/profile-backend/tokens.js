@@ -4,11 +4,14 @@ import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
 } from "./errors.js";
+import {
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS
+} from "../profile-shared/tokenLimits.js";
 
 export const CLI_TOKEN_PREFIX = "cup_";
 export const DEFAULT_CLI_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 365;
 export const DEFAULT_CLI_TOKEN_SCOPES = Object.freeze(["snapshot:write"]);
-export const DEFAULT_MAX_ACTIVE_CLI_TOKENS = 3;
+export { DEFAULT_MAX_ACTIVE_CLI_TOKENS };
 
 export function createCliTokenService(options = {}) {
   const {

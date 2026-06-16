@@ -9,8 +9,12 @@ import {
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
+import {
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS
+} from "../profile-shared/tokenLimits.js";
 
 const DEFAULT_TOKEN_NAME = "CI token";
+const SETTINGS_TOKEN_LIMIT_MESSAGE = "Active token limit reached. Revoke a token before creating another.";
 
 export function SettingsPage({
   authState,
@@ -103,6 +107,11 @@ function SettingsTokenPanel({ client }) {
   });
   const [tokenName, setTokenName] = useState(DEFAULT_TOKEN_NAME);
   const [createdToken, setCreatedToken] = useState(null);
+  const activeTokenCount = tokens.length;
+  const tokenLimitReached = activeTokenCount >= DEFAULT_MAX_ACTIVE_CLI_TOKENS;
+  const createDisabled = createState.status === "submitting" ||
+    tokenLimitReached ||
+    loadState.status === "loading";
 
   useEffect(() => {
     let isCurrent = true;
@@ -137,7 +146,7 @@ function SettingsTokenPanel({ client }) {
 
   async function handleCreateToken(event) {
     event.preventDefault();
-    if (!client || createState.status === "submitting") {
+    if (!client || createDisabled) {
       return;
     }
 
@@ -151,7 +160,7 @@ function SettingsTokenPanel({ client }) {
       setCreateState({ error: null, status: "idle" });
     } catch (error) {
       setCreateState({
-        error: error instanceof Error ? error.message : "Failed to create token.",
+        error: formatCreateTokenError(error),
         status: "error"
       });
     }
@@ -191,6 +200,11 @@ function SettingsTokenPanel({ client }) {
     <div className="settings-panel">
       <div className="settings-panel-heading">
         <h3>API Tokens</h3>
+        {loadState.status === "ready" ? (
+          <span className="settings-token-count">
+            {activeTokenCount}/{DEFAULT_MAX_ACTIVE_CLI_TOKENS}
+          </span>
+        ) : null}
       </div>
 
       <form className="settings-token-form" onSubmit={handleCreateToken}>
@@ -205,13 +219,19 @@ function SettingsTokenPanel({ client }) {
           />
           <button
             className="settings-secondary-action"
-            disabled={createState.status === "submitting"}
+            disabled={createDisabled}
             type="submit"
           >
-            {createState.status === "submitting" ? "Creating" : "Create token"}
+            {getCreateTokenButtonLabel(createState.status, tokenLimitReached)}
           </button>
         </div>
       </form>
+
+      {tokenLimitReached ? (
+        <p className="settings-limit-note" role="status">
+          {SETTINGS_TOKEN_LIMIT_MESSAGE}
+        </p>
+      ) : null}
 
       {createState.status === "error" ? (
         <p className="settings-error">{createState.error}</p>
@@ -524,6 +544,24 @@ function prependTokenRecord(tokens, tokenRecord) {
     tokenRecord,
     ...tokens.filter((token) => token.id !== tokenRecord.id)
   ];
+}
+
+function getCreateTokenButtonLabel(createStatus, tokenLimitReached) {
+  if (createStatus === "submitting") {
+    return "Creating";
+  }
+  if (tokenLimitReached) {
+    return "Limit reached";
+  }
+  return "Create token";
+}
+
+function formatCreateTokenError(error) {
+  if (error?.code === "conflict" || error?.status === 409) {
+    return SETTINGS_TOKEN_LIMIT_MESSAGE;
+  }
+
+  return error instanceof Error ? error.message : "Failed to create token.";
 }
 
 function formatTokenMeta(token) {

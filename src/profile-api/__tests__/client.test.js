@@ -257,6 +257,29 @@ test("manages settings tokens with session credentials", async () => {
   assert.equal(revoked.revokedAt, "2026-06-10T00:00:00.000Z");
 });
 
+test("surfaces settings token limit errors with code and status", async () => {
+  const client = createProfileApiClient({
+    fetchImpl: async () => jsonResponse({
+      ok: false,
+      error: {
+        code: "conflict",
+        message: "Active CLI token limit reached"
+      }
+    }, { status: 409 })
+  });
+
+  await assert.rejects(
+    () => client.createSettingsToken({ label: "CI token" }),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "conflict");
+      assert.equal(error.status, 409);
+      assert.equal(error.message, "Active CLI token limit reached");
+      return true;
+    }
+  );
+});
+
 test("manages settings devices with session credentials", async () => {
   const requests = [];
   const client = createProfileApiClient({
