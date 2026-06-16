@@ -101,6 +101,7 @@ export {
   CLI_TOKEN_PREFIX,
   DEFAULT_CLI_TOKEN_SCOPES,
   DEFAULT_CLI_TOKEN_TTL_MS,
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS,
   createCliTokenDigest,
   createCliTokenService,
   defaultCreateId,

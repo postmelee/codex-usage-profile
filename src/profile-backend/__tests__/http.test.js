@@ -5,6 +5,7 @@ import {
   CLI_DEVICE_CODE_PREFIX,
   CLI_LOGIN_STATUS,
   CLI_TOKEN_PREFIX,
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS,
   DEFAULT_SESSION_COOKIE_NAME,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
@@ -310,6 +311,94 @@ test("handles settings token create, list, revoke, and revoked submit failure", 
   assert.equal(submitAfterRevoke.status, 410);
   assert.equal(submitAfterRevoke.body.error.code, PROFILE_BACKEND_ERROR_CODES.GONE);
   assert.equal(storedState.includes(created.body.data.token), false);
+});
+
+test("limits active settings and device-code tokens per owner", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const createdTokens = [];
+
+  for (let index = 0; index < DEFAULT_MAX_ACTIVE_CLI_TOKENS; index += 1) {
+    const created = await requestJson(
+      fixture.handler,
+      "POST",
+      "/api/settings/tokens",
+      {
+        label: `CI token ${index + 1}`
+      },
+      { cookie }
+    );
+
+    assert.equal(created.status, 201);
+    createdTokens.push(created.body.data.tokenRecord);
+  }
+
+  const overflow = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/settings/tokens",
+    {
+      label: "overflow"
+    },
+    { cookie }
+  );
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
+  const pollAtLimit = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+
+  assert.equal(overflow.status, 409);
+  assert.equal(overflow.body.error.code, PROFILE_BACKEND_ERROR_CODES.CONFLICT);
+  assert.equal(pollAtLimit.status, 409);
+  assert.equal(pollAtLimit.body.error.code, PROFILE_BACKEND_ERROR_CODES.CONFLICT);
+
+  await requestJson(
+    fixture.handler,
+    "DELETE",
+    `/api/settings/tokens/${createdTokens[0].id}`,
+    undefined,
+    { cookie }
+  );
+  const pollAfterRevoke = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+
+  assert.equal(pollAfterRevoke.status, 200);
+  assert.equal(pollAfterRevoke.body.data.status, CLI_LOGIN_STATUS.APPROVED);
+  assert.equal(
+    pollAfterRevoke.body.data.tokenRecord.sourceChallengeId,
+    started.body.data.challenge.id
+  );
+  assert.equal(listed.body.data.tokens.length, DEFAULT_MAX_ACTIVE_CLI_TOKENS);
 });
 
 test("lists device-code login tokens and rejects bearer-only settings management", async () => {
