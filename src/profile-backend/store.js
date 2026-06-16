@@ -23,6 +23,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
   const cliTokenIdByDigest = new Map();
   const latestSnapshotsByOwnerId = new Map();
   const ownerIdBySnapshotHandle = new Map();
+  const submittedDevicesById = new Map();
+  const submittedDeviceIdByOwnerAndKey = new Map();
 
   const store = {
     clear() {
@@ -38,6 +40,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       cliTokenIdByDigest.clear();
       latestSnapshotsByOwnerId.clear();
       ownerIdBySnapshotHandle.clear();
+      submittedDevicesById.clear();
+      submittedDeviceIdByOwnerAndKey.clear();
     },
 
     deleteCliToken(id) {
@@ -74,6 +78,13 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       return clone(cliTokensById.get(id)) ?? null;
     },
 
+    listCliTokensByOwnerId(ownerId) {
+      return Array.from(cliTokensById.values())
+        .filter((token) => token.ownerId === ownerId)
+        .sort((a, b) => compareIsoDesc(a.createdAt, b.createdAt))
+        .map(clone);
+    },
+
     getLatestSnapshotByHandle(handle) {
       const ownerId = ownerIdBySnapshotHandle.get(handle);
       return ownerId ? clone(latestSnapshotsByOwnerId.get(ownerId)) : null;
@@ -81,6 +92,15 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
     getLatestSnapshotByOwnerId(ownerId) {
       return clone(latestSnapshotsByOwnerId.get(ownerId)) ?? null;
+    },
+
+    getSubmittedDeviceById(id) {
+      return clone(submittedDevicesById.get(id)) ?? null;
+    },
+
+    getSubmittedDeviceByOwnerAndKey(ownerId, deviceKey) {
+      const id = submittedDeviceIdByOwnerAndKey.get(deviceKeyForOwner(ownerId, deviceKey));
+      return id ? clone(submittedDevicesById.get(id)) : null;
     },
 
     getOAuthState(id) {
@@ -103,6 +123,13 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
     listOwners() {
       return Array.from(ownersById.values(), clone);
+    },
+
+    listSubmittedDevicesByOwnerId(ownerId) {
+      return Array.from(submittedDevicesById.values())
+        .filter((device) => device.ownerId === ownerId)
+        .sort(compareSubmittedDevicesDesc)
+        .map(clone);
     },
 
     getSession(id) {
@@ -213,6 +240,39 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       return clone(record);
     },
 
+    saveSubmittedDevice(device) {
+      requireFields("submitted device", device, [
+        "id",
+        "ownerId",
+        "deviceKey",
+        "createdAt",
+        "updatedAt",
+        "lastSubmittedAt"
+      ]);
+
+      const previous = submittedDevicesById.get(device.id);
+      const ownerKey = deviceKeyForOwner(device.ownerId, device.deviceKey);
+      const idForOwnerKey = submittedDeviceIdByOwnerAndKey.get(ownerKey);
+
+      if (idForOwnerKey && idForOwnerKey !== device.id) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+          "Submitted device key already belongs to another device"
+        );
+      }
+
+      if (previous) {
+        submittedDeviceIdByOwnerAndKey.delete(
+          deviceKeyForOwner(previous.ownerId, previous.deviceKey)
+        );
+      }
+
+      submittedDevicesById.set(device.id, clone(device));
+      submittedDeviceIdByOwnerAndKey.set(ownerKey, device.id);
+
+      return clone(device);
+    },
+
     saveOwner(owner) {
       requireFields("owner", owner, [
         "id",
@@ -260,7 +320,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         sessions: Array.from(sessionsById.values(), clone),
         cliLoginChallenges: Array.from(loginChallengesById.values(), clone),
         cliTokens: Array.from(cliTokensById.values(), clone),
-        latestSnapshots: Array.from(latestSnapshotsByOwnerId.values(), clone)
+        latestSnapshots: Array.from(latestSnapshotsByOwnerId.values(), clone),
+        submittedDevices: Array.from(submittedDevicesById.values(), clone)
       };
     }
   };
@@ -280,6 +341,23 @@ function clone(value) {
 
 function providerKey(authProvider, providerUserId) {
   return `${authProvider}:${providerUserId}`;
+}
+
+function deviceKeyForOwner(ownerId, deviceKey) {
+  return `${ownerId}:${deviceKey}`;
+}
+
+function compareIsoDesc(left, right) {
+  return String(right ?? "").localeCompare(String(left ?? ""));
+}
+
+function compareSubmittedDevicesDesc(left, right) {
+  const submittedCompare = compareIsoDesc(left.lastSubmittedAt, right.lastSubmittedAt);
+  if (submittedCompare !== 0) {
+    return submittedCompare;
+  }
+
+  return compareIsoDesc(left.createdAt, right.createdAt);
 }
 
 function requireFields(label, record, fields) {
@@ -321,6 +399,9 @@ function hydrateStore(store, initialState) {
   for (const snapshot of state.latestSnapshots) {
     store.saveLatestSnapshot(snapshot);
   }
+  for (const device of state.submittedDevices) {
+    store.saveSubmittedDevice(device);
+  }
 }
 
 function normalizeStoreState(value) {
@@ -354,7 +435,8 @@ function normalizeStoreState(value) {
       "cliLoginChallenges"
     ),
     cliTokens: normalizeRecordArray(value.cliTokens, "cliTokens"),
-    latestSnapshots: normalizeRecordArray(value.latestSnapshots, "latestSnapshots")
+    latestSnapshots: normalizeRecordArray(value.latestSnapshots, "latestSnapshots"),
+    submittedDevices: normalizeRecordArray(value.submittedDevices, "submittedDevices")
   };
 }
 
@@ -365,7 +447,8 @@ function emptyStoreState() {
     sessions: [],
     cliLoginChallenges: [],
     cliTokens: [],
-    latestSnapshots: []
+    latestSnapshots: [],
+    submittedDevices: []
   };
 }
 

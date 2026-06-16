@@ -96,6 +96,55 @@ test("handles GitHub browser login redirect, callback session, and me lookup", a
   assert.equal(me.body.data.session.ownerId, "owner_github_12345");
 });
 
+test("redirects GitHub browser callback back to the app with a session cookie", async () => {
+  const fixture = createFixture();
+  const loginResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings",
+    "",
+    { accept: "text/html" }
+  );
+  const state = new URL(loginResponse.headers.get("location")).searchParams.get("state");
+  const callback = await requestResponse(
+    fixture.handler,
+    "GET",
+    `/api/auth/github/callback?code=oauth_code_1&state=${state}`,
+    "",
+    { accept: "text/html" }
+  );
+
+  assert.equal(callback.status, 302);
+  assert.equal(callback.headers.get("location"), "/settings");
+  assert.match(callback.headers.get("set-cookie"), new RegExp(`${DEFAULT_SESSION_COOKIE_NAME}=session_`));
+});
+
+test("redirects browser GitHub login configuration errors back to settings", async () => {
+  const handler = createProfileBackendHttpHandler({
+    store: createMemoryProfileBackendStore()
+  });
+  const browserResponse = await requestResponse(
+    handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings",
+    "",
+    { accept: "text/html" }
+  );
+  const apiResponse = await requestJson(
+    handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings"
+  );
+
+  assert.equal(browserResponse.status, 302);
+  assert.equal(
+    browserResponse.headers.get("location"),
+    "/settings?auth_error=github_oauth_not_configured"
+  );
+  assert.equal(apiResponse.status, 400);
+  assert.equal(apiResponse.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+});
+
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
@@ -192,6 +241,125 @@ test("handles device login start, authorize, and poll token exchange", async () 
   assert.equal(Object.hasOwn(reused.body.data, "token"), false);
   assert.equal(storedState.includes(polled.body.data.token), false);
   assert.equal(storedState.includes(started.body.data.deviceCode), false);
+});
+
+test("handles settings token create, list, revoke, and revoked submit failure", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const created = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/settings/tokens",
+    {
+      label: "  CI token  "
+    },
+    { cookie }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const revoked = await requestJson(
+    fixture.handler,
+    "DELETE",
+    `/api/settings/tokens/${created.body.data.tokenRecord.id}`,
+    undefined,
+    { cookie }
+  );
+  const listedAfterRevoke = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const submitAfterRevoke = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt
+    },
+    { authorization: `Bearer ${created.body.data.token}` }
+  );
+  const storedState = JSON.stringify(fixture.store.exportState());
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assert.equal(created.body.data.tokenRecord.label, "CI token");
+  assert.equal(Object.hasOwn(created.body.data.tokenRecord, "token"), false);
+  assert.equal(Object.hasOwn(created.body.data.tokenRecord, "tokenDigest"), false);
+
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data.tokens.length, 1);
+  assert.equal(listed.body.data.tokens[0].id, created.body.data.tokenRecord.id);
+  assert.equal(JSON.stringify(listed.body.data).includes(created.body.data.token), false);
+  assert.equal(JSON.stringify(listed.body.data).includes("tokenDigest"), false);
+
+  assert.equal(revoked.status, 200);
+  assert.equal(revoked.body.data.tokenRecord.id, created.body.data.tokenRecord.id);
+  assert.equal(revoked.body.data.tokenRecord.revokedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(Object.hasOwn(revoked.body.data.tokenRecord, "tokenDigest"), false);
+  assert.equal(listedAfterRevoke.body.data.tokens.length, 0);
+  assert.equal(submitAfterRevoke.status, 410);
+  assert.equal(submitAfterRevoke.body.error.code, PROFILE_BACKEND_ERROR_CODES.GONE);
+  assert.equal(storedState.includes(created.body.data.token), false);
+});
+
+test("lists device-code login tokens and rejects bearer-only settings management", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    label: "workstation"
+  });
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
+  const polled = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/poll",
+    {
+      deviceCode: started.body.data.deviceCode
+    }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const bearerOnly = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { authorization: `Bearer ${polled.body.data.token}` }
+  );
+
+  assert.equal(polled.status, 200);
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data.tokens.length, 1);
+  assert.equal(listed.body.data.tokens[0].id, polled.body.data.tokenRecord.id);
+  assert.equal(listed.body.data.tokens[0].label, "workstation");
+  assert.equal(listed.body.data.tokens[0].sourceChallengeId, started.body.data.challenge.id);
+  assert.equal(bearerOnly.status, 401);
+  assert.equal(bearerOnly.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
 });
 
 test("rejects device authorization without a session cookie", async () => {
@@ -325,6 +493,134 @@ test("handles bearer snapshot submit and public handle lookup", async () => {
   assert.equal(publicSnapshot.status, 200);
   assert.equal(publicSnapshot.body.data.snapshot.handle, "postmelee");
   assert.deepEqual(publicSnapshot.body.data.snapshot.snapshot, sampleProfileSnapshot);
+});
+
+test("handles settings device list and rename after submit", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const { token } = fixture.issueToken();
+
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      visibility: PROFILE_VISIBILITY.PUBLIC,
+      device: {
+        id: "machine-1",
+        name: "Office Mac"
+      }
+    },
+    { authorization: `Bearer ${token}` }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices",
+    undefined,
+    { cookie }
+  );
+  const device = listed.body.data.devices[0];
+  const renamed = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${device.id}`,
+    {
+      name: "  Desk Mac  "
+    },
+    { cookie }
+  );
+  const reset = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${device.id}`,
+    {
+      name: ""
+    },
+    { cookie }
+  );
+
+  assert.equal(listed.status, 200);
+  assert.equal(device.deviceKey, "machine-1");
+  assert.equal(device.displayName, "Office Mac");
+  assert.equal(device.customName, "Office Mac");
+  assert.equal(device.lastSubmittedAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.body.data.device.displayName, "Desk Mac");
+  assert.equal(renamed.body.data.device.customName, "Desk Mac");
+  assert.equal(reset.status, 200);
+  assert.equal(reset.body.data.device.displayName, "Unnamed device");
+  assert.equal(reset.body.data.device.customName, null);
+});
+
+test("rejects settings device management without session ownership", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const ownerCookie = fixture.saveSession();
+  fixture.store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const otherCookie = fixture.saveSession("owner_2", { id: "session_2" });
+  const { token } = fixture.issueToken();
+
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      device: {
+        id: "machine-1"
+      }
+    },
+    { authorization: `Bearer ${token}` }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices",
+    undefined,
+    { cookie: ownerCookie }
+  );
+  const missingSession = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices"
+  );
+  const crossOwner = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${listed.body.data.devices[0].id}`,
+    {
+      name: "Other"
+    },
+    { cookie: otherCookie }
+  );
+  const invalidName = await requestJson(
+    fixture.handler,
+    "PATCH",
+    `/api/settings/devices/${listed.body.data.devices[0].id}`,
+    {
+      name: "bad\nname"
+    },
+    { cookie: ownerCookie }
+  );
+
+  assert.equal(missingSession.status, 401);
+  assert.equal(missingSession.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
+  assert.equal(crossOwner.status, 404);
+  assert.equal(crossOwner.body.error.code, PROFILE_BACKEND_ERROR_CODES.NOT_FOUND);
+  assert.equal(invalidName.status, 400);
+  assert.equal(invalidName.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
 });
 
 test("hides private snapshots behind the same not found response", async () => {

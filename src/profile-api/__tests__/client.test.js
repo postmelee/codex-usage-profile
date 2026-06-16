@@ -188,6 +188,128 @@ test("authorizes device login with session credentials", async () => {
   assert.equal(result.challenge.ownerId, "owner_1");
 });
 
+test("manages settings tokens with session credentials", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      if (url === "/api/settings/tokens" && options.method === "POST") {
+        return jsonResponse({
+          ok: true,
+          data: {
+            token: "cup_raw_token",
+            tokenRecord: {
+              id: "cli_token_1",
+              label: "CI token"
+            }
+          }
+        }, { status: 201 });
+      }
+      if (url === "/api/settings/tokens/cli_token_1" && options.method === "DELETE") {
+        return jsonResponse({
+          ok: true,
+          data: {
+            tokenRecord: {
+              id: "cli_token_1",
+              label: "CI token",
+              revokedAt: "2026-06-10T00:00:00.000Z"
+            }
+          }
+        });
+      }
+      return jsonResponse({
+        ok: true,
+        data: {
+          tokens: [
+            {
+              id: "cli_token_1",
+              label: "CI token"
+            }
+          ]
+        }
+      });
+    }
+  });
+
+  const tokens = await client.listSettingsTokens();
+  const created = await client.createSettingsToken({ label: "CI token" });
+  const revoked = await client.revokeSettingsToken("cli_token_1");
+
+  assert.equal(requests[0].url, "/api/settings/tokens");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[0].options.headers.accept, "application/json");
+
+  assert.equal(requests[1].url, "/api/settings/tokens");
+  assert.equal(requests[1].options.method, "POST");
+  assert.equal(requests[1].options.credentials, "same-origin");
+  assert.equal(requests[1].options.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    label: "CI token"
+  });
+
+  assert.equal(requests[2].url, "/api/settings/tokens/cli_token_1");
+  assert.equal(requests[2].options.method, "DELETE");
+  assert.equal(requests[2].options.credentials, "same-origin");
+
+  assert.equal(tokens[0].id, "cli_token_1");
+  assert.equal(created.token, "cup_raw_token");
+  assert.equal(created.tokenRecord.id, "cli_token_1");
+  assert.equal(revoked.revokedAt, "2026-06-10T00:00:00.000Z");
+});
+
+test("manages settings devices with session credentials", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      if (url === "/api/settings/devices/device_1" && options.method === "PATCH") {
+        return jsonResponse({
+          ok: true,
+          data: {
+            device: {
+              id: "device_1",
+              deviceKey: "machine-1",
+              displayName: "Desk Mac",
+              customName: "Desk Mac"
+            }
+          }
+        });
+      }
+      return jsonResponse({
+        ok: true,
+        data: {
+          devices: [
+            {
+              id: "device_1",
+              deviceKey: "machine-1",
+              displayName: "Office Mac",
+              customName: "Office Mac"
+            }
+          ]
+        }
+      });
+    }
+  });
+
+  const devices = await client.listSettingsDevices();
+  const renamed = await client.renameSettingsDevice("device_1", "Desk Mac");
+
+  assert.equal(requests[0].url, "/api/settings/devices");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[0].options.headers.accept, "application/json");
+
+  assert.equal(requests[1].url, "/api/settings/devices/device_1");
+  assert.equal(requests[1].options.method, "PATCH");
+  assert.equal(requests[1].options.credentials, "same-origin");
+  assert.equal(requests[1].options.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    name: "Desk Mac"
+  });
+
+  assert.equal(devices[0].displayName, "Office Mac");
+  assert.equal(renamed.customName, "Desk Mac");
+});
+
 test("throws ProfileApiError for API error envelopes", async () => {
   const client = createProfileApiClient({
     fetchImpl: async () => jsonResponse({
@@ -239,6 +361,38 @@ test("validates required client inputs", async () => {
   );
   await assert.rejects(
     () => client.authorizeDeviceLogin({ userCode: "" }),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => client.revokeSettingsToken(""),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => client.createSettingsToken({ label: 42 }),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => client.renameSettingsDevice("", "Desk Mac"),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => client.renameSettingsDevice("device_1", 42),
     (error) => {
       assert.equal(error instanceof ProfileApiError, true);
       assert.equal(error.code, "validation_failed");

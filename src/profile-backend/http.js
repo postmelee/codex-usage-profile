@@ -10,10 +10,16 @@ import { createOAuthRuntimeService } from "./oauth-runtime.js";
 import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
 import { createCliTokenService } from "./tokens.js";
+import {
+  createSubmittedDeviceService,
+  getSubmittedDeviceDisplayName
+} from "./devices.js";
 
 const JSON_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8"
 });
+const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
+const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
 
 export function createProfileBackendHttpHandler(options = {}) {
   const {
@@ -70,10 +76,17 @@ export function createProfileBackendHttpHandler(options = {}) {
     pollIntervalSeconds: options.devicePollIntervalSeconds,
     tokenService
   });
+  const deviceService = options.deviceService ?? createSubmittedDeviceService({
+    store,
+    now,
+    createId
+  });
   const snapshotService = options.snapshotService ?? createSnapshotSubmitService({
     store,
     now,
-    tokenService
+    tokenService,
+    deviceService,
+    createId
   });
 
   return async function handleProfileBackendRequest(request) {
@@ -82,12 +95,23 @@ export function createProfileBackendHttpHandler(options = {}) {
       const route = `${request.method.toUpperCase()} ${url.pathname}`;
 
       if (route === "GET /api/auth/github/login") {
-        const result = oauthRuntimeService.startGitHubLogin({
-          cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
-          redirectTo: url.searchParams.get("redirect_to")
-        });
+        try {
+          const result = oauthRuntimeService.startGitHubLogin({
+            cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
+            redirectTo: url.searchParams.get("redirect_to")
+          });
 
-        return redirectResponse(result.authorizationUrl);
+          return redirectResponse(result.authorizationUrl);
+        } catch (error) {
+          if (shouldRedirectBrowserAuthError(request, error)) {
+            return redirectResponse(buildAuthErrorRedirectPath(
+              url.searchParams.get("redirect_to"),
+              error
+            ));
+          }
+
+          throw error;
+        }
       }
 
       if (route === "GET /api/auth/github/callback") {
@@ -102,14 +126,25 @@ export function createProfileBackendHttpHandler(options = {}) {
           })
           : null;
 
-        return okResponse({
+        const payload = {
           owner: serializeOwner(result.owner),
           session: serializeSession(result.session),
           challenge: serializeChallenge(challenge),
           redirectTo: result.oauthState.redirectTo ?? null
-        }, 200, {
+        };
+        const headers = {
           "set-cookie": result.sessionCookie
-        });
+        };
+
+        if (wantsBrowserNavigation(request)) {
+          return redirectResponse(
+            sanitizeLocalRedirectPath(result.oauthState.redirectTo, "/settings"),
+            302,
+            headers
+          );
+        }
+
+        return okResponse(payload, 200, headers);
       }
 
       if (route === "GET /api/auth/me") {
@@ -172,6 +207,84 @@ export function createProfileBackendHttpHandler(options = {}) {
         });
 
         return okResponse(serializeDevicePoll(result));
+      }
+
+      if (route === "GET /api/settings/tokens") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const tokens = tokenService.listCliTokens({ ownerId: owner.id });
+
+        return okResponse({
+          tokens: tokens.map(serializeCliTokenRecord)
+        });
+      }
+
+      if (route === "POST /api/settings/tokens") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request);
+        const result = tokenService.issueCliToken({
+          ownerId: owner.id,
+          label: normalizeSettingsTokenLabel(body.label ?? body.name)
+        });
+
+        return okResponse({
+          token: result.token,
+          tokenRecord: serializeCliTokenRecord(result.tokenRecord)
+        }, 201);
+      }
+
+      const settingsTokenPrefix = "/api/settings/tokens/";
+      if (
+        request.method.toUpperCase() === "DELETE" &&
+        url.pathname.startsWith(settingsTokenPrefix)
+      ) {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const tokenId = decodeURIComponent(url.pathname.slice(settingsTokenPrefix.length));
+        const tokenRecord = tokenService.revokeCliToken({
+          tokenId,
+          ownerId: owner.id
+        });
+
+        return okResponse({
+          tokenRecord: serializeCliTokenRecord(tokenRecord)
+        });
+      }
+
+      if (route === "GET /api/settings/devices") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const devices = deviceService.listSubmittedDevices({ ownerId: owner.id });
+
+        return okResponse({
+          devices: devices.map(serializeSubmittedDevice)
+        });
+      }
+
+      const settingsDevicePrefix = "/api/settings/devices/";
+      if (
+        request.method.toUpperCase() === "PATCH" &&
+        url.pathname.startsWith(settingsDevicePrefix)
+      ) {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request);
+        const deviceId = decodeURIComponent(url.pathname.slice(settingsDevicePrefix.length));
+        const device = deviceService.renameSubmittedDevice({
+          ownerId: owner.id,
+          deviceId,
+          displayName: body.name ?? body.displayName
+        });
+
+        return okResponse({
+          device: serializeSubmittedDevice(device)
+        });
       }
 
       if (route === "POST /api/auth/github/callback") {
@@ -332,8 +445,8 @@ export function errorResponse(error) {
   });
 }
 
-export function redirectResponse(location, status = 302) {
-  const headers = new Headers();
+export function redirectResponse(location, status = 302, extraHeaders = {}) {
+  const headers = new Headers(extraHeaders);
   headers.set("location", location);
 
   return new Response(null, {
@@ -367,6 +480,36 @@ function normalizeError(error) {
     PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
     error instanceof Error ? error.message : "Request failed"
   );
+}
+
+function shouldRedirectBrowserAuthError(request, error) {
+  return wantsBrowserNavigation(request) && isProfileBackendError(error);
+}
+
+function wantsBrowserNavigation(request) {
+  const accept = request.headers.get("accept") ?? "";
+
+  return accept.includes("text/html");
+}
+
+function buildAuthErrorRedirectPath(redirectTo, error) {
+  const path = sanitizeLocalRedirectPath(redirectTo, "/settings");
+  const url = new URL(path, "http://localhost");
+  const code = error.code === PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED &&
+    error.message === "githubClientId is required"
+    ? "github_oauth_not_configured"
+    : "github_login_failed";
+
+  url.searchParams.set("auth_error", code);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function sanitizeLocalRedirectPath(value, fallback) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+    return fallback;
+  }
+
+  return value;
 }
 
 function serializeOwner(owner) {
@@ -436,6 +579,19 @@ function serializeDevicePoll(result) {
   return payload;
 }
 
+function normalizeSettingsTokenLabel(value) {
+  if (typeof value !== "string") {
+    return DEFAULT_SETTINGS_TOKEN_LABEL;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return DEFAULT_SETTINGS_TOKEN_LABEL;
+  }
+
+  return trimmed.slice(0, MAX_SETTINGS_TOKEN_LABEL_LENGTH);
+}
+
 function serializeSession(session) {
   if (!session) return null;
 
@@ -461,6 +617,20 @@ function serializeCliTokenRecord(tokenRecord) {
     expiresAt: tokenRecord.expiresAt,
     revokedAt: tokenRecord.revokedAt ?? null,
     lastUsedAt: tokenRecord.lastUsedAt ?? null
+  };
+}
+
+function serializeSubmittedDevice(device) {
+  if (!device) return null;
+
+  return {
+    id: device.id,
+    deviceKey: device.deviceKey,
+    displayName: getSubmittedDeviceDisplayName(device),
+    customName: device.displayName ?? null,
+    createdAt: device.createdAt,
+    updatedAt: device.updatedAt,
+    lastSubmittedAt: device.lastSubmittedAt
   };
 }
 

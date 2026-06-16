@@ -58,6 +58,21 @@ test("detects nested credential-like keys and values", () => {
   );
 });
 
+test("detects credential-like values in submit device metadata", () => {
+  const findings = detectForbiddenSecrets({
+    snapshot: sampleProfileSnapshot,
+    device: {
+      id: "machine-1",
+      access_token: "gho_1234567890abcdefghijklmnopqrstuv"
+    }
+  });
+
+  assert.deepEqual(
+    findings.map((finding) => finding.path),
+    ["$.device.access_token", "$.device.access_token"]
+  );
+});
+
 test("detects OpenAI, GitHub, bearer, and private key values", () => {
   assert.equal(isForbiddenSecretValue("sk-proj-1234567890abcdef"), true);
   assert.equal(isForbiddenSecretValue("ghp_1234567890abcdefghijklmnopqrstuv"), true);
@@ -149,6 +164,46 @@ test("device login responses expose raw secrets only at intended exchange points
 
   assert.equal(exportedState.includes(started.body.data.deviceCode), false);
   assert.equal(exportedState.includes(polled.body.data.token), false);
+});
+
+test("settings token responses expose raw tokens only on create", async () => {
+  const fixture = createDeviceFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const created = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/settings/tokens",
+    {
+      label: "CI token"
+    },
+    { cookie }
+  );
+  const listed = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+  const revoked = await requestJson(
+    fixture.handler,
+    "DELETE",
+    `/api/settings/tokens/${created.body.data.tokenRecord.id}`,
+    undefined,
+    { cookie }
+  );
+  const exportedState = JSON.stringify(fixture.store.exportState());
+
+  assert.equal(created.status, 201);
+  assert.equal(created.body.data.token, `${CLI_TOKEN_PREFIX}test_1`);
+  assertNoSerializedKeys(created.body.data.tokenRecord, ["token", "tokenDigest"]);
+  assertNoSerializedKeys(listed.body.data.tokens[0], ["token", "tokenDigest"]);
+  assertNoSerializedKeys(revoked.body.data.tokenRecord, ["token", "tokenDigest"]);
+  assert.equal(JSON.stringify(listed.body.data).includes(created.body.data.token), false);
+  assert.equal(JSON.stringify(revoked.body.data).includes(created.body.data.token), false);
+  assert.equal(exportedState.includes(created.body.data.token), false);
 });
 
 test("device login rejects invalid, duplicate, expired, and unknown codes", async () => {
