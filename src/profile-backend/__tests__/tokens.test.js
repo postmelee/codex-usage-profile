@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CLI_TOKEN_PREFIX,
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
   ProfileBackendError,
@@ -90,6 +91,68 @@ test("lists owner CLI tokens without revoked records by default", () => {
     [second.tokenRecord.id, first.tokenRecord.id]
   );
   assert.equal(Object.hasOwn(activeTokens[0], "token"), false);
+});
+
+test("limits active CLI tokens per owner and ignores revoked records", () => {
+  const store = createStoreWithOwner();
+  store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const service = createCliTokenService({
+    store,
+    now: () => new Date("2026-06-08T00:00:00.000Z"),
+    createId: createIdFactory(),
+    createToken: createTokenFactory()
+  });
+  const issued = [
+    service.issueCliToken({ ownerId: "owner_1", label: "first" }),
+    service.issueCliToken({ ownerId: "owner_1", label: "second" }),
+    service.issueCliToken({ ownerId: "owner_1", label: "third" })
+  ];
+
+  const otherOwner = service.issueCliToken({
+    ownerId: "owner_2",
+    label: "other"
+  });
+
+  assert.equal(
+    service.listCliTokens({ ownerId: "owner_1" }).length,
+    DEFAULT_MAX_ACTIVE_CLI_TOKENS
+  );
+  assertBackendError(
+    () => service.issueCliToken({ ownerId: "owner_1", label: "overflow" }),
+    PROFILE_BACKEND_ERROR_CODES.CONFLICT
+  );
+
+  service.revokeCliToken({
+    ownerId: "owner_1",
+    tokenId: issued[1].tokenRecord.id
+  });
+  const replacement = service.issueCliToken({
+    ownerId: "owner_1",
+    label: "replacement"
+  });
+
+  assert.equal(replacement.tokenRecord.label, "replacement");
+  assert.equal(service.listCliTokens({ ownerId: "owner_1" }).length, 3);
+  assert.deepEqual(
+    service
+      .listCliTokens({ ownerId: "owner_1" })
+      .map((tokenRecord) => tokenRecord.label)
+      .sort(),
+    ["first", "replacement", "third"]
+  );
+  assert.deepEqual(
+    service
+      .listCliTokens({ ownerId: "owner_2" })
+      .map((tokenRecord) => tokenRecord.id),
+    [otherOwner.tokenRecord.id]
+  );
 });
 
 test("rejects invalid, expired, revoked, and owner-mismatched CLI tokens", () => {

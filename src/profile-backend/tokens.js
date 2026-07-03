@@ -4,10 +4,14 @@ import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
 } from "./errors.js";
+import {
+  DEFAULT_MAX_ACTIVE_CLI_TOKENS
+} from "../profile-shared/tokenLimits.js";
 
 export const CLI_TOKEN_PREFIX = "cup_";
 export const DEFAULT_CLI_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 365;
 export const DEFAULT_CLI_TOKEN_SCOPES = Object.freeze(["snapshot:write"]);
+export { DEFAULT_MAX_ACTIVE_CLI_TOKENS };
 
 export function createCliTokenService(options = {}) {
   const {
@@ -15,7 +19,8 @@ export function createCliTokenService(options = {}) {
     now = () => new Date(),
     createId = defaultCreateId,
     createToken = defaultCreateToken,
-    tokenTtlMs = DEFAULT_CLI_TOKEN_TTL_MS
+    tokenTtlMs = DEFAULT_CLI_TOKEN_TTL_MS,
+    maxActiveTokens = DEFAULT_MAX_ACTIVE_CLI_TOKENS
   } = options;
 
   if (!store) {
@@ -33,6 +38,8 @@ export function createCliTokenService(options = {}) {
           "Owner not found"
         );
       }
+
+      assertActiveCliTokenLimitAvailable(store, ownerId, maxActiveTokens);
 
       const issuedAt = normalizeDate(now());
       const expiresAt = issueOptions.expiresAt
@@ -170,6 +177,20 @@ function assertTokenUsable(tokenRecord, nowDate) {
     throw new ProfileBackendError(
       PROFILE_BACKEND_ERROR_CODES.EXPIRED,
       "CLI token has expired"
+    );
+  }
+}
+
+function assertActiveCliTokenLimitAvailable(store, ownerId, maxActiveTokens) {
+  const activeTokenCount = store
+    .listCliTokensByOwnerId(ownerId)
+    .filter((tokenRecord) => !tokenRecord.revokedAt)
+    .length;
+
+  if (activeTokenCount >= maxActiveTokens) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+      "Active CLI token limit reached"
     );
   }
 }
