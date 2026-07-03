@@ -451,6 +451,103 @@ test("lists device-code login tokens and rejects bearer-only settings management
   assert.equal(bearerOnly.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
 });
 
+test("rejects settings mutations without session cookies and ignores bearer credentials", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const { token } = fixture.issueToken({ label: "bearer" });
+  const created = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/settings/tokens",
+    {
+      label: "CI token"
+    },
+    { cookie }
+  );
+
+  await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/snapshots/submit",
+    {
+      snapshot: sampleProfileSnapshot,
+      capturedAt: sampleProfileSnapshot.capturedAt,
+      device: {
+        id: "machine-1"
+      }
+    },
+    { authorization: `Bearer ${token}` }
+  );
+  const devices = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/devices",
+    undefined,
+    { cookie }
+  );
+  const deviceId = devices.body.data.devices[0].id;
+  const responses = [
+    await requestJson(
+      fixture.handler,
+      "POST",
+      "/api/settings/tokens",
+      { label: "missing session" }
+    ),
+    await requestJson(
+      fixture.handler,
+      "POST",
+      "/api/settings/tokens",
+      { label: "bearer only" },
+      { authorization: `Bearer ${token}` }
+    ),
+    await requestJson(
+      fixture.handler,
+      "DELETE",
+      `/api/settings/tokens/${created.body.data.tokenRecord.id}`
+    ),
+    await requestJson(
+      fixture.handler,
+      "DELETE",
+      `/api/settings/tokens/${created.body.data.tokenRecord.id}`,
+      undefined,
+      { authorization: `Bearer ${token}` }
+    ),
+    await requestJson(
+      fixture.handler,
+      "PATCH",
+      `/api/settings/devices/${deviceId}`,
+      { name: "No session" }
+    ),
+    await requestJson(
+      fixture.handler,
+      "PATCH",
+      `/api/settings/devices/${deviceId}`,
+      { name: "Bearer only" },
+      { authorization: `Bearer ${token}` }
+    )
+  ];
+  const listedAfterRejectedMutations = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/settings/tokens",
+    undefined,
+    { cookie }
+  );
+
+  for (const response of responses) {
+    assert.equal(response.status, 401);
+    assert.equal(response.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
+  }
+  assert.equal(listedAfterRejectedMutations.body.data.tokens.length, 2);
+  assert.equal(
+    listedAfterRejectedMutations.body.data.tokens.some((item) => (
+      item.id === created.body.data.tokenRecord.id
+    )),
+    true
+  );
+});
+
 test("rejects device authorization without a session cookie", async () => {
   const fixture = createFixture();
   fixture.saveOwner();

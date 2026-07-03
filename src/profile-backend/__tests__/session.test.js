@@ -10,7 +10,8 @@ import {
   createSessionService,
   parseCookieHeader,
   readSessionIdFromCookie,
-  serializeExpiredSessionCookie
+  serializeExpiredSessionCookie,
+  serializeSessionCookie
 } from "../index.js";
 
 test("creates sessions, serializes secure cookies, and verifies cookie auth", () => {
@@ -30,6 +31,31 @@ test("creates sessions, serializes secure cookies, and verifies cookie auth", ()
   assert.equal(readSessionIdFromCookie(cookie), "session_1");
   assert.equal(verified.owner.id, "owner_1");
   assert.equal(Object.hasOwn(storedSession, "token"), false);
+});
+
+test("serializes explicit session cookie security attributes", () => {
+  const { service } = createFixture();
+  const { session, cookie } = service.createSession({ ownerId: "owner_1" });
+  const parts = cookie.split("; ");
+  const secureCookie = serializeSessionCookie(session, {
+    now: new Date("2026-06-08T00:00:00.000Z"),
+    secure: true
+  });
+  const secureExpiredCookie = serializeExpiredSessionCookie({ secure: true });
+
+  assert.equal(parts[0], `${DEFAULT_SESSION_COOKIE_NAME}=session_1`);
+  assert.equal(parts.includes("Path=/"), true);
+  assert.equal(parts.includes("HttpOnly"), true);
+  assert.equal(parts.includes("SameSite=Lax"), true);
+  assert.equal(parts.includes("Max-Age=2592000"), true);
+  assert.equal(parts.includes("Expires=Wed, 08 Jul 2026 00:00:00 GMT"), true);
+  assert.equal(parts.includes("Secure"), false);
+
+  assert.equal(secureCookie.includes("Secure"), true);
+  assert.equal(secureCookie.includes("SameSite=Lax"), true);
+  assert.equal(secureExpiredCookie.includes("Secure"), true);
+  assert.equal(secureExpiredCookie.includes("SameSite=Lax"), true);
+  assert.equal(secureExpiredCookie.includes("Max-Age=0"), true);
 });
 
 test("logs out by revoking sessions and expiring cookies", () => {
