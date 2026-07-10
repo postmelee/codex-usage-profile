@@ -47,7 +47,7 @@ GitHub Issue: [#6](https://github.com/postmelee/codex-usage-profile/issues/6)
 - `src/profile-card/__tests__/view-model.test.js`
 - `src/profile-card/__tests__/heatmap.test.js`
 - `src/profile-card/__tests__/renderer.test.js`
-- deterministic renderer용 font/brand asset과 해당 라이선스 파일
+- deterministic renderer용 font asset과 해당 라이선스 파일
 - `mydocs/working/task_m100_6_stage1.md`
 
 수정:
@@ -76,7 +76,7 @@ GitHub Issue: [#6](https://github.com/postmelee/codex-usage-profile/issues/6)
    - missing day는 0 token
    - non-zero 분포를 기반으로 4단계 blue scale 계산
 4. 499x306 logical scene을 SVG로 구성하고 2x PNG로 rasterize한다.
-   - rounded black card, 50x50 avatar, GitHub text block, Codex mark
+   - rounded black card, 50x50 avatar, GitHub text block, Codex 제품명 텍스트
    - 26x7 heatmap
    - lifetime/peak/current streak/longest streak 4 stats
    - 기본 영문, `ko` 라벨 지원
@@ -301,11 +301,13 @@ Task #6 Stage 3: Home과 card share profile UX 구현
    - private profile은 README에서 표시되지 않음
    - GitHub identity와 CLI usage의 책임 분리
 2. README에 최소 로그인/공유 예시와 공식 문서 링크를 추가한다.
+   - 비공식 프로젝트이며 OpenAI와 제휴·보증 관계가 없다는 고지
+   - OpenAI 상표·로고를 재구성한 그래픽 없이 Codex 제품명만 정확한 설명 용도로 사용
 3. 로컬 runtime에서 실제 OAuth session으로 owner profile/card 흐름을 smoke한다.
 4. 첨부 reference와 output을 998x612로 비교한다.
    - outer radius/background
    - avatar/name/login baseline
-   - Codex mark alignment
+   - Codex 제품명 텍스트 alignment
    - heatmap 26x7 geometry와 latest 오른쪽 배치
    - 4 stats divider/label alignment
 5. desktop/mobile Home/Profile/Share screenshots를 확인한다.

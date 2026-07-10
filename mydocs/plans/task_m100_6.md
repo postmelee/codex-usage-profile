@@ -55,7 +55,7 @@ GitHub identity 필드는 server-owned다. CLI가 이름, 사용자명, avatar �
 - `account/usage/read` 결과와 동일한 카드 usage 입력 계약 및 validator/normalizer
 - GitHub owner identity와 usage를 병합하는 server-owned card view model
 - CLI identity/profile 필드를 신뢰하지 않는 allowlist 경계
-- 원형 GitHub avatar, 표시 이름, `@githubLogin`, Codex mark, 26주 heatmap, 4개 통계 렌더링
+- 원형 GitHub avatar, 표시 이름, `@githubLogin`, Codex 제품명 텍스트, 26주 heatmap, 4개 통계 렌더링
 - 499x306 logical canvas, 998x612 PNG 출력
 - 로그인한 소유자의 private card preview endpoint
 - `GET /u/:handle/card.png` 공개 PNG endpoint
