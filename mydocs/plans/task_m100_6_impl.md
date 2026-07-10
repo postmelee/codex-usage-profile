@@ -76,7 +76,7 @@ GitHub Issue: [#6](https://github.com/postmelee/codex-usage-profile/issues/6)
    - missing day는 0 token
    - non-zero 분포를 기반으로 4단계 blue scale 계산
 4. 499x306 logical scene을 SVG로 구성하고 2x PNG로 rasterize한다.
-   - rounded black card, 50x50 avatar, GitHub text block, Codex 제품명 텍스트
+   - rounded black card, 52x52 avatar, GitHub text block, Codex 제품명 텍스트
    - 26x7 heatmap
    - lifetime/peak/current streak/longest streak 4 stats
    - 기본 영문, `ko` 라벨 지원

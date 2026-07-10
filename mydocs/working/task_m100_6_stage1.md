@@ -41,7 +41,7 @@ git diff --check
 결과:
 
 - OK: profile-card 단위 테스트 14건 전체 통과
-- OK: PNG signature, 998x612 크기, 투명 모서리, 배경, heatmap level, divider, avatar와 text-only Codex label 픽셀 확인
+- OK: PNG signature, 998x612 크기, 투명 모서리, 배경, heatmap level, divider, 52x52 avatar와 text-only Codex label 픽셀 확인
 - OK: 긴 display name과 번역 라벨이 고정 영역 밖으로 넘치지 않도록 축소 또는 말줄임 처리
 - OK: Vite 8.0.16 production build 성공, 45 modules transformed
 - OK: `git diff --check` 경고 없음

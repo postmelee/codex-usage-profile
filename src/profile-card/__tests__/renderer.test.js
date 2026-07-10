@@ -46,6 +46,8 @@ test("renders the Codex share card as a 998x612 PNG", async () => {
   assert.deepEqual(readPixel(context, 617, 375), rgba("#339cff"));
   assert.deepEqual(readPixel(context, 281, 500), rgba(CARD_COLORS.divider));
   assert.notDeepEqual(readPixel(context, 114, 114), rgba(CARD_COLORS.background));
+  assert.notDeepEqual(readPixel(context, 166, 116), rgba(CARD_COLORS.background));
+  assert.deepEqual(readPixel(context, 170, 116), rgba(CARD_COLORS.background));
   assert.deepEqual(readPixel(context, 770, 116), rgba(CARD_COLORS.background));
   assert.deepEqual(readPixel(context, 885, 99), rgba(CARD_COLORS.secondary));
 });

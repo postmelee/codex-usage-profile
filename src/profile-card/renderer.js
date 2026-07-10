@@ -28,6 +28,10 @@ const CARD_FONT_FILES_DIRECTORY = join(
 );
 const CARD_FONT_WEIGHTS = Object.freeze([400, 500, 600]);
 const cardFontFamiliesByWeight = new Map();
+const AVATAR_X = 32;
+const AVATAR_Y = 32;
+const AVATAR_SIZE = 52;
+const AVATAR_RADIUS = AVATAR_SIZE / 2;
 const HEATMAP_X = 32;
 const HEATMAP_Y = 96;
 const HEATMAP_WIDTH = 435;
@@ -103,16 +107,29 @@ async function drawHeader(context, header, options) {
 
   context.save();
   context.beginPath();
-  context.arc(57, 57, 25, 0, Math.PI * 2);
+  context.arc(
+    AVATAR_X + AVATAR_RADIUS,
+    AVATAR_Y + AVATAR_RADIUS,
+    AVATAR_RADIUS,
+    0,
+    Math.PI * 2
+  );
   context.clip();
 
   if (avatarImage) {
-    drawImageCover(context, avatarImage, 32, 32, 50, 50);
+    drawImageCover(
+      context,
+      avatarImage,
+      AVATAR_X,
+      AVATAR_Y,
+      AVATAR_SIZE,
+      AVATAR_SIZE
+    );
   } else {
     context.fillStyle = "#2f2f2f";
-    context.fillRect(32, 32, 50, 50);
+    context.fillRect(AVATAR_X, AVATAR_Y, AVATAR_SIZE, AVATAR_SIZE);
     drawCenteredFittedText(context, getAvatarFallback(header.displayName), {
-      centerX: 57,
+      centerX: AVATAR_X + AVATAR_RADIUS,
       color: CARD_COLORS.secondary,
       maxFontSize: 20,
       maxWidth: 38,
