@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+
 import { ProfileShell } from "./ProfileShell.jsx";
 import {
   getAccountAvatar,
@@ -5,11 +7,28 @@ import {
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
-import { buildProfileLoginHref } from "./cardShare.js";
+import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
+
+const SAMPLE_CARD_URL = "/assets/codex-card-sample.png";
 
 export function HomePage({ authState, client, onAuthStateChange }) {
   const status = authState?.status ?? "loading";
   const owner = getAccountOwner(authState);
+  const locale = useMemo(
+    () => resolveShareLocale(globalThis.navigator?.language),
+    []
+  );
+  const ownerPreviewUrl = status === "authenticated" && owner
+    ? client?.buildOwnerCardPreviewUrl?.({ locale }) ?? null
+    : null;
+  const [ownerPreviewFailed, setOwnerPreviewFailed] = useState(false);
+  const cardPreviewUrl = ownerPreviewUrl && !ownerPreviewFailed
+    ? ownerPreviewUrl
+    : SAMPLE_CARD_URL;
+
+  useEffect(() => {
+    setOwnerPreviewFailed(false);
+  }, [ownerPreviewUrl]);
 
   return (
     <ProfileShell
@@ -26,10 +45,15 @@ export function HomePage({ authState, client, onAuthStateChange }) {
           </header>
 
           <img
-            alt="Sample Codex usage card"
+            alt={ownerPreviewUrl && !ownerPreviewFailed
+              ? "Your Codex usage card"
+              : "Sample Codex usage card"}
             className="home-card-preview"
             height="612"
-            src="/assets/codex-card-sample.png"
+            onError={() => {
+              if (ownerPreviewUrl) setOwnerPreviewFailed(true);
+            }}
+            src={cardPreviewUrl}
             width="998"
           />
 

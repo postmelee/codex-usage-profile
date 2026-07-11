@@ -37,8 +37,16 @@ test.describe("Home and share card flow", () => {
 
   test("Home shows the signed-in GitHub identity and owner profile entry", async ({ page }) => {
     await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
+
+    const ownerPreview = page.getByRole("img", { name: "Your Codex usage card" });
+    await expect(ownerPreview).toHaveAttribute(
+      "src",
+      "/api/profile/card.png?locale=en"
+    );
+    await expect.poll(() => ownerPreview.evaluate((image) => image.naturalWidth)).toBe(998);
 
     const accountState = page.locator(".home-account-state");
     await expect(accountState.getByRole("img", { name: "postmelee avatar" })).toBeVisible();
@@ -48,6 +56,47 @@ test.describe("Home and share card flow", () => {
       "href",
       "/profile"
     );
+  });
+
+  test("keeps Home Profile and Settings inside the frame with internal scrolling", async ({ page }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("private"),
+      ok: true
+    }));
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 620 });
+
+    for (const path of ["/", "/profile", "/settings"]) {
+      await page.goto(path);
+      const metrics = await getFrameScrollMetrics(page);
+
+      expect(metrics.frameBottom).toBeLessThanOrEqual(metrics.viewportHeight);
+      expect(metrics.frameHeight).toBeLessThanOrEqual(metrics.viewportHeight - 72 + 1);
+      expect(metrics.overflowY).toBe("auto");
+      expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+    }
+
+    const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
+    await expect(primaryNavigation.getByRole("link", { name: "Home", exact: true }))
+      .toHaveAttribute("href", "/");
+    await expect(primaryNavigation.getByRole("link", { name: "Profile", exact: true }))
+      .toHaveAttribute("href", "/profile");
+
+    const internalScrollTop = await page.locator(".profile-shell").evaluate((shell) => {
+      shell.scrollTop = 120;
+      return shell.scrollTop;
+    });
+    expect(internalScrollTop).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath("settings-short-viewport.png") });
   });
 
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
@@ -334,5 +383,21 @@ async function fulfillJson(route, body, status = 200) {
     body: JSON.stringify(body),
     contentType: "application/json",
     status
+  });
+}
+
+async function getFrameScrollMetrics(page) {
+  return page.locator(".app-frame").evaluate((frame) => {
+    const shell = frame.querySelector(".profile-shell");
+    const frameRect = frame.getBoundingClientRect();
+
+    return {
+      clientHeight: shell.clientHeight,
+      frameBottom: frameRect.bottom,
+      frameHeight: frameRect.height,
+      overflowY: getComputedStyle(shell).overflowY,
+      scrollHeight: shell.scrollHeight,
+      viewportHeight: window.innerHeight
+    };
   });
 }
