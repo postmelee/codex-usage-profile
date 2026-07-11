@@ -35,6 +35,21 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-desktop.png") });
   });
 
+  test("Home shows the signed-in GitHub identity and owner profile entry", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    const accountState = page.locator(".home-account-state");
+    await expect(accountState.getByRole("img", { name: "postmelee avatar" })).toBeVisible();
+    await expect(accountState.getByText("postmelee", { exact: true })).toBeVisible();
+    await expect(accountState.getByText("@postmelee", { exact: true })).toBeVisible();
+    await expect(accountState.getByRole("link", { name: "View profile" })).toHaveAttribute(
+      "href",
+      "/profile"
+    );
+  });
+
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     let visibility = "private";
