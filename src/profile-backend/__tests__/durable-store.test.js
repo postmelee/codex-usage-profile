@@ -18,8 +18,9 @@ import {
   readStoreState
 } from "../index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
+import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 
-test("persists owner, OAuth state, session, CLI token digest, and latest snapshot", async () => {
+test("persists auth records, latest snapshot, and latest card usage", async () => {
   const filePath = createTempStorePath();
   const rawCliToken = `${CLI_TOKEN_PREFIX}raw_test_token`;
   const rawGitHubToken = "gho_1234567890abcdefghijklmnopqrstuv";
@@ -74,6 +75,14 @@ test("persists owner, OAuth state, session, CLI token digest, and latest snapsho
       visibility: PROFILE_VISIBILITY.PUBLIC
     }
   });
+  firstStore.saveLatestUsage({
+    ownerId: login.owner.id,
+    handle: login.owner.handle,
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    capturedAt: "2026-06-11T00:00:00.000Z",
+    uploadedAt: "2026-06-11T00:01:00.000Z",
+    usage: sampleAccountUsageReadResult
+  });
 
   const storedFile = readFileSync(filePath, "utf8");
   const reopenedStore = createFileProfileBackendStore({ filePath });
@@ -92,6 +101,10 @@ test("persists owner, OAuth state, session, CLI token digest, and latest snapsho
   assert.equal(
     reopenedStore.getLatestSnapshotByHandle("postmelee").snapshot.profile.username,
     sampleProfileSnapshot.profile.username
+  );
+  assert.deepEqual(
+    reopenedStore.getLatestUsageByHandle("postmelee").usage,
+    sampleAccountUsageReadResult
   );
 });
 

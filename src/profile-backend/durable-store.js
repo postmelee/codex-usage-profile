@@ -21,6 +21,7 @@ const MUTATING_METHODS = new Set([
   "saveCliLoginChallenge",
   "saveCliToken",
   "saveLatestSnapshot",
+  "saveLatestUsage",
   "saveOAuthState",
   "saveOwner",
   "saveSession"

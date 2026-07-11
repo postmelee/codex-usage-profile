@@ -5,6 +5,8 @@ import {
   createNotFoundFrontendHandler,
   createProfileHostAdapter,
   isApiRoutePath,
+  isProfileBackendRoutePath,
+  isPublicCardRoutePath,
   normalizeApiPrefix
 } from "../host-adapter.js";
 
@@ -29,16 +31,19 @@ test("routes /api requests to the backend handler and non-api requests to fronte
 
   const apiResponse = await handler(new Request(`${BASE_URL}/api/auth/me`));
   const apiRootResponse = await handler(new Request(`${BASE_URL}/api`));
+  const cardResponse = await handler(new Request(`${BASE_URL}/u/meleeisdeveloping/card.png`));
   const frontendResponse = await handler(new Request(`${BASE_URL}/u/meleeisdeveloping`));
 
   assert.equal(apiResponse.status, 200);
   assert.deepEqual(await apiResponse.json(), { source: "api" });
   assert.equal(apiRootResponse.status, 200);
+  assert.equal(cardResponse.status, 200);
   assert.equal(frontendResponse.status, 200);
   assert.equal(frontendResponse.headers.get("content-type"), "text/html; charset=utf-8");
   assert.deepEqual(calls, [
     ["api", "GET", "/api/auth/me"],
     ["api", "GET", "/api"],
+    ["api", "GET", "/u/meleeisdeveloping/card.png"],
     ["frontend", "GET", "/u/meleeisdeveloping"]
   ]);
 });
@@ -114,6 +119,9 @@ test("supports custom API prefixes without matching partial path segments", asyn
   assert.equal(normalizeApiPrefix("/runtime/api/"), "/runtime/api");
   assert.equal(isApiRoutePath("/runtime/api/auth/me", "/runtime/api/"), true);
   assert.equal(isApiRoutePath("/runtime/apiary", "/runtime/api/"), false);
+  assert.equal(isPublicCardRoutePath("/u/postmelee/card.png"), true);
+  assert.equal(isPublicCardRoutePath("/u/postmelee"), false);
+  assert.equal(isProfileBackendRoutePath("/u/postmelee/card.png", "/runtime/api/"), true);
   assert.deepEqual(calls, [
     ["api", "/runtime/api/auth/me"],
     ["frontend", "/runtime/apiary"]

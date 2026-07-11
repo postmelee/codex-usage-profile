@@ -14,7 +14,7 @@ export function createProfileHostAdapter(options = {}) {
   return async function handleProfileHostRequest(request) {
     const url = new URL(request.url);
 
-    if (isApiRoutePath(url.pathname, normalizedApiPrefix)) {
+    if (isProfileBackendRoutePath(url.pathname, normalizedApiPrefix)) {
       return apiHandler(request);
     }
 
@@ -41,6 +41,15 @@ export function isApiRoutePath(pathname, apiPrefix = DEFAULT_API_PREFIX) {
 
   return normalizedPathname === normalizedApiPrefix ||
     normalizedPathname.startsWith(`${normalizedApiPrefix}/`);
+}
+
+export function isProfileBackendRoutePath(pathname, apiPrefix = DEFAULT_API_PREFIX) {
+  return isApiRoutePath(pathname, apiPrefix) || isPublicCardRoutePath(pathname);
+}
+
+export function isPublicCardRoutePath(pathname) {
+  const normalizedPathname = requirePathname(pathname);
+  return /^\/u\/[^/]+\/card\.png$/.test(normalizedPathname);
 }
 
 export function normalizeApiPrefix(value = DEFAULT_API_PREFIX) {

@@ -33,3 +33,12 @@ export {
   formatCardTokenCount,
   resolveCardLocale
 } from "./view-model.js";
+
+export {
+  DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES,
+  DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS,
+  DEFAULT_PROFILE_CARD_CACHE_ENTRIES,
+  createProfileCardEtag,
+  createProfileCardService,
+  normalizeGitHubAvatarUrl
+} from "./service.js";

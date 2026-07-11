@@ -17,7 +17,7 @@ import { createGitHubOAuthClient } from "./github-oauth-client.js";
 import {
   DEFAULT_API_PREFIX,
   createProfileHostAdapter,
-  isApiRoutePath
+  isProfileBackendRoutePath
 } from "./host-adapter.js";
 
 export const DEFAULT_RUNTIME_HOST = "127.0.0.1";
@@ -89,7 +89,7 @@ export function createProfileRuntimeNodeHandler(options = {}) {
       const requestUrl = createNodeRequestUrl(nodeRequest, { publicBaseUrl });
       const pathname = new URL(requestUrl).pathname;
 
-      if (isApiRoutePath(pathname, apiPrefix)) {
+      if (isProfileBackendRoutePath(pathname, apiPrefix)) {
         const request = createWebRequestFromNodeRequest(nodeRequest, {
           url: requestUrl
         });
