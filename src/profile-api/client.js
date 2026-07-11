@@ -24,6 +24,10 @@ export function createProfileApiClient(options = {}) {
       return buildGitHubLoginUrl(baseUrl, loginOptions);
     },
 
+    buildOwnerCardPreviewUrl(previewOptions = {}) {
+      return buildOwnerCardPreviewUrl(baseUrl, previewOptions);
+    },
+
     async getCurrentAccount() {
       const response = await fetchImpl(buildApiUrl(baseUrl, "/api/auth/me"), {
         credentials: "same-origin",
@@ -41,6 +45,35 @@ export function createProfileApiClient(options = {}) {
         owner: envelope.data.owner,
         session: envelope.data.session
       };
+    },
+
+    async getOwnerProfile() {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/profile"), {
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json"
+        }
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data;
+    },
+
+    async updateProfileVisibility(visibility) {
+      const response = await fetchImpl(buildApiUrl(baseUrl, "/api/profile"), {
+        body: JSON.stringify({
+          visibility: requireProfileVisibility(visibility)
+        }),
+        credentials: "same-origin",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        method: "PATCH"
+      });
+      const envelope = await readApiEnvelope(response);
+
+      return envelope.data;
     },
 
     async getPublicSnapshot(handle) {
@@ -237,6 +270,24 @@ export function buildGitHubLoginUrl(baseUrl = "", options = {}) {
   return `${url.pathname}${url.search}`;
 }
 
+export function buildOwnerCardPreviewUrl(baseUrl = "", options = {}) {
+  const url = new URL(
+    buildApiUrl(baseUrl, "/api/profile/card.png"),
+    "http://localhost"
+  );
+  const locale = normalizeOptionalString(options.locale, "locale");
+
+  if (locale) {
+    url.searchParams.set("locale", locale);
+  }
+  if (options.revision !== undefined && options.revision !== null) {
+    url.searchParams.set("v", String(options.revision));
+  }
+
+  if (baseUrl) return url.toString();
+  return `${url.pathname}${url.search}`;
+}
+
 async function readApiEnvelope(response) {
   const body = await readJsonResponse(response);
 
@@ -331,6 +382,16 @@ function requireDeviceId(deviceId) {
   }
 
   return deviceId.trim();
+}
+
+function requireProfileVisibility(value) {
+  if (value !== "private" && value !== "public") {
+    throw new ProfileApiError("visibility must be private or public", {
+      code: "validation_failed"
+    });
+  }
+
+  return value;
 }
 
 function normalizeSettingsTokenLabelInput(label) {

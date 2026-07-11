@@ -1,6 +1,122 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/meleeisdeveloping";
+const CARD_PNG = readFileSync(new URL(
+  "../public/assets/codex-card-sample.png",
+  import.meta.url
+));
+const AUTH_OWNER = Object.freeze({
+  avatarUrl: "/assets/postmelee-avatar.png",
+  displayName: "postmelee",
+  githubLogin: "postmelee",
+  handle: "postmelee",
+  id: "owner_1",
+  visibility: "private"
+});
+
+test.describe("Home and share card flow", () => {
+  test("Home shows the sample card and sends anonymous users to GitHub login", async ({ page }, testInfo) => {
+    await mockAnonymousAccount(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Codex usage profile" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Sample Codex usage card" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
+      "href",
+      "/api/auth/github/login?redirect_to=%2Fprofile"
+    );
+
+    const preview = page.getByRole("img", { name: "Sample Codex usage card" });
+    await expect.poll(() => preview.evaluate((image) => image.naturalWidth)).toBe(998);
+    await expect(preview).toHaveCSS("aspect-ratio", "499 / 306");
+    await page.screenshot({ path: testInfo.outputPath("home-desktop.png") });
+  });
+
+  test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    let visibility = "private";
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", async (route) => {
+      if (route.request().method() === "PATCH") {
+        visibility = JSON.parse(route.request().postData() ?? "{}").visibility;
+      }
+      await fulfillJson(route, {
+        data: ownerProfile(visibility),
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/profile");
+
+    const shareButton = page.getByRole("button", { name: "Share profile" });
+    await expect(page.getByRole("heading", { name: "Your Codex card" })).toBeVisible();
+    await expect(shareButton).toBeDisabled();
+    await expect(page.getByText("Private", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Publish card" }).click();
+    await expect(page.getByText("Public", { exact: true })).toBeVisible();
+    await expect(shareButton).toBeEnabled();
+
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share card" });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole("button", { name: "Close share dialog" })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath("share-desktop.png") });
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("link", { name: "Save PNG" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Close share dialog" })).toBeFocused();
+
+    await page.getByRole("button", { name: "Copy Image URL" }).click();
+    await expect(page.getByText("Image URL copied")).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "http://127.0.0.1:5173/u/postmelee/card.png"
+    );
+
+    await page.getByRole("button", { name: "Copy README Markdown" }).click();
+    await expect(page.getByText("README Markdown copied")).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png)"
+    );
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Save PNG" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(shareButton).toBeFocused();
+  });
+
+  test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/profile");
+    await page.getByRole("button", { name: "Share profile" }).click();
+
+    await expect(page.getByRole("dialog", { name: "Share card" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
+      "aspect-ratio",
+      "499 / 306"
+    );
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("share-mobile.png") });
+  });
+});
 
 test.describe("Codex profile UI", () => {
   test("renders the desktop profile with the Codex-like action row", async ({ page }, testInfo) => {
@@ -161,3 +277,47 @@ test.describe("Codex profile UI", () => {
     await page.screenshot({ path: testInfo.outputPath("mobile-tooltip.png") });
   });
 });
+
+async function mockAnonymousAccount(page) {
+  await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+    error: { code: "unauthorized", message: "Session cookie is required" },
+    ok: false
+  }, 401));
+}
+
+async function mockAuthenticatedAccount(page) {
+  await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+    data: {
+      owner: AUTH_OWNER,
+      session: { id: "session_1", ownerId: AUTH_OWNER.id }
+    },
+    ok: true
+  }));
+}
+
+async function mockCardImages(page) {
+  const fulfillPng = (route) => route.fulfill({
+    body: CARD_PNG,
+    contentType: "image/png",
+    status: 200
+  });
+  await page.route("**/api/profile/card.png*", fulfillPng);
+  await page.route("**/u/postmelee/card.png*", fulfillPng);
+}
+
+function ownerProfile(visibility) {
+  return {
+    owner: { ...AUTH_OWNER, visibility },
+    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    usage: { uploadedAt: "2026-06-11T00:01:00.000Z" },
+    visibility
+  };
+}
+
+async function fulfillJson(route, body, status = 200) {
+  await route.fulfill({
+    body: JSON.stringify(body),
+    contentType: "application/json",
+    status
+  });
+}

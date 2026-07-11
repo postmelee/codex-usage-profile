@@ -6,6 +6,8 @@ export function ProfileShell({
   children,
   client,
   onAuthStateChange,
+  onShare,
+  shareDisabled = false,
   showShare = true,
   title = "Profile"
 }) {
@@ -18,7 +20,12 @@ export function ProfileShell({
           <h1>{title}</h1>
           <div className="profile-actions" aria-label="Page actions">
             {showShare ? (
-              <button aria-label="Share profile" type="button">
+              <button
+                aria-label="Share profile"
+                disabled={shareDisabled}
+                onClick={onShare}
+                type="button"
+              >
                 <Icon name="share" />
                 <span>Share</span>
               </button>

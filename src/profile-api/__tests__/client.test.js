@@ -5,6 +5,7 @@ import {
   ProfileApiError,
   buildApiUrl,
   buildGitHubLoginUrl,
+  buildOwnerCardPreviewUrl,
   createProfileApiClient
 } from "../client.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
@@ -52,6 +53,35 @@ test("returns null when current account has no valid session", async () => {
   });
 
   assert.equal(await client.getCurrentAccount(), null);
+});
+
+test("loads and updates the session owner's card profile", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          owner: { id: "owner_1", handle: "postmelee" },
+          publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+          usage: { uploadedAt: "2026-06-11T00:00:00.000Z" },
+          visibility: options.method === "PATCH" ? "public" : "private"
+        }
+      });
+    }
+  });
+
+  const profile = await client.getOwnerProfile();
+  const updated = await client.updateProfileVisibility("public");
+
+  assert.equal(requests[0].url, "/api/profile");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.equal(requests[1].url, "/api/profile");
+  assert.equal(requests[1].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(requests[1].options.body), { visibility: "public" });
+  assert.equal(profile.visibility, "private");
+  assert.equal(updated.visibility, "public");
 });
 
 test("loads a public snapshot from the API envelope", async () => {
@@ -421,6 +451,25 @@ test("validates required client inputs", async () => {
       assert.equal(error.code, "validation_failed");
       return true;
     }
+  );
+  await assert.rejects(
+    () => client.updateProfileVisibility("team"),
+    (error) => {
+      assert.equal(error instanceof ProfileApiError, true);
+      assert.equal(error.code, "validation_failed");
+      return true;
+    }
+  );
+});
+
+test("builds locale-aware owner card preview URLs", () => {
+  assert.equal(
+    buildOwnerCardPreviewUrl("", { locale: "ko", revision: 3 }),
+    "/api/profile/card.png?locale=ko&v=3"
+  );
+  assert.equal(
+    buildOwnerCardPreviewUrl("https://profiles.example.test/app", { locale: "en" }),
+    "https://profiles.example.test/api/profile/card.png?locale=en"
   );
 });
 
