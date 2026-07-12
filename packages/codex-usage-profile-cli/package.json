@@ -2,6 +2,22 @@
   "name": "codex-usage-profile",
   "version": "0.1.0",
   "description": "Connect local Codex usage to a Codex Usage Profile.",
+  "keywords": [
+    "codex",
+    "openai",
+    "usage",
+    "profile",
+    "github-readme"
+  ],
+  "homepage": "https://github.com/postmelee/codex-usage-profile#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/postmelee/codex-usage-profile.git",
+    "directory": "packages/codex-usage-profile-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/postmelee/codex-usage-profile/issues"
+  },
   "type": "module",
   "bin": {
     "codex-usage-profile": "./bin/codex-usage-profile.js"
@@ -11,7 +27,9 @@
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
     "codex-usage-analyzer": "^0.2.0"
@@ -21,6 +39,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT"
 }

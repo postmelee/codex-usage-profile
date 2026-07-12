@@ -1,0 +1,61 @@
+# codex-usage-profile
+
+Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
+
+> This package is under MVP development. It has no default production service URL yet, and this repository does not claim that npm publishing or production deployment is complete.
+
+## Requirements
+
+- Node.js 20 or newer
+- A recent `codex` CLI on `PATH`
+- A ChatGPT-backed Codex sign-in that supports `account/usage/read`
+- A Codex Usage Profile service account linked through GitHub
+
+API-key-only and Bedrock Codex authentication do not provide the account usage method consumed by the analyzer.
+
+## Quick Start
+
+After the package and service are published, one command can start browser login when needed and continue with submission:
+
+```bash
+npx --yes codex-usage-profile@latest submit --server https://profiles.example.com
+```
+
+The example origin is a placeholder. Use the origin operated by the deployed service. Once login succeeds, the service origin and a narrow submit credential are stored locally, so later commands can omit `--server`.
+
+```bash
+npx --yes codex-usage-profile@latest status
+npx --yes codex-usage-profile@latest submit
+npx --yes codex-usage-profile@latest logout
+```
+
+Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROFILE_TOKEN` can supply an externally managed submit token, but the CLI never accepts a token as a command argument.
+
+## What Submit Sends
+
+The CLI imports `codex-usage-analyzer`, starts the installed Codex app-server, and sends one Account Usage Contract v1 document to `POST /api/account-usage/submit`. The document contains only:
+
+- lifetime and peak daily tokens
+- longest-running turn and streak counts
+- source-dated daily token buckets
+- contract version and capture time
+
+GitHub name, login, avatar, visibility, and public URL remain server-owned. The CLI does not send Codex/OpenAI credentials, GitHub OAuth credentials, prompts, responses, tool data, or local session files.
+
+Device id and display name travel in product-specific headers rather than inside the analyzer document. The submit credential is sent only in the `Authorization` header.
+
+## Credential Storage
+
+Device login returns a raw service credential once. The CLI stores it in an owner-only config directory using an atomic file replacement and `0600` file permissions on macOS and Linux. File credentials are bound to the service origin that issued them and are never sent to another origin.
+
+`logout` removes the local file. It cannot unset `CODEX_USAGE_PROFILE_TOKEN`; remove that variable from the shell environment yourself. Revoke issued credentials immediately from the web Settings screen when a machine or token is no longer trusted.
+
+## Documentation
+
+- [CLI login, submit, privacy, and troubleshooting](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/cli-submit.md)
+- [README card and cache behavior](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/readme-card.md)
+- [Analyzer responsibility boundary](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/codex-usage-analyzer.md)
+
+## License
+
+MIT. This independent community project is not affiliated with, endorsed by, or sponsored by OpenAI. OpenAI and Codex names and trademarks belong to their respective owners.

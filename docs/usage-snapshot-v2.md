@@ -1,20 +1,22 @@
 # UsageSnapshot v2 Contract
 
-`UsageSnapshot v2` is the shared JSON contract produced by local usage analyzers and consumed by Codex Usage Profile-compatible web services.
+> **Legacy compatibility contract:** this schema remains internal to the existing full-profile preview and `/api/snapshots/submit` compatibility path. `codex-usage-analyzer@0.2.x` and the new `codex-usage-profile submit` command use Account Usage Contract v1 instead.
 
-The contract intentionally separates local usage analysis from web account identity. A local analyzer owns usage fields such as token totals, token breakdown, model usage, and skill/plugin activity. A web service owns GitHub login data, profile visibility, submit tokens, devices, public URLs, and rendered card/profile view models.
+`UsageSnapshot v2` was the shared JSON contract produced by legacy local usage adapters and consumed by Codex Usage Profile-compatible web services.
+
+The contract intentionally separates local usage analysis from web account identity. A legacy producer owns usage fields such as token totals, token breakdown, model usage, and skill/plugin activity. A web service owns GitHub login data, profile visibility, submit tokens, devices, public URLs, and rendered card/profile view models.
 
 ## Producer And Consumer Boundary
 
 | Component | Responsibility |
 |---|---|
-| `codex-usage-analyzer` | Reads local usage data, normalizes it, and emits a `UsageSnapshot v2` JSON object. |
+| Legacy profile adapters | Produce `UsageSnapshot v2` for the compatibility preview and snapshot API. |
 | `codex-usage-profile` | Authenticates users, receives snapshots, stores latest public/private state, merges snapshots with GitHub profile data, and renders profile/card UI. |
-| Product-specific wrappers | May call the analyzer SDK and submit the resulting snapshot to their own service. They must not add GitHub-facing fields into the analyzer snapshot. |
+| Product-specific wrappers | May submit a legacy snapshot to the compatibility endpoint. New wrappers use Account Usage Contract v1 instead. GitHub-facing fields remain outside either usage payload. |
 
-`UsageSnapshot v2` is the value submitted as `payload.snapshot`. Submit wrapper metadata such as `handle`, `visibility`, bearer token, device id, and service session is not part of this contract.
+`UsageSnapshot v2` is the value accepted as `payload.snapshot` by the legacy endpoint. Submit wrapper metadata such as `handle`, `visibility`, bearer token, device id, and service session is not part of this contract.
 
-The analyzer SDK/CLI boundary is documented in [`codex-usage-analyzer.md`](codex-usage-analyzer.md).
+The active Account Usage analyzer and CLI boundary is documented in [`codex-usage-analyzer.md`](codex-usage-analyzer.md).
 
 ## Top-Level Shape
 
@@ -236,7 +238,7 @@ The following fields belong to the web service account/profile layer, not to `Us
 | visibility and routing | public/private visibility, canonical public handle |
 | service auth | browser session, CLI API token, device id |
 
-Renderers that need GitHub data must merge a stored GitHub profile record with the analyzer snapshot after submit.
+Renderers that need GitHub data must merge a stored GitHub profile record with the legacy snapshot after submit.
 
 ## Credential And Secret Exclusion
 
@@ -252,7 +254,7 @@ Forbidden examples:
 - CLI API tokens
 - private local filesystem paths
 
-This rule applies to field names and nested values. An analyzer should emit only normalized usage data, not raw source objects.
+This rule applies to field names and nested values. A legacy producer should emit only normalized usage data, not raw source objects.
 
 ## v1 Compatibility
 
@@ -321,4 +323,4 @@ The existing v1 validator should remain separate. Consumers should introduce a d
 
 ## Product Wrapper Guidance
 
-Product-specific CLIs such as a card-focused wrapper should import the analyzer SDK, receive a `UsageSnapshot v2`, and submit that snapshot to their service. They may add product-specific submit wrapper fields outside `snapshot`, but they must not mutate the analyzer snapshot with GitHub-facing fields, tokens, device data, or rendered UI-only values.
+New product CLIs should import `codex-usage-analyzer@0.2.x`, receive Account Usage Contract v1, and submit that identity-free document without a wrapper. They must not convert new analyzer output into this legacy schema or add GitHub-facing fields, tokens, device data, or rendered UI-only values. Device metadata belongs in downstream request headers.

@@ -6,7 +6,7 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 
 1. 웹사이트에서 **Sign in with GitHub**을 선택한다.
 2. 로그인 후 `/profile`에서 GitHub 이름, 사용자명, 아바타가 반영된 private preview를 확인한다.
-3. CLI submit으로 Codex 사용량을 전송한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
+3. CLI `submit`으로 Codex 사용량을 전송한다. credential이 없으면 browser 승인을 먼저 진행하고 같은 명령에서 제출을 계속한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
 4. **Publish card**를 선택해 프로필을 public으로 전환한다.
 5. 상단 **Share**에서 이미지 URL 또는 README Markdown을 복사한다.
 6. Markdown을 GitHub profile 또는 repository README에 삽입한다.
@@ -16,6 +16,51 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 ```
 
 Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
+
+## CLI 연결
+
+package와 service가 배포된 뒤의 사용자 명령은 다음과 같다. example origin은 실제 배포 origin으로 교체한다.
+
+```bash
+npx --yes codex-usage-profile@latest submit \
+  --server https://profiles.example.com
+```
+
+첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장된다. 이후에는 같은 stable device id로 명령을 실행할 수 있다.
+
+```bash
+npx --yes codex-usage-profile@latest status
+npx --yes codex-usage-profile@latest submit
+```
+
+source checkout에서는 다음 bin을 사용한다.
+
+```bash
+node packages/codex-usage-profile-cli/bin/codex-usage-profile.js submit \
+  --server http://127.0.0.1:5177
+```
+
+상세한 로그인, credential 위치, 환경변수와 문제 해결은 [CLI 로그인과 사용량 제출](cli-submit.md)을 참고한다.
+
+## Submit API 계약
+
+CLI는 `codex-usage-analyzer@0.2.x`의 Account Usage Contract v1 document를 wrapper 없이 그대로 전송한다.
+
+```http
+POST /api/account-usage/submit
+Authorization: Bearer <service-submit-token>
+Content-Type: application/json
+x-codex-usage-profile-device-id: <stable-device-id>
+x-codex-usage-profile-device-name: <display-name>
+```
+
+body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 존재한다. GitHub identity, visibility, device, URL, credential은 body에 포함되지 않는다.
+
+- 새로운 revision은 `201 accepted`를 반환한다.
+- 같은 timestamp와 같은 document의 재시도는 중복 저장 없이 `200 unchanged`를 반환한다.
+- 오래된 timestamp 또는 같은 timestamp의 다른 내용은 `409`로 거부한다.
+- 성공 응답은 Profile URL, card URL과 README Markdown을 반환하지만 CLI는 opaque revision을 사용자 출력에서 제거한다.
+- valid submit은 token에 연결된 owner의 latest usage와 device submit 시각을 갱신한다. visibility는 기존 웹 profile 설정을 유지한다.
 
 ## URL과 언어
 
@@ -43,7 +88,7 @@ Cache-Control: public, no-cache, must-revalidate
 ETag: "..."
 ```
 
-- CLI submit이 최신 사용량을 교체하면 카드 콘텐츠 hash와 ETag가 바뀐다.
+- CLI submit이 변경된 최신 사용량을 저장하면 카드 콘텐츠 hash와 ETag가 바뀐다. exact retry는 같은 ETag를 유지한다.
 - 브라우저나 이미지 프록시는 기존 URL을 다시 요청할 때 `If-None-Match`로 검증한다.
 - 콘텐츠가 같으면 `304 Not Modified`, 달라지면 새 PNG와 ETag를 받는다.
 - URL에 timestamp나 무작위 query를 붙일 필요가 없다.
@@ -69,10 +114,10 @@ Camo purge는 모든 GitHub 사용자의 재요청을 유발하므로 드물게 
 | 데이터 | 진실 원천 | 웹 서비스에 전달되는 값 |
 |---|---|---|
 | 이름, GitHub 사용자명, 아바타 | GitHub OAuth | 카드 identity |
-| 누적/최대 토큰, 최장 작업, 연속 기록, 일별 버킷 | Codex App Server `account/usage/read` | 카드 usage |
+| 누적/최대 토큰, 최장 작업, 연속 기록, 일별 버킷 | Codex App Server `account/usage/read` | Account Usage Contract v1 카드 usage |
 | 공개 여부 | 웹 서비스 owner profile | 공개 endpoint 접근 제어 |
 
-Codex App Server의 [`account/usage/read`](https://developers.openai.com/codex/app-server#7-token-usage-chatgpt)는 Codex 서비스 기반 인증에서 토큰 활동 요약과 일별 버킷을 제공한다. CLI는 이 결과만 제출하며 GitHub 이름, 아바타, OAuth credential을 usage payload에 포함하지 않는다.
+Codex App Server의 [`account/usage/read`](https://developers.openai.com/codex/app-server#7-token-usage-chatgpt)는 ChatGPT 기반 Codex 인증에서 토큰 활동 요약과 일별 버킷을 제공한다. API key-only와 Bedrock 인증은 이 method를 지원하지 않는다. CLI는 이 결과만 제출하며 GitHub 이름, 아바타, OAuth credential을 usage payload에 포함하지 않는다.
 
 웹 서비스는 Codex/OpenAI 비밀번호, 로컬 인증 파일 또는 원본 ChatGPT credential을 요구하지 않는다. GitHub OAuth access token은 로그인한 사용자를 확인하는 데만 사용하고 profile store에 기록하지 않는다.
 
