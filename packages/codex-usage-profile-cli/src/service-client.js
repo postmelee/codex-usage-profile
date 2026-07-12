@@ -1,6 +1,9 @@
 import { normalizeRequestTimeout, normalizeServiceOrigin } from "./config.js";
 import { CliError, requireNonEmptyString } from "./errors.js";
 
+export const ACCOUNT_USAGE_DEVICE_ID_HEADER = "x-codex-usage-profile-device-id";
+export const ACCOUNT_USAGE_DEVICE_NAME_HEADER = "x-codex-usage-profile-device-name";
+
 export class ServiceClientError extends CliError {
   constructor(code, message, options = {}) {
     super(code, message, options);
@@ -58,6 +61,24 @@ export function createServiceClient(options = {}) {
       return request("/api/account-usage/status", {
         token: requireNonEmptyString(statusOptions.token, "token")
       });
+    },
+
+    submitAccountUsage(submitOptions = {}) {
+      const headers = {
+        [ACCOUNT_USAGE_DEVICE_ID_HEADER]: requireNonEmptyString(
+          submitOptions.deviceId,
+          "deviceId"
+        )
+      };
+      const deviceName = normalizeOptionalString(submitOptions.deviceName);
+      if (deviceName) headers[ACCOUNT_USAGE_DEVICE_NAME_HEADER] = deviceName;
+
+      return request("/api/account-usage/submit", {
+        body: submitOptions.document,
+        headers,
+        method: "POST",
+        token: requireNonEmptyString(submitOptions.token, "token")
+      });
     }
   };
 }
@@ -66,7 +87,8 @@ async function requestServiceJson(options) {
   const controller = new AbortController();
   const timeoutId = options.setTimeoutImpl(() => controller.abort(), options.timeoutMs);
   const headers = {
-    accept: "application/json"
+    accept: "application/json",
+    ...options.headers
   };
   const init = {
     headers,

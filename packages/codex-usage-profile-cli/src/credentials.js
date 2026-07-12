@@ -115,9 +115,12 @@ export function resolveCredentialSource(options = {}) {
 
   if (!options.storedCredential) return null;
 
+  const storedCredential = normalizeCredentialState(options.storedCredential);
+  if (!storedCredential.token) return null;
+
   return {
     source: "file",
-    ...normalizeCredentialState(options.storedCredential)
+    ...storedCredential
   };
 }
 
@@ -131,7 +134,7 @@ export function normalizeCredentialState(value) {
   }
 
   return {
-    token: requireNonEmptyString(value.token, "token"),
+    token: normalizeOptionalString(value.token),
     serviceOrigin: normalizeServiceOrigin(value.serviceOrigin),
     tokenRecordId: normalizeOptionalString(value.tokenRecordId),
     deviceId: requireNonEmptyString(value.deviceId, "deviceId")

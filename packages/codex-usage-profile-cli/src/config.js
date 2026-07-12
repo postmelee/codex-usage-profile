@@ -2,7 +2,7 @@ import { CliError } from "./errors.js";
 
 export const SERVICE_URL_ENV = "CODEX_USAGE_PROFILE_URL";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-export const MAX_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+export const MAX_REQUEST_TIMEOUT_MS = 120_000;
 
 export function resolveServiceOrigin(options = {}) {
   const env = options.env ?? process.env;

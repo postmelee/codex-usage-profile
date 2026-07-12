@@ -1,8 +1,10 @@
 import os from "node:os";
+import { readAccountUsage as defaultReadAccountUsage } from "codex-usage-analyzer";
 
 import {
   TOKEN_ENV,
   createCredentialStore,
+  createDeviceId,
   resolveCredentialSource
 } from "./credentials.js";
 import {
@@ -11,9 +13,11 @@ import {
 } from "./config.js";
 import { loginWithDeviceCode } from "./device-login.js";
 import { CliError } from "./errors.js";
+import { writeSubmitOutput } from "./output.js";
 import {
   createServiceClient
 } from "./service-client.js";
+import { submitAccountUsage } from "./submit.js";
 
 export const CLI_VERSION = "0.1.0";
 export const CLI_USAGE = `Usage: codex-usage-profile <command> [options]
@@ -102,11 +106,23 @@ export async function runCli(argv, options = {}) {
         }
       });
     }
-
-    throw new CliError(
-      "submit_not_available",
-      "Submit will be enabled after analyzer integration is installed."
-    );
+    return await runSubmit({
+      client,
+      credentialSource: activeCredential,
+      credentialStore,
+      env,
+      serviceOrigin,
+      stdout,
+      json: parsed.json,
+      timeoutMs,
+      readAccountUsage: options.readAccountUsage ?? defaultReadAccountUsage,
+      login: options.loginWithDeviceCode ?? loginWithDeviceCode,
+      deviceName: options.deviceName ?? os.hostname(),
+      now: options.now,
+      sleep: options.sleep,
+      openBrowser: options.openBrowser,
+      randomBytes: options.randomBytes
+    });
   } catch (error) {
     stderr.write(`${formatCliError(error)}\n`);
     return error instanceof CliError ? error.exitCode : 1;
@@ -171,7 +187,8 @@ async function runStatus({ client, credentialSource, json, stdout }) {
   }
 
   const status = projectStatusMetadata(
-    await client.getStatus({ token: credentialSource.token })
+    await client.getStatus({ token: credentialSource.token }),
+    { forbiddenValues: [credentialSource.token] }
   );
   if (json) {
     stdout.write(`${JSON.stringify(status, null, 2)}\n`);
@@ -186,41 +203,50 @@ async function runStatus({ client, credentialSource, json, stdout }) {
   return 0;
 }
 
-function projectStatusMetadata(value) {
+function projectStatusMetadata(value, options = {}) {
+  const sanitize = (item) => sanitizeOutputString(item, options.forbiddenValues);
   return {
     account: value?.account
       ? {
-          handle: value.account.handle ?? null,
-          visibility: value.account.visibility ?? null
+          handle: sanitize(value.account.handle),
+          visibility: sanitize(value.account.visibility)
         }
       : null,
     token: value?.token
       ? {
-          id: value.token.id ?? null,
-          label: value.token.label ?? null,
-          createdAt: value.token.createdAt ?? null,
-          expiresAt: value.token.expiresAt ?? null,
-          lastUsedAt: value.token.lastUsedAt ?? null
+          id: sanitize(value.token.id),
+          label: sanitize(value.token.label),
+          createdAt: sanitize(value.token.createdAt),
+          expiresAt: sanitize(value.token.expiresAt),
+          lastUsedAt: sanitize(value.token.lastUsedAt)
         }
       : null,
     latestUsage: value?.latestUsage
       ? {
-          contractVersion: value.latestUsage.contractVersion ?? null,
-          capturedAt: value.latestUsage.capturedAt ?? null,
-          uploadedAt: value.latestUsage.uploadedAt ?? null,
-          revision: value.latestUsage.revision ?? null
+          contractVersion: Number.isSafeInteger(value.latestUsage.contractVersion)
+            ? value.latestUsage.contractVersion
+            : null,
+          capturedAt: sanitize(value.latestUsage.capturedAt),
+          uploadedAt: sanitize(value.latestUsage.uploadedAt)
         }
       : null,
     profile: value?.profile
       ? {
-          handle: value.profile.handle ?? null,
-          visibility: value.profile.visibility ?? null,
-          profileUrl: value.profile.profileUrl ?? null,
-          imageUrl: value.profile.imageUrl ?? null,
-          readmeMarkdown: value.profile.readmeMarkdown ?? null
+          handle: sanitize(value.profile.handle),
+          visibility: sanitize(value.profile.visibility),
+          profileUrl: sanitize(value.profile.profileUrl),
+          imageUrl: sanitize(value.profile.imageUrl),
+          readmeMarkdown: sanitize(value.profile.readmeMarkdown)
         }
       : null
   };
+}
+
+function sanitizeOutputString(value, forbiddenValues = []) {
+  if (typeof value !== "string") return null;
+  return forbiddenValues.some((secret) => (
+    typeof secret === "string" && secret !== "" && value.includes(secret)
+  )) ? null : value;
 }
 
 async function runLogin(options) {
@@ -262,6 +288,70 @@ async function runLogout({ credentialStore, env, stdout }) {
     stdout.write(`${TOKEN_ENV} is still active and must be unset in your shell.\n`);
   }
   return 0;
+}
+
+async function runSubmit(options) {
+  let credentialSource = options.credentialSource;
+  if (!credentialSource) {
+    await options.login({
+      client: options.client,
+      credentialStore: options.credentialStore,
+      serviceOrigin: options.serviceOrigin,
+      stdout: options.stdout,
+      ...withoutUndefined({
+        label: options.deviceName,
+        now: options.now,
+        sleep: options.sleep,
+        openBrowser: options.openBrowser,
+        randomBytes: options.randomBytes
+      })
+    });
+    credentialSource = resolveCredentialSource({
+      env: options.env,
+      storedCredential: await options.credentialStore.load()
+    });
+  }
+
+  if (!credentialSource) {
+    throw new CliError("login_required", "Login did not create a usable credential.");
+  }
+
+  const deviceId = await ensureDeviceId({
+    credentialSource,
+    credentialStore: options.credentialStore,
+    serviceOrigin: options.serviceOrigin,
+    randomBytes: options.randomBytes
+  });
+  const result = await submitAccountUsage({
+    readAccountUsage: options.readAccountUsage,
+    client: options.client,
+    token: credentialSource.token,
+    timeoutMs: options.timeoutMs,
+    deviceId,
+    deviceName: options.deviceName,
+    sleep: options.sleep
+  });
+  writeSubmitOutput(result, {
+    forbiddenValues: [credentialSource.token],
+    json: options.json,
+    stdout: options.stdout
+  });
+  return 0;
+}
+
+async function ensureDeviceId(options) {
+  if (options.credentialSource.deviceId) {
+    return options.credentialSource.deviceId;
+  }
+
+  const deviceId = createDeviceId(options.randomBytes);
+  await options.credentialStore.save({
+    token: null,
+    serviceOrigin: options.serviceOrigin,
+    tokenRecordId: null,
+    deviceId
+  });
+  return deviceId;
 }
 
 function formatCliError(error) {

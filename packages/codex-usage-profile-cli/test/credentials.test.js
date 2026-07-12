@@ -109,3 +109,27 @@ test("prefers environment credentials without persisting them", () => {
   assert.equal(file.source, "file");
   assert.equal(file.serviceOrigin, "https://stored.example.test");
 });
+
+test("allows device-only metadata without treating it as a file credential", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cup-device-only-"));
+  t.after(() => fs.rm(directory, { force: true, recursive: true }));
+  const store = createCredentialStore({
+    configDirectory: path.join(directory, "config"),
+    platform: "linux"
+  });
+
+  await store.save({
+    token: null,
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: null,
+    deviceId: "device_1"
+  });
+  const loaded = await store.load();
+
+  assert.equal(loaded.token, null);
+  assert.equal(resolveCredentialSource({ env: {}, storedCredential: loaded }), null);
+  assert.equal(resolveCredentialSource({
+    env: { [TOKEN_ENV]: "cup_environment_token" },
+    storedCredential: loaded
+  }).deviceId, "device_1");
+});

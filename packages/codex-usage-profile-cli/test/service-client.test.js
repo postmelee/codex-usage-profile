@@ -64,6 +64,49 @@ test("uses bearer auth for metadata-only status", async () => {
   assert.equal(status.account.handle, "postmelee");
 });
 
+test("submits the exact analyzer document with device headers", async () => {
+  const requests = [];
+  const document = {
+    contractVersion: 1,
+    capturedAt: "2026-07-13T00:00:00.000Z",
+    summary: {
+      lifetimeTokens: 100,
+      peakDailyTokens: 50,
+      longestRunningTurnSec: 10,
+      currentStreakDays: 2,
+      longestStreakDays: 3
+    },
+    dailyUsageBuckets: []
+  };
+  const client = createServiceClient({
+    serviceOrigin: "https://profiles.example.test",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          submission: { status: "accepted" },
+          profile: { handle: "postmelee" }
+        }
+      }, { status: 201 });
+    }
+  });
+
+  await client.submitAccountUsage({
+    token: "cup_secret_value",
+    document,
+    deviceId: "device_1",
+    deviceName: "MacBook"
+  });
+
+  assert.equal(requests[0].url, "https://profiles.example.test/api/account-usage/submit");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.headers.authorization, "Bearer cup_secret_value");
+  assert.equal(requests[0].options.headers["x-codex-usage-profile-device-id"], "device_1");
+  assert.equal(requests[0].options.headers["x-codex-usage-profile-device-name"], "MacBook");
+  assert.deepEqual(JSON.parse(requests[0].options.body), document);
+});
+
 test("returns safe service errors and Retry-After metadata", async () => {
   const client = createServiceClient({
     serviceOrigin: "https://profiles.example.test",

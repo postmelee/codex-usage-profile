@@ -52,7 +52,11 @@ test("prints metadata-only status using an environment token", async () => {
         assert.equal(token, "cup_secret_value");
         return {
           account: { handle: "postmelee" },
-          latestUsage: { capturedAt: "2026-07-13T00:00:00.000Z" },
+          token: { label: "cup_secret_value" },
+          latestUsage: {
+            capturedAt: "2026-07-13T00:00:00.000Z",
+            revision: "usage_private_revision"
+          },
           profile: { profileUrl: "https://profiles.example.test/profile" },
           accessToken: "cup_response_secret",
           usage: { lifetimeTokens: 999 }
@@ -67,6 +71,7 @@ test("prints metadata-only status using an environment token", async () => {
   assert.match(io.stdout.value, /"postmelee"/);
   assert.equal(io.stdout.value.includes("cup_secret_value"), false);
   assert.equal(io.stdout.value.includes("cup_response_secret"), false);
+  assert.equal(io.stdout.value.includes("usage_private_revision"), false);
   assert.equal(io.stdout.value.includes("lifetimeTokens"), false);
   assert.equal(io.stderr.value, "");
 });
@@ -174,14 +179,39 @@ test("logout removes only file credentials and reports active environment token"
   assert.equal(io.stdout.value.includes("cup_environment_secret"), false);
 });
 
-test("keeps submit disabled until analyzer orchestration is added", async () => {
+test("runs analyzer submit with the bound credential and device", async () => {
+  const document = createAccountUsageDocument();
+  const store = createMemoryCredentialStore({
+    token: "cup_file_secret",
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: "cli_token_1",
+    deviceId: "device_1"
+  });
+  let request;
   const io = createIo({
-    env: { CODEX_USAGE_PROFILE_URL: "https://profiles.example.test" },
-    credentialStore: createMemoryCredentialStore()
+    env: {},
+    credentialStore: store,
+    readAccountUsage: async ({ timeoutMs }) => {
+      assert.equal(timeoutMs, 30_000);
+      return document;
+    },
+    createClient: () => ({
+      async submitAccountUsage(value) {
+        request = value;
+        return createSubmitResponse();
+      }
+    }),
+    deviceName: "MacBook"
   });
 
-  assert.equal(await runCli(["submit"], io), 1);
-  assert.match(io.stderr.value, /analyzer integration/);
+  assert.equal(await runCli(["submit", "--json"], io), 0);
+  assert.equal(request.token, "cup_file_secret");
+  assert.equal(request.document, document);
+  assert.equal(request.deviceId, "device_1");
+  assert.equal(request.deviceName, "MacBook");
+  assert.match(io.stdout.value, /"accepted"/);
+  assert.equal(io.stdout.value.includes("cup_file_secret"), false);
+  assert.equal(io.stdout.value.includes("usage_private_revision"), false);
 });
 
 test("handles asynchronous command failures without stack traces or credentials", async () => {
@@ -208,6 +238,56 @@ test("handles asynchronous command failures without stack traces or credentials"
   assert.match(network.stderr.value, /Could not connect/);
   assert.equal(missing.stderr.value.includes("at runStatus"), false);
   assert.equal(network.stderr.value.includes("cup_secret_value"), false);
+});
+
+test("logs in automatically before submit and never persists an environment token", async () => {
+  const store = createMemoryCredentialStore();
+  let loginCalls = 0;
+  let submittedToken;
+  const io = createIo({
+    env: { CODEX_USAGE_PROFILE_URL: "https://profiles.example.test" },
+    credentialStore: store,
+    loginWithDeviceCode: async ({ credentialStore, serviceOrigin }) => {
+      loginCalls += 1;
+      await credentialStore.save({
+        token: "cup_login_secret",
+        serviceOrigin,
+        tokenRecordId: "cli_token_1",
+        deviceId: "device_login"
+      });
+    },
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage({ token }) {
+        submittedToken = token;
+        return createSubmitResponse();
+      }
+    })
+  });
+
+  assert.equal(await runCli(["submit"], io), 0);
+  assert.equal(loginCalls, 1);
+  assert.equal(submittedToken, "cup_login_secret");
+  assert.equal(io.stdout.value.includes("cup_login_secret"), false);
+
+  const environmentStore = createMemoryCredentialStore();
+  const environmentIo = createIo({
+    env: {
+      CODEX_USAGE_PROFILE_URL: "https://profiles.example.test",
+      CODEX_USAGE_PROFILE_TOKEN: "cup_environment_secret"
+    },
+    credentialStore: environmentStore,
+    randomBytes: () => Buffer.alloc(18, 2),
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() { return createSubmitResponse(); }
+    })
+  });
+
+  assert.equal(await runCli(["submit"], environmentIo), 0);
+  const metadata = await environmentStore.load();
+  assert.equal(metadata.token, null);
+  assert.match(metadata.deviceId, /^device_/);
 });
 
 function createIo(overrides = {}) {
@@ -239,6 +319,43 @@ function createMemoryCredentialStore(initial = null) {
       const existed = credential !== null;
       credential = null;
       return existed;
+    }
+  };
+}
+
+function createAccountUsageDocument() {
+  return {
+    contractVersion: 1,
+    capturedAt: "2026-07-13T00:00:00.000Z",
+    summary: {
+      lifetimeTokens: 100,
+      peakDailyTokens: 50,
+      longestRunningTurnSec: 10,
+      currentStreakDays: 2,
+      longestStreakDays: 3
+    },
+    dailyUsageBuckets: [
+      { startDate: "2026-07-13", tokens: 100 }
+    ]
+  };
+}
+
+function createSubmitResponse() {
+  return {
+    submission: {
+      status: "accepted",
+      idempotent: false,
+      contractVersion: 1,
+      capturedAt: "2026-07-13T00:00:00.000Z",
+      uploadedAt: "2026-07-13T00:01:00.000Z",
+      revision: "usage_private_revision"
+    },
+    profile: {
+      handle: "postmelee",
+      visibility: "public",
+      profileUrl: "https://profiles.example.test/profile",
+      imageUrl: "https://profiles.example.test/u/postmelee/card.png",
+      readmeMarkdown: "![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
     }
   };
 }
