@@ -78,11 +78,19 @@ test.describe("Home and share card flow", () => {
     for (const path of ["/", "/profile", "/settings"]) {
       await page.goto(path);
       const metrics = await getFrameScrollMetrics(page);
+      const titleMetrics = await page.locator(".profile-topbar h1").evaluate((title) => ({
+        clientHeight: title.clientHeight,
+        lineHeight: getComputedStyle(title).lineHeight,
+        scrollHeight: title.scrollHeight
+      }));
 
       expect(metrics.frameBottom).toBeLessThanOrEqual(metrics.viewportHeight);
       expect(metrics.frameHeight).toBeLessThanOrEqual(metrics.viewportHeight - 72 + 1);
       expect(metrics.overflowY).toBe("auto");
       expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+      expect(titleMetrics.lineHeight).toBe("20px");
+      expect(titleMetrics.clientHeight).toBeGreaterThanOrEqual(22);
+      expect(titleMetrics.scrollHeight).toBeLessThanOrEqual(titleMetrics.clientHeight);
     }
 
     const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
