@@ -29,6 +29,36 @@ test.describe("Home and share card flow", () => {
       "/api/auth/github/login?redirect_to=%2Fprofile"
     );
 
+    const topbarMetrics = await page.locator([
+      ".profile-topbar h1",
+      ".profile-navigation a",
+      ".account-login-link"
+    ].join(", ")).evaluateAll((elements) => elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        centerY: bounds.top + bounds.height / 2,
+        height: bounds.height,
+        lineHeight: getComputedStyle(element).lineHeight
+      };
+    }));
+    const signInTextMetrics = await page.locator(".account-login-link span").evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      lineHeight: getComputedStyle(element).lineHeight,
+      scrollHeight: element.scrollHeight
+    }));
+
+    expect(topbarMetrics).toHaveLength(3);
+    for (const metric of topbarMetrics) {
+      expect(metric.height).toBe(28);
+      expect(metric.lineHeight).toBe("20px");
+      expect(Math.abs(metric.centerY - topbarMetrics[0].centerY)).toBeLessThanOrEqual(0.5);
+    }
+    expect(signInTextMetrics).toEqual({
+      clientHeight: 20,
+      lineHeight: "20px",
+      scrollHeight: 20
+    });
+
     const preview = page.getByRole("img", { name: "Sample Codex usage card" });
     await expect.poll(() => preview.evaluate((image) => image.naturalWidth)).toBe(998);
     await expect(preview).toHaveCSS("aspect-ratio", "499 / 306");

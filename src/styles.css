@@ -115,13 +115,16 @@ button {
 }
 
 .profile-topbar h1 {
+  align-items: center;
+  display: flex;
   flex: 0 1 auto;
   font-size: 15px;
   font-weight: 500;
   line-height: 20px;
   margin: 0;
+  min-height: 28px;
   overflow: hidden;
-  padding-block: 1px;
+  padding: 4px 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -170,8 +173,8 @@ button {
   font-weight: 500;
   gap: 6px;
   letter-spacing: 0;
-  line-height: 1;
-  min-height: 24px;
+  line-height: 20px;
+  min-height: 28px;
   padding: 4px 0;
   text-decoration: none;
 }
@@ -241,6 +244,8 @@ button {
 
 .account-login-link span,
 .account-status-button span:last-child {
+  display: block;
+  line-height: 20px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
