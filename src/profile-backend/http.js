@@ -1,4 +1,5 @@
 import { createAccountService } from "./accounts.js";
+import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { createProfileCardService } from "../profile-card/service.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
@@ -23,6 +24,10 @@ const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
 const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
 const PRIVATE_CARD_CACHE_CONTROL = "private, no-store";
 const PUBLIC_CARD_CACHE_CONTROL = "public, no-cache, must-revalidate";
+
+export const ACCOUNT_USAGE_DEVICE_ID_HEADER = "x-codex-usage-profile-device-id";
+export const ACCOUNT_USAGE_DEVICE_NAME_HEADER = "x-codex-usage-profile-device-name";
+export const DEFAULT_ACCOUNT_USAGE_BODY_MAX_BYTES = 64 * 1024;
 
 export function createProfileBackendHttpHandler(options = {}) {
   const {
@@ -101,6 +106,15 @@ export function createProfileBackendHttpHandler(options = {}) {
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
     cacheEntries: options.profileCardCacheEntries
   });
+  const accountUsageService = options.accountUsageService ??
+    createAccountUsageSubmitService({
+      store,
+      now,
+      tokenService,
+      deviceService,
+      rateLimiter: options.accountUsageRateLimiter,
+      createId
+    });
 
   return async function handleProfileBackendRequest(request) {
     try {
@@ -412,6 +426,40 @@ export function createProfileBackendHttpHandler(options = {}) {
         }, 201);
       }
 
+      if (route === "POST /api/account-usage/submit") {
+        const token = readBearerToken(request);
+        const document = await readJsonBody(request, {
+          maxBytes: options.accountUsageBodyMaxBytes ??
+            DEFAULT_ACCOUNT_USAGE_BODY_MAX_BYTES,
+          requireJson: true
+        });
+        const result = accountUsageService.submitAccountUsage({
+          token,
+          document,
+          device: readAccountUsageDeviceHeaders(request)
+        });
+
+        return okResponse(
+          serializeAccountUsageSubmission(
+            result,
+            request,
+            options.publicBaseUrl
+          ),
+          result.idempotent ? 200 : 201
+        );
+      }
+
+      if (route === "GET /api/account-usage/status") {
+        const token = readBearerToken(request);
+        const result = accountUsageService.getAccountUsageStatus({ token });
+
+        return okResponse(serializeAccountUsageStatus(
+          result,
+          request,
+          options.publicBaseUrl
+        ));
+      }
+
       const publicSnapshotPrefix = "/api/snapshots/public/";
       if (
         request.method.toUpperCase() === "GET" &&
@@ -456,8 +504,30 @@ export function createProfileBackendHttpHandler(options = {}) {
   };
 }
 
-export async function readJsonBody(request) {
-  const text = await request.text();
+export async function readJsonBody(request, options = {}) {
+  if (options.requireJson === true) {
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
+      throw new ProfileBackendError(
+        PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
+        "Content-Type must be application/json",
+        { status: 415 }
+      );
+    }
+  }
+
+  const maxBytes = normalizeBodyMaxBytes(options.maxBytes);
+  const contentLength = request.headers.get("content-length");
+  if (
+    maxBytes !== null &&
+    contentLength !== null &&
+    Number.isFinite(Number(contentLength)) &&
+    Number(contentLength) > maxBytes
+  ) {
+    throw bodyTooLargeError(maxBytes);
+  }
+
+  const text = await readRequestText(request, maxBytes);
 
   if (text.trim() === "") {
     return {};
@@ -499,7 +569,7 @@ export function errorResponse(error) {
 
   return new Response(JSON.stringify(normalized.toResponseBody()), {
     status: normalized.status,
-    headers: createHeaders()
+    headers: createHeaders(normalized.headers ?? {})
   });
 }
 
@@ -527,6 +597,20 @@ function createHeaders(extraHeaders = {}) {
 
 function readCookieHeader(request) {
   return request.headers.get("cookie") ?? "";
+}
+
+function readAccountUsageDeviceHeaders(request) {
+  const id = request.headers.get(ACCOUNT_USAGE_DEVICE_ID_HEADER);
+  const name = request.headers.get(ACCOUNT_USAGE_DEVICE_NAME_HEADER);
+
+  if (id === null && name === null) {
+    return undefined;
+  }
+
+  return {
+    id,
+    name
+  };
 }
 
 function readProfileVisibility(body) {
@@ -738,6 +822,115 @@ function serializeLatestUsage(record) {
     uploadedAt: record.uploadedAt,
     usage: record.usage
   };
+}
+
+function serializeAccountUsageSubmission(result, request, publicBaseUrl) {
+  return {
+    submission: {
+      status: result.idempotent ? "unchanged" : "accepted",
+      idempotent: result.idempotent,
+      contractVersion: result.usageRecord.contractVersion ?? 1,
+      capturedAt: result.usageRecord.capturedAt,
+      uploadedAt: result.usageRecord.uploadedAt,
+      revision: result.revision
+    },
+    profile: buildAccountUsageProfileMetadata(
+      result.owner,
+      request,
+      publicBaseUrl
+    ),
+    device: serializeSubmittedDevice(result.device)
+  };
+}
+
+function serializeAccountUsageStatus(result, request, publicBaseUrl) {
+  return {
+    account: {
+      handle: result.owner.handle,
+      visibility: result.owner.visibility
+    },
+    token: {
+      id: result.tokenRecord.id,
+      label: result.tokenRecord.label ?? null,
+      createdAt: result.tokenRecord.createdAt,
+      expiresAt: result.tokenRecord.expiresAt,
+      lastUsedAt: result.tokenRecord.lastUsedAt ?? null
+    },
+    latestUsage: result.usageRecord
+      ? {
+          contractVersion: result.usageRecord.contractVersion ?? 1,
+          capturedAt: result.usageRecord.capturedAt,
+          uploadedAt: result.usageRecord.uploadedAt,
+          revision: result.revision
+        }
+      : null,
+    profile: buildAccountUsageProfileMetadata(
+      result.owner,
+      request,
+      publicBaseUrl
+    )
+  };
+}
+
+function buildAccountUsageProfileMetadata(owner, request, publicBaseUrl) {
+  const baseUrl = publicBaseUrl ?? new URL(request.url).origin;
+  const imageUrl = buildPublicCardUrl(owner.handle, request, publicBaseUrl);
+
+  return {
+    handle: owner.handle,
+    visibility: owner.visibility,
+    profileUrl: new URL("/profile", baseUrl).toString(),
+    imageUrl,
+    readmeMarkdown: `![Codex usage profile](${imageUrl})`
+  };
+}
+
+function normalizeBodyMaxBytes(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("maxBytes must be a positive safe integer");
+  }
+  return value;
+}
+
+async function readRequestText(request, maxBytes) {
+  if (maxBytes === null || request.body === null) {
+    return request.text();
+  }
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let receivedBytes = 0;
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maxBytes) {
+        await reader.cancel();
+        throw bodyTooLargeError(maxBytes);
+      }
+
+      text += decoder.decode(value, { stream: true });
+    }
+
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function bodyTooLargeError(maxBytes) {
+  return new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
+    `Request body must be ${maxBytes} bytes or fewer`,
+    { status: 413 }
+  );
 }
 
 function buildPublicCardUrl(handle, request, publicBaseUrl) {

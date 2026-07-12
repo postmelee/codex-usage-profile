@@ -1,7 +1,13 @@
 export {
+  ACCOUNT_USAGE_CONTRACT_VERSION,
+  DEFAULT_ACCOUNT_USAGE_FUTURE_SKEW_MS,
+  assertAccountUsageDocument,
   assertAccountUsageReadResult,
   isAccountUsageReadResult,
+  normalizeAccountUsageDocument,
   normalizeAccountUsageReadResult,
+  projectAccountUsageReadResult,
+  validateAccountUsageDocument,
   validateAccountUsageReadResult
 } from "./account-usage.js";
 

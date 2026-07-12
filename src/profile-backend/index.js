@@ -13,6 +13,9 @@ export {
 } from "./durable-store.js";
 
 export {
+  ACCOUNT_USAGE_DEVICE_ID_HEADER,
+  ACCOUNT_USAGE_DEVICE_NAME_HEADER,
+  DEFAULT_ACCOUNT_USAGE_BODY_MAX_BYTES,
   createProfileBackendHttpHandler,
   errorResponse,
   okResponse,
@@ -63,6 +66,17 @@ export {
   isForbiddenSecretKey,
   isForbiddenSecretValue
 } from "./security.js";
+
+export {
+  DEFAULT_ACCOUNT_USAGE_BURST_LIMIT,
+  DEFAULT_ACCOUNT_USAGE_BURST_WINDOW_MS,
+  DEFAULT_ACCOUNT_USAGE_SUSTAINED_LIMIT,
+  DEFAULT_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS,
+  createAccountUsageContentDigest,
+  createAccountUsageRateLimiter,
+  createAccountUsageRevision,
+  createAccountUsageSubmitService
+} from "./account-usage-submit.js";
 
 export {
   createSnapshotSubmitService,
