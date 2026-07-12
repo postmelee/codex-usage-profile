@@ -14,6 +14,7 @@ import {
   createProfileBackendHttpHandler
 } from "../index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
+import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 
 const BASE_URL = "http://localhost";
 
@@ -651,6 +652,124 @@ test("handles session logout and revokes subsequent me lookup", async () => {
   assert.equal(afterLogout.body.error.code, PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED);
 });
 
+test("returns the session owner's card profile metadata", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  const unauthorized = await requestJson(fixture.handler, "GET", "/api/profile");
+  const profile = await requestJson(
+    fixture.handler, "GET", "/api/profile", undefined, { cookie }
+  );
+  assert.equal(unauthorized.status, 401);
+  assert.equal(profile.status, 200);
+  assert.equal(profile.body.data.owner.id, "owner_1");
+  assert.equal(profile.body.data.visibility, PROFILE_VISIBILITY.PRIVATE);
+  assert.deepEqual(profile.body.data.usage.usage, sampleAccountUsageReadResult);
+  assert.equal(profile.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
+});
+
+test("updates only the session owner's card visibility", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  fixture.store.saveOwner({
+    id: "owner_2", authProvider: "github", providerUserId: "2",
+    githubLogin: "other", handle: "other", visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const injectedOwner = await requestJson(
+    fixture.handler, "PATCH", "/api/profile",
+    { ownerId: "owner_2", visibility: PROFILE_VISIBILITY.PUBLIC }, { cookie }
+  );
+  const response = await requestJson(
+    fixture.handler, "PATCH", "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC }, { cookie }
+  );
+  assert.equal(injectedOwner.status, 400);
+  assert.equal(injectedOwner.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(
+    fixture.store.getLatestUsageByOwnerId("owner_1").visibility,
+    PROFILE_VISIBILITY.PUBLIC
+  );
+  assert.equal(fixture.store.getOwnerById("owner_2").visibility, PROFILE_VISIBILITY.PRIVATE);
+});
+
+test("serves a private owner preview without public caching", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  const unauthorized = await requestResponse(
+    fixture.handler, "GET", "/api/profile/card.png"
+  );
+  const response = await requestResponse(
+    fixture.handler, "GET", "/api/profile/card.png?locale=ko", "", { cookie }
+  );
+  const body = Buffer.from(await response.arrayBuffer());
+  assert.equal(unauthorized.status, 401);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(body.subarray(1, 4).toString(), "PNG");
+});
+
+test("serves public GET and HEAD cards with ETag revalidation", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  const privateResponse = await requestJson(
+    fixture.handler, "GET", "/u/postmelee/card.png"
+  );
+  await requestJson(
+    fixture.handler, "PATCH", "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC }, { cookie }
+  );
+  const getResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?locale=ko"
+  );
+  const etag = getResponse.headers.get("etag");
+  const headResponse = await requestResponse(
+    fixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"
+  );
+  const notModified = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?locale=ko", "",
+    { "if-none-match": etag }
+  );
+  assert.equal(privateResponse.status, 404);
+  assert.deepEqual(privateResponse.body, {
+    ok: false,
+    error: { code: PROFILE_BACKEND_ERROR_CODES.NOT_FOUND, message: "Card not found" }
+  });
+  assert.equal(getResponse.status, 200);
+  assert.equal(getResponse.headers.get("content-type"), "image/png");
+  assert.equal(
+    getResponse.headers.get("cache-control"),
+    "public, no-cache, must-revalidate"
+  );
+  assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
+  assert.equal(headResponse.status, 200);
+  assert.equal(headResponse.headers.get("etag"), etag);
+  assert.equal((await headResponse.arrayBuffer()).byteLength, 0);
+  assert.equal(notModified.status, 304);
+  assert.equal(notModified.headers.get("etag"), etag);
+  assert.equal((await notModified.arrayBuffer()).byteLength, 0);
+
+  await requestJson(
+    fixture.handler, "PATCH", "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PRIVATE }, { cookie }
+  );
+  const hiddenAgain = await requestJson(
+    fixture.handler, "GET", "/u/postmelee/card.png"
+  );
+  const missing = await requestJson(fixture.handler, "GET", "/u/missing/card.png");
+  assert.equal(hiddenAgain.status, 404);
+  assert.deepEqual(hiddenAgain.body, missing.body);
+});
+
 test("handles bearer snapshot submit and public handle lookup", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
@@ -960,6 +1079,17 @@ function createFixture() {
         githubLogin: "postmelee",
         handle: "postmelee",
         visibility: PROFILE_VISIBILITY.PRIVATE,
+        ...overrides
+      });
+    },
+    saveLatestUsage(overrides = {}) {
+      return store.saveLatestUsage({
+        ownerId: "owner_1",
+        handle: "postmelee",
+        visibility: PROFILE_VISIBILITY.PRIVATE,
+        capturedAt: "2026-06-11T00:00:00.000Z",
+        uploadedAt: "2026-06-11T00:01:00.000Z",
+        usage: sampleAccountUsageReadResult,
         ...overrides
       });
     },

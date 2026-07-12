@@ -4,6 +4,8 @@ import { createProfileApiClient } from "./profile-api/client.js";
 import { sampleProfileSnapshot } from "./profile-snapshot/fixtures/sample-snapshot.js";
 import { selectProfileViewModel } from "./profile-snapshot/index.js";
 import { DeviceApprovalPage } from "./profile-ui/DeviceApprovalPage.jsx";
+import { CardProfilePage } from "./profile-ui/CardProfilePage.jsx";
+import { HomePage } from "./profile-ui/HomePage.jsx";
 import { ProfilePage } from "./profile-ui/ProfilePage.jsx";
 import { SettingsPage } from "./profile-ui/SettingsPage.jsx";
 import {
@@ -59,7 +61,7 @@ export function App() {
     let isCurrent = true;
     const currentLocation = window.location;
 
-    if (appRoute.type !== APP_ROUTE_TYPES.PROFILE) {
+    if (appRoute.type !== APP_ROUTE_TYPES.PUBLIC_PROFILE) {
       return () => {
         isCurrent = false;
       };
@@ -109,6 +111,26 @@ export function App() {
         authState={authState}
         client={profileApiClient}
         location={window.location}
+        onAuthStateChange={handleAuthStateChange}
+      />
+    );
+  }
+
+  if (appRoute.type === APP_ROUTE_TYPES.HOME) {
+    return (
+      <HomePage
+        authState={authState}
+        client={profileApiClient}
+        onAuthStateChange={handleAuthStateChange}
+      />
+    );
+  }
+
+  if (appRoute.type === APP_ROUTE_TYPES.OWNER_PROFILE) {
+    return (
+      <CardProfilePage
+        authState={authState}
+        client={profileApiClient}
         onAuthStateChange={handleAuthStateChange}
       />
     );

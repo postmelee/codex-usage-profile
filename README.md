@@ -1,6 +1,21 @@
 # Codex Usage Profile
 
-Codex Usage Profile renders a Codex-style usage profile page and defines the backend contract for CLI-submitted profile snapshots. The current implementation keeps the local preview available from fixture data while adding API boundaries for future CLI submit, public profile lookup, and README/card rendering work.
+Codex Usage Profile combines GitHub identity with Codex account usage and renders a public 998x612 PNG that can be embedded in a GitHub README. A stable image URL is revalidated after each successful usage submit, so README markup does not need to change when the card data changes.
+
+## README Card
+
+1. Sign in with GitHub from `/`.
+2. Open `/profile` and confirm the private card preview.
+3. Submit Codex usage, then select **Publish card**.
+4. Open **Share** and copy the README Markdown.
+
+```md
+![Codex usage profile](https://profiles.example.com/u/octocat/card.png)
+```
+
+The default URL renders English. Add `?locale=ko` for Korean. Making the profile private causes the public image endpoint to return `404`.
+
+The usage portion follows the official Codex App Server [`account/usage/read`](https://developers.openai.com/codex/app-server#7-token-usage-chatgpt) result: summary metrics and daily token buckets. GitHub OAuth remains the source for the displayed name, login, and avatar. See [GitHub README card usage and cache behavior](docs/readme-card.md) for the complete flow, ETag updates, and GitHub Camo guidance.
 
 ## Development
 
@@ -12,7 +27,7 @@ npm test
 npm run build
 ```
 
-The local preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` routes are wired to the public snapshot API client and fall back to an unavailable state when no public snapshot exists.
+The Home and owner card routes are `/` and `/profile`. The existing full profile preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` routes are wired to the public snapshot API client and fall back to an unavailable state when no public snapshot exists.
 
 `npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
@@ -85,3 +100,7 @@ This local runtime currently verifies the browser GitHub OAuth and session bound
 - Analyzer snapshots must not include GitHub-facing profile data such as GitHub login, avatar URL, bio, profile URL, service visibility, session ids, CLI tokens, or device metadata. The web service merges GitHub account/profile records with usage snapshots after submit.
 - Public profile lookup returns only the latest snapshot whose visibility is `public`; private or missing snapshots are treated as not found.
 - The HTTP handler in this repository is a contract-level adapter. Real deployment still needs rate limiting, CSRF review for state-changing browser routes, production database selection, backup policy, and secret management.
+
+## Trademark Notice
+
+This is an unofficial community project and is not affiliated with, endorsed by, or sponsored by OpenAI. The generated card uses the `Codex` product name only as descriptive text and does not reproduce or reconstruct an OpenAI or Codex logo.

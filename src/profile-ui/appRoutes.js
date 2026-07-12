@@ -1,6 +1,8 @@
 export const APP_ROUTE_TYPES = Object.freeze({
   DEVICE: "device",
-  PROFILE: "profile",
+  HOME: "home",
+  OWNER_PROFILE: "owner-profile",
+  PUBLIC_PROFILE: "public-profile",
   SETTINGS: "settings"
 });
 
@@ -21,9 +23,23 @@ export function resolveAppRoute(location) {
     };
   }
 
+  if (pathname === "/") {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.HOME
+    };
+  }
+
+  if (pathname === "/profile") {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.OWNER_PROFILE
+    };
+  }
+
   return {
     pathname,
-    type: APP_ROUTE_TYPES.PROFILE
+    type: APP_ROUTE_TYPES.PUBLIC_PROFILE
   };
 }
 

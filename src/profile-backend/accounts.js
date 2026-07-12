@@ -15,6 +15,22 @@ export function createAccountService(options = {}) {
   }
 
   return {
+    updateVisibility(updateOptions = {}) {
+      const owner = store.getOwnerById(updateOptions.ownerId);
+      if (!owner) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+          "Owner not found"
+        );
+      }
+
+      return store.saveOwner({
+        ...owner,
+        visibility: normalizeVisibility(updateOptions.visibility),
+        updatedAt: toIsoString(now())
+      });
+    },
+
     upsertGitHubOwner(identityPayload, upsertOptions = {}) {
       const identity = normalizeGitHubIdentity(identityPayload);
       const existingOwner = store.getOwnerByProviderIdentity(
@@ -112,4 +128,3 @@ function toIsoString(value) {
 
   return new Date(value).toISOString();
 }
-

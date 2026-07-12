@@ -23,6 +23,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
   const cliTokenIdByDigest = new Map();
   const latestSnapshotsByOwnerId = new Map();
   const ownerIdBySnapshotHandle = new Map();
+  const latestUsagesByOwnerId = new Map();
+  const ownerIdByUsageHandle = new Map();
   const submittedDevicesById = new Map();
   const submittedDeviceIdByOwnerAndKey = new Map();
 
@@ -40,6 +42,8 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       cliTokenIdByDigest.clear();
       latestSnapshotsByOwnerId.clear();
       ownerIdBySnapshotHandle.clear();
+      latestUsagesByOwnerId.clear();
+      ownerIdByUsageHandle.clear();
       submittedDevicesById.clear();
       submittedDeviceIdByOwnerAndKey.clear();
     },
@@ -92,6 +96,15 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
     getLatestSnapshotByOwnerId(ownerId) {
       return clone(latestSnapshotsByOwnerId.get(ownerId)) ?? null;
+    },
+
+    getLatestUsageByHandle(handle) {
+      const ownerId = ownerIdByUsageHandle.get(handle);
+      return ownerId ? clone(latestUsagesByOwnerId.get(ownerId)) : null;
+    },
+
+    getLatestUsageByOwnerId(ownerId) {
+      return clone(latestUsagesByOwnerId.get(ownerId)) ?? null;
     },
 
     getSubmittedDeviceById(id) {
@@ -240,6 +253,35 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       return clone(record);
     },
 
+    saveLatestUsage(record) {
+      requireFields("latest usage", record, [
+        "ownerId",
+        "handle",
+        "visibility",
+        "capturedAt",
+        "uploadedAt",
+        "usage"
+      ]);
+
+      const previous = latestUsagesByOwnerId.get(record.ownerId);
+      const ownerIdForHandle = ownerIdByUsageHandle.get(record.handle);
+      if (ownerIdForHandle && ownerIdForHandle !== record.ownerId) {
+        throw new ProfileBackendError(
+          PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+          "Usage handle already belongs to another owner"
+        );
+      }
+
+      if (previous) {
+        ownerIdByUsageHandle.delete(previous.handle);
+      }
+
+      latestUsagesByOwnerId.set(record.ownerId, clone(record));
+      ownerIdByUsageHandle.set(record.handle, record.ownerId);
+
+      return clone(record);
+    },
+
     saveSubmittedDevice(device) {
       requireFields("submitted device", device, [
         "id",
@@ -321,6 +363,7 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         cliLoginChallenges: Array.from(loginChallengesById.values(), clone),
         cliTokens: Array.from(cliTokensById.values(), clone),
         latestSnapshots: Array.from(latestSnapshotsByOwnerId.values(), clone),
+        latestUsages: Array.from(latestUsagesByOwnerId.values(), clone),
         submittedDevices: Array.from(submittedDevicesById.values(), clone)
       };
     }
@@ -399,6 +442,9 @@ function hydrateStore(store, initialState) {
   for (const snapshot of state.latestSnapshots) {
     store.saveLatestSnapshot(snapshot);
   }
+  for (const usage of state.latestUsages) {
+    store.saveLatestUsage(usage);
+  }
   for (const device of state.submittedDevices) {
     store.saveSubmittedDevice(device);
   }
@@ -436,6 +482,7 @@ function normalizeStoreState(value) {
     ),
     cliTokens: normalizeRecordArray(value.cliTokens, "cliTokens"),
     latestSnapshots: normalizeRecordArray(value.latestSnapshots, "latestSnapshots"),
+    latestUsages: normalizeRecordArray(value.latestUsages, "latestUsages"),
     submittedDevices: normalizeRecordArray(value.submittedDevices, "submittedDevices")
   };
 }
@@ -448,6 +495,7 @@ function emptyStoreState() {
     cliLoginChallenges: [],
     cliTokens: [],
     latestSnapshots: [],
+    latestUsages: [],
     submittedDevices: []
   };
 }

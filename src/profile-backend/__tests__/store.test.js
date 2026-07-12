@@ -8,6 +8,7 @@ import {
   createMemoryProfileBackendStore
 } from "../index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
+import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 
 const owner = Object.freeze({
   id: "owner_1",
@@ -333,6 +334,27 @@ test("enforces latest snapshot handle conflicts", () => {
   );
 });
 
+test("saves, clones, and reindexes latest account usage by owner and handle", () => {
+  const store = createMemoryProfileBackendStore();
+  const record = createLatestUsageRecord({ handle: "old-handle" });
+  const saved = store.saveLatestUsage(record);
+  saved.usage.summary.lifetimeTokens = 1;
+  store.saveLatestUsage(createLatestUsageRecord({ handle: "new-handle" }));
+
+  assert.equal(
+    store.getLatestUsageByOwnerId(owner.id).usage.summary.lifetimeTokens,
+    sampleAccountUsageReadResult.summary.lifetimeTokens
+  );
+  assert.equal(store.getLatestUsageByHandle("old-handle"), null);
+  assert.equal(store.getLatestUsageByHandle("new-handle").ownerId, owner.id);
+  assertBackendError(
+    () => store.saveLatestUsage(createLatestUsageRecord({
+      ownerId: "owner_2", handle: "new-handle"
+    })),
+    PROFILE_BACKEND_ERROR_CODES.CONFLICT
+  );
+});
+
 test("validates required record fields", () => {
   const store = createMemoryProfileBackendStore();
 
@@ -356,11 +378,16 @@ test("validates required record fields", () => {
     () => store.saveLatestSnapshot(null),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
+  assertBackendError(
+    () => store.saveLatestUsage(null),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
 });
 
 test("exports and hydrates memory store state", () => {
   const store = createMemoryProfileBackendStore();
   const snapshot = createLatestSnapshotRecord();
+  const usage = createLatestUsageRecord();
   const device = createSubmittedDeviceRecord();
 
   store.saveOwner(owner);
@@ -386,6 +413,7 @@ test("exports and hydrates memory store state", () => {
   });
   store.saveSubmittedDevice(device);
   store.saveLatestSnapshot(snapshot);
+  store.saveLatestUsage(usage);
 
   const hydrated = createMemoryProfileBackendStore(store.exportState());
 
@@ -396,6 +424,7 @@ test("exports and hydrates memory store state", () => {
   assert.equal(hydrated.getCliTokenByDigest("digest_1").id, "cli_token_1");
   assert.deepEqual(hydrated.getSubmittedDeviceById(device.id), device);
   assert.deepEqual(hydrated.getLatestSnapshotByHandle(owner.handle), snapshot);
+  assert.deepEqual(hydrated.getLatestUsageByHandle(owner.handle), usage);
 });
 
 test("validates memory store initial state shape", () => {
@@ -426,6 +455,18 @@ function createLatestSnapshotRecord(overrides = {}) {
     uploadedAt: "2026-06-08T00:00:00.000Z",
     schemaVersion: sampleProfileSnapshot.schemaVersion,
     snapshot: sampleProfileSnapshot,
+    ...overrides
+  };
+}
+
+function createLatestUsageRecord(overrides = {}) {
+  return {
+    ownerId: owner.id,
+    handle: owner.handle,
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    capturedAt: "2026-06-11T00:00:00.000Z",
+    uploadedAt: "2026-06-11T00:01:00.000Z",
+    usage: sampleAccountUsageReadResult,
     ...overrides
   };
 }

@@ -142,6 +142,25 @@ test("validates owner visibility", () => {
   );
 });
 
+test("updates owner visibility using the server-owned owner id", () => {
+  const store = createMemoryProfileBackendStore();
+  const accounts = createAccountService({ store, now: fixedNow });
+  const owner = accounts.upsertGitHubOwner({ id: 12345, login: "postmelee" });
+  const updated = accounts.updateVisibility({
+    ownerId: owner.id,
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+  assert.equal(updated.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(updated.updatedAt, "2026-06-08T00:00:00.000Z");
+  assertBackendError(
+    () => accounts.updateVisibility({
+      ownerId: "missing",
+      visibility: PROFILE_VISIBILITY.PUBLIC
+    }),
+    PROFILE_BACKEND_ERROR_CODES.NOT_FOUND
+  );
+});
+
 function assertBackendError(callback, code) {
   assert.throws(callback, (error) => {
     assert.equal(error instanceof ProfileBackendError, true);

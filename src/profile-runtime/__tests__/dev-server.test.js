@@ -95,7 +95,13 @@ test("routes API requests through the runtime node handler and delegates fronten
   const calls = [];
   const handler = createProfileRuntimeNodeHandler({
     apiHandler: async (request) => {
-      calls.push(["api", request.method, new URL(request.url).pathname]);
+      const pathname = new URL(request.url).pathname;
+      calls.push(["api", request.method, pathname]);
+      if (pathname.endsWith("/card.png")) {
+        return new Response("png", {
+          headers: { "content-type": "image/png", etag: '"card-etag"' }
+        });
+      }
       return new Response(JSON.stringify({
         body: await request.json(),
         source: "api"
@@ -114,6 +120,7 @@ test("routes API requests through the runtime node handler and delegates fronten
     }
   });
   const apiResponse = createNodeResponseRecorder();
+  const cardResponse = createNodeResponseRecorder();
   const frontendResponse = createNodeResponseRecorder();
 
   await handler(createReadableRequest({
@@ -125,6 +132,11 @@ test("routes API requests through the runtime node handler and delegates fronten
     method: "POST",
     url: "/api/cli/login/start"
   }), apiResponse);
+  await handler(createReadableRequest({
+    headers: { host: "127.0.0.1:5173" },
+    method: "HEAD",
+    url: "/u/meleeisdeveloping/card.png"
+  }), cardResponse);
   await handler(createReadableRequest({
     headers: {
       host: "127.0.0.1:5173"
@@ -138,10 +150,14 @@ test("routes API requests through the runtime node handler and delegates fronten
     body: { label: "macbook" },
     source: "api"
   });
+  assert.equal(cardResponse.statusCode, 200);
+  assert.equal(cardResponse.headers["content-type"], "image/png");
+  assert.equal(cardResponse.headers.etag, '"card-etag"');
   assert.equal(frontendResponse.statusCode, 200);
   assert.equal(frontendResponse.body, "<html>app</html>");
   assert.deepEqual(calls, [
     ["api", "POST", "/api/cli/login/start"],
+    ["api", "HEAD", "/u/meleeisdeveloping/card.png"],
     ["frontend", "GET", "/u/meleeisdeveloping"]
   ]);
 });

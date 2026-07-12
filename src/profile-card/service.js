@@ -1,0 +1,290 @@
+import { createHash } from "node:crypto";
+
+import { createAccountService } from "../profile-backend/accounts.js";
+import {
+  PROFILE_BACKEND_ERROR_CODES,
+  ProfileBackendError
+} from "../profile-backend/errors.js";
+import { PROFILE_VISIBILITY } from "../profile-backend/store.js";
+import { normalizeAccountUsageReadResult } from "./account-usage.js";
+import {
+  CARD_RENDERER_VERSION,
+  renderProfileCardPng
+} from "./renderer.js";
+import {
+  buildCardViewModel,
+  resolveCardLocale
+} from "./view-model.js";
+
+export const DEFAULT_PROFILE_CARD_CACHE_ENTRIES = 32;
+export const DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS = 3_000;
+export const DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+
+const ALLOWED_AVATAR_HOST = "avatars.githubusercontent.com";
+const ALLOWED_AVATAR_CONTENT_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+]);
+
+export function createProfileCardService(options = {}) {
+  const {
+    store,
+    now = () => new Date(),
+    fetchImpl = globalThis.fetch,
+    renderPng = renderProfileCardPng,
+    rendererVersion = CARD_RENDERER_VERSION,
+    avatarTimeoutMs = DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS,
+    avatarMaxBytes = DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES,
+    cacheEntries = DEFAULT_PROFILE_CARD_CACHE_ENTRIES
+  } = options;
+
+  if (!store) {
+    throw new TypeError("store is required");
+  }
+  if (typeof renderPng !== "function") {
+    throw new TypeError("renderPng must be a function");
+  }
+
+  const accountService = options.accountService ?? createAccountService({ store, now });
+  const pngCache = createLruCache(cacheEntries);
+  const avatarCache = createLruCache(cacheEntries);
+
+  return {
+    getOwnerProfile(profileOptions = {}) {
+      const owner = requireOwnerById(store, profileOptions.ownerId);
+      const usageRecord = store.getLatestUsageByOwnerId(owner.id);
+
+      return { owner, usageRecord, visibility: owner.visibility };
+    },
+
+    updateVisibility(updateOptions = {}) {
+      const owner = accountService.updateVisibility({
+        ownerId: updateOptions.ownerId,
+        visibility: updateOptions.visibility
+      });
+      const usageRecord = store.getLatestUsageByOwnerId(owner.id);
+      const updatedUsageRecord = usageRecord
+        ? store.saveLatestUsage({
+          ...usageRecord,
+          handle: owner.handle,
+          visibility: owner.visibility
+        })
+        : null;
+
+      return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
+    },
+
+    async renderOwnerCard(renderOptions = {}) {
+      const owner = requireOwnerById(store, renderOptions.ownerId);
+      const usageRecord = requireUsageByOwnerId(store, owner.id);
+
+      return renderCard({
+        owner,
+        usageRecord,
+        locale: renderOptions.locale,
+        includeBody: renderOptions.includeBody !== false,
+        ifNoneMatch: renderOptions.ifNoneMatch
+      });
+    },
+
+    async renderPublicCard(renderOptions = {}) {
+      const handle = normalizePublicHandle(renderOptions.handle);
+      const owner = handle ? store.getOwnerByHandle(handle) : null;
+      const usageRecord = owner ? store.getLatestUsageByOwnerId(owner.id) : null;
+
+      if (
+        !owner || !usageRecord ||
+        owner.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        usageRecord.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        usageRecord.handle !== owner.handle
+      ) {
+        throw cardNotFoundError();
+      }
+
+      return renderCard({
+        owner,
+        usageRecord,
+        locale: renderOptions.locale,
+        includeBody: renderOptions.includeBody !== false,
+        ifNoneMatch: renderOptions.ifNoneMatch
+      });
+    }
+  };
+
+  async function renderCard(renderOptions) {
+    const locale = resolveCardLocale(renderOptions.locale);
+    const usage = normalizeAccountUsageReadResult(renderOptions.usageRecord.usage);
+    const etag = createProfileCardEtag({
+      locale,
+      owner: renderOptions.owner,
+      rendererVersion,
+      usage,
+      usageRecord: renderOptions.usageRecord
+    });
+
+    if (matchesIfNoneMatch(renderOptions.ifNoneMatch, etag)) {
+      return { body: null, etag, locale, notModified: true };
+    }
+    if (!renderOptions.includeBody) {
+      return { body: null, etag, locale, notModified: false };
+    }
+
+    let body = pngCache.get(etag);
+    if (!body) {
+      const avatarSource = await loadOwnerAvatar(renderOptions.owner);
+      const viewModel = buildCardViewModel({
+        locale,
+        owner: renderOptions.owner,
+        usage
+      });
+      body = Buffer.from(await renderPng(viewModel, { avatarSource }));
+      pngCache.set(etag, body);
+    }
+
+    return { body: Buffer.from(body), etag, locale, notModified: false };
+  }
+
+  async function loadOwnerAvatar(owner) {
+    const avatarUrl = normalizeGitHubAvatarUrl(owner.avatarUrl);
+    if (!avatarUrl || typeof fetchImpl !== "function") return null;
+
+    const cacheKey = `${avatarUrl}|${owner.updatedAt ?? ""}`;
+    if (avatarCache.has(cacheKey)) return avatarCache.get(cacheKey);
+
+    let avatar = null;
+    try {
+      const response = await fetchImpl(avatarUrl, {
+        redirect: "error",
+        signal: AbortSignal.timeout(avatarTimeoutMs)
+      });
+      avatar = await readAvatarResponse(response, { maxBytes: avatarMaxBytes });
+    } catch {
+      avatar = null;
+    }
+
+    avatarCache.set(cacheKey, avatar);
+    return avatar;
+  }
+}
+
+export function createProfileCardEtag(options = {}) {
+  const payload = JSON.stringify({
+    rendererVersion: options.rendererVersion ?? CARD_RENDERER_VERSION,
+    locale: resolveCardLocale(options.locale),
+    owner: {
+      id: options.owner?.id ?? null,
+      handle: options.owner?.handle ?? null,
+      displayName: options.owner?.displayName ?? null,
+      githubLogin: options.owner?.githubLogin ?? null,
+      avatarUrl: options.owner?.avatarUrl ?? null,
+      updatedAt: options.owner?.updatedAt ?? null
+    },
+    usageRecord: {
+      capturedAt: options.usageRecord?.capturedAt ?? null,
+      uploadedAt: options.usageRecord?.uploadedAt ?? null,
+      usage: options.usage
+    }
+  });
+  const digest = createHash("sha256").update(payload).digest("base64url");
+  return `"${digest}"`;
+}
+
+export function normalizeGitHubAvatarUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== ALLOWED_AVATAR_HOST ||
+      url.username || url.password || url.port
+    ) return null;
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function requireOwnerById(store, ownerId) {
+  const owner = store.getOwnerById(ownerId);
+  if (!owner) throw cardNotFoundError();
+  return owner;
+}
+
+function requireUsageByOwnerId(store, ownerId) {
+  const usageRecord = store.getLatestUsageByOwnerId(ownerId);
+  if (!usageRecord) throw cardNotFoundError();
+  return usageRecord;
+}
+
+function normalizePublicHandle(value) {
+  if (typeof value !== "string") return null;
+  const handle = value.trim().toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle) ? handle : null;
+}
+
+function matchesIfNoneMatch(value, etag) {
+  if (typeof value !== "string") return false;
+  return value.split(",").some((candidate) => {
+    const normalized = candidate.trim();
+    return normalized === "*" || normalized === etag;
+  });
+}
+
+async function readAvatarResponse(response, options) {
+  if (!response?.ok) return null;
+  const contentType = (response.headers.get("content-type") ?? "")
+    .split(";", 1)[0].trim().toLowerCase();
+  if (!ALLOWED_AVATAR_CONTENT_TYPES.has(contentType)) return null;
+
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > options.maxBytes) return null;
+  if (!response.body) return null;
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let byteLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > options.maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks, byteLength);
+}
+
+function createLruCache(maxEntries) {
+  const entries = new Map();
+  const limit = Number.isSafeInteger(maxEntries) && maxEntries > 0
+    ? maxEntries
+    : DEFAULT_PROFILE_CARD_CACHE_ENTRIES;
+  return {
+    get(key) {
+      if (!entries.has(key)) return null;
+      const value = entries.get(key);
+      entries.delete(key);
+      entries.set(key, value);
+      return value;
+    },
+    has(key) { return entries.has(key); },
+    set(key, value) {
+      if (entries.has(key)) entries.delete(key);
+      entries.set(key, value);
+      if (entries.size > limit) entries.delete(entries.keys().next().value);
+    }
+  };
+}
+
+function cardNotFoundError() {
+  return new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+    "Card not found"
+  );
+}

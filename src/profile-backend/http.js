@@ -1,4 +1,5 @@
 import { createAccountService } from "./accounts.js";
+import { createProfileCardService } from "../profile-card/service.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
 import {
@@ -20,6 +21,8 @@ const JSON_HEADERS = Object.freeze({
 });
 const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
 const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
+const PRIVATE_CARD_CACHE_CONTROL = "private, no-store";
+const PUBLIC_CARD_CACHE_CONTROL = "public, no-cache, must-revalidate";
 
 export function createProfileBackendHttpHandler(options = {}) {
   const {
@@ -87,6 +90,16 @@ export function createProfileBackendHttpHandler(options = {}) {
     tokenService,
     deviceService,
     createId
+  });
+  const cardService = options.cardService ?? createProfileCardService({
+    store,
+    accountService,
+    now,
+    fetchImpl: options.profileCardFetchImpl ?? options.fetchImpl,
+    renderPng: options.profileCardRenderPng,
+    avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
+    avatarMaxBytes: options.profileCardAvatarMaxBytes,
+    cacheEntries: options.profileCardCacheEntries
   });
 
   return async function handleProfileBackendRequest(request) {
@@ -168,6 +181,37 @@ export function createProfileBackendHttpHandler(options = {}) {
         }, 200, {
           "set-cookie": result.cookie
         });
+      }
+
+      if (route === "GET /api/profile") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const profile = cardService.getOwnerProfile({ ownerId: owner.id });
+        return okResponse(serializeOwnerProfile(profile, request, options.publicBaseUrl));
+      }
+
+      if (route === "PATCH /api/profile") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request);
+        const profile = cardService.updateVisibility({
+          ownerId: owner.id,
+          visibility: readProfileVisibility(body)
+        });
+        return okResponse(serializeOwnerProfile(profile, request, options.publicBaseUrl));
+      }
+
+      if (route === "GET /api/profile/card.png") {
+        const { owner } = sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const card = await cardService.renderOwnerCard({
+          ownerId: owner.id,
+          locale: url.searchParams.get("locale")
+        });
+        return cardPngResponse(card, { cacheControl: PRIVATE_CARD_CACHE_CONTROL });
       }
 
       if (route === "POST /api/auth/device") {
@@ -388,6 +432,20 @@ export function createProfileBackendHttpHandler(options = {}) {
         });
       }
 
+      const publicCardMatch = url.pathname.match(/^\/u\/([^/]+)\/card\.png$/);
+      if (publicCardMatch && ["GET", "HEAD"].includes(request.method.toUpperCase())) {
+        const card = await cardService.renderPublicCard({
+          handle: decodePublicCardHandle(publicCardMatch[1]),
+          locale: url.searchParams.get("locale"),
+          ifNoneMatch: request.headers.get("if-none-match"),
+          includeBody: request.method.toUpperCase() === "GET"
+        });
+        return cardPngResponse(card, {
+          cacheControl: PUBLIC_CARD_CACHE_CONTROL,
+          head: request.method.toUpperCase() === "HEAD"
+        });
+      }
+
       throw new ProfileBackendError(
         PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
         "Route not found"
@@ -469,6 +527,19 @@ function createHeaders(extraHeaders = {}) {
 
 function readCookieHeader(request) {
   return request.headers.get("cookie") ?? "";
+}
+
+function readProfileVisibility(body) {
+  if (
+    !body || typeof body !== "object" || Array.isArray(body) ||
+    Object.keys(body).length !== 1 || !Object.hasOwn(body, "visibility")
+  ) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "Profile visibility payload must contain only visibility"
+    );
+  }
+  return body.visibility;
 }
 
 function normalizeError(error) {
@@ -646,4 +717,48 @@ function serializeLatestSnapshot(record) {
     schemaVersion: record.schemaVersion,
     snapshot: record.snapshot
   };
+}
+
+function serializeOwnerProfile(profile, request, publicBaseUrl) {
+  return {
+    owner: serializeOwner(profile.owner),
+    usage: serializeLatestUsage(profile.usageRecord),
+    visibility: profile.visibility,
+    publicCardUrl: buildPublicCardUrl(profile.owner.handle, request, publicBaseUrl)
+  };
+}
+
+function serializeLatestUsage(record) {
+  if (!record) return null;
+  return {
+    ownerId: record.ownerId,
+    handle: record.handle,
+    visibility: record.visibility,
+    capturedAt: record.capturedAt,
+    uploadedAt: record.uploadedAt,
+    usage: record.usage
+  };
+}
+
+function buildPublicCardUrl(handle, request, publicBaseUrl) {
+  const baseUrl = publicBaseUrl ?? new URL(request.url).origin;
+  return new URL(`/u/${encodeURIComponent(handle)}/card.png`, baseUrl).toString();
+}
+
+function decodePublicCardHandle(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
+
+function cardPngResponse(card, options) {
+  const headers = {
+    "cache-control": options.cacheControl,
+    "content-type": "image/png",
+    etag: card.etag
+  };
+  if (card.notModified) return new Response(null, { status: 304, headers });
+  return new Response(options.head ? null : card.body, { status: 200, headers });
 }
