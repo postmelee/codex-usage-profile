@@ -1,0 +1,23 @@
+{
+  "name": "codex-usage-profile",
+  "version": "0.1.0",
+  "description": "Connect local Codex usage to a Codex Usage Profile.",
+  "type": "module",
+  "bin": {
+    "codex-usage-profile": "./bin/codex-usage-profile.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
