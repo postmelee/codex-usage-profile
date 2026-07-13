@@ -673,6 +673,121 @@ test("returns the session owner's card profile metadata", async () => {
   assert.equal(profile.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
 });
 
+test("serves a public Account Usage profile with an explicit response allowlist", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner({
+    displayName: "Post Melee",
+    avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+    ownerSecret: "owner-internal"
+  });
+  fixture.saveLatestUsage({
+    contentDigest: "digest-internal",
+    revision: 42,
+    localPath: "/Users/example/.codex"
+  });
+  const cookie = fixture.saveSession();
+  await requestJson(
+    fixture.handler, "PATCH", "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC }, { cookie }
+  );
+
+  const response = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/profiles/public/postmelee"
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(response.body.data, {
+    owner: {
+      displayName: "Post Melee",
+      githubLogin: "postmelee",
+      avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+      handle: "postmelee"
+    },
+    usage: {
+      capturedAt: "2026-06-11T00:00:00.000Z",
+      uploadedAt: "2026-06-11T00:01:00.000Z",
+      usage: sampleAccountUsageReadResult
+    },
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    publicCardUrl: `${BASE_URL}/u/postmelee/card.png`
+  });
+
+  const serialized = JSON.stringify(response.body.data);
+  for (const internalValue of [
+    "owner_1",
+    "owner-internal",
+    "digest-internal",
+    "/Users/example/.codex"
+  ]) {
+    assert.equal(serialized.includes(internalValue), false);
+  }
+  for (const internalKey of [
+    "providerUserId",
+    "ownerId",
+    "contentDigest",
+    "revision",
+    "localPath"
+  ]) {
+    assert.equal(serialized.includes(`\"${internalKey}\"`), false);
+  }
+});
+
+test("hides non-public, missing, malformed, and mismatched public profiles", async () => {
+  const privateFixture = createFixture();
+  privateFixture.saveOwner();
+  privateFixture.saveLatestUsage();
+
+  const noUsageFixture = createFixture();
+  noUsageFixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+
+  const privateUsageFixture = createFixture();
+  privateUsageFixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  privateUsageFixture.saveLatestUsage();
+
+  const mismatchedFixture = createFixture();
+  mismatchedFixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  mismatchedFixture.saveLatestUsage({
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+
+  const responses = await Promise.all([
+    requestJson(
+      privateFixture.handler, "GET", "/api/profiles/public/postmelee"
+    ),
+    requestJson(
+      privateFixture.handler, "GET", "/api/profiles/public/missing"
+    ),
+    requestJson(
+      privateFixture.handler, "GET", "/api/profiles/public/%ZZ"
+    ),
+    requestJson(
+      noUsageFixture.handler, "GET", "/api/profiles/public/postmelee"
+    ),
+    requestJson(
+      privateUsageFixture.handler, "GET", "/api/profiles/public/postmelee"
+    ),
+    requestJson(
+      mismatchedFixture.handler, "GET", "/api/profiles/public/postmelee"
+    )
+  ]);
+  const expected = {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+      message: "Card not found"
+    }
+  };
+
+  for (const response of responses) {
+    assert.equal(response.status, 404);
+    assert.deepEqual(response.body, expected);
+  }
+});
+
 test("updates only the session owner's card visibility", async () => {
   const fixture = createFixture();
   fixture.saveOwner();

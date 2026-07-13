@@ -1,5 +1,6 @@
 import { createAccountService } from "./accounts.js";
 import { createAccountUsageSubmitService } from "./account-usage-submit.js";
+import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
 import { createProfileCardService } from "../profile-card/service.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
@@ -11,6 +12,7 @@ import {
 import { createOAuthRuntimeService } from "./oauth-runtime.js";
 import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
+import { PROFILE_VISIBILITY } from "./store.js";
 import { createCliTokenService } from "./tokens.js";
 import {
   createSubmittedDeviceService,
@@ -460,6 +462,24 @@ export function createProfileBackendHttpHandler(options = {}) {
         ));
       }
 
+      const publicProfilePrefix = "/api/profiles/public/";
+      if (
+        request.method.toUpperCase() === "GET" &&
+        url.pathname.startsWith(publicProfilePrefix)
+      ) {
+        const profile = cardService.getPublicProfile({
+          handle: decodePublicHandle(
+            url.pathname.slice(publicProfilePrefix.length)
+          )
+        });
+
+        return okResponse(
+          serializePublicProfile(profile, request, options.publicBaseUrl),
+          200,
+          { "cache-control": "no-store" }
+        );
+      }
+
       const publicSnapshotPrefix = "/api/snapshots/public/";
       if (
         request.method.toUpperCase() === "GET" &&
@@ -812,6 +832,33 @@ function serializeOwnerProfile(profile, request, publicBaseUrl) {
   };
 }
 
+function serializePublicProfile(profile, request, publicBaseUrl) {
+  const usage = normalizeAccountUsageReadResult(profile.usageRecord.usage);
+
+  return {
+    owner: {
+      displayName: profile.owner.displayName ?? null,
+      githubLogin: profile.owner.githubLogin ?? null,
+      avatarUrl: profile.owner.avatarUrl ?? null,
+      handle: profile.owner.handle
+    },
+    usage: {
+      capturedAt: profile.usageRecord.capturedAt,
+      uploadedAt: profile.usageRecord.uploadedAt,
+      usage: {
+        summary: usage.summary,
+        dailyUsageBuckets: usage.dailyUsageBuckets
+      }
+    },
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    publicCardUrl: buildPublicCardUrl(
+      profile.owner.handle,
+      request,
+      publicBaseUrl
+    )
+  };
+}
+
 function serializeLatestUsage(record) {
   if (!record) return null;
   return {
@@ -938,12 +985,16 @@ function buildPublicCardUrl(handle, request, publicBaseUrl) {
   return new URL(`/u/${encodeURIComponent(handle)}/card.png`, baseUrl).toString();
 }
 
-function decodePublicCardHandle(value) {
+function decodePublicHandle(value) {
   try {
     return decodeURIComponent(value);
   } catch {
     return "";
   }
+}
+
+function decodePublicCardHandle(value) {
+  return decodePublicHandle(value);
 }
 
 function cardPngResponse(card, options) {
