@@ -68,6 +68,8 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
 2. verification URL과 user code를 출력하고 브라우저 열기를 시도한다.
 3. 사용자가 웹에서 GitHub 로그인 후 code를 승인한다.
 4. CLI가 server가 지정한 interval과 expiry를 지키며 `POST /api/auth/device/poll`을 호출한다.
+
+지원되는 interactive terminal에서는 verification URL 자체가 cyan OSC 8 hyperlink로 표시되어 클릭할 수 있다. `Open` label과 뒤따르는 출력은 terminal 기본색을 유지한다. 파이프 출력, `submit --json`, `TERM=dumb` 또는 hyperlink 지원 신호가 없는 terminal에는 ANSI control sequence 없이 같은 plain URL을 출력한다. 브라우저 자동 열기가 실패해도 plain URL과 user code는 항상 남는다.
 5. 승인된 poll 응답에서 raw service token을 한 번만 받고 로컬 credential file에 저장한다.
 6. `submit`에서 시작한 경우 즉시 analyzer와 usage submit을 이어서 실행한다.
 

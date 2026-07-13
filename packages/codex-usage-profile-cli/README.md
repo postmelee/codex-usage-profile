@@ -23,6 +23,8 @@ npx --yes codex-usage-profile@latest submit --server https://profiles.example.co
 
 The example origin is a placeholder. Use the origin operated by the deployed service. Once login succeeds, the service origin and a narrow submit credential are stored locally, so later commands can omit `--server`.
 
+During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
+
 ```bash
 npx --yes codex-usage-profile@latest status
 npx --yes codex-usage-profile@latest submit

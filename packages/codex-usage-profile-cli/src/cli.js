@@ -102,7 +102,9 @@ export async function runCli(argv, options = {}) {
           now: options.now,
           sleep: options.sleep,
           openBrowser: options.openBrowser,
-          randomBytes: options.randomBytes
+          randomBytes: options.randomBytes,
+          env,
+          hyperlinks: parsed.json ? false : undefined
         }
       });
     }
@@ -121,7 +123,8 @@ export async function runCli(argv, options = {}) {
       now: options.now,
       sleep: options.sleep,
       openBrowser: options.openBrowser,
-      randomBytes: options.randomBytes
+      randomBytes: options.randomBytes,
+      hyperlinks: parsed.json ? false : undefined
     });
   } catch (error) {
     stderr.write(`${formatCliError(error)}\n`);
@@ -303,7 +306,9 @@ async function runSubmit(options) {
         now: options.now,
         sleep: options.sleep,
         openBrowser: options.openBrowser,
-        randomBytes: options.randomBytes
+        randomBytes: options.randomBytes,
+        env: options.env,
+        hyperlinks: options.json ? false : options.hyperlinks
       })
     });
     credentialSource = resolveCredentialSource({

@@ -290,6 +290,39 @@ test("logs in automatically before submit and never persists an environment toke
   assert.match(metadata.deviceId, /^device_/);
 });
 
+test("disables terminal hyperlinks while JSON submit performs automatic login", async () => {
+  const store = createMemoryCredentialStore();
+  const env = {
+    CODEX_USAGE_PROFILE_URL: "https://profiles.example.test",
+    TERM_PROGRAM: "iTerm.app"
+  };
+  let loginOptions;
+  const io = createIo({
+    env,
+    stdout: createOutput({ isTTY: true }),
+    credentialStore: store,
+    loginWithDeviceCode: async (options) => {
+      loginOptions = options;
+      await options.credentialStore.save({
+        token: "cup_login_secret",
+        serviceOrigin: options.serviceOrigin,
+        tokenRecordId: "cli_token_1",
+        deviceId: "device_login"
+      });
+    },
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() { return createSubmitResponse(); }
+    })
+  });
+
+  assert.equal(await runCli(["submit", "--json"], io), 0);
+  assert.equal(loginOptions.hyperlinks, false);
+  assert.equal(loginOptions.env, env);
+  assert.equal(io.stdout.value.includes("\u001B"), false);
+  assert.equal(JSON.parse(io.stdout.value).submission.status, "accepted");
+});
+
 function createIo(overrides = {}) {
   return {
     stdout: createOutput(),
@@ -298,8 +331,9 @@ function createIo(overrides = {}) {
   };
 }
 
-function createOutput() {
+function createOutput(options = {}) {
   return {
+    isTTY: options.isTTY === true,
     value: "",
     write(value) {
       this.value += value;

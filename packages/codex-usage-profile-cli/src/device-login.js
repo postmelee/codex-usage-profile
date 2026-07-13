@@ -10,6 +10,15 @@ const RETRYABLE_ERROR_CODES = new Set([
   "request_timeout",
   "rate_limited"
 ]);
+const HYPERLINK_TERM_PROGRAMS = new Set([
+  "Hyper",
+  "WezTerm",
+  "WarpTerminal",
+  "iTerm.app",
+  "vscode"
+]);
+const ANSI_CYAN = "\u001B[36m";
+const ANSI_DEFAULT_FOREGROUND = "\u001B[39m";
 
 export async function loginWithDeviceCode(options = {}) {
   const {
@@ -21,7 +30,9 @@ export async function loginWithDeviceCode(options = {}) {
     sleep = defaultSleep,
     openBrowser = openUrl,
     randomBytes,
-    label = os.hostname()
+    label = os.hostname(),
+    env = process.env,
+    hyperlinks
   } = options;
 
   if (!client || !credentialStore || !stdout) {
@@ -38,7 +49,13 @@ export async function loginWithDeviceCode(options = {}) {
     serviceOrigin
   );
 
-  stdout.write(`Open ${verificationUrl}\n`);
+  const hyperlinkEnabled = hyperlinks !== false && supportsTerminalHyperlinks({
+    env,
+    stdout
+  });
+  stdout.write(`Open ${formatTerminalHyperlink(verificationUrl, {
+    enabled: hyperlinkEnabled
+  })}\n`);
   stdout.write(`Enter code ${userCode}\n`);
   try {
     await openBrowser(verificationUrl);
@@ -96,6 +113,28 @@ export async function loginWithDeviceCode(options = {}) {
   }
 
   throw new CliError("device_login_expired", "Device login expired. Run login again.");
+}
+
+export function formatTerminalHyperlink(url, options = {}) {
+  const value = requireNonEmptyString(url, "terminal URL");
+  if (options.enabled !== true) return value;
+  return `${ANSI_CYAN}\u001B]8;;${value}\u001B\\${value}\u001B]8;;\u001B\\${ANSI_DEFAULT_FOREGROUND}`;
+}
+
+export function supportsTerminalHyperlinks(options = {}) {
+  const stdout = options.stdout;
+  const env = options.env ?? process.env;
+
+  if (stdout?.isTTY !== true || env.TERM === "dumb" || env.FORCE_HYPERLINK === "0") {
+    return false;
+  }
+  if (env.FORCE_HYPERLINK === "1") return true;
+  if (HYPERLINK_TERM_PROGRAMS.has(env.TERM_PROGRAM)) return true;
+  if (typeof env.WT_SESSION === "string" && env.WT_SESSION !== "") return true;
+  if (/kitty/i.test(env.TERM ?? "")) return true;
+
+  const vteVersion = Number.parseInt(env.VTE_VERSION ?? "", 10);
+  return Number.isSafeInteger(vteVersion) && vteVersion >= 5000;
 }
 
 export function resolveVerificationUrl(value, serviceOrigin) {

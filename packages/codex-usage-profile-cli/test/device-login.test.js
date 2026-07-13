@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loginWithDeviceCode, resolveVerificationUrl } from "../src/device-login.js";
+import {
+  formatTerminalHyperlink,
+  loginWithDeviceCode,
+  resolveVerificationUrl,
+  supportsTerminalHyperlinks
+} from "../src/device-login.js";
 import { ServiceClientError } from "../src/service-client.js";
 
 test("polls through pending and rate limit states then stores the raw token once", async () => {
@@ -144,6 +149,61 @@ test("keeps login usable when automatic browser opening fails", async () => {
   assert.match(output.value, /Enter code/);
 });
 
+test("renders a terminal hyperlink only for supported interactive terminals", async () => {
+  const interactive = createOutput({ isTTY: true });
+  await loginWithDeviceCode({
+    client: createSequenceClient([{
+      status: "approved",
+      token: "cup_secret_value",
+      tokenRecord: { id: "cli_token_1" }
+    }]),
+    credentialStore: createCredentialStore(),
+    serviceOrigin: "https://profiles.example.test",
+    stdout: interactive,
+    env: { TERM_PROGRAM: "iTerm.app" },
+    now: () => new Date("2026-07-13T00:00:00.000Z"),
+    openBrowser: () => {},
+    randomBytes: () => Buffer.alloc(18, 1)
+  });
+
+  assert.match(interactive.value, /Open \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test/);
+  assert.match(interactive.value, /\u001B\]8;;\u001B\\/);
+  assert.match(interactive.value, /\u001B\]8;;\u001B\\\u001B\[39m\nEnter code/);
+
+  const plainUrl = "https://profiles.example.test/device?user_code=ABCD-1234";
+  assert.equal(formatTerminalHyperlink(plainUrl), plainUrl);
+  assert.equal(supportsTerminalHyperlinks({
+    env: { TERM_PROGRAM: "iTerm.app" },
+    stdout: createOutput()
+  }), false);
+  assert.equal(supportsTerminalHyperlinks({
+    env: { TERM: "dumb", TERM_PROGRAM: "iTerm.app" },
+    stdout: createOutput({ isTTY: true })
+  }), false);
+});
+
+test("keeps JSON and explicitly disabled login output free of ANSI escapes", async () => {
+  const output = createOutput({ isTTY: true });
+  await loginWithDeviceCode({
+    client: createSequenceClient([{
+      status: "approved",
+      token: "cup_secret_value",
+      tokenRecord: { id: "cli_token_1" }
+    }]),
+    credentialStore: createCredentialStore(),
+    serviceOrigin: "https://profiles.example.test",
+    stdout: output,
+    env: { TERM_PROGRAM: "iTerm.app" },
+    hyperlinks: false,
+    now: () => new Date("2026-07-13T00:00:00.000Z"),
+    openBrowser: () => {},
+    randomBytes: () => Buffer.alloc(18, 1)
+  });
+
+  assert.equal(output.value.includes("\u001B"), false);
+  assert.match(output.value, /Open https:\/\/profiles\.example\.test/);
+});
+
 function createSequenceClient(sequence) {
   let next = 0;
   return {
@@ -165,8 +225,16 @@ function createSequenceClient(sequence) {
   };
 }
 
-function createOutput() {
+function createCredentialStore() {
   return {
+    async load() { return null; },
+    async save(value) { return value; }
+  };
+}
+
+function createOutput(options = {}) {
+  return {
+    isTTY: options.isTTY === true,
     value: "",
     write(value) {
       this.value += value;
