@@ -18,7 +18,7 @@ API-key-only and Bedrock Codex authentication do not provide the account usage m
 After the package and service are published, one command can start browser login when needed and continue with submission:
 
 ```bash
-npx --yes codex-usage-profile@latest submit --server https://profiles.example.com
+npx codex-usage-profile@latest submit --server https://profiles.example.com
 ```
 
 The example origin is a placeholder. Use the origin operated by the deployed service. Once login succeeds, the service origin and a narrow submit credential are stored locally, so later commands can omit `--server`.
@@ -26,12 +26,24 @@ The example origin is a placeholder. Use the origin operated by the deployed ser
 During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
 
 ```bash
-npx --yes codex-usage-profile@latest status
-npx --yes codex-usage-profile@latest submit
-npx --yes codex-usage-profile@latest logout
+npx codex-usage-profile@latest status
+npx codex-usage-profile@latest submit
+npx codex-usage-profile@latest logout
 ```
 
+On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
+
 Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROFILE_TOKEN` can supply an externally managed submit token, but the CLI never accepts a token as a command argument.
+
+## Non-interactive Automation
+
+On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-issued service token and pin the CLI to an exact version. `--yes` intentionally skips npm's installation confirmation and should not be combined with `@latest` in unattended execution.
+
+```bash
+CODEX_USAGE_PROFILE_URL=https://profiles.example.com \
+CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
+npx --yes codex-usage-profile@0.1.0 submit --json
+```
 
 ## What Submit Sends
 

@@ -22,15 +22,15 @@ Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한�
 package와 service가 배포된 뒤의 사용자 명령은 다음과 같다. example origin은 실제 배포 origin으로 교체한다.
 
 ```bash
-npx --yes codex-usage-profile@latest submit \
+npx codex-usage-profile@latest submit \
   --server https://profiles.example.com
 ```
 
 첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장된다. 이후에는 같은 stable device id로 명령을 실행할 수 있다.
 
 ```bash
-npx --yes codex-usage-profile@latest status
-npx --yes codex-usage-profile@latest submit
+npx codex-usage-profile@latest status
+npx codex-usage-profile@latest submit
 ```
 
 source checkout에서는 다음 bin을 사용한다.

@@ -18,19 +18,31 @@ A successful CLI submit updates stored usage and changes the card ETag while pre
 After package and service deployment, the intended command is:
 
 ```bash
-npx --yes codex-usage-profile@latest submit \
+npx codex-usage-profile@latest submit \
   --server https://profiles.example.com
 ```
 
 The first approved login stores the service origin, so later commands can omit `--server`.
 
 ```bash
-npx --yes codex-usage-profile@latest status
-npx --yes codex-usage-profile@latest submit
-npx --yes codex-usage-profile@latest logout
+npx codex-usage-profile@latest status
+npx codex-usage-profile@latest submit
+npx codex-usage-profile@latest logout
 ```
 
+On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
+
 See [CLI login and submit](docs/cli-submit.md) for source/tarball commands, credential locations, transmitted fields, privacy, error mapping, and troubleshooting.
+
+### Non-interactive Automation
+
+On a trusted machine that already has a ChatGPT-backed Codex sign-in, automation can use a pre-issued service token and an exact CLI version. `--yes` intentionally skips npm's installation confirmation, so do not combine it with `@latest` in unattended execution.
+
+```bash
+CODEX_USAGE_PROFILE_URL=https://profiles.example.com \
+CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
+npx --yes codex-usage-profile@0.1.0 submit --json
+```
 
 ## README Card
 

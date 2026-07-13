@@ -18,28 +18,39 @@ API key-only와 Bedrock 인증은 이 account usage method를 제공하지 않�
 package와 서비스가 배포된 뒤에는 `submit` 한 번으로 credential이 없을 때 browser login을 시작하고 승인 후 같은 명령에서 제출을 계속한다.
 
 ```bash
-npx --yes codex-usage-profile@latest submit \
+npx codex-usage-profile@latest submit \
   --server https://profiles.example.com
 ```
 
 명시적으로 단계를 나눌 수도 있다.
 
 ```bash
-npx --yes codex-usage-profile@latest login \
+npx codex-usage-profile@latest login \
   --server https://profiles.example.com
-npx --yes codex-usage-profile@latest submit
-npx --yes codex-usage-profile@latest status
+npx codex-usage-profile@latest submit
+npx codex-usage-profile@latest status
 ```
 
-첫 로그인에서 service origin이 credential과 함께 저장되므로 이후 명령은 `--server`를 생략할 수 있다. CI 또는 별도 token manager에서는 환경변수를 사용할 수 있다.
+첫 로그인에서 service origin이 credential과 함께 저장되므로 이후 명령은 `--server`를 생략할 수 있다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
+
+raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
+
+## Automation / 비대화형 실행
+
+비대화형 실행은 일반적인 GitHub Actions 환경이 아니라 다음 조건을 충족하는 신뢰할 수 있는 machine을 전제로 한다.
+
+- 실행 가능한 Codex CLI와 ChatGPT 기반 로그인이 이미 준비됨
+- 웹 Settings에서 발급한 service submit token을 secret manager로 주입함
+- browser device login이 필요하지 않음
+- CLI package를 `@latest`가 아닌 정확한 version으로 고정함
 
 ```bash
 export CODEX_USAGE_PROFILE_URL=https://profiles.example.com
 export CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>'
-npx --yes codex-usage-profile@latest submit
+npx --yes codex-usage-profile@0.1.0 submit --json
 ```
 
-raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
+여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
 
 ## 로컬과 tarball 검증
 
@@ -56,7 +67,7 @@ publish 전 package artifact는 tarball로 검증한다.
 
 ```bash
 npm pack --workspace packages/codex-usage-profile-cli
-npx --yes --package=./codex-usage-profile-0.1.0.tgz \
+npx --package=./codex-usage-profile-0.1.0.tgz \
   codex-usage-profile --help
 ```
 
