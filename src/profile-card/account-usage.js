@@ -3,6 +3,13 @@ const RESULT_KEYS = Object.freeze([
   "dailyUsageBuckets"
 ]);
 
+const DOCUMENT_KEYS = Object.freeze([
+  "contractVersion",
+  "capturedAt",
+  "summary",
+  "dailyUsageBuckets"
+]);
+
 const SUMMARY_KEYS = Object.freeze([
   "lifetimeTokens",
   "peakDailyTokens",
@@ -17,6 +24,71 @@ const DAILY_BUCKET_KEYS = Object.freeze([
 ]);
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const ACCOUNT_USAGE_CONTRACT_VERSION = 1;
+export const DEFAULT_ACCOUNT_USAGE_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+export function validateAccountUsageDocument(value, options = {}) {
+  const errors = [];
+
+  if (!isRecord(value)) {
+    return {
+      errors: ["$: expected object"],
+      ok: false
+    };
+  }
+
+  validateExactKeys("$", value, DOCUMENT_KEYS, errors);
+
+  if (value.contractVersion !== ACCOUNT_USAGE_CONTRACT_VERSION) {
+    errors.push(
+      `$.contractVersion: expected ${ACCOUNT_USAGE_CONTRACT_VERSION}`
+    );
+  }
+
+  validateCapturedAt("$.capturedAt", value.capturedAt, errors, options);
+  validateSummary("$.summary", value.summary, errors);
+  validateDailyUsageBuckets("$.dailyUsageBuckets", value.dailyUsageBuckets, errors);
+
+  return {
+    errors,
+    ok: errors.length === 0
+  };
+}
+
+export function assertAccountUsageDocument(value, options = {}) {
+  const result = validateAccountUsageDocument(value, options);
+
+  if (!result.ok) {
+    throw new TypeError(`Invalid Account Usage Contract:\n${result.errors.join("\n")}`);
+  }
+
+  return value;
+}
+
+export function normalizeAccountUsageDocument(value, options = {}) {
+  assertAccountUsageDocument(value, options);
+
+  return {
+    contractVersion: ACCOUNT_USAGE_CONTRACT_VERSION,
+    capturedAt: new Date(value.capturedAt).toISOString(),
+    summary: normalizeSummary(value.summary),
+    dailyUsageBuckets: value.dailyUsageBuckets === null
+      ? null
+      : normalizeDailyUsageBuckets(value.dailyUsageBuckets)
+  };
+}
+
+export function projectAccountUsageReadResult(document) {
+  const normalized = normalizeAccountUsageDocument(document, {
+    maxFutureSkewMs: Number.POSITIVE_INFINITY
+  });
+
+  return {
+    summary: normalized.summary,
+    dailyUsageBuckets: normalized.dailyUsageBuckets
+  };
+}
 
 export function validateAccountUsageReadResult(value) {
   const errors = [];
@@ -56,18 +128,26 @@ export function normalizeAccountUsageReadResult(value) {
   assertAccountUsageReadResult(value);
 
   return {
-    summary: Object.fromEntries(
-      SUMMARY_KEYS.map((key) => [key, value.summary[key]])
-    ),
+    summary: normalizeSummary(value.summary),
     dailyUsageBuckets: value.dailyUsageBuckets === null
       ? []
-      : value.dailyUsageBuckets
-        .map((bucket) => ({
-          startDate: bucket.startDate,
-          tokens: bucket.tokens
-        }))
-        .sort((left, right) => left.startDate.localeCompare(right.startDate))
+      : normalizeDailyUsageBuckets(value.dailyUsageBuckets)
   };
+}
+
+function normalizeSummary(value) {
+  return Object.fromEntries(
+    SUMMARY_KEYS.map((key) => [key, value[key]])
+  );
+}
+
+function normalizeDailyUsageBuckets(value) {
+  return value
+    .map((bucket) => ({
+      startDate: bucket.startDate,
+      tokens: bucket.tokens
+    }))
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
 }
 
 function validateSummary(path, value, errors) {
@@ -144,6 +224,49 @@ function validateIsoDate(path, value, errors) {
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
     errors.push(`${path}: expected valid UTC date`);
   }
+}
+
+function validateCapturedAt(path, value, errors, options) {
+  if (typeof value !== "string" || !value.endsWith("Z")) {
+    errors.push(`${path}: expected ISO 8601 UTC string`);
+    return;
+  }
+
+  const capturedAt = new Date(value);
+  if (Number.isNaN(capturedAt.getTime())) {
+    errors.push(`${path}: expected valid timestamp`);
+    return;
+  }
+
+  const now = normalizeNow(options.now);
+  const maxFutureSkewMs = normalizeFutureSkew(options.maxFutureSkewMs);
+  if (capturedAt.getTime() > now.getTime() + maxFutureSkewMs) {
+    errors.push(`${path}: must not be more than ${maxFutureSkewMs}ms in the future`);
+  }
+}
+
+function normalizeNow(value) {
+  const resolved = typeof value === "function" ? value() : value;
+  const date = resolved === undefined ? new Date() : new Date(resolved);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError("now must resolve to a valid date");
+  }
+
+  return date;
+}
+
+function normalizeFutureSkew(value) {
+  if (value === Number.POSITIVE_INFINITY) {
+    return value;
+  }
+
+  const resolved = value ?? DEFAULT_ACCOUNT_USAGE_FUTURE_SKEW_MS;
+  if (!Number.isSafeInteger(resolved) || resolved < 0) {
+    throw new TypeError("maxFutureSkewMs must be a non-negative safe integer");
+  }
+
+  return resolved;
 }
 
 function expectRecord(path, value, errors) {

@@ -1,13 +1,50 @@
 # Codex Usage Profile
 
-Codex Usage Profile combines GitHub identity with Codex account usage and renders a public 998x612 PNG that can be embedded in a GitHub README. A stable image URL is revalidated after each successful usage submit, so README markup does not need to change when the card data changes.
+Codex Usage Profile combines GitHub identity with the account usage reported by Codex and renders a 998x612 PNG that can be embedded in a GitHub README.
+
+A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
+
+> The project is still in MVP development. The CLI package has no default production service URL yet, npm publishing is not claimed as complete, and the example origins below are placeholders.
+
+## MVP Flow
+
+1. Open the website and sign in with GitHub.
+2. Run the product CLI. If no credential exists, it opens the browser approval flow and continues after approval.
+3. The CLI reads `account/usage/read` through `codex-usage-analyzer` and submits Account Usage Contract v1.
+4. Open `/profile`, verify the updated private preview, then select **Publish card**.
+5. Copy the stable image URL or README Markdown from **Share**.
+6. Future submits update the same image URL.
+
+After package and service deployment, the intended command is:
+
+```bash
+npx codex-usage-profile@latest submit \
+  --server https://profiles.example.com
+```
+
+The first approved login stores the service origin, so later commands can omit `--server`.
+
+```bash
+npx codex-usage-profile@latest status
+npx codex-usage-profile@latest submit
+npx codex-usage-profile@latest logout
+```
+
+On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
+
+See [CLI login and submit](docs/cli-submit.md) for source/tarball commands, credential locations, transmitted fields, privacy, error mapping, and troubleshooting.
+
+### Non-interactive Automation
+
+On a trusted machine that already has a ChatGPT-backed Codex sign-in, automation can use a pre-issued service token and an exact CLI version. `--yes` intentionally skips npm's installation confirmation, so do not combine it with `@latest` in unattended execution.
+
+```bash
+CODEX_USAGE_PROFILE_URL=https://profiles.example.com \
+CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
+npx --yes codex-usage-profile@0.1.0 submit --json
+```
 
 ## README Card
-
-1. Sign in with GitHub from `/`.
-2. Open `/profile` and confirm the private card preview.
-3. Submit Codex usage, then select **Publish card**.
-4. Open **Share** and copy the README Markdown.
 
 ```md
 ![Codex usage profile](https://profiles.example.com/u/octocat/card.png)
@@ -15,7 +52,39 @@ Codex Usage Profile combines GitHub identity with Codex account usage and render
 
 The default URL renders English. Add `?locale=ko` for Korean. Making the profile private causes the public image endpoint to return `404`.
 
-The usage portion follows the official Codex App Server [`account/usage/read`](https://developers.openai.com/codex/app-server#7-token-usage-chatgpt) result: summary metrics and daily token buckets. GitHub OAuth remains the source for the displayed name, login, and avatar. See [GitHub README card usage and cache behavior](docs/readme-card.md) for the complete flow, ETag updates, and GitHub Camo guidance.
+Public cards use this cache contract:
+
+```text
+Content-Type: image/png
+Cache-Control: public, no-cache, must-revalidate
+ETag: "..."
+```
+
+Each changed submit produces a new ETag. GitHub's image proxy can delay visible README refresh even after the origin returns the new card. See [README card usage and cache behavior](docs/readme-card.md).
+
+## Data Boundary
+
+The active CLI path uses the official Codex App Server `account/usage/read` result through [`codex-usage-analyzer@0.2.x`](https://github.com/postmelee/codex-usage-analyzer).
+
+Analyzer-owned Account Usage Contract v1 fields:
+
+- capture time and contract version
+- lifetime and peak daily tokens
+- longest-running turn
+- current and longest streak
+- source-dated daily token buckets
+
+Web-service-owned fields:
+
+- GitHub display name, login, avatar and stable provider user id
+- browser sessions and CLI submit tokens
+- device metadata
+- public/private visibility and profile handle
+- profile/card URLs, rendering, localization and cache behavior
+
+The CLI sends the account usage document itself to `POST /api/account-usage/submit`. Device metadata uses headers and GitHub identity comes only from the authenticated web account. The service never trusts an identity supplied beside usage.
+
+The older [`UsageSnapshot v2`](docs/usage-snapshot-v2.md) remains an internal compatibility contract for the existing full-profile preview and legacy snapshot API. It is not emitted by `codex-usage-analyzer@0.2.x` and is not used by the new submit command.
 
 ## Development
 
@@ -27,79 +96,80 @@ npm test
 npm run build
 ```
 
-The Home and owner card routes are `/` and `/profile`. The existing full profile preview is available at `/u/meleeisdeveloping`. Unknown `/u/:handle` routes are wired to the public snapshot API client and fall back to an unavailable state when no public snapshot exists.
+The Home and owner card routes are `/` and `/profile`. The existing full-profile preview is available at `/u/meleeisdeveloping`.
 
 `npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
-## Usage Snapshot Contract
-
-`UsageSnapshot v2` is the shared data contract for analyzer-produced usage data. The contract is documented in [`docs/usage-snapshot-v2.md`](docs/usage-snapshot-v2.md).
-
-The intended boundary is:
-
-- `codex-usage-analyzer` reads local usage data and emits a `UsageSnapshot v2` JSON object.
-- `codex-usage-profile` authenticates users, receives snapshots, stores latest public/private state, and renders profile/card UI.
-- GitHub-facing fields such as login, avatar URL, display name, bio, profile URL, visibility, sessions, tokens, and devices belong to the web service account/profile layer, not to the analyzer snapshot.
-- Product-specific CLIs can wrap the analyzer SDK and submit the resulting snapshot, but should keep rendered UI-only values and account identity outside `payload.snapshot`.
-
-## Analyzer Package
-
-The analyzer now has a standalone repository at [`postmelee/codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer).
-
-This repository still includes `codex-usage-analyzer` as a temporary workspace compatibility copy at [`packages/codex-usage-analyzer`](packages/codex-usage-analyzer/README.md).
-
-The analyzer CLI smoke path is:
+Local CLI smoke:
 
 ```bash
-node packages/codex-usage-analyzer/bin/codex-usage-analyzer.js analyze --json
+node packages/codex-usage-profile-cli/bin/codex-usage-profile.js --help
+node packages/codex-usage-profile-cli/bin/codex-usage-profile.js login \
+  --server http://127.0.0.1:5177
 ```
 
-The analyzer package is contract-first at this stage. It exposes the SDK/CLI boundary and canonical `UsageSnapshot v2` validator, but the real local usage parser is still a follow-up. See [`docs/codex-usage-analyzer.md`](docs/codex-usage-analyzer.md) for SDK exports, wrapper compatibility, the standalone repository, and dependency transition options.
+Package preflight:
+
+```bash
+npm pack --dry-run --workspace packages/codex-usage-profile-cli --json
+```
 
 ## Runtime Configuration
 
-The backend package exposes a framework-neutral `Request`/`Response` handler instead of a standalone server. A host adapter should pass runtime configuration into `createProfileBackendHttpHandler()`:
-
-Copy `.env.example` to `.env` for local runtime work. `.env` is ignored by git and must contain real local secrets only on your machine.
+Copy `.env.example` to a local `.env`. `.env` is ignored by git and must never be committed.
 
 | Setting | Purpose |
 |---|---|
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client id used by `/api/auth/github/login` |
-| `GITHUB_CLIENT_SECRET` | Host adapter secret used by the injected GitHub OAuth client during code exchange |
-| `PUBLIC_BASE_URL` | Public origin used to build the OAuth callback URL |
-| `PROFILE_STORE_FILE` | Local durable store path when using `createFileProfileBackendStore()` |
-| `SESSION_SECURE_COOKIES` | Enable secure cookies behind HTTPS production hosting |
+| `GITHUB_CLIENT_SECRET` | Server-side secret used during OAuth code exchange |
+| `PUBLIC_BASE_URL` | Public origin used to build OAuth callback and card URLs |
+| `PROFILE_STORE_FILE` | Local durable store path for development |
+| `SESSION_SECURE_COOKIES` | Enables secure cookies behind HTTPS hosting |
 
-For local GitHub OAuth testing, configure the OAuth App callback URL to:
+GitHub OAuth callback URL:
 
 ```text
 {PUBLIC_BASE_URL}/api/auth/github/callback
 ```
 
-The runtime uses the GitHub access token only to fetch the authenticated GitHub user, then discards it.
+The GitHub access token is used only to fetch the authenticated GitHub user and is then discarded. GitHub name, login, and avatar remain server-owned identity fields.
 
-When `.env` is missing, `npm run dev:runtime` still starts with safe defaults for frontend and non-OAuth API smoke checks. GitHub login redirect needs `GITHUB_CLIENT_ID`; callback completion needs both GitHub OAuth settings.
+When `.env` is missing, `npm run dev:runtime` still starts with safe defaults for non-OAuth smoke checks. GitHub login redirect requires `GITHUB_CLIENT_ID`; callback completion requires both OAuth values.
 
-This local runtime currently verifies the browser GitHub OAuth and session boundary. The MVP CLI auth flow is planned as a device-code flow so users can run `npx codex-usage-profile@latest submit` without configuring a local callback:
+## CLI Authentication
 
-1. CLI calls a device login start endpoint and receives a verification URL, user code, device code, expiry, and poll interval.
-2. CLI displays the verification URL and user code, then polls the device login status endpoint.
-3. Browser opens the verification URL. If needed, the user signs in with GitHub and approves the pending CLI device code.
-4. The poll response returns a raw CLI API token once after approval.
-5. CLI stores the token locally with restrictive permissions.
-6. Future CLI submit requests use `Authorization: Bearer ...` against `POST /api/snapshots/submit`.
+The CLI uses the existing device login endpoints:
+
+```text
+POST /api/auth/device
+POST /api/auth/device/poll
+GET  /api/account-usage/status
+POST /api/account-usage/submit
+```
+
+The browser approves a user code under the signed-in GitHub session. The approved poll response returns a narrow service token once. The server stores only its digest; the CLI stores the raw token in an owner-only local credential file with atomic replacement and `0600` permissions on macOS/Linux.
+
+File credentials are bound to the issuing service origin and are never sent to another origin. `CODEX_USAGE_PROFILE_TOKEN` can override the file token but is never written to disk. `logout` removes the file and cannot unset a shell environment variable.
 
 ## Security And Privacy
 
-- The service should never ask for a Codex/OpenAI password, local Codex `auth.json`, or raw OpenAI/GitHub OAuth tokens as profile data.
-- GitHub OAuth access tokens are used only to resolve the signed-in GitHub user and are not written to the profile store.
-- Browser sessions use `HttpOnly`, `SameSite=Lax` cookies. Production hosting should enable secure cookies and terminate TLS before exposing OAuth or submit routes.
-- CLI submit sends a profile snapshot JSON payload with a CLI API token in the `Authorization: Bearer ...` header.
-- A raw CLI API token is returned only at issue/exchange time. Backend storage keeps a digest and metadata, not the raw token.
-- Snapshot submit rejects credential-like fields and values such as OAuth access tokens, refresh tokens, local auth files, API keys, and `CODEX_ACCESS_TOKEN` environment assignments.
-- Analyzer snapshots must not include GitHub-facing profile data such as GitHub login, avatar URL, bio, profile URL, service visibility, session ids, CLI tokens, or device metadata. The web service merges GitHub account/profile records with usage snapshots after submit.
-- Public profile lookup returns only the latest snapshot whose visibility is `public`; private or missing snapshots are treated as not found.
-- The HTTP handler in this repository is a contract-level adapter. Real deployment still needs rate limiting, CSRF review for state-changing browser routes, production database selection, backup policy, and secret management.
+- The service never asks for a Codex/OpenAI password, local Codex `auth.json`, API key, access token, refresh token or keychain entry.
+- The analyzer delegates authentication to the installed Codex process and emits identity-free usage only.
+- CLI tokens are excluded from argv, URLs, logs, analytics, success output and error messages.
+- Usage submit rejects wrapper, identity, credential-like and unknown fields.
+- A Bearer token can update only its bound GitHub owner. Body/header data cannot select another owner.
+- New profiles default to private; public card access follows the web profile visibility setting.
+- Exact retries are idempotent, stale/conflicting revisions are rejected, request bodies are size-limited, and submit is rate-limited.
+- Production deployment still needs TLS, a shared rate limiter, durable database/concurrency policy, backup retention, account deletion and secret management.
+
+Revoke a CLI token immediately from web Settings when it is exposed or a machine is no longer trusted.
+
+## Documentation
+
+- [CLI login and usage submit](docs/cli-submit.md)
+- [README image endpoint and cache](docs/readme-card.md)
+- [Standalone analyzer integration](docs/codex-usage-analyzer.md)
+- [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
 
 ## Trademark Notice
 

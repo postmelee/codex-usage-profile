@@ -5,14 +5,18 @@ import {
   CLI_DEVICE_CODE_PREFIX,
   CLI_LOGIN_STATUS,
   CLI_TOKEN_PREFIX,
+  ACCOUNT_USAGE_DEVICE_ID_HEADER,
+  ACCOUNT_USAGE_DEVICE_NAME_HEADER,
   DEFAULT_MAX_ACTIVE_CLI_TOKENS,
   DEFAULT_SESSION_COOKIE_NAME,
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_VISIBILITY,
+  createAccountUsageRateLimiter,
   createCliTokenService,
   createMemoryProfileBackendStore,
   createProfileBackendHttpHandler
 } from "../index.js";
+import { ACCOUNT_USAGE_CONTRACT_VERSION } from "../../profile-card/index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 
@@ -800,6 +804,184 @@ test("handles bearer snapshot submit and public handle lookup", async () => {
   assert.deepEqual(publicSnapshot.body.data.snapshot.snapshot, sampleProfileSnapshot);
 });
 
+test("submits Account Usage Contract v1 and returns metadata-only status", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const { token } = fixture.issueToken({ label: "account usage" });
+  const document = createAccountUsageDocument();
+  const headers = {
+    authorization: `Bearer ${token}`,
+    [ACCOUNT_USAGE_DEVICE_ID_HEADER]: "macbook-pro",
+    [ACCOUNT_USAGE_DEVICE_NAME_HEADER]: "Office Mac"
+  };
+
+  const submitted = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const repeated = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const status = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/account-usage/status",
+    undefined,
+    { authorization: `Bearer ${token}` }
+  );
+  const stored = fixture.store.getLatestUsageByOwnerId("owner_1");
+  const serializedResponses = JSON.stringify({
+    submitted: submitted.body,
+    repeated: repeated.body,
+    status: status.body
+  });
+
+  assert.equal(submitted.status, 201);
+  assert.equal(submitted.body.data.submission.status, "accepted");
+  assert.equal(submitted.body.data.submission.contractVersion, 1);
+  assert.match(submitted.body.data.submission.revision, /^usage_/);
+  assert.equal(submitted.body.data.profile.handle, "postmelee");
+  assert.equal(
+    submitted.body.data.profile.imageUrl,
+    `${BASE_URL}/u/postmelee/card.png`
+  );
+  assert.equal(
+    submitted.body.data.profile.readmeMarkdown,
+    `![Codex usage profile](${BASE_URL}/u/postmelee/card.png)`
+  );
+  assert.equal(submitted.body.data.device.deviceKey, "macbook-pro");
+  assert.equal(submitted.body.data.device.displayName, "Office Mac");
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.body.data.submission.status, "unchanged");
+  assert.equal(repeated.body.data.submission.idempotent, true);
+
+  assert.equal(status.status, 200);
+  assert.equal(status.body.data.account.handle, "postmelee");
+  assert.equal(status.body.data.latestUsage.capturedAt, document.capturedAt);
+  assert.equal(status.body.data.latestUsage.revision, submitted.body.data.submission.revision);
+  assert.equal(stored.contractVersion, ACCOUNT_USAGE_CONTRACT_VERSION);
+  assert.deepEqual(stored.usage, {
+    summary: document.summary,
+    dailyUsageBuckets: document.dailyUsageBuckets
+  });
+  assert.equal(serializedResponses.includes("lifetimeTokens"), false);
+  assert.equal(serializedResponses.includes(token), false);
+});
+
+test("rejects Account Usage conflicts and invalid HTTP bodies", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const { token } = fixture.issueToken();
+  const authorization = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const submitted = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    authorization
+  );
+  const conflict = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    createAccountUsageDocument({
+      summary: {
+        ...document.summary,
+        lifetimeTokens: document.summary.lifetimeTokens + 1
+      }
+    }),
+    authorization
+  );
+  const wrongContentType = await requestRaw(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    JSON.stringify(document),
+    {
+      ...authorization,
+      "content-type": "text/plain"
+    }
+  );
+  const oversized = await requestRaw(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    JSON.stringify({ ...document, padding: "x".repeat(70 * 1024) }),
+    {
+      ...authorization,
+      "content-type": "application/json"
+    }
+  );
+
+  assert.equal(submitted.status, 201);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.error.code, PROFILE_BACKEND_ERROR_CODES.CONFLICT);
+  assert.equal(wrongContentType.status, 415);
+  assert.equal(wrongContentType.body.error.code, PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST);
+  assert.equal(oversized.status, 413);
+  assert.equal(oversized.body.error.code, PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST);
+});
+
+test("returns conflict and Retry-After responses for Account Usage submit", async () => {
+  const rateLimitNow = () => new Date("2026-06-10T00:00:00.000Z");
+  const fixture = createFixture({
+    accountUsageRateLimiter: createAccountUsageRateLimiter({
+      now: rateLimitNow,
+      burstLimit: 2,
+      burstWindowMs: 10_000,
+      sustainedLimit: 4,
+      sustainedWindowMs: 60_000
+    })
+  });
+  fixture.saveOwner();
+  const { token } = fixture.issueToken();
+  const headers = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const accepted = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const conflict = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    createAccountUsageDocument({
+      summary: {
+        ...document.summary,
+        peakDailyTokens: document.summary.peakDailyTokens + 1
+      }
+    }),
+    headers
+  );
+  const rateLimited = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+
+  assert.equal(accepted.status, 201);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.error.code, PROFILE_BACKEND_ERROR_CODES.CONFLICT);
+  assert.equal(rateLimited.status, 429);
+  assert.equal(rateLimited.body.error.code, PROFILE_BACKEND_ERROR_CODES.RATE_LIMITED);
+  assert.equal(rateLimited.headers.get("retry-after"), "10");
+});
+
 test("handles settings device list and rename after submit", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
@@ -1019,7 +1201,7 @@ test("returns validation errors from submit payloads", async () => {
   });
 });
 
-function createFixture() {
+function createFixture(options = {}) {
   const store = createMemoryProfileBackendStore();
   let current = new Date("2026-06-10T00:00:00.000Z");
   const createId = createIdFactory();
@@ -1058,7 +1240,9 @@ function createFixture() {
           html_url: "https://github.com/postmelee"
         };
       }
-    }
+    },
+    accountUsageBodyMaxBytes: options.accountUsageBodyMaxBytes,
+    accountUsageRateLimiter: options.accountUsageRateLimiter
   });
 
   return {
@@ -1107,6 +1291,16 @@ function createFixture() {
     setNow(value) {
       current = value;
     }
+  };
+}
+
+function createAccountUsageDocument(overrides = {}) {
+  return {
+    contractVersion: ACCOUNT_USAGE_CONTRACT_VERSION,
+    capturedAt: "2026-06-10T00:00:00.000Z",
+    summary: structuredClone(sampleAccountUsageReadResult.summary),
+    dailyUsageBuckets: structuredClone(sampleAccountUsageReadResult.dailyUsageBuckets),
+    ...overrides
   };
 }
 
