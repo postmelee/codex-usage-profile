@@ -2,7 +2,7 @@
 
 [`codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer) is the standalone upstream reader used by the product-specific `codex-usage-profile` CLI.
 
-Version `0.2.x` starts the installed Codex app-server, calls the documented `account/usage/read` method, and returns Account Usage Contract v1. It does not scan retained local sessions or directly read authentication files, tokens, keychains, prompts, responses, or tool data.
+The installed package starts the Codex app-server, calls the documented `account/usage/read` method, and returns Account Usage Contract v1. It does not scan retained local sessions or directly read authentication files, tokens, keychains, prompts, responses, or tool data.
 
 ## Current Dependency
 
@@ -139,4 +139,4 @@ Detailed product commands and privacy behavior are in [CLI login and submit](cli
 
 ## Legacy UsageSnapshot v2
 
-This repository still contains an internal `UsageSnapshot v2` compatibility contract for the older full-profile preview and snapshot API. It is no longer exported by or submitted through `codex-usage-analyzer@0.2.x`, and the new CLI does not send it. New account usage integration must use Account Usage Contract v1.
+This repository still contains an internal `UsageSnapshot v2` compatibility contract for the legacy snapshot API and compatibility-only modules. It is not exported by the current analyzer package, sent by the current CLI, or consumed by the production `/u/:handle` route. New account usage integration must use Account Usage Contract v1.

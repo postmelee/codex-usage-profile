@@ -64,7 +64,7 @@ Each changed submit produces a new ETag. GitHub's image proxy can delay visible 
 
 ## Data Boundary
 
-The active CLI path uses the official Codex App Server `account/usage/read` result through [`codex-usage-analyzer@0.2.x`](https://github.com/postmelee/codex-usage-analyzer).
+The active CLI path uses the official Codex App Server `account/usage/read` result through the installed [`codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer) package.
 
 Analyzer-owned Account Usage Contract v1 fields:
 
@@ -84,7 +84,7 @@ Web-service-owned fields:
 
 The CLI sends the account usage document itself to `POST /api/account-usage/submit`. Device metadata uses headers and GitHub identity comes only from the authenticated web account. The service never trusts an identity supplied beside usage.
 
-The older [`UsageSnapshot v2`](docs/usage-snapshot-v2.md) remains an internal compatibility contract for the existing full-profile preview and legacy snapshot API. It is not emitted by `codex-usage-analyzer@0.2.x` and is not used by the new submit command.
+The older [`UsageSnapshot v2`](docs/usage-snapshot-v2.md) remains an internal compatibility contract for the legacy snapshot API and compatibility-only modules. It is not emitted by the current analyzer package, submitted by the current CLI, or used by the production `/u/:handle` route.
 
 ## Development
 
@@ -96,7 +96,7 @@ npm test
 npm run build
 ```
 
-The Home and owner card routes are `/` and `/profile`. The existing full-profile preview is available at `/u/meleeisdeveloping`.
+The Home, owner card, and public card-profile routes are `/`, `/profile`, and `/u/{handle}`. The public route loads the allowlisted Account Usage response from `GET /api/profiles/public/{handle}` and displays the stable `/u/{handle}/card.png` image.
 
 `npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 

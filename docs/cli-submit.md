@@ -107,7 +107,7 @@ file credential은 발급한 service origin에 묶인다. 다른 `--server` 또�
 
 ## 전송되는 데이터
 
-`codex-usage-analyzer@0.2.x`의 `readAccountUsage()`가 Account Usage Contract v1을 반환한다. CLI는 complete shape를 다시 검증한 뒤 wrapper 없이 document 자체를 `POST /api/account-usage/submit` body로 보낸다.
+CLI dependency로 설치된 `codex-usage-analyzer`의 `readAccountUsage()`가 Account Usage Contract v1을 반환한다. CLI는 complete shape를 다시 검증한 뒤 wrapper 없이 document 자체를 `POST /api/account-usage/submit` body로 보낸다.
 
 ```json
 {

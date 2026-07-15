@@ -44,7 +44,7 @@ node packages/codex-usage-profile-cli/bin/codex-usage-profile.js submit \
 
 ## Submit API 계약
 
-CLI는 `codex-usage-analyzer@0.2.x`의 Account Usage Contract v1 document를 wrapper 없이 그대로 전송한다.
+CLI는 설치된 `codex-usage-analyzer` package의 Account Usage Contract v1 document를 wrapper 없이 그대로 전송한다.
 
 ```http
 POST /api/account-usage/submit
@@ -61,6 +61,20 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 - 오래된 timestamp 또는 같은 timestamp의 다른 내용은 `409`로 거부한다.
 - 성공 응답은 Profile URL, card URL과 README Markdown을 반환하지만 CLI는 opaque revision을 사용자 출력에서 제거한다.
 - valid submit은 token에 연결된 owner의 latest usage와 device submit 시각을 갱신한다. visibility는 기존 웹 profile 설정을 유지한다.
+
+## 공개 프로필 경계
+
+공개 HTML, JSON과 PNG는 같은 owner record, latest Account Usage record, visibility와 handle 일치 조건을 사용한다.
+
+| Surface | URL | 역할 |
+|---|---|---|
+| 공개 프로필 | `/u/{handle}` | 공개 카드와 사용량 요약을 표시한다. |
+| 공개 JSON | `/api/profiles/public/{handle}` | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
+| 공개 PNG | `/u/{handle}/card.png` | README에 삽입하는 안정적인 이미지 endpoint다. |
+
+profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON과 PNG는 `404`를 반환한다. 공개 HTML은 로그인 여부를 노출하지 않는 동일한 unavailable 상태를 표시한다.
+
+현재 공개 프로필과 카드는 Account Usage Contract v1이 제공하는 누적/최대 토큰, 최장 작업, 연속 기록과 일별 버킷만 지원한다. favorite model, token breakdown, skill/plugin ranking은 이 계약에 없으므로 현재 제품 화면에 표시하지 않는다.
 
 ## URL과 언어
 
