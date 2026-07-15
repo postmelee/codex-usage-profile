@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test } from "@playwright/test";
 
-const PROFILE_ROUTE = "/u/meleeisdeveloping";
+const PROFILE_ROUTE = "/u/postmelee";
 const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
@@ -220,163 +220,96 @@ test.describe("Home and share card flow", () => {
   });
 });
 
-test.describe("Codex profile UI", () => {
-  test("renders the desktop profile with the Codex-like action row", async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: 1512, height: 982 });
+test.describe("Public profile", () => {
+  test("public profile renders the API-backed GitHub identity and stable card", async ({ page }, testInfo) => {
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(PROFILE_ROUTE);
 
-    await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "postmelee" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Share profile" })).toBeVisible();
-    await expect(page.getByText("Private")).toHaveCount(0);
-    await expect(page.getByText("Edit")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
+      .toBeVisible();
+    await expect(page.getByText("@postmelee", { exact: true })).toBeVisible();
+    await expect(page.getByText("Public", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
 
-    const avatarLoaded = await page.locator(".avatar-shell img").evaluate(
-      (image) => image.complete && image.naturalWidth > 0
+    const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
+    await expect(card).toHaveAttribute(
+      "src",
+      "http://127.0.0.1:5173/u/postmelee/card.png"
     );
-    expect(avatarLoaded).toBe(true);
+    await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
+    await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(998);
 
-    const bodyHasHorizontalOverflow = await page.evaluate(
+    await expect(page.getByText("Activity insights", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Most used plugins", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Token activity", { exact: true })).toHaveCount(0);
+    expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
-    );
-    expect(bodyHasHorizontalOverflow).toBe(false);
-
-    await expect.poll(async () => page.locator(".token-grid-wrap").evaluate((wrap) => {
-      const grid = wrap.querySelector(".token-grid");
-
-      return grid.getBoundingClientRect().width;
-    })).toBeGreaterThan(850);
-
-    const desktopHeatmapMetrics = await page.locator(".token-grid-wrap").evaluate((wrap) => {
-      const grid = wrap.querySelector(".token-grid");
-      const firstCell = grid.querySelector("[data-token-cell]");
-      const gridRect = grid.getBoundingClientRect();
-
-      return {
-        cellWidth: firstCell.getBoundingClientRect().width,
-        gridWidth: gridRect.width,
-        maxScrollLeft: wrap.scrollWidth - wrap.clientWidth,
-        wrapWidth: wrap.clientWidth
-      };
-    });
-
-    expect(desktopHeatmapMetrics.cellWidth).toBeGreaterThan(13);
-    expect(desktopHeatmapMetrics.gridWidth).toBeGreaterThan(850);
-    expect(Math.abs(desktopHeatmapMetrics.gridWidth - desktopHeatmapMetrics.wrapWidth)).toBeLessThanOrEqual(1);
-    expect(desktopHeatmapMetrics.maxScrollLeft).toBeLessThanOrEqual(1);
-
-    await page.screenshot({ path: testInfo.outputPath("desktop.png") });
+    )).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("public-profile-desktop.png") });
   });
 
-  test("keeps mobile layout readable without document overflow", async ({ page }, testInfo) => {
+  test("public profile keeps the card readable on mobile without horizontal overflow", async ({ page }, testInfo) => {
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
 
-    await expect(page.getByRole("button", { name: "Share profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Token activity" })).toBeVisible();
-
-    const bodyHasHorizontalOverflow = await page.evaluate(
+    const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
+    await expect(card).toBeVisible();
+    const cardBox = await card.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(cardBox.x).toBeGreaterThanOrEqual(0);
+    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(390);
+    expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
-    );
-    expect(bodyHasHorizontalOverflow).toBe(false);
-
-    await page.screenshot({ path: testInfo.outputPath("mobile.png") });
+    )).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("public-profile-mobile.png") });
   });
 
-  test("keeps fixed heatmap cell geometry before the mobile breakpoint", async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: 900, height: 982 });
-    await page.goto(PROFILE_ROUTE);
-
-    const metrics = await page.locator(".token-grid-wrap").evaluate((wrap) => {
-      const grid = wrap.querySelector(".token-grid");
-      const cells = Array.from(grid.querySelectorAll("[data-token-cell]"));
-      const first = cells[0].getBoundingClientRect();
-      const secondRow = cells[1].getBoundingClientRect();
-      const secondColumn = cells[7].getBoundingClientRect();
-      const gridRect = grid.getBoundingClientRect();
-
-      return {
-        cellHeight: first.height,
-        cellWidth: first.width,
-        columnGap: secondColumn.left - first.right,
-        gridWidth: gridRect.width,
-        maxScrollLeft: wrap.scrollWidth - wrap.clientWidth,
-        rowGap: secondRow.top - first.bottom,
-        scrollLeft: wrap.scrollLeft,
-        wrapWidth: wrap.clientWidth
-      };
+  test("public profile moves from a neutral loading state to ready", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    let releaseResponse;
+    const responseGate = new Promise((resolve) => {
+      releaseResponse = resolve;
     });
-
-    expect(Math.round(metrics.cellWidth)).toBe(13);
-    expect(Math.round(metrics.cellHeight)).toBe(13);
-    expect(Math.round(metrics.columnGap)).toBe(3);
-    expect(Math.round(metrics.rowGap)).toBe(3);
-    expect(Math.round(metrics.gridWidth)).toBe(829);
-
-    if (metrics.maxScrollLeft > 0) {
-      expect(Math.abs(metrics.scrollLeft - metrics.maxScrollLeft)).toBeLessThanOrEqual(1);
-    }
-
-    await page.screenshot({ path: testInfo.outputPath("tablet-heatmap.png") });
-  });
-
-  test("keeps the latest heatmap columns visible after the viewport narrows", async ({ page }) => {
-    await page.setViewportSize({ width: 900, height: 982 });
-    await page.goto(PROFILE_ROUTE);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-
-    await expect.poll(async () => (
-      page.locator(".token-grid-wrap").evaluate((wrap) => {
-        const maxScrollLeft = wrap.scrollWidth - wrap.clientWidth;
-
-        return Math.round(maxScrollLeft - wrap.scrollLeft);
-      })
-    )).toBeLessThanOrEqual(1);
-  });
-
-  test("switches heatmap modes and exposes the daily tooltip text", async ({ page }) => {
-    await page.setViewportSize({ width: 1512, height: 982 });
-    await page.goto(PROFILE_ROUTE);
-
-    await expect(page.locator(".token-grid")).toHaveAttribute("data-heatmap-mode", "daily");
-
-    const emptyDay = page.locator('[data-token-cell][data-date="2025-07-20"]');
-    await expect(emptyDay).toHaveAttribute("data-tooltip", "0 tokens on Jul 20, 2025");
-    await emptyDay.hover();
-    await expect(page.locator(".token-tooltip")).toBeVisible();
-
-    await page.getByRole("button", { name: "Weekly" }).click();
-    await expect(page.locator(".token-grid")).toHaveAttribute("data-heatmap-mode", "weekly");
-
-    await page.getByRole("button", { name: "Cumulative" }).click();
-    await expect(page.locator(".token-grid")).toHaveAttribute("data-heatmap-mode", "cumulative");
-  });
-
-  test("keeps the mobile heatmap tooltip inside the viewport near the right edge", async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(PROFILE_ROUTE);
-
-    const scrollMetrics = await page.locator(".token-grid-wrap").evaluate((element) => {
-      return {
-        maxScrollLeft: element.scrollWidth - element.clientWidth,
-        scrollLeft: element.scrollLeft
-      };
+    await page.route("**/api/profiles/public/postmelee", async (route) => {
+      await responseGate;
+      await fulfillJson(route, { data: publicProfile(), ok: true });
     });
-    expect(scrollMetrics.scrollLeft).toBeGreaterThan(0);
-    expect(Math.abs(scrollMetrics.scrollLeft - scrollMetrics.maxScrollLeft)).toBeLessThanOrEqual(1);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(PROFILE_ROUTE);
 
-    await page.locator('[data-token-cell][data-date="2026-06-06"]').hover();
+    await expect(page.getByRole("heading", { name: "Loading public profile" }))
+      .toBeVisible();
+    await expect(page.getByText("postmelee", { exact: false })).toHaveCount(0);
 
-    const tooltip = page.locator(".token-tooltip");
-    await expect(tooltip).toBeVisible();
+    releaseResponse();
+    await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
+      .toBeVisible();
+  });
 
-    const tooltipBox = await tooltip.boundingBox();
-    expect(tooltipBox).not.toBeNull();
-    expect(tooltipBox.x).toBeGreaterThanOrEqual(0);
-    expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(390);
+  test("public profile uses one identity-free unavailable state", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.route("**/api/profiles/public/private-or-missing", (route) => (
+      fulfillJson(route, {
+        error: { code: "not_found", message: "Card not found" },
+        ok: false
+      }, 404)
+    ));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/u/private-or-missing");
 
-    await page.screenshot({ path: testInfo.outputPath("mobile-tooltip.png") });
+    await expect(page.getByRole("heading", { name: "Profile unavailable" }))
+      .toBeVisible();
+    await expect(page.getByText("This public profile is not available."))
+      .toBeVisible();
+    await expect(page.getByText("private-or-missing", { exact: false })).toHaveCount(0);
+    await expect(page.locator(".public-profile-card")).toHaveCount(0);
   });
 });
 
@@ -405,6 +338,40 @@ async function mockCardImages(page) {
   });
   await page.route("**/api/profile/card.png*", fulfillPng);
   await page.route("**/u/postmelee/card.png*", fulfillPng);
+}
+
+async function mockPublicProfile(page) {
+  await page.route("**/api/profiles/public/postmelee", (route) => fulfillJson(route, {
+    data: publicProfile(),
+    ok: true
+  }));
+}
+
+function publicProfile() {
+  return {
+    owner: {
+      avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+      displayName: "Post Melee",
+      githubLogin: "postmelee",
+      handle: "postmelee"
+    },
+    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    usage: {
+      capturedAt: "2026-07-14T00:00:00.000Z",
+      uploadedAt: "2026-07-14T00:01:00.000Z",
+      usage: {
+        dailyUsageBuckets: [],
+        summary: {
+          currentStreakDays: 10,
+          lifetimeTokens: 15_090_000_000,
+          longestStreakDays: 49,
+          longestTaskDurationMs: 6_780_000,
+          peakDailyTokens: 700_000_000
+        }
+      }
+    },
+    visibility: "public"
+  };
 }
 
 function ownerProfile(visibility) {

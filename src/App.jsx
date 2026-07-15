@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createProfileApiClient } from "./profile-api/client.js";
-import { sampleProfileSnapshot } from "./profile-snapshot/fixtures/sample-snapshot.js";
-import { selectProfileViewModel } from "./profile-snapshot/index.js";
 import { DeviceApprovalPage } from "./profile-ui/DeviceApprovalPage.jsx";
 import { CardProfilePage } from "./profile-ui/CardProfilePage.jsx";
 import { HomePage } from "./profile-ui/HomePage.jsx";
-import { ProfilePage } from "./profile-ui/ProfilePage.jsx";
+import { PublicProfilePage } from "./profile-ui/PublicProfilePage.jsx";
 import { SettingsPage } from "./profile-ui/SettingsPage.jsx";
 import {
   APP_ROUTE_TYPES,
   resolveAppRoute
 } from "./profile-ui/appRoutes.js";
 import {
-  loadProfileRouteSnapshot,
-  resolveProfileRoute
-} from "./profile-ui/profileRoutes.js";
+  loadPublicProfileRoute,
+  resolvePublicProfileRoute
+} from "./profile-ui/publicProfileRoutes.js";
 
 export function App() {
   const profileApiClient = useMemo(() => createProfileApiClient(), []);
@@ -24,8 +22,8 @@ export function App() {
     account: null,
     status: "loading"
   });
-  const [route, setRoute] = useState(() => (
-    resolveProfileRoute(window.location, sampleProfileSnapshot)
+  const [publicRoute, setPublicRoute] = useState(() => (
+    resolvePublicProfileRoute(window.location)
   ));
   const handleAuthStateChange = useCallback((nextAuthState) => {
     setAuthState(nextAuthState);
@@ -67,22 +65,21 @@ export function App() {
       };
     }
 
-    const initialRoute = resolveProfileRoute(currentLocation, sampleProfileSnapshot);
+    const initialRoute = resolvePublicProfileRoute(currentLocation);
 
-    setRoute(initialRoute);
+    setPublicRoute(initialRoute);
 
-    if (initialRoute.source !== "api") {
+    if (initialRoute.status !== "loading") {
       return () => {
         isCurrent = false;
       };
     }
 
-    loadProfileRouteSnapshot(currentLocation, {
-      client: profileApiClient,
-      sampleSnapshot: sampleProfileSnapshot
+    loadPublicProfileRoute(currentLocation, {
+      client: profileApiClient
     }).then((nextRoute) => {
       if (isCurrent) {
-        setRoute(nextRoute);
+        setPublicRoute(nextRoute);
       }
     });
 
@@ -90,10 +87,6 @@ export function App() {
       isCurrent = false;
     };
   }, [appRoute.type, profileApiClient]);
-
-  const viewModel = route.status === "ready"
-    ? selectProfileViewModel(route.snapshot)
-    : null;
 
   if (appRoute.type === APP_ROUTE_TYPES.DEVICE) {
     return (
@@ -137,13 +130,12 @@ export function App() {
   }
 
   return (
-    <ProfilePage
+    <PublicProfilePage
       authState={authState}
       client={profileApiClient}
-      handle={route.handle}
       onAuthStateChange={handleAuthStateChange}
-      status={route.status}
-      viewModel={viewModel}
+      profile={publicRoute.profile}
+      status={publicRoute.status}
     />
   );
 }
