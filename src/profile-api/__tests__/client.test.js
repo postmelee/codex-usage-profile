@@ -84,6 +84,64 @@ test("loads and updates the session owner's card profile", async () => {
   assert.equal(updated.visibility, "public");
 });
 
+test("loads a public Account Usage profile from the allowlisted endpoint", async () => {
+  const requests = [];
+  const publicProfile = {
+    owner: {
+      avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+      displayName: "Post Melee",
+      githubLogin: "postmelee",
+      handle: "postmelee"
+    },
+    publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+    usage: {
+      capturedAt: "2026-07-14T00:00:00.000Z",
+      uploadedAt: "2026-07-14T00:01:00.000Z",
+      usage: {
+        dailyUsageBuckets: [],
+        summary: {
+          currentStreakDays: 10,
+          lifetimeTokens: 15_090_000_000,
+          longestStreakDays: 49,
+          longestTaskDurationMs: 6_780_000,
+          peakDailyTokens: 700_000_000
+        }
+      }
+    },
+    visibility: "public"
+  };
+  const client = createProfileApiClient({
+    baseUrl: "https://profiles.example.test/app",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({ ok: true, data: publicProfile });
+    }
+  });
+
+  const profile = await client.getPublicProfile("postmelee");
+
+  assert.equal(
+    requests[0].url,
+    "https://profiles.example.test/api/profiles/public/postmelee"
+  );
+  assert.equal(requests[0].options.headers.accept, "application/json");
+  assert.deepEqual(profile, publicProfile);
+});
+
+test("returns null when a public Account Usage profile is unavailable", async () => {
+  const client = createProfileApiClient({
+    fetchImpl: async () => jsonResponse({
+      ok: false,
+      error: {
+        code: "not_found",
+        message: "Card not found"
+      }
+    }, { status: 404 })
+  });
+
+  assert.equal(await client.getPublicProfile("private-or-missing"), null);
+});
+
 test("loads a public snapshot from the API envelope", async () => {
   const requests = [];
   const client = createProfileApiClient({

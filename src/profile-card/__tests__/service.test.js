@@ -35,12 +35,49 @@ test("reads owner profile and keeps owner and latest usage visibility aligned", 
 
 test("hides missing, private, and visibility-mismatched public cards", async () => {
   const fixture = createFixture();
-  await assertCardNotFound(() => fixture.service.renderPublicCard({ handle: OWNER.handle }));
-  await assertCardNotFound(() => fixture.service.renderPublicCard({ handle: "missing" }));
-  await assertCardNotFound(() => fixture.service.renderPublicCard({ handle: "../postmelee" }));
+  for (const method of ["getPublicProfile", "renderPublicCard"]) {
+    await assertCardNotFound(() => fixture.service[method]({ handle: OWNER.handle }));
+    await assertCardNotFound(() => fixture.service[method]({ handle: "missing" }));
+    await assertCardNotFound(() => fixture.service[method]({ handle: "../postmelee" }));
+  }
 
   fixture.store.saveOwner({ ...OWNER, visibility: PROFILE_VISIBILITY.PUBLIC });
-  await assertCardNotFound(() => fixture.service.renderPublicCard({ handle: OWNER.handle }));
+  for (const method of ["getPublicProfile", "renderPublicCard"]) {
+    await assertCardNotFound(() => fixture.service[method]({ handle: OWNER.handle }));
+  }
+});
+
+test("returns a public profile from the owner-linked Account Usage record", () => {
+  const fixture = createFixture();
+  fixture.service.updateVisibility({
+    ownerId: OWNER.id,
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+
+  const profile = fixture.service.getPublicProfile({ handle: " POSTMELEE " });
+
+  assert.equal(profile.owner.id, OWNER.id);
+  assert.equal(profile.usageRecord.ownerId, OWNER.id);
+  assert.equal(profile.usageRecord.handle, OWNER.handle);
+  assert.deepEqual(profile.usageRecord.usage, sampleAccountUsageReadResult);
+  assert.equal(profile.visibility, PROFILE_VISIBILITY.PUBLIC);
+});
+
+test("fails closed when public owner and Account Usage handles do not match", async () => {
+  const fixture = createFixture();
+  fixture.store.saveOwner({ ...OWNER, visibility: PROFILE_VISIBILITY.PUBLIC });
+  fixture.store.saveLatestUsage({
+    ...fixture.store.getLatestUsageByOwnerId(OWNER.id),
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+
+  await assertCardNotFound(() => fixture.service.getPublicProfile({
+    handle: OWNER.handle
+  }));
+  await assertCardNotFound(() => fixture.service.renderPublicCard({
+    handle: OWNER.handle
+  }));
 });
 
 test("memoizes avatar and PNG by strong ETag and supports conditional reads", async () => {
@@ -202,7 +239,7 @@ function createFixture(options = {}) {
 }
 
 async function assertCardNotFound(callback) {
-  await assert.rejects(callback, (error) => {
+  await assert.rejects(Promise.resolve().then(callback), (error) => {
     assert.equal(error.code, PROFILE_BACKEND_ERROR_CODES.NOT_FOUND);
     assert.equal(error.message, "Card not found");
     return true;

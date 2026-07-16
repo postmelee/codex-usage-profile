@@ -19,6 +19,7 @@ import {
   isForbiddenSecretValue
 } from "../index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
+import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 
 test("does not flag normal profile snapshot token metrics", () => {
   const findings = detectForbiddenSecrets(sampleProfileSnapshot);
@@ -204,6 +205,59 @@ test("settings token responses expose raw tokens only on create", async () => {
   assert.equal(JSON.stringify(listed.body.data).includes(created.body.data.token), false);
   assert.equal(JSON.stringify(revoked.body.data).includes(created.body.data.token), false);
   assert.equal(exportedState.includes(created.body.data.token), false);
+});
+
+test("public profile responses exclude owner and usage storage metadata", async () => {
+  const fixture = createDeviceFixture();
+  fixture.saveOwner({
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    displayName: "Post Melee",
+    avatarUrl: "https://avatars.githubusercontent.com/u/12345",
+    internalOwnerNote: "hidden-owner-note"
+  });
+  fixture.store.saveLatestUsage({
+    ownerId: "owner_1",
+    handle: "postmelee",
+    visibility: PROFILE_VISIBILITY.PUBLIC,
+    capturedAt: "2026-06-11T00:00:00.000Z",
+    uploadedAt: "2026-06-11T00:01:00.000Z",
+    usage: sampleAccountUsageReadResult,
+    contentDigest: "hidden-content-digest",
+    revision: 7,
+    sourcePath: "/Users/example/.codex"
+  });
+
+  const response = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/profiles/public/postmelee"
+  );
+  const serialized = JSON.stringify(response.body.data);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(Object.keys(response.body.data.owner).sort(), [
+    "avatarUrl",
+    "displayName",
+    "githubLogin",
+    "handle"
+  ]);
+  assert.deepEqual(Object.keys(response.body.data.usage).sort(), [
+    "capturedAt",
+    "uploadedAt",
+    "usage"
+  ]);
+  for (const forbidden of [
+    "owner_1",
+    "hidden-owner-note",
+    "hidden-content-digest",
+    "/Users/example/.codex",
+    "providerUserId",
+    "contentDigest",
+    "revision",
+    "sourcePath"
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
 });
 
 test("device login rejects invalid, duplicate, expired, and unknown codes", async () => {

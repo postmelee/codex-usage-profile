@@ -59,6 +59,28 @@ export function createProfileApiClient(options = {}) {
       return envelope.data;
     },
 
+    async getPublicProfile(handle) {
+      const normalizedHandle = requireHandle(handle);
+      const response = await fetchImpl(
+        buildApiUrl(
+          baseUrl,
+          `/api/profiles/public/${encodeURIComponent(normalizedHandle)}`
+        ),
+        {
+          headers: {
+            accept: "application/json"
+          }
+        }
+      );
+
+      if (response.status === 404) {
+        return null;
+      }
+
+      const envelope = await readApiEnvelope(response);
+      return envelope.data;
+    },
+
     async updateProfileVisibility(visibility) {
       const response = await fetchImpl(buildApiUrl(baseUrl, "/api/profile"), {
         body: JSON.stringify({

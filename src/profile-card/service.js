@@ -76,6 +76,10 @@ export function createProfileCardService(options = {}) {
       return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
     },
 
+    getPublicProfile(profileOptions = {}) {
+      return requirePublicProfile(store, profileOptions.handle);
+    },
+
     async renderOwnerCard(renderOptions = {}) {
       const owner = requireOwnerById(store, renderOptions.ownerId);
       const usageRecord = requireUsageByOwnerId(store, owner.id);
@@ -90,18 +94,10 @@ export function createProfileCardService(options = {}) {
     },
 
     async renderPublicCard(renderOptions = {}) {
-      const handle = normalizePublicHandle(renderOptions.handle);
-      const owner = handle ? store.getOwnerByHandle(handle) : null;
-      const usageRecord = owner ? store.getLatestUsageByOwnerId(owner.id) : null;
-
-      if (
-        !owner || !usageRecord ||
-        owner.visibility !== PROFILE_VISIBILITY.PUBLIC ||
-        usageRecord.visibility !== PROFILE_VISIBILITY.PUBLIC ||
-        usageRecord.handle !== owner.handle
-      ) {
-        throw cardNotFoundError();
-      }
+      const { owner, usageRecord } = requirePublicProfile(
+        store,
+        renderOptions.handle
+      );
 
       return renderCard({
         owner,
@@ -218,6 +214,23 @@ function requireUsageByOwnerId(store, ownerId) {
   const usageRecord = store.getLatestUsageByOwnerId(ownerId);
   if (!usageRecord) throw cardNotFoundError();
   return usageRecord;
+}
+
+function requirePublicProfile(store, value) {
+  const handle = normalizePublicHandle(value);
+  const owner = handle ? store.getOwnerByHandle(handle) : null;
+  const usageRecord = owner ? store.getLatestUsageByOwnerId(owner.id) : null;
+
+  if (
+    !owner || !usageRecord ||
+    owner.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+    usageRecord.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+    usageRecord.handle !== owner.handle
+  ) {
+    throw cardNotFoundError();
+  }
+
+  return { owner, usageRecord, visibility: PROFILE_VISIBILITY.PUBLIC };
 }
 
 function normalizePublicHandle(value) {

@@ -405,6 +405,7 @@ button {
 
 .home-card-preview,
 .card-profile-preview,
+.public-profile-card,
 .share-card-preview {
   aspect-ratio: 499 / 306;
   display: block;
@@ -578,6 +579,66 @@ button {
   font-size: 13px;
   margin: 12px 0 0;
   text-align: right;
+}
+
+.public-profile-view {
+  align-items: flex-start;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100% - 50px);
+  min-width: 0;
+  padding: 70px 24px 96px;
+}
+
+.public-profile-stage {
+  min-width: 0;
+  width: min(100%, 820px);
+}
+
+.public-profile-heading {
+  align-items: flex-end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.public-profile-heading > div {
+  min-width: 0;
+}
+
+.public-profile-heading h2,
+.public-profile-state h2 {
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.public-profile-heading p,
+.public-profile-state p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.public-profile-card {
+  margin-top: 28px;
+}
+
+.public-profile-state {
+  align-self: center;
+  margin-top: 90px;
+  width: min(100%, 520px);
+}
+
+.public-profile-state.is-loading .profile-state-indicator {
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
 .card-profile-message {
@@ -1676,14 +1737,21 @@ button {
   }
 
   .home-view,
-  .card-profile-view {
+  .card-profile-view,
+  .public-profile-view {
     padding: 48px 0 70px;
   }
 
   .home-heading h2,
   .card-profile-heading h2,
-  .card-profile-message h2 {
+  .card-profile-message h2,
+  .public-profile-heading h2,
+  .public-profile-state h2 {
     font-size: 22px;
+  }
+
+  .public-profile-heading {
+    align-items: flex-start;
   }
 
   .home-card-preview {
@@ -1709,6 +1777,10 @@ button {
   }
 
   .card-profile-message {
+    margin-top: 60px;
+  }
+
+  .public-profile-state {
     margin-top: 60px;
   }
 

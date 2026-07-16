@@ -1,6 +1,6 @@
 # UsageSnapshot v2 Contract
 
-> **Legacy compatibility contract:** this schema remains internal to the existing full-profile preview and `/api/snapshots/submit` compatibility path. `codex-usage-analyzer@0.2.x` and the new `codex-usage-profile submit` command use Account Usage Contract v1 instead.
+> **Legacy compatibility contract:** this schema remains internal to `/api/snapshots/submit`, `/api/snapshots/public/:handle`, and compatibility-only modules. It is not emitted by the current analyzer package, submitted by the current CLI, or consumed by the production `/u/:handle`, owner card, or README PNG routes.
 
 `UsageSnapshot v2` was the shared JSON contract produced by legacy local usage adapters and consumed by Codex Usage Profile-compatible web services.
 
@@ -10,13 +10,18 @@ The contract intentionally separates local usage analysis from web account ident
 
 | Component | Responsibility |
 |---|---|
-| Legacy profile adapters | Produce `UsageSnapshot v2` for the compatibility preview and snapshot API. |
-| `codex-usage-profile` | Authenticates users, receives snapshots, stores latest public/private state, merges snapshots with GitHub profile data, and renders profile/card UI. |
+| Legacy profile adapters | Produce `UsageSnapshot v2` for compatibility-only consumers and the snapshot API. |
+| Compatibility snapshot API | Validates and stores legacy snapshots for callers that still use `/api/snapshots/*`. |
+| Current profile service | Uses Account Usage Contract v1 for the owner card, public `/u/:handle` route, public JSON, and README PNG. |
 | Product-specific wrappers | May submit a legacy snapshot to the compatibility endpoint. New wrappers use Account Usage Contract v1 instead. GitHub-facing fields remain outside either usage payload. |
 
 `UsageSnapshot v2` is the value accepted as `payload.snapshot` by the legacy endpoint. Submit wrapper metadata such as `handle`, `visibility`, bearer token, device id, and service session is not part of this contract.
 
-The active Account Usage analyzer and CLI boundary is documented in [`codex-usage-analyzer.md`](codex-usage-analyzer.md).
+The active Account Usage analyzer and CLI boundary is documented in [`codex-usage-analyzer.md`](codex-usage-analyzer.md). The active public profile and PNG boundary is documented in [`readme-card.md`](readme-card.md).
+
+## Current Product Boundary
+
+The production profile does not derive favorite model, token breakdown, skill ranking, plugin ranking, Codex avatar, or pet fields from this schema. Those fields remain documented below only so legacy payloads can be validated without changing their historical shape. Their presence in this contract does not mean the current analyzer or public profile supports them.
 
 ## Top-Level Shape
 
@@ -197,7 +202,7 @@ interface UsageRankingItemV2 {
 }
 ```
 
-`topSkills` is the canonical source for skill-based product UI, including card attack mappings. `topPlugins` is the canonical source for plugin ranking UI.
+Within a legacy v2 consumer, `topSkills` is the source for skill-based UI and `topPlugins` is the source for plugin ranking UI. The current Account Usage profile does not consume either field.
 
 If a source only provides a mixed invocation list, the analyzer should split items by type. If the type is unknown, omit the item rather than guessing.
 
@@ -323,4 +328,4 @@ The existing v1 validator should remain separate. Consumers should introduce a d
 
 ## Product Wrapper Guidance
 
-New product CLIs should import `codex-usage-analyzer@0.2.x`, receive Account Usage Contract v1, and submit that identity-free document without a wrapper. They must not convert new analyzer output into this legacy schema or add GitHub-facing fields, tokens, device data, or rendered UI-only values. Device metadata belongs in downstream request headers.
+New product CLIs should import the current `codex-usage-analyzer` package, receive Account Usage Contract v1, and submit that identity-free document without a wrapper. They must not convert new analyzer output into this legacy schema or add GitHub-facing fields, tokens, device data, or rendered UI-only values. Device metadata belongs in downstream request headers.
