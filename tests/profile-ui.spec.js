@@ -102,10 +102,11 @@ test.describe("Home and share card flow", () => {
       data: { devices: [] },
       ok: true
     }));
+    await mockPublicProfile(page);
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 620 });
 
-    for (const path of ["/", "/profile", "/settings"]) {
+    for (const path of ["/", "/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
       const metrics = await getFrameScrollMetrics(page);
       const titleMetrics = await page.locator(".profile-topbar h1").evaluate((title) => ({
@@ -134,7 +135,7 @@ test.describe("Home and share card flow", () => {
       return shell.scrollTop;
     });
     expect(internalScrollTop).toBeGreaterThan(0);
-    await page.screenshot({ path: testInfo.outputPath("settings-short-viewport.png") });
+    await page.screenshot({ path: testInfo.outputPath("public-profile-short-viewport.png") });
   });
 
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
@@ -245,6 +246,16 @@ test.describe("Public profile", () => {
     await expect(page.getByText("Activity insights", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Most used plugins", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Token activity", { exact: true })).toHaveCount(0);
+    const publicMarkup = await page.locator(".public-profile-view").innerHTML();
+    for (const internalValue of [
+      "owner_1",
+      "providerUserId",
+      "contentDigest",
+      "tokenDigest",
+      "/Users/"
+    ]) {
+      expect(publicMarkup).not.toContain(internalValue);
+    }
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
