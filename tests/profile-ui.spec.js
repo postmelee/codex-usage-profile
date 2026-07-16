@@ -26,7 +26,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("img", { name: "Sample Codex usage card" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
       "href",
-      "/api/auth/github/login?redirect_to=%2Fprofile"
+      "/api/auth/github/login?redirect_to=%2F"
     );
 
     const topbarMetrics = await page.locator([

@@ -2,16 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
 import {
+  buildAccountLoginHref,
   getAccountAvatar,
   getAccountDisplayName,
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
-import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
+import { resolveShareLocale } from "./cardShare.js";
 
 const SAMPLE_CARD_URL = "/assets/codex-card-sample.png";
 
-export function HomePage({ authState, client, onAuthStateChange }) {
+export function HomePage({
+  authState,
+  client,
+  location,
+  onAuthStateChange
+}) {
   const status = authState?.status ?? "loading";
   const owner = getAccountOwner(authState);
   const locale = useMemo(
@@ -61,7 +67,11 @@ export function HomePage({ authState, client, onAuthStateChange }) {
             {status === "authenticated" && owner ? (
               <AuthenticatedHome owner={owner} />
             ) : (
-              <AnonymousHome client={client} status={status} />
+              <AnonymousHome
+                client={client}
+                location={location}
+                status={status}
+              />
             )}
           </div>
         </div>
@@ -93,7 +103,7 @@ function AuthenticatedHome({ owner }) {
   );
 }
 
-function AnonymousHome({ client, status }) {
+function AnonymousHome({ client, location, status }) {
   if (status === "loading") {
     return <p className="home-status" role="status">Checking account</p>;
   }
@@ -102,7 +112,10 @@ function AnonymousHome({ client, status }) {
   }
 
   return (
-    <a className="primary-command" href={buildProfileLoginHref(client)}>
+    <a
+      className="primary-command"
+      href={buildAccountLoginHref(client, location)}
+    >
       Sign in with GitHub
     </a>
   );
