@@ -1873,6 +1873,14 @@ button {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .account-status-button:not(.is-unavailable) .account-status-dot,
+  .profile-stage-loading .profile-state-indicator,
+  .public-profile-state.is-loading .profile-state-indicator {
+    animation: none;
+  }
+}
+
 @media (max-width: 760px) {
   .app-frame {
     border-radius: 0;

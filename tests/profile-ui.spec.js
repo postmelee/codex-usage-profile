@@ -110,6 +110,120 @@ test.describe("Home and share card flow", () => {
     await expect.poll(() => page.evaluate(() => globalThis.__copiedHomeCommand)).toBe(command);
   });
 
+  test("Home keeps loading and unavailable account states neutral", async ({ page }) => {
+    let releaseAccount;
+    const accountGate = new Promise((resolve) => {
+      releaseAccount = resolve;
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await accountGate;
+      await fulfillJson(route, {
+        error: { code: "unauthorized", message: "Session cookie is required" },
+        ok: false
+      }, 401);
+    });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+
+    await expect(page.getByText("Checking account", { exact: true })).toBeVisible();
+    await expect(page.getByText("Checking your GitHub session", { exact: true })).toBeVisible();
+    await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
+    await expect(page.locator(".account-status-dot")).toHaveCSS("animation-name", "none");
+
+    releaseAccount();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+
+    await page.unrouteAll({ behavior: "wait" });
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      error: { code: "service_unavailable", message: "Account lookup failed" },
+      ok: false
+    }, 503));
+    await page.reload();
+
+    await expect(page.locator(".home-account-state").getByText(
+      "Account unavailable",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByText("Sign in is temporarily unavailable.", { exact: true }))
+      .toBeVisible();
+    await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
+  });
+
+  test("Home preserves a manual command fallback when clipboard copy fails", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText() {
+            throw new Error("Clipboard denied");
+          }
+        }
+      });
+    });
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const command = page.getByText("npx codex-usage-profile@latest submit", {
+      exact: true
+    });
+    await page.getByRole("button", { name: "Copy submit command" }).click();
+
+    await expect(page.getByText(
+      "Copy failed. Select the command and copy it manually.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(command).toBeVisible();
+    await expect(command).toHaveCSS("user-select", "text");
+  });
+
+  test("Home stays readable and keyboard accessible on mobile", async ({ page }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const card = page.getByRole("img", { name: "Your Codex usage card" });
+    const cardBox = await card.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(cardBox.x).toBeGreaterThanOrEqual(0);
+    expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(390);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+
+    await page.getByRole("heading", { name: "Quickstart" }).scrollIntoViewIfNeeded();
+    const commandBox = await page.locator(".home-command-row").boundingBox();
+    expect(commandBox).not.toBeNull();
+    expect(commandBox.x).toBeGreaterThanOrEqual(0);
+    expect(commandBox.x + commandBox.width).toBeLessThanOrEqual(390);
+    expect(await getClippedHomeElements(page)).toEqual([]);
+
+    const frameMetrics = await getFrameScrollMetrics(page);
+    expect(frameMetrics.overflowY).toBe("auto");
+    expect(frameMetrics.scrollHeight).toBeGreaterThan(frameMetrics.clientHeight);
+
+    await page.locator(".profile-shell").evaluate((shell) => {
+      shell.scrollTop = 0;
+    });
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Profile", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    const accountButton = page.getByRole("button", { name: "Account menu for postmelee" });
+    await expect(accountButton).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "View profile" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Copy submit command" })).toBeFocused();
+
+    await accountButton.click();
+    await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "/settings"
+    );
+    await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
+  });
+
   test("keeps Home Profile and Settings inside the frame with internal scrolling", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
@@ -360,6 +474,29 @@ async function mockAuthenticatedAccount(page) {
       session: { id: "session_1", ownerId: AUTH_OWNER.id }
     },
     ok: true
+  }));
+}
+
+async function getClippedHomeElements(page) {
+  return page.locator([
+    ".profile-topbar h1",
+    ".profile-navigation a",
+    ".home-heading h2",
+    ".home-heading p",
+    ".home-account-identity strong",
+    ".home-account-identity small",
+    ".home-command-row code",
+    ".home-quickstart-steps h3",
+    ".home-quickstart-steps p",
+    ".primary-command",
+    ".secondary-command"
+  ].join(", ")).evaluateAll((elements) => elements.flatMap((element) => {
+    const horizontalClipping = element.scrollWidth > element.clientWidth + 1;
+    const verticalClipping = element.scrollHeight > element.clientHeight + 1;
+
+    return horizontalClipping || verticalClipping
+      ? [`${element.tagName.toLowerCase()}.${element.className}`]
+      : [];
   }));
 }
 
