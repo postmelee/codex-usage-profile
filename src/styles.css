@@ -361,7 +361,6 @@ button {
   margin: 8px 8px 2px;
 }
 
-.home-view,
 .card-profile-view {
   align-items: flex-start;
   display: flex;
@@ -369,6 +368,15 @@ button {
   min-height: calc(100% - 50px);
   min-width: 0;
   padding: 70px 24px 96px;
+}
+
+.home-view {
+  display: grid;
+  gap: 64px;
+  justify-items: center;
+  min-height: calc(100% - 50px);
+  min-width: 0;
+  padding: 36px 24px 96px;
 }
 
 .home-stage,
@@ -388,6 +396,8 @@ button {
 }
 
 .home-heading {
+  display: grid;
+  gap: 10px;
   text-align: center;
 }
 
@@ -401,6 +411,15 @@ button {
   letter-spacing: 0;
   line-height: 1.2;
   margin: 0;
+}
+
+.home-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 0 auto;
+  max-width: 520px;
+  overflow-wrap: anywhere;
 }
 
 .home-card-preview,
@@ -418,8 +437,8 @@ button {
 }
 
 .home-card-preview {
-  margin-top: 32px;
-  max-width: 760px;
+  margin-top: 26px;
+  max-width: 700px;
 }
 
 .home-account-state {
@@ -427,7 +446,7 @@ button {
   display: flex;
   gap: 18px;
   justify-content: center;
-  margin-top: 30px;
+  margin-top: 24px;
   min-height: 44px;
   min-width: 0;
 }
@@ -492,8 +511,154 @@ button {
 }
 
 .home-status.is-error,
+.home-quickstart-status.is-error,
 .card-profile-error {
   color: #ff8b8b;
+}
+
+.home-quickstart {
+  border-top: 1px solid var(--line-strong);
+  min-width: 0;
+  padding-top: 34px;
+  width: min(100%, 820px);
+}
+
+.home-quickstart-heading {
+  display: grid;
+  gap: 8px;
+}
+
+.home-quickstart-heading h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 26px;
+  margin: 0;
+}
+
+.home-quickstart-heading p,
+.home-quickstart-access p,
+.home-quickstart-status {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.home-command-tool {
+  margin-top: 24px;
+}
+
+.home-command-label {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  margin-bottom: 7px;
+}
+
+.home-command-row {
+  align-items: center;
+  background: #111;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  display: flex;
+  gap: 8px;
+  min-height: 48px;
+  min-width: 0;
+  padding: 5px 5px 5px 13px;
+}
+
+.home-command-row code {
+  color: #e3e3e3;
+  flex: 1 1 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.home-command-copy {
+  color: #c9c9ca;
+}
+
+.home-copy-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 7px 0 0;
+  min-height: 18px;
+}
+
+.home-copy-status.is-error {
+  color: #ff9a9a;
+}
+
+.home-copy-status.is-copied {
+  color: #91c4a4;
+}
+
+.home-quickstart-access {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding: 16px 0;
+}
+
+.home-quickstart-status {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  min-height: 54px;
+  padding: 16px 0;
+}
+
+.home-quickstart-steps {
+  display: grid;
+  gap: 0 32px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+}
+
+.home-quickstart-steps li {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 17px 0 19px;
+}
+
+.home-step-number {
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.home-quickstart-steps h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.home-quickstart-steps p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .primary-command,
@@ -1736,10 +1901,14 @@ button {
     font-size: 13px;
   }
 
-  .home-view,
   .card-profile-view,
   .public-profile-view {
     padding: 48px 0 70px;
+  }
+
+  .home-view {
+    gap: 48px;
+    padding: 40px 0 70px;
   }
 
   .home-heading h2,
@@ -1770,6 +1939,24 @@ button {
 
   .home-account-state > .primary-command {
     width: 100%;
+  }
+
+  .home-quickstart {
+    padding-top: 28px;
+  }
+
+  .home-quickstart-access {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .home-quickstart-access .secondary-command {
+    width: 100%;
+  }
+
+  .home-quickstart-steps {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .card-profile-controls > button {

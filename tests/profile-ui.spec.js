@@ -23,11 +23,17 @@ test.describe("Home and share card flow", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Codex usage profile" })).toBeVisible();
+    await expect(page.getByText(
+      "Keep one shareable card up to date with the Codex usage you submit."
+    )).toBeVisible();
     await expect(page.getByRole("img", { name: "Sample Codex usage card" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute(
       "href",
       "/api/auth/github/login?redirect_to=%2F"
     );
+    await expect(page.getByRole("heading", { name: "Quickstart" })).toBeVisible();
+    await expect(page.getByRole("listitem")).toHaveCount(5);
+    await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
 
     const topbarMetrics = await page.locator([
       ".profile-topbar h1",
@@ -66,6 +72,16 @@ test.describe("Home and share card flow", () => {
   });
 
   test("Home shows the signed-in GitHub identity and owner profile entry", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value) {
+            globalThis.__copiedHomeCommand = value;
+          }
+        }
+      });
+    });
     await mockAuthenticatedAccount(page);
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -86,6 +102,12 @@ test.describe("Home and share card flow", () => {
       "href",
       "/profile"
     );
+
+    const command = "npx codex-usage-profile@latest submit";
+    await expect(page.getByText(command, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Copy submit command" }).click();
+    await expect(page.getByText("Command copied.", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => globalThis.__copiedHomeCommand)).toBe(command);
   });
 
   test("keeps Home Profile and Settings inside the frame with internal scrolling", async ({ page }, testInfo) => {

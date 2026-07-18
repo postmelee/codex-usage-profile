@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
+import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import {
   buildAccountLoginHref,
   getAccountAvatar,
@@ -31,6 +32,8 @@ export function HomePage({
   const cardPreviewUrl = ownerPreviewUrl && !ownerPreviewFailed
     ? ownerPreviewUrl
     : SAMPLE_CARD_URL;
+  const isAuthenticated = status === "authenticated" && Boolean(owner);
+  const loginHref = buildAccountLoginHref(client, location);
 
   useEffect(() => {
     setOwnerPreviewFailed(false);
@@ -44,10 +47,13 @@ export function HomePage({
       showShare={false}
       title="Codex usage"
     >
-      <section className="home-view" aria-labelledby="home-title">
-        <div className="home-stage">
+      <div className="home-view">
+        <section className="home-stage" aria-labelledby="home-title">
           <header className="home-heading">
             <h2 id="home-title">Codex usage profile</h2>
+            <p>
+              Keep one shareable card up to date with the Codex usage you submit.
+            </p>
           </header>
 
           <img
@@ -64,18 +70,23 @@ export function HomePage({
           />
 
           <div className="home-account-state">
-            {status === "authenticated" && owner ? (
+            {isAuthenticated ? (
               <AuthenticatedHome owner={owner} />
             ) : (
               <AnonymousHome
-                client={client}
-                location={location}
+                loginHref={loginHref}
                 status={status}
               />
             )}
           </div>
-        </div>
-      </section>
+        </section>
+
+        <HomeQuickstart
+          authenticated={isAuthenticated}
+          loginHref={loginHref}
+          status={status}
+        />
+      </div>
     </ProfileShell>
   );
 }
@@ -103,7 +114,7 @@ function AuthenticatedHome({ owner }) {
   );
 }
 
-function AnonymousHome({ client, location, status }) {
+function AnonymousHome({ loginHref, status }) {
   if (status === "loading") {
     return <p className="home-status" role="status">Checking account</p>;
   }
@@ -114,7 +125,7 @@ function AnonymousHome({ client, location, status }) {
   return (
     <a
       className="primary-command"
-      href={buildAccountLoginHref(client, location)}
+      href={loginHref}
     >
       Sign in with GitHub
     </a>
