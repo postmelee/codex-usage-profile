@@ -114,6 +114,7 @@ export function App() {
       <HomePage
         authState={authState}
         client={profileApiClient}
+        location={window.location}
         onAuthStateChange={handleAuthStateChange}
       />
     );

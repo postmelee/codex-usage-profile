@@ -99,6 +99,10 @@ test("builds account login redirect URLs", () => {
     buildAccountLoginHref(null, { pathname: "/settings", search: "" }),
     "/api/auth/github/login?redirect_to=%2Fsettings"
   );
+  assert.equal(
+    buildAccountLoginHref(null, { pathname: "/", search: "" }),
+    "/api/auth/github/login?redirect_to=%2F"
+  );
 });
 
 test("maps account auth error query parameters to user-facing copy", () => {

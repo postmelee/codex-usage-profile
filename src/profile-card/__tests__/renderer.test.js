@@ -7,6 +7,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   CARD_COLORS,
   CARD_OUTPUT_HEIGHT,
+  CARD_OUTPUT_SCALE,
   CARD_OUTPUT_WIDTH,
   renderProfileCardPng
 } from "../renderer.js";
@@ -19,7 +20,7 @@ import {
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-test("renders the Codex share card as a 998x612 PNG", async () => {
+test("renders the Codex share card as a 1497x918 PNG", async () => {
   const viewModel = buildCardViewModel({
     locale: "ko",
     owner: sampleCardOwner,
@@ -40,16 +41,16 @@ test("renders the Codex share card as a 998x612 PNG", async () => {
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0);
 
-  assert.deepEqual(readPixel(context, 499, 306), rgba(CARD_COLORS.background));
-  assert.equal(readPixel(context, 0, 0)[3], 0);
-  assert.deepEqual(readPixel(context, 78, 206), rgba("#2f2f2f"));
-  assert.deepEqual(readPixel(context, 617, 375), rgba("#339cff"));
-  assert.deepEqual(readPixel(context, 281, 500), rgba(CARD_COLORS.divider));
-  assert.notDeepEqual(readPixel(context, 114, 114), rgba(CARD_COLORS.background));
-  assert.notDeepEqual(readPixel(context, 166, 116), rgba(CARD_COLORS.background));
-  assert.deepEqual(readPixel(context, 170, 116), rgba(CARD_COLORS.background));
-  assert.deepEqual(readPixel(context, 770, 116), rgba(CARD_COLORS.background));
-  assert.deepEqual(readPixel(context, 885, 99), rgba(CARD_COLORS.secondary));
+  assert.deepEqual(readLogicalPixel(context, 249.5, 153), rgba(CARD_COLORS.background));
+  assert.equal(readLogicalPixel(context, 0, 0)[3], 0);
+  assert.deepEqual(readLogicalPixel(context, 39, 103), rgba("#2f2f2f"));
+  assert.deepEqual(readLogicalPixel(context, 308.5, 187.5), rgba("#339cff"));
+  assert.deepEqual(readLogicalPixel(context, 140.5, 250), rgba(CARD_COLORS.divider));
+  assert.notDeepEqual(readLogicalPixel(context, 57, 57), rgba(CARD_COLORS.background));
+  assert.notDeepEqual(readLogicalPixel(context, 79, 58), rgba(CARD_COLORS.background));
+  assert.deepEqual(readLogicalPixel(context, 81, 58), rgba(CARD_COLORS.background));
+  assert.deepEqual(readLogicalPixel(context, 385, 58), rgba(CARD_COLORS.background));
+  assert.deepEqual(readLogicalPixel(context, 442.5, 49.5), rgba(CARD_COLORS.secondary));
 });
 
 test("keeps long translated labels inside fixed stat columns", async () => {
@@ -75,6 +76,14 @@ test("keeps long translated labels inside fixed stat columns", async () => {
 
 function readPixel(context, x, y) {
   return Array.from(context.getImageData(x, y, 1, 1).data);
+}
+
+function readLogicalPixel(context, x, y) {
+  return readPixel(
+    context,
+    Math.round(x * CARD_OUTPUT_SCALE),
+    Math.round(y * CARD_OUTPUT_SCALE)
+  );
 }
 
 function rgba(hex) {
