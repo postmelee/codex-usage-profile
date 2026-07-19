@@ -1,0 +1,12 @@
+.data
+.env
+.env.*
+.git
+.github
+dist
+dist-marketing
+mydocs
+node_modules
+playwright-report
+test-results
+*.log

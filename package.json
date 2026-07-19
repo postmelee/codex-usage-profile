@@ -9,9 +9,11 @@
   "scripts": {
     "dev": "vite",
     "dev:runtime": "node src/profile-runtime/dev-server.js",
+    "start": "node src/profile-runtime/production-server.js",
     "build": "vite build",
     "build:cloud-run": "vite build --configLoader runner",
     "build:marketing": "vite build --config vite.sites.config.js --configLoader runner",
+    "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
     "test": "node --test",
     "test:e2e": "playwright test"
   },
