@@ -108,6 +108,17 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy submit command" }).click();
     await expect(page.getByText("Command copied.", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => globalThis.__copiedHomeCommand)).toBe(command);
+
+    const homeMarkup = await page.locator(".home-view").innerHTML();
+    for (const internalValue of [
+      "owner_1",
+      "tokenDigest",
+      "deviceSecret",
+      "storagePath",
+      "cup_"
+    ]) {
+      expect(homeMarkup).not.toContain(internalValue);
+    }
   });
 
   test("Home keeps loading and unavailable account states neutral", async ({ page }) => {
