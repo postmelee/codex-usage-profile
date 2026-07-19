@@ -22,6 +22,11 @@ test.describe("Home and share card flow", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
 
+    await expect(page.locator(".profile-topbar")).toHaveCSS("height", "52px");
+    await expect(page.locator(".profile-topbar-title")).toHaveAttribute("href", "/");
+    await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-size", "14px");
+    await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-weight", "700");
+    await expect(page.locator(".profile-topbar-title")).toHaveText("Codex Usage");
     await expect(page.getByRole("heading", { name: "Codex usage profile" })).toBeVisible();
     await expect(page.getByText(
       "Keep one shareable card up to date with the Codex usage you submit."
@@ -36,8 +41,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
 
     const topbarMetrics = await page.locator([
-      ".profile-topbar h1",
-      ".profile-navigation a",
+      ".profile-topbar-title",
       ".account-login-link"
     ].join(", ")).evaluateAll((elements) => elements.map((element) => {
       const bounds = element.getBoundingClientRect();
@@ -53,7 +57,7 @@ test.describe("Home and share card flow", () => {
       scrollHeight: element.scrollHeight
     }));
 
-    expect(topbarMetrics).toHaveLength(3);
+    expect(topbarMetrics).toHaveLength(2);
     for (const metric of topbarMetrics) {
       expect(metric.height).toBe(28);
       expect(metric.lineHeight).toBe("20px");
@@ -66,12 +70,44 @@ test.describe("Home and share card flow", () => {
     });
 
     const preview = page.getByRole("img", { name: "Sample Codex usage card" });
-    await expect.poll(() => preview.evaluate((image) => image.naturalWidth)).toBe(998);
+    await expect.poll(() => preview.evaluate((image) => image.naturalWidth)).toBe(1497);
     await expect(preview).toHaveCSS("aspect-ratio", "499 / 306");
+    await expect(preview).toHaveCSS("opacity", "1");
+    const tilt = page.locator("hover-tilt.home-card-tilt");
+    await expect(tilt).toHaveAttribute("data-tilt-enabled", "true");
+    await expect(tilt).toHaveAttribute("tilt-factor", "0.45");
+    await expect(tilt).toHaveAttribute("tilt-factor-y", "0.35");
+    await expect(tilt).toHaveAttribute("scale-factor", "1.018");
+    await expect(tilt).toHaveAttribute("glare-intensity", "0.15");
+    await expect.poll(() => tilt.evaluate(
+      (element) => Boolean(element.shadowRoot?.querySelector("[part=container]"))
+    )).toBe(true);
+    await expect(page.locator(".home-card-beam")).toHaveAttribute("data-beam", /.+/);
+    await expect(page.locator(".home-card-beam")).toHaveCSS("border-radius", "41px");
+    const tiltBox = await tilt.boundingBox();
+    expect(tiltBox).not.toBeNull();
+    await page.mouse.move(tiltBox.x + tiltBox.width * 0.82, tiltBox.y + tiltBox.height * 0.2);
+    await expect.poll(() => tilt.evaluate(
+      (element) => element.shadowRoot?.querySelector("[part=container]")?.dataset.isActive
+    )).toBe("true");
+    const glare = page.locator(".home-card-glare");
+    await expect.poll(() => glare.evaluate(
+      (element) => Number.parseFloat(getComputedStyle(element).opacity)
+    )).toBeGreaterThan(0.15);
+    await expect.poll(() => glare.evaluate(
+      (element) => Number.parseFloat(getComputedStyle(element).opacity)
+    )).toBeLessThanOrEqual(0.22);
+    await expect.poll(() => tilt.evaluate(
+      (element) => getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
+    )).toBe("41px");
+    await page.waitForTimeout(450);
+    const quickstartBox = await page.getByRole("heading", { name: "Quickstart" }).boundingBox();
+    expect(quickstartBox).not.toBeNull();
+    expect(quickstartBox.y).toBeLessThan(900);
     await page.screenshot({ path: testInfo.outputPath("home-desktop.png") });
   });
 
-  test("Home shows the signed-in GitHub identity and owner profile entry", async ({ page }) => {
+  test("Home shows the signed-in GitHub identity and private card action", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "clipboard", {
         configurable: true,
@@ -92,16 +128,13 @@ test.describe("Home and share card flow", () => {
       "src",
       "/api/profile/card.png?locale=en"
     );
-    await expect.poll(() => ownerPreview.evaluate((image) => image.naturalWidth)).toBe(998);
+    await expect.poll(() => ownerPreview.evaluate((image) => image.naturalWidth)).toBe(1497);
 
     const accountState = page.locator(".home-account-state");
     await expect(accountState.getByRole("img", { name: "postmelee avatar" })).toBeVisible();
     await expect(accountState.getByText("postmelee", { exact: true })).toBeVisible();
     await expect(accountState.getByText("@postmelee", { exact: true })).toBeVisible();
-    await expect(accountState.getByRole("link", { name: "View profile" })).toHaveAttribute(
-      "href",
-      "/profile"
-    );
+    await expect(accountState.getByRole("button", { name: "Publish card" })).toBeEnabled();
 
     const command = "npx codex-usage-profile@latest submit";
     await expect(page.getByText(command, { exact: true })).toBeVisible();
@@ -140,6 +173,11 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByText("Checking your GitHub session", { exact: true })).toBeVisible();
     await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
     await expect(page.locator(".account-status-dot")).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".home-card-preview")).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".home-card-media")).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".home-card-beam")).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
 
     releaseAccount();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
@@ -155,6 +193,11 @@ test.describe("Home and share card flow", () => {
       "Account unavailable",
       { exact: true }
     )).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in unavailable" })).toBeVisible();
+    await expect(page.locator(".profile-topbar").getByText(
+      "Account unavailable",
+      { exact: true }
+    )).toHaveCount(0);
     await expect(page.getByText("Sign in is temporarily unavailable.", { exact: true }))
       .toBeVisible();
     await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
@@ -194,7 +237,11 @@ test.describe("Home and share card flow", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
+    await expect(page.locator(".profile-topbar")).toHaveCSS("height", "48px");
     const card = page.getByRole("img", { name: "Your Codex usage card" });
+    await expect(card).toHaveCSS("opacity", "1");
+    await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
     const cardBox = await card.boundingBox();
     expect(cardBox).not.toBeNull();
     expect(cardBox.x).toBeGreaterThanOrEqual(0);
@@ -203,31 +250,36 @@ test.describe("Home and share card flow", () => {
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
 
-    await page.getByRole("heading", { name: "Quickstart" }).scrollIntoViewIfNeeded();
+    const quickstartHeading = page.getByRole("heading", { name: "Quickstart" });
+    const initialQuickstartBox = await quickstartHeading.boundingBox();
+    expect(initialQuickstartBox).not.toBeNull();
+    expect(initialQuickstartBox.y).toBeLessThan(844);
+
+    await quickstartHeading.scrollIntoViewIfNeeded();
     const commandBox = await page.locator(".home-command-row").boundingBox();
     expect(commandBox).not.toBeNull();
     expect(commandBox.x).toBeGreaterThanOrEqual(0);
     expect(commandBox.x + commandBox.width).toBeLessThanOrEqual(390);
     expect(await getClippedHomeElements(page)).toEqual([]);
 
-    const frameMetrics = await getFrameScrollMetrics(page);
-    expect(frameMetrics.overflowY).toBe("auto");
-    expect(frameMetrics.scrollHeight).toBeGreaterThan(frameMetrics.clientHeight);
+    const landingMetrics = await getLandingScrollMetrics(page);
+    expect(landingMetrics.frameHeight).toBeGreaterThanOrEqual(844);
+    expect(landingMetrics.overflowY).toBe("visible");
+    expect(landingMetrics.documentScrollHeight).toBeGreaterThan(landingMetrics.viewportHeight);
 
-    await page.locator(".profile-shell").evaluate((shell) => {
-      shell.scrollTop = 0;
-    });
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Profile", exact: true })).toBeFocused();
+    await expect(page.getByRole("link", { name: "Codex Usage", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     const accountButton = page.getByRole("button", { name: "Account menu for postmelee" });
     await expect(accountButton).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "View profile" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Copy submit command" })).toBeFocused();
 
     await accountButton.click();
+    await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveCount(0);
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
       "/settings"
@@ -235,7 +287,7 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
 
-  test("keeps Home Profile and Settings inside the frame with internal scrolling", async ({ page }, testInfo) => {
+  test("uses document scrolling on Home and keeps app surfaces framed", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("private"),
@@ -253,10 +305,23 @@ test.describe("Home and share card flow", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 620 });
 
-    for (const path of ["/", "/profile", "/settings", PROFILE_ROUTE]) {
+    await page.goto("/");
+    await expect(page.locator(".home-card-preview")).toHaveCSS("opacity", "1");
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
+    const landingMetrics = await getLandingScrollMetrics(page);
+    expect(landingMetrics.frameHeight).toBeGreaterThanOrEqual(620);
+    expect(landingMetrics.overflowY).toBe("visible");
+    expect(landingMetrics.documentScrollHeight).toBeGreaterThan(landingMetrics.viewportHeight);
+    const shortQuickstartBox = await page.getByRole("heading", { name: "Quickstart" }).boundingBox();
+    expect(shortQuickstartBox).not.toBeNull();
+    expect(shortQuickstartBox.y).toBeLessThan(620);
+    await page.screenshot({ path: testInfo.outputPath("home-short-viewport.png") });
+
+    for (const path of ["/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
       const metrics = await getFrameScrollMetrics(page);
-      const titleMetrics = await page.locator(".profile-topbar h1").evaluate((title) => ({
+      const titleMetrics = await page.locator(".profile-topbar-title").evaluate((title) => ({
         clientHeight: title.clientHeight,
         lineHeight: getComputedStyle(title).lineHeight,
         scrollHeight: title.scrollHeight
@@ -275,7 +340,7 @@ test.describe("Home and share card flow", () => {
     await expect(primaryNavigation.getByRole("link", { name: "Home", exact: true }))
       .toHaveAttribute("href", "/");
     await expect(primaryNavigation.getByRole("link", { name: "Profile", exact: true }))
-      .toHaveAttribute("href", "/profile");
+      .toHaveCount(0);
 
     const internalScrollTop = await page.locator(".profile-shell").evaluate((shell) => {
       shell.scrollTop = 120;
@@ -301,15 +366,10 @@ test.describe("Home and share card flow", () => {
     await mockCardImages(page);
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/profile");
-
-    const shareButton = page.getByRole("button", { name: "Share profile" });
-    await expect(page.getByRole("heading", { name: "Your Codex card" })).toBeVisible();
-    await expect(shareButton).toBeDisabled();
-    await expect(page.getByText("Private", { exact: true })).toBeVisible();
+    await page.goto("/");
 
     await page.getByRole("button", { name: "Publish card" }).click();
-    await expect(page.getByText("Public", { exact: true })).toBeVisible();
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
 
     await shareButton.click();
@@ -342,6 +402,46 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(shareButton).toBeFocused();
+
+    await shareButton.click();
+    await page.getByRole("button", { name: "Make private" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+  });
+
+  test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: { ...ownerProfile("private"), usage: null },
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.route("**/api/profile/card.png*", (route) => route.fulfill({
+      body: JSON.stringify({
+        error: { code: "not_found", message: "Card not found" },
+        ok: false
+      }),
+      contentType: "application/json",
+      status: 404
+    }));
+    await page.goto("/");
+
+    await expect(page.getByRole("button", { name: "Submit usage first" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Publish card" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Share", exact: true })).toHaveCount(0);
+    await expect(page.locator(".home-card-sample-identity")).toBeVisible();
+    await expect(page.locator(".home-card-sample-avatar")).toHaveAttribute(
+      "src",
+      AUTH_OWNER.avatarUrl
+    );
+    await expect(page.locator(".home-card-sample-copy strong")).toHaveText(
+      AUTH_OWNER.displayName
+    );
+    await expect(page.locator(".home-card-sample-copy span")).toHaveText(
+      `@${AUTH_OWNER.githubLogin}`
+    );
+    await page.screenshot({ path: testInfo.outputPath("home-no-usage.png") });
   });
 
   test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
@@ -353,10 +453,11 @@ test.describe("Home and share card flow", () => {
     await mockCardImages(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/profile");
-    await page.getByRole("button", { name: "Share profile" }).click();
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Share card" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
       "aspect-ratio",
       "499 / 306"
@@ -388,7 +489,7 @@ test.describe("Public profile", () => {
       "http://127.0.0.1:5173/u/postmelee/card.png"
     );
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
-    await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(998);
+    await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(1497);
 
     await expect(page.getByText("Activity insights", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Most used plugins", { exact: true })).toHaveCount(0);
@@ -486,13 +587,17 @@ async function mockAuthenticatedAccount(page) {
     },
     ok: true
   }));
+  await page.route("**/api/profile", (route) => fulfillJson(route, {
+    data: ownerProfile("private"),
+    ok: true
+  }));
 }
 
 async function getClippedHomeElements(page) {
   return page.locator([
-    ".profile-topbar h1",
+    ".profile-topbar-title",
     ".profile-navigation a",
-    ".home-heading h2",
+    ".home-heading h1",
     ".home-heading p",
     ".home-account-identity strong",
     ".home-account-identity small",
@@ -583,6 +688,20 @@ async function getFrameScrollMetrics(page) {
       frameHeight: frameRect.height,
       overflowY: getComputedStyle(shell).overflowY,
       scrollHeight: shell.scrollHeight,
+      viewportHeight: window.innerHeight
+    };
+  });
+}
+
+async function getLandingScrollMetrics(page) {
+  return page.locator(".app-frame").evaluate((frame) => {
+    const shell = frame.querySelector(".profile-shell");
+    const frameRect = frame.getBoundingClientRect();
+
+    return {
+      documentScrollHeight: document.documentElement.scrollHeight,
+      frameHeight: frameRect.height,
+      overflowY: getComputedStyle(shell).overflowY,
       viewportHeight: window.innerHeight
     };
   });

@@ -106,9 +106,15 @@ export function AccountMenu({
 
   if (authStatus === "unavailable" || !isAuthenticated) {
     return (
-      <button className="account-status-button is-unavailable" disabled type="button">
-        <span className="account-status-dot" />
-        <span>Account unavailable</span>
+      <button
+        aria-label="Sign in unavailable"
+        className="account-status-button is-unavailable"
+        disabled
+        title="Sign in is temporarily unavailable"
+        type="button"
+      >
+        <Icon name="user" size={14} />
+        <span>Sign in</span>
       </button>
     );
   }

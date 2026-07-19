@@ -24,7 +24,7 @@ test("keeps the Quickstart flow ordered and immutable", () => {
     [
       "approve-device",
       "submit-usage",
-      "review-profile",
+      "review-card",
       "publish-card",
       "copy-readme"
     ]

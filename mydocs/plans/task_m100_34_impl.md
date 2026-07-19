@@ -27,6 +27,7 @@ GitHub Issue: [#34](https://github.com/postmelee/codex-usage-profile/issues/34)
 | 2 | Session-aware landing과 Quickstart UI | `HomeQuickstart`, card hero, copy interaction | UI unit test, build, focused E2E |
 | 3 | 반응형·접근성·브라우저 회귀 | desktop/mobile layout, clipboard/a11y, existing route regression | full UI E2E, build |
 | 4 | 통합 시각·보안 QA와 문서 일관성 | runtime smoke, DOM allowlist, docs consistency | full test/build/e2e, manual screenshots |
+| 5 | 전체화면 Landing Hero와 Quickstart 발견성 | route별 shell 분리, animated card hero, first-viewport Quickstart | focused/full E2E, build, 작업지시자 시각 검증 |
 
 ## 문서 위치 확인
 
@@ -175,6 +176,8 @@ Task #34 Stage 2: session-aware landing과 Quickstart UI 구현
 - `src/profile-ui/HomeQuickstart.jsx`
 - `src/styles.css`
 - `tests/profile-ui.spec.js`
+- `package.json`
+- `package-lock.json`
 - `mydocs/orders/20260717.md` 또는 실제 진행 날짜 orders 파일
 
 ### 변경 내용
@@ -277,6 +280,79 @@ git diff --check
 Task #34 Stage 4: landing 통합 QA와 문서 일관성 완료
 ```
 
+## Stage 5 — 전체화면 Landing Hero와 Quickstart 발견성
+
+### 산출물
+
+신규:
+
+- `mydocs/working/task_m100_34_stage5.md`
+
+수정:
+
+- `src/profile-ui/ProfileShell.jsx`
+- `src/profile-ui/AccountMenu.jsx`
+- `src/profile-ui/HomePage.jsx`
+- `src/profile-ui/HomeQuickstart.jsx`
+- `src/profile-ui/ShareDialog.jsx` (기존 dialog 재사용에 필요한 prop 확장이 있는 경우)
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `package.json`, `package-lock.json`
+- `mydocs/orders/20260719.md` 또는 실제 진행 날짜 orders 파일
+
+### 변경 내용
+
+1. `/`만 기존 app frame에서 분리해 browser viewport 전체를 사용하는 landing shell로 전환한다.
+   - 공통 topbar와 AccountMenu의 인증 동작은 재사용한다.
+   - `/profile`은 Codex app과 유사한 frame과 내부 scroll을 유지한다.
+   - `/settings`, device와 public profile의 shell 변경은 이번 Stage 범위에 포함하지 않는다.
+2. 첫 화면을 제품명, 짧은 value proposition, 실제 card preview와 상태별 primary action으로 구성한다.
+   - H1 역할의 제품명은 literal product name인 `Codex Usage Profile`로 표시한다.
+   - card는 별도 장식 container 안에 중첩하지 않고 실제 image surface와 outline/shadow를 직접 보여준다.
+   - anonymous는 GitHub sign-in을 우선 행동으로 제공한다.
+   - authenticated는 owner profile 공개 상태를 읽어 private card에는 `Publish card`, public card에는 `Share`를 표시한다.
+   - card 사용량이 없거나 profile 조회 중이면 상태를 명시하고 잘못된 공유·게시 동작을 노출하지 않는다.
+   - 기존 `View profile` CTA와 AccountMenu의 `Profile` 항목은 MVP landing에서 제거하고, AccountMenu는 `Settings`, `Log out`만 제공한다.
+   - public card의 `Share`는 기존 Share dialog를 재사용해 stable image URL, README Markdown과 PNG 저장을 제공한다.
+3. 모든 desktop/mobile viewport에서 다음 Quickstart section의 시작 신호가 첫 화면 하단에 보이도록 hero 높이와 간격을 제한한다.
+   - Home은 frame 내부 scroll 대신 document scroll을 사용한다.
+   - 별도 중복 CTA 없이 Hero의 상태별 primary action 다음에 Quickstart section이 바로 이어지게 한다.
+4. card preview에 한 번만 실행되는 절제된 entrance animation을 적용한다.
+   - card 본문은 opacity와 짧은 translate/scale만 사용하고 entrance를 반복하지 않는다.
+   - `prefers-reduced-motion: reduce`에서는 animation을 제거하고 동일 정보를 즉시 표시한다.
+   - 실제 card outline에는 MIT 라이선스 `border-beam`의 rotate 효과를 낮은 강도로 적용하고, offscreen·reduced-motion 정지 계약을 검증한다.
+   - 기존 Beam 설정을 유지한 채 MPL-2.0 `hover-tilt` Web Component로 desktop fine pointer 환경에만 낮은 강도의 tilt, glare와 확대 효과를 적용한다.
+   - mobile, coarse pointer와 `prefers-reduced-motion: reduce`에서는 tilt component를 로드하지 않고 동일한 정적 card layout을 유지한다.
+5. 1280x900, 390x844와 1280x620에서 first-viewport 발견성, horizontal overflow, text clipping과 keyboard order를 검증한다.
+6. 작업지시자의 실제 browser 시각 검증 승인을 받은 후에만 Stage 5 보고서와 커밋, 최종 보고 단계로 진행한다.
+
+### 검증
+
+```bash
+npm run build
+npm run test:e2e -- --grep "Home"
+npm run test:e2e
+git diff --check
+```
+
+검증 관점:
+
+- Home은 viewport 전체 폭과 document scroll을 사용하고 app frame 내부 scroll을 만들지 않는다.
+- `/profile`의 app frame, sticky topbar와 내부 scroll 계약은 유지된다.
+- desktop/mobile 첫 viewport에서 hero와 Quickstart heading 또는 command 시작 신호를 함께 확인할 수 있다.
+- entrance animation이 정보 접근을 지연하지 않고 reduced-motion에서 제거된다.
+- desktop pointer에서 tilt/glare가 활성화되고 mobile·reduced-motion에서는 정적 card로 유지되며 Beam 설정이 바뀌지 않는다.
+- 긴 identity, CTA와 command가 겹치거나 잘리지 않는다.
+- authenticated private/public/no-usage 상태가 각각 Publish/Share/disabled 상태로 정확히 분기된다.
+- AccountMenu에는 Settings와 Log out만 남고 숨길 owner profile 진입점이 없어야 한다.
+- 기존 owner/public/settings/device flow와 보안 DOM allowlist가 유지된다.
+
+### 커밋
+
+```text
+Task #34 Stage 5: 전체화면 landing과 Quickstart 발견성 개선
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -295,6 +371,8 @@ Task #34 Stage 4: landing 통합 QA와 문서 일관성 완료
 - Stage 2는 Stage 1의 command, step order와 login return 계약 승인 후 진행한다.
 - Stage 3은 Stage 2의 session-aware landing과 copy interaction 승인 후 진행한다.
 - Stage 4는 Stage 3의 responsive/accessibility/browser 회귀 승인 후 진행한다.
+- Stage 5는 Stage 4 QA에서 확인된 landing 발견성 개선 방향을 작업지시자가 승인한 후 진행한다.
+- Stage 5 UI는 작업지시자 시각 검증 승인 전 보고서 작성과 최종 단계로 넘기지 않는다.
 - 각 Stage 완료 후 보고서와 검증 결과를 공유하고 다음 Stage의 명시 승인을 받는다.
 
 ## 위험과 대응
@@ -309,7 +387,7 @@ Task #34 Stage 4: landing 통합 QA와 문서 일관성 완료
 
 ## 승인 요청 사항
 
-- 4개 Stage 분할과 각 Stage 산출물, 검증 명령, 커밋 메시지를 승인 요청한다.
+- 5개 Stage 분할과 각 Stage 산출물, 검증 명령, 커밋 메시지를 승인 요청한다.
 - Stage 1에서 canonical command/step contract와 Home OAuth `/` 복귀를 먼저 고정하는 순서를 승인 요청한다.
 - 별도 `/onboarding` route 없이 `/`에서 landing과 Quickstart를 제공하는 구현 경계를 승인 요청한다.
 - npm/service 배포는 범위 밖으로 유지하고 landing에서 배포 완료를 주장하지 않는 정책을 승인 요청한다.

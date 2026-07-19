@@ -10,10 +10,10 @@ import {
 
 export const CARD_LOGICAL_WIDTH = 499;
 export const CARD_LOGICAL_HEIGHT = 306;
-export const CARD_OUTPUT_SCALE = 2;
+export const CARD_OUTPUT_SCALE = 3;
 export const CARD_OUTPUT_WIDTH = CARD_LOGICAL_WIDTH * CARD_OUTPUT_SCALE;
 export const CARD_OUTPUT_HEIGHT = CARD_LOGICAL_HEIGHT * CARD_OUTPUT_SCALE;
-export const CARD_RENDERER_VERSION = "codex-share-card-1";
+export const CARD_RENDERER_VERSION = "codex-share-card-2";
 
 export const CARD_COLORS = Object.freeze({
   background: "#181818",
@@ -28,9 +28,9 @@ const CARD_FONT_FILES_DIRECTORY = join(
 );
 const CARD_FONT_WEIGHTS = Object.freeze([400, 500, 600]);
 const cardFontFamiliesByWeight = new Map();
-const AVATAR_X = 32;
-const AVATAR_Y = 32;
-const AVATAR_SIZE = 52;
+const AVATAR_X = 36;
+const AVATAR_Y = 36;
+const AVATAR_SIZE = 44;
 const AVATAR_RADIUS = AVATAR_SIZE / 2;
 const HEATMAP_X = 32;
 const HEATMAP_Y = 96;
@@ -131,8 +131,8 @@ async function drawHeader(context, header, options) {
     drawCenteredFittedText(context, getAvatarFallback(header.displayName), {
       centerX: AVATAR_X + AVATAR_RADIUS,
       color: CARD_COLORS.secondary,
-      maxFontSize: 20,
-      maxWidth: 38,
+      maxFontSize: 18,
+      maxWidth: 32,
       minFontSize: 14,
       weight: 600,
       y: 64

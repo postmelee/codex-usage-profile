@@ -8,7 +8,9 @@ import {
 
 export function ShareDialog({
   locale,
+  makingPrivate = false,
   onClose,
+  onMakePrivate,
   open,
   previewUrl,
   publicCardUrl
@@ -121,7 +123,17 @@ export function ShareDialog({
           value={markdown}
         />
 
-        <div className="share-dialog-actions">
+        <div className={`share-dialog-actions${onMakePrivate ? " has-privacy-action" : ""}`}>
+          {onMakePrivate ? (
+            <button
+              className="secondary-command"
+              disabled={makingPrivate}
+              onClick={onMakePrivate}
+              type="button"
+            >
+              {makingPrivate ? "Making private" : "Make private"}
+            </button>
+          ) : null}
           <a className="secondary-command" download="codex-usage-profile.png" href={imageUrl}>
             <Icon name="download" />
             <span>Save PNG</span>

@@ -12,9 +12,9 @@ export const HOME_QUICKSTART_STEPS = Object.freeze([
     "Let the CLI read your Codex usage and send the supported usage fields."
   ),
   createStep(
-    "review-profile",
-    "Review your profile",
-    "Open your private profile preview and confirm the updated card."
+    "review-card",
+    "Review your card",
+    "Confirm the updated private card on the home page."
   ),
   createStep(
     "publish-card",
