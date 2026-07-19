@@ -10,6 +10,8 @@
     "dev": "vite",
     "dev:runtime": "node src/profile-runtime/dev-server.js",
     "build": "vite build",
+    "build:cloud-run": "vite build --configLoader runner",
+    "build:marketing": "vite build --config vite.sites.config.js --configLoader runner",
     "test": "node --test",
     "test:e2e": "playwright test"
   },
