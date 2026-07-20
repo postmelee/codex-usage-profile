@@ -151,6 +151,88 @@ test("redirects browser GitHub login configuration errors back to settings", asy
   assert.equal(apiResponse.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
 });
 
+test("allows only local OAuth return paths and never reflects external redirects", async () => {
+  const fixture = createFixture();
+  const local = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=/settings%3Ftab%3Ddevices%23tokens"
+  );
+  const localStateId = new URL(local.headers.get("location")).searchParams.get("state");
+  const external = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=https%3A%2F%2Fevil.example"
+  );
+  const protocolRelative = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/auth/github/login?redirect_to=%2F%2Fevil.example",
+    "",
+    { accept: "text/html" }
+  );
+
+  assert.equal(
+    fixture.store.getOAuthState(localStateId).redirectTo,
+    "/settings?tab=devices#tokens"
+  );
+  assert.equal(external.status, 400);
+  assert.equal(external.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+  assert.equal(protocolRelative.status, 302);
+  assert.equal(
+    protocolRelative.headers.get("location"),
+    "/settings?auth_error=github_login_failed"
+  );
+});
+
+test("denies explicit cross-origin API access without adding CORS headers", async () => {
+  const fixture = createFixture();
+  const response = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/auth/me",
+    undefined,
+    { origin: "https://marketing.example" }
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.error.code, PROFILE_BACKEND_ERROR_CODES.FORBIDDEN);
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
+
+test("rejects cross-site session mutation and accepts same-origin mutation", async () => {
+  const fixture = createFixture();
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+  const crossSite = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    {
+      cookie,
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site"
+    }
+  );
+  const sameOrigin = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    {
+      cookie,
+      origin: BASE_URL,
+      "sec-fetch-site": "same-origin"
+    }
+  );
+
+  assert.equal(crossSite.status, 403);
+  assert.equal(crossSite.body.error.code, PROFILE_BACKEND_ERROR_CODES.FORBIDDEN);
+  assert.equal(sameOrigin.status, 200);
+  assert.equal(sameOrigin.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+});
+
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
   const fixture = createFixture();
   fixture.saveOwner();

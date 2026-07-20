@@ -24,7 +24,8 @@ const MUTATING_METHODS = new Set([
   "saveLatestUsage",
   "saveOAuthState",
   "saveOwner",
-  "saveSession"
+  "saveSession",
+  "saveSubmittedDevice"
 ]);
 
 export function createFileProfileBackendStore(options = {}) {

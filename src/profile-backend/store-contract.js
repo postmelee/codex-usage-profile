@@ -1,0 +1,140 @@
+export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 1;
+
+export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
+  "clear",
+  "deleteCliToken",
+  "exportState",
+  "getCliLoginChallenge",
+  "getCliLoginChallengeByDeviceCodeDigest",
+  "getCliLoginChallengeByUserCode",
+  "getCliTokenByDigest",
+  "getCliTokenById",
+  "getLatestSnapshotByHandle",
+  "getLatestSnapshotByOwnerId",
+  "getLatestUsageByHandle",
+  "getLatestUsageByOwnerId",
+  "getOAuthState",
+  "getOwnerByHandle",
+  "getOwnerById",
+  "getOwnerByProviderIdentity",
+  "getSession",
+  "getSubmittedDeviceById",
+  "getSubmittedDeviceByOwnerAndKey",
+  "listCliTokensByOwnerId",
+  "listOwners",
+  "listSubmittedDevicesByOwnerId",
+  "saveCliLoginChallenge",
+  "saveCliToken",
+  "saveLatestSnapshot",
+  "saveLatestUsage",
+  "saveOAuthState",
+  "saveOwner",
+  "saveSession",
+  "saveSubmittedDevice"
+]);
+
+export const PROFILE_BACKEND_STORE_RECORDS = deepFreeze({
+  cliLoginChallenge: {
+    ownerKey: "ownerId",
+    secretFields: ["deviceCodeDigest"],
+    uniqueKeys: ["id", "deviceCodeDigest", "userCode"]
+  },
+  cliToken: {
+    ownerKey: "ownerId",
+    secretFields: ["tokenDigest"],
+    uniqueKeys: ["id", "tokenDigest"]
+  },
+  latestSnapshot: {
+    ownerKey: "ownerId",
+    secretFields: [],
+    uniqueKeys: ["ownerId", "handle"]
+  },
+  latestUsage: {
+    ownerKey: "ownerId",
+    secretFields: [],
+    uniqueKeys: ["ownerId", "handle"]
+  },
+  oauthState: {
+    ownerKey: "ownerId",
+    secretFields: ["id"],
+    uniqueKeys: ["id"]
+  },
+  owner: {
+    ownerKey: "id",
+    secretFields: [],
+    uniqueKeys: ["id", "authProvider+providerUserId", "handle"]
+  },
+  session: {
+    ownerKey: "ownerId",
+    secretFields: ["id"],
+    uniqueKeys: ["id"]
+  },
+  submittedDevice: {
+    ownerKey: "ownerId",
+    secretFields: [],
+    uniqueKeys: ["id", "ownerId+deviceKey"]
+  }
+});
+
+export const PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS = deepFreeze({
+  approveCliLogin: {
+    records: ["cliLoginChallenge", "owner"],
+    serializationKey: "cliLoginChallenge.id",
+    invariant: "only a pending, unexpired challenge can be approved once",
+    failurePolicy: "rollback"
+  },
+  completeOAuthCallback: {
+    records: ["oauthState", "owner", "session"],
+    serializationKey: "oauthState.id",
+    invariant: "exactly one callback consumes a pending OAuth state",
+    failurePolicy: "rollback"
+  },
+  exchangeCliLogin: {
+    records: ["cliLoginChallenge", "cliToken"],
+    serializationKey: "cliLoginChallenge.id",
+    invariant: "exactly one token is issued for an approved challenge",
+    failurePolicy: "rollback"
+  },
+  submitAccountUsage: {
+    records: ["cliToken", "latestUsage", "submittedDevice"],
+    serializationKey: "owner.id",
+    invariant: "capturedAt and contentDigest provide stale, conflict, and idempotent outcomes",
+    failurePolicy: "rollback"
+  },
+  updateVisibility: {
+    records: ["owner", "latestUsage", "latestSnapshot"],
+    serializationKey: "owner.id",
+    invariant: "owner and latest records expose one visibility revision",
+    failurePolicy: "rollback"
+  }
+});
+
+export function assertProfileBackendStoreContract(store) {
+  if (!store || (typeof store !== "object" && typeof store !== "function")) {
+    throw new TypeError("profile backend store must be an object");
+  }
+
+  const missingMethods = PROFILE_BACKEND_STORE_METHODS.filter(
+    (method) => typeof store[method] !== "function"
+  );
+
+  if (missingMethods.length > 0) {
+    throw new TypeError(
+      `profile backend store is missing methods: ${missingMethods.join(", ")}`
+    );
+  }
+
+  return store;
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) {
+    return value;
+  }
+
+  for (const item of Object.values(value)) {
+    deepFreeze(item);
+  }
+
+  return Object.freeze(value);
+}

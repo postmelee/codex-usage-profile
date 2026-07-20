@@ -186,6 +186,7 @@ Revoke a CLI token immediately from web Settings when it is exposed or a machine
 - [CLI login and usage submit](docs/cli-submit.md)
 - [README image endpoint and cache](docs/readme-card.md)
 - [Standalone analyzer integration](docs/codex-usage-analyzer.md)
+- [Production hosting architecture](docs/production-hosting.md)
 - [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
 
 ## Trademark Notice

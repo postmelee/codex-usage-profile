@@ -123,11 +123,16 @@ export function createProfileBackendHttpHandler(options = {}) {
       const url = new URL(request.url);
       const route = `${request.method.toUpperCase()} ${url.pathname}`;
 
+      assertSameOriginApiRequest(request, url, options.publicBaseUrl);
+      assertSameOriginSessionMutation(request, route, url);
+
       if (route === "GET /api/auth/github/login") {
         try {
           const result = oauthRuntimeService.startGitHubLogin({
             cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
-            redirectTo: url.searchParams.get("redirect_to")
+            redirectTo: normalizeRequestedRedirectPath(
+              url.searchParams.get("redirect_to")
+            )
           });
 
           return redirectResponse(result.authorizationUrl);
@@ -679,12 +684,91 @@ function buildAuthErrorRedirectPath(redirectTo, error) {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-function sanitizeLocalRedirectPath(value, fallback) {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
+export function sanitizeLocalRedirectPath(value, fallback) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\") ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
     return fallback;
   }
 
-  return value;
+  try {
+    const baseUrl = new URL("http://profile.local");
+    const redirectUrl = new URL(value, baseUrl);
+    if (redirectUrl.origin !== baseUrl.origin) {
+      return fallback;
+    }
+    return `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeRequestedRedirectPath(value) {
+  if (value === null) return null;
+
+  const redirectPath = sanitizeLocalRedirectPath(value, null);
+  if (!redirectPath) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "redirect_to must be a local application path"
+    );
+  }
+  return redirectPath;
+}
+
+function assertSameOriginApiRequest(request, url, publicBaseUrl) {
+  if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  const requestOrigin = request.headers.get("origin");
+  if (requestOrigin === null) return;
+
+  const expectedOrigin = new URL(publicBaseUrl ?? url.origin).origin;
+  let normalizedOrigin = null;
+  try {
+    normalizedOrigin = new URL(requestOrigin).origin;
+  } catch {
+    normalizedOrigin = null;
+  }
+
+  if (normalizedOrigin !== expectedOrigin) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.FORBIDDEN,
+      "Cross-origin API access is not allowed"
+    );
+  }
+}
+
+function assertSameOriginSessionMutation(request, route, url) {
+  if (!isSessionMutationRoute(route, url.pathname)) return;
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin") {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.FORBIDDEN,
+      "Cross-origin session mutation is not allowed"
+    );
+  }
+}
+
+function isSessionMutationRoute(route, pathname) {
+  if ([
+    "POST /api/auth/device/authorize",
+    "POST /api/auth/logout",
+    "POST /api/cli/login/approve",
+    "PATCH /api/profile",
+    "POST /api/settings/tokens"
+  ].includes(route)) {
+    return true;
+  }
+
+  return (route.startsWith("DELETE ") && pathname.startsWith("/api/settings/tokens/")) ||
+    (route.startsWith("PATCH ") && pathname.startsWith("/api/settings/devices/"));
 }
 
 function serializeOwner(owner) {

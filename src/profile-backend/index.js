@@ -1,4 +1,12 @@
 export {
+  PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS,
+  PROFILE_BACKEND_STORE_CONTRACT_VERSION,
+  PROFILE_BACKEND_STORE_METHODS,
+  PROFILE_BACKEND_STORE_RECORDS,
+  assertProfileBackendStoreContract
+} from "./store-contract.js";
+
+export {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError,
   createProfileBackendError,
@@ -21,7 +29,8 @@ export {
   okResponse,
   readBearerToken,
   readJsonBody,
-  redirectResponse
+  redirectResponse,
+  sanitizeLocalRedirectPath
 } from "./http.js";
 
 export {
