@@ -16,6 +16,117 @@ const AUTH_OWNER = Object.freeze({
   visibility: "private"
 });
 
+test.describe("Marketing mirror", () => {
+  test("Marketing stays sample-only and matches the landing layout", async ({ page }, testInfo) => {
+    const apiRequests = [];
+    await page.route("**/api/**", (route) => {
+      apiRequests.push(route.request().url());
+      return route.abort();
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/sites.html");
+
+    await expect(page.getByRole("heading", { name: "Codex usage profile" }))
+      .toBeVisible();
+    const card = page.getByRole("img", { name: "Sample Codex usage card" });
+    await expect(card).toHaveAttribute("src", "/assets/codex-card-sample.png");
+    await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(1497);
+    await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+    await expect(page.getByRole("heading", { name: "Quickstart" })).toBeVisible();
+    await expect(page.getByText("npx codex-usage-profile@latest submit", {
+      exact: true
+    })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Create your card" })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:5173/"
+    );
+    const desktopCta = await page.getByRole("link", {
+      name: "Create your card"
+    }).boundingBox();
+    expect(desktopCta).not.toBeNull();
+    await expect(page.locator(".profile-topbar, .account-menu, .home-account-identity"))
+      .toHaveCount(0);
+    await expect(page.getByRole("link", { name: /sign in/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /settings/i })).toHaveCount(0);
+    expect(apiRequests).toEqual([]);
+
+    const markup = await page.locator(".home-view").innerHTML();
+    for (const privateValue of [
+      "owner_1",
+      "meleeisdeveloping",
+      "githubLogin",
+      "tokenDigest"
+    ]) {
+      expect(markup).not.toContain(privateValue);
+    }
+
+    const desktopQuickstart = await page.getByRole("heading", {
+      name: "Quickstart"
+    }).boundingBox();
+    expect(desktopQuickstart).not.toBeNull();
+    expect(desktopQuickstart.y).toBeLessThan(900);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("sites-marketing-desktop.png")
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+    await expect(page.locator(".home-card-tilt")).toHaveAttribute(
+      "data-tilt-enabled",
+      "false"
+    );
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    const mobileCard = await page.locator(".home-card-tilt").boundingBox();
+    const mobileCta = await page.getByRole("link", {
+      name: "Create your card"
+    }).boundingBox();
+    expect(mobileCard).not.toBeNull();
+    expect(mobileCta).not.toBeNull();
+    expect(Math.round(mobileCta.width)).toBe(Math.round(desktopCta.width));
+    expect(Math.round(mobileCta.height)).toBe(Math.round(desktopCta.height));
+    const mobileHeroGap = await page.evaluate(() => {
+      const hero = document.querySelector(".home-hero").getBoundingClientRect();
+      const cta = document.querySelector(".marketing-app-action").getBoundingClientRect();
+      return Math.round(hero.bottom - cta.bottom);
+    });
+    expect(mobileHeroGap).toBeGreaterThanOrEqual(36);
+    expect(mobileHeroGap).toBeLessThanOrEqual(40);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+    expect(await getClippedHomeElements(page)).toEqual([]);
+    expect(apiRequests).toEqual([]);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("sites-marketing-mobile.png")
+    });
+  });
+
+  test("Marketing keeps shared visual metrics across product and Sites hosts", async ({ page }) => {
+    for (const viewport of [
+      { height: 900, width: 1280 },
+      { height: 844, width: 390 }
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/sites.html");
+      await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+      const sitesMetrics = await getMarketingMetrics(page);
+
+      await mockAnonymousAccount(page);
+      await page.goto("/");
+      await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+      const productMetrics = await getMarketingMetrics(page);
+
+      expect(productMetrics).toEqual(sitesMetrics);
+      expect(productMetrics.card.right).toBeLessThanOrEqual(viewport.width);
+      expect(productMetrics.quickstart.right).toBeLessThanOrEqual(viewport.width);
+    }
+  });
+});
+
 test.describe("Home and share card flow", () => {
   test("Home shows the sample card and sends anonymous users to GitHub login", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
@@ -614,6 +725,43 @@ async function getClippedHomeElements(page) {
       ? [`${element.tagName.toLowerCase()}.${element.className}`]
       : [];
   }));
+}
+
+async function getMarketingMetrics(page) {
+  return page.evaluate(() => {
+    const card = document.querySelector(".home-card-tilt");
+    const description = document.querySelector(".home-heading p");
+    const quickstart = document.querySelector(".home-quickstart-inner");
+    const title = document.querySelector(".home-heading h1");
+    if (!card || !description || !quickstart || !title) {
+      throw new Error("Marketing layout is incomplete");
+    }
+
+    const box = (element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        height: Math.round(bounds.height * 100) / 100,
+        right: Math.round(bounds.right * 100) / 100,
+        width: Math.round(bounds.width * 100) / 100
+      };
+    };
+    const text = (element) => ({
+      ...box(element),
+      fontSize: getComputedStyle(element).fontSize,
+      lineHeight: getComputedStyle(element).lineHeight
+    });
+    const horizontalBox = (element) => {
+      const { right, width } = box(element);
+      return { right, width };
+    };
+
+    return {
+      card: box(card),
+      description: text(description),
+      quickstart: horizontalBox(quickstart),
+      title: text(title)
+    };
+  });
 }
 
 async function mockCardImages(page) {

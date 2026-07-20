@@ -114,6 +114,23 @@ Package preflight:
 npm pack --dry-run --workspace packages/codex-usage-profile-cli --json
 ```
 
+### Cloud Run Container POC
+
+Build the production frontend and the Cloud Run target image, then run the
+container smoke against the same image:
+
+```bash
+npm run build:cloud-run
+docker build --platform linux/amd64 \
+  -t codex-usage-profile:task37 .
+node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37
+```
+
+The smoke fixture uses `PROFILE_RUNTIME_MODE=spike` with a temporary file
+store. Production mode rejects the file store and requires an injected
+external store adapter; the durable Neon/R2 boundary is intentionally deferred
+to the next hosting stage.
+
 ## Runtime Configuration
 
 Copy `.env.example` to a local `.env`. `.env` is ignored by git and must never be committed.
@@ -169,6 +186,7 @@ Revoke a CLI token immediately from web Settings when it is exposed or a machine
 - [CLI login and usage submit](docs/cli-submit.md)
 - [README image endpoint and cache](docs/readme-card.md)
 - [Standalone analyzer integration](docs/codex-usage-analyzer.md)
+- [Production hosting architecture](docs/production-hosting.md)
 - [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
 
 ## Trademark Notice

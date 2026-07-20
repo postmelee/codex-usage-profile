@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-sites/
+dist-marketing/
 playwright-report/
 test-results/
 .env

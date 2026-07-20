@@ -9,7 +9,14 @@
   "scripts": {
     "dev": "vite",
     "dev:runtime": "node src/profile-runtime/dev-server.js",
+    "start": "node src/profile-runtime/production-server.js",
     "build": "vite build",
+    "build:cloud-run": "vite build --configLoader runner",
+    "build:marketing": "npm run build:sites",
+    "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
+    "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",
+    "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
+    "smoke:hosting-matrix": "node scripts/smoke-hosting-matrix.mjs",
     "test": "node --test",
     "test:e2e": "playwright test"
   },
