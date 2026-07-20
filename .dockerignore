@@ -4,6 +4,7 @@
 .git
 .github
 dist
+dist-sites
 dist-marketing
 mydocs
 node_modules

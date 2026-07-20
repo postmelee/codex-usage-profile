@@ -3,14 +3,17 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
+import { sitesArtifactPlugin } from "./build/sites-vite-plugin.js";
+
 const rootDirectory = fileURLToPath(new URL(".", import.meta.url));
+const outputDirectory = resolve(rootDirectory, "dist-sites");
 
 export default defineConfig({
   build: {
     emptyOutDir: true,
-    outDir: "dist-marketing",
+    outDir: resolve(outputDirectory, "client"),
     rollupOptions: {
-      input: resolve(rootDirectory, "src/profile-marketing/sites-entry.jsx"),
+      input: resolve(rootDirectory, "sites.html"),
       output: {
         assetFileNames: "assets/[name]-[hash][extname]",
         chunkFileNames: "assets/[name]-[hash].js",
@@ -18,5 +21,9 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react()]
+  plugins: [
+    sitesArtifactPlugin({ outputDirectory, projectDirectory: rootDirectory }),
+    react()
+  ],
+  publicDir: false
 });

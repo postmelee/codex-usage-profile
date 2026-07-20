@@ -16,6 +16,77 @@ const AUTH_OWNER = Object.freeze({
   visibility: "private"
 });
 
+test.describe("Marketing mirror", () => {
+  test("Marketing stays sample-only and matches the landing layout", async ({ page }, testInfo) => {
+    const apiRequests = [];
+    await page.route("**/api/**", (route) => {
+      apiRequests.push(route.request().url());
+      return route.abort();
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/sites.html");
+
+    await expect(page.getByRole("heading", { name: "Codex usage profile" }))
+      .toBeVisible();
+    const card = page.getByRole("img", { name: "Sample Codex usage card" });
+    await expect(card).toHaveAttribute("src", "/assets/codex-card-sample.png");
+    await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(1497);
+    await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+    await expect(page.getByRole("heading", { name: "Quickstart" })).toBeVisible();
+    await expect(page.getByText("npx codex-usage-profile@latest submit", {
+      exact: true
+    })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Create your card" })).toHaveAttribute(
+      "href",
+      "http://127.0.0.1:5173/"
+    );
+    await expect(page.locator(".profile-topbar, .account-menu, .home-account-identity"))
+      .toHaveCount(0);
+    await expect(page.getByRole("link", { name: /sign in/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /settings/i })).toHaveCount(0);
+    expect(apiRequests).toEqual([]);
+
+    const markup = await page.locator(".home-view").innerHTML();
+    for (const privateValue of [
+      "owner_1",
+      "meleeisdeveloping",
+      "githubLogin",
+      "tokenDigest"
+    ]) {
+      expect(markup).not.toContain(privateValue);
+    }
+
+    const desktopQuickstart = await page.getByRole("heading", {
+      name: "Quickstart"
+    }).boundingBox();
+    expect(desktopQuickstart).not.toBeNull();
+    expect(desktopQuickstart.y).toBeLessThan(900);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("sites-marketing-desktop.png")
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await expect(page.locator(".home-card-media")).toHaveCSS("opacity", "1");
+    await expect(page.locator(".home-card-tilt")).toHaveAttribute(
+      "data-tilt-enabled",
+      "false"
+    );
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+    expect(await getClippedHomeElements(page)).toEqual([]);
+    expect(apiRequests).toEqual([]);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("sites-marketing-mobile.png")
+    });
+  });
+});
+
 test.describe("Home and share card flow", () => {
   test("Home shows the sample card and sends anonymous users to GitHub login", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
