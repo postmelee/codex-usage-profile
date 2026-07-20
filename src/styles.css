@@ -2162,8 +2162,8 @@ button {
   }
 
   .home-hero {
-    min-height: calc(100svh - 206px);
-    padding: 36px 16px 28px;
+    min-height: auto;
+    padding: 64px 16px 36px;
   }
 
   .home-heading h1 {
@@ -2194,6 +2194,10 @@ button {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
+  }
+
+  .marketing-app-action {
+    align-self: center;
   }
 
   .home-account-identity {

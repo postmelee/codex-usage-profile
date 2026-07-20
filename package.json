@@ -16,6 +16,7 @@
     "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
     "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",
     "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
+    "smoke:hosting-matrix": "node scripts/smoke-hosting-matrix.mjs",
     "test": "node --test",
     "test:e2e": "playwright test"
   },

@@ -116,6 +116,11 @@ Neon 연결 문자열, R2 access key/secret과 signing credential은 server-only
 - media revision/publish/unpublish memory contract
 - external/protocol-relative OAuth redirect 거부
 - explicit cross-origin API/session mutation 거부와 CORS header 부재
+- sample-only Sites client/Worker/manifest build와 browser preview
+- Sites artifact의 API/account/session/provider secret 및 사용자 fixture 부재
+- configured Cloud Run root CTA와 query, OAuth state, 사용자 식별자 부재
+- Sites 시작 전·실행 중·종료 후 Cloud Run health/API/frontend 독립 동작
+- Cloud Run Home과 Sites mirror의 desktop/mobile marketing layout 비교
 
 ### 설계만 확정됨
 
@@ -123,7 +128,9 @@ Neon 연결 문자열, R2 access key/secret과 signing credential은 server-only
 - Neon schema, transaction, multi-instance concurrency, migration/backup/retention
 - R2 bucket, immutable object write, stable object materialization과 cache invalidation
 - production observability, alerting, abuse protection와 shared rate limiter
-- ChatGPT Sites hosting plugin을 사용한 event/marketing publication
+- ChatGPT Sites remote project 생성과 event/marketing publication
+
+로컬 hosting matrix는 배포 구조와 독립 failure boundary를 검증하는 POC다. 실제 Cloud Run, Neon, R2 또는 Sites 원격 배포 성공을 의미하지 않으며 production readiness 선언에 사용할 수 없다.
 
 ## 후속 작업
 

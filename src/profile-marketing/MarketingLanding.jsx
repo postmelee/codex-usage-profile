@@ -157,7 +157,7 @@ function MarketingAppAction({ config }) {
   }
 
   return (
-    <a className="primary-command" href={config.appHref}>
+    <a className="primary-command marketing-app-action" href={config.appHref}>
       {config.copy.appCta}
     </a>
   );
