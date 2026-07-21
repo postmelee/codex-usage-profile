@@ -45,6 +45,25 @@ export function createFileProfileBackendStore(options = {}) {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
 
+      // A transaction runs its writes against the underlying memory store
+      // (bypassing the per-call persist below), so we persist exactly once
+      // after it commits. On failure the memory store has already restored
+      // its pre-transaction state, so the on-disk file stays consistent and
+      // no persist is needed.
+      if (property === "transaction") {
+        return (runner) => {
+          const result = value.call(target, runner);
+          if (result && typeof result.then === "function") {
+            return result.then((committed) => {
+              persist();
+              return committed;
+            });
+          }
+          persist();
+          return result;
+        };
+      }
+
       if (typeof property !== "string" || !MUTATING_METHODS.has(property)) {
         return value;
       }

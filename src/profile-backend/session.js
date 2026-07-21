@@ -22,9 +22,9 @@ export function createSessionService(options = {}) {
   }
 
   const cookieOptions = { cookieName, secure: secureCookies };
-  const verifySession = (sessionId) => {
+  const verifySession = async (sessionId) => {
     const id = requireNonEmptyString(sessionId, "sessionId");
-    const session = store.getSession(id);
+    const session = await store.getSession(id);
 
     if (!session) {
       throw unauthorized("Session is invalid");
@@ -32,7 +32,7 @@ export function createSessionService(options = {}) {
 
     assertSessionUsable(session, normalizeDate(now()));
 
-    const owner = store.getOwnerById(session.ownerId);
+    const owner = await store.getOwnerById(session.ownerId);
     if (!owner) {
       throw unauthorized("Session owner no longer exists");
     }
@@ -41,9 +41,12 @@ export function createSessionService(options = {}) {
   };
 
   return {
-    createSession(createOptions = {}) {
+    async createSession(createOptions = {}) {
+      // `store` override lets a caller run this write inside an open
+      // transaction (tx handle) while keeping this service's cookie config.
+      const activeStore = createOptions.store ?? store;
       const ownerId = requireNonEmptyString(createOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
+      const owner = await activeStore.getOwnerById(ownerId);
 
       if (!owner) {
         throw new ProfileBackendError(
@@ -60,7 +63,7 @@ export function createSessionService(options = {}) {
         expiresAt: new Date(createdAt.getTime() + sessionTtlMs).toISOString(),
         revokedAt: null
       };
-      const savedSession = store.saveSession(session);
+      const savedSession = await activeStore.saveSession(session);
 
       return {
         owner,
@@ -80,9 +83,9 @@ export function createSessionService(options = {}) {
       );
     },
 
-    revokeSession(revokeOptions = {}) {
+    async revokeSession(revokeOptions = {}) {
       const sessionId = requireNonEmptyString(revokeOptions.sessionId, "sessionId");
-      const session = store.getSession(sessionId);
+      const session = await store.getSession(sessionId);
 
       if (!session) {
         throw unauthorized("Session is invalid");
@@ -98,14 +101,14 @@ export function createSessionService(options = {}) {
       });
     },
 
-    logoutFromCookie(cookieHeader) {
+    async logoutFromCookie(cookieHeader) {
       const sessionId = readSessionIdFromCookie(cookieHeader, {
         cookieName,
         required: false
       });
-      const session = sessionId ? store.getSession(sessionId) : null;
+      const session = sessionId ? await store.getSession(sessionId) : null;
       const revokedSession = session && !session.revokedAt
-        ? store.saveSession({
+        ? await store.saveSession({
           ...session,
           revokedAt: normalizeDate(now()).toISOString()
         })

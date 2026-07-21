@@ -14,10 +14,10 @@ import {
   createMemoryProfileBackendStore
 } from "../index.js";
 
-test("starts a CLI login challenge with a browser URL", () => {
+test("starts a CLI login challenge with a browser URL", async () => {
   const { store, service } = createFixture();
 
-  const result = service.startCliLogin({
+  const result = await service.startCliLogin({
     label: "macbook",
     redirectUri: "codex-usage-profile://callback"
   });
@@ -39,15 +39,15 @@ test("starts a CLI login challenge with a browser URL", () => {
   assert.equal(JSON.stringify(storedChallenge).includes(result.deviceCode), false);
 });
 
-test("approves and exchanges a CLI login challenge for a raw token", () => {
+test("approves and exchanges a CLI login challenge for a raw token", async () => {
   const { store, service } = createFixture();
-  const { challenge } = service.startCliLogin({ label: "macbook" });
+  const { challenge } = await service.startCliLogin({ label: "macbook" });
 
-  const approved = service.approveCliLogin({
+  const approved = await service.approveCliLogin({
     challengeId: challenge.id,
     ownerId: "owner_1"
   });
-  const exchanged = service.exchangeCliLogin({ challengeId: challenge.id });
+  const exchanged = await service.exchangeCliLogin({ challengeId: challenge.id });
   const storedChallenge = store.getCliLoginChallenge(challenge.id);
   const storedToken = store.getCliTokenById(exchanged.tokenRecord.id);
 
@@ -61,16 +61,16 @@ test("approves and exchanges a CLI login challenge for a raw token", () => {
   assert.equal(storedChallenge.cliTokenId, exchanged.tokenRecord.id);
 });
 
-test("approves a CLI login by user code and polls a raw token once", () => {
+test("approves a CLI login by user code and polls a raw token once", async () => {
   const { service } = createFixture();
-  const started = service.startCliLogin({ label: "macbook" });
+  const started = await service.startCliLogin({ label: "macbook" });
 
-  const approved = service.approveCliLogin({
+  const approved = await service.approveCliLogin({
     userCode: "abcd1234",
     ownerId: "owner_1"
   });
-  const polled = service.pollCliLogin({ deviceCode: started.deviceCode });
-  const reused = service.pollCliLogin({ deviceCode: started.deviceCode });
+  const polled = await service.pollCliLogin({ deviceCode: started.deviceCode });
+  const reused = await service.pollCliLogin({ deviceCode: started.deviceCode });
 
   assert.equal(approved.status, CLI_LOGIN_STATUS.APPROVED);
   assert.equal(approved.ownerId, "owner_1");
@@ -82,14 +82,14 @@ test("approves a CLI login by user code and polls a raw token once", () => {
   assert.equal(Object.hasOwn(reused, "token"), false);
 });
 
-test("polls pending and expired CLI login challenges by device code", () => {
+test("polls pending and expired CLI login challenges by device code", async () => {
   const fixture = createFixture();
   const { store, service } = fixture;
-  const started = service.startCliLogin();
-  const pending = service.pollCliLogin({ deviceCode: started.deviceCode });
+  const started = await service.startCliLogin();
+  const pending = await service.pollCliLogin({ deviceCode: started.deviceCode });
 
   fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
-  const expired = service.pollCliLogin({ deviceCode: started.deviceCode });
+  const expired = await service.pollCliLogin({ deviceCode: started.deviceCode });
 
   assert.equal(pending.status, CLI_LOGIN_STATUS.PENDING);
   assert.equal(pending.challenge.status, CLI_LOGIN_STATUS.PENDING);
@@ -101,32 +101,32 @@ test("polls pending and expired CLI login challenges by device code", () => {
   );
 });
 
-test("rejects exchange before approval and rejects exchange reuse", () => {
+test("rejects exchange before approval and rejects exchange reuse", async () => {
   const { service } = createFixture();
-  const { challenge } = service.startCliLogin();
+  const { challenge } = await service.startCliLogin();
 
-  assertBackendError(
+  await assertBackendError(
     () => service.exchangeCliLogin({ challengeId: challenge.id }),
     PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
   );
 
-  service.approveCliLogin({ challengeId: challenge.id, ownerId: "owner_1" });
-  service.exchangeCliLogin({ challengeId: challenge.id });
+  await service.approveCliLogin({ challengeId: challenge.id, ownerId: "owner_1" });
+  await service.exchangeCliLogin({ challengeId: challenge.id });
 
-  assertBackendError(
+  await assertBackendError(
     () => service.exchangeCliLogin({ challengeId: challenge.id }),
     PROFILE_BACKEND_ERROR_CODES.GONE
   );
 });
 
-test("expires pending challenges and persists expired status", () => {
+test("expires pending challenges and persists expired status", async () => {
   const fixture = createFixture();
   const { store, service } = fixture;
-  const { challenge } = service.startCliLogin();
+  const { challenge } = await service.startCliLogin();
 
   fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
 
-  assertBackendError(
+  await assertBackendError(
     () => service.approveCliLogin({
       challengeId: challenge.id,
       ownerId: "owner_1"
@@ -139,18 +139,18 @@ test("expires pending challenges and persists expired status", () => {
   );
 });
 
-test("validates owner and challenge ids during approval", () => {
+test("validates owner and challenge ids during approval", async () => {
   const { service } = createFixture();
-  const { challenge } = service.startCliLogin();
+  const { challenge } = await service.startCliLogin();
 
-  assertBackendError(
+  await assertBackendError(
     () => service.approveCliLogin({
       challengeId: "missing",
       ownerId: "owner_1"
     }),
     PROFILE_BACKEND_ERROR_CODES.NOT_FOUND
   );
-  assertBackendError(
+  await assertBackendError(
     () => service.approveCliLogin({
       challengeId: challenge.id,
       ownerId: "missing_owner"
@@ -233,8 +233,8 @@ function createTokenFactory() {
   };
 }
 
-function assertBackendError(callback, code) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

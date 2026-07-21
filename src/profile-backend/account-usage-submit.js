@@ -37,65 +37,72 @@ export function createAccountUsageSubmitService(options = {}) {
   const rateLimiter = options.rateLimiter ?? createAccountUsageRateLimiter({ now });
 
   return {
-    submitAccountUsage(submitOptions = {}) {
-      const { owner, tokenRecord } = tokenService.verifyCliToken(submitOptions.token);
+    async submitAccountUsage(submitOptions = {}) {
+      const { owner, tokenRecord } = await tokenService.verifyCliToken(submitOptions.token);
       rateLimiter.consume(tokenRecord.id);
 
       assertNoForbiddenSecrets(submitOptions.document);
       const document = normalizeSubmittedDocument(submitOptions.document, { now });
       const contentDigest = createAccountUsageContentDigest(document);
-      const previous = store.getLatestUsageByOwnerId(owner.id);
-      const comparison = compareUsageDocuments(previous, document, contentDigest);
-
-      if (comparison === "stale") {
-        throw conflictError("Account usage document is older than the stored revision");
-      }
-      if (comparison === "conflict") {
-        throw conflictError("Account usage timestamp already has different content");
-      }
-
       const uploadedAt = normalizeDate(now()).toISOString();
-      const device = deviceService.upsertSubmittedDevice({
-        ownerId: owner.id,
-        device: submitOptions.device,
-        submittedAt: uploadedAt
-      });
 
-      if (comparison === "idempotent") {
+      // capturedAt and contentDigest decide stale/conflict/idempotent/new
+      // atomically: the previous record is read under the owner row lock and
+      // the usage save plus device touch commit together.
+      return store.transaction(async (tx) => {
+        const previous = await tx.getLatestUsageByOwnerId(owner.id);
+        const comparison = compareUsageDocuments(previous, document, contentDigest);
+
+        if (comparison === "stale") {
+          throw conflictError("Account usage document is older than the stored revision");
+        }
+        if (comparison === "conflict") {
+          throw conflictError("Account usage timestamp already has different content");
+        }
+
+        const device = await deviceService.upsertSubmittedDevice({
+          ownerId: owner.id,
+          device: submitOptions.device,
+          submittedAt: uploadedAt,
+          store: tx
+        });
+
+        if (comparison === "idempotent") {
+          return {
+            owner,
+            tokenRecord,
+            usageRecord: previous,
+            device,
+            idempotent: true,
+            revision: createAccountUsageRevision(contentDigest)
+          };
+        }
+
+        const usageRecord = await tx.saveLatestUsage({
+          ownerId: owner.id,
+          handle: owner.handle,
+          visibility: owner.visibility,
+          contractVersion: document.contractVersion,
+          capturedAt: document.capturedAt,
+          uploadedAt,
+          contentDigest,
+          usage: projectAccountUsageReadResult(document)
+        });
+
         return {
           owner,
           tokenRecord,
-          usageRecord: previous,
+          usageRecord,
           device,
-          idempotent: true,
+          idempotent: false,
           revision: createAccountUsageRevision(contentDigest)
         };
-      }
-
-      const usageRecord = store.saveLatestUsage({
-        ownerId: owner.id,
-        handle: owner.handle,
-        visibility: owner.visibility,
-        contractVersion: document.contractVersion,
-        capturedAt: document.capturedAt,
-        uploadedAt,
-        contentDigest,
-        usage: projectAccountUsageReadResult(document)
       });
-
-      return {
-        owner,
-        tokenRecord,
-        usageRecord,
-        device,
-        idempotent: false,
-        revision: createAccountUsageRevision(contentDigest)
-      };
     },
 
-    getAccountUsageStatus(statusOptions = {}) {
-      const { owner, tokenRecord } = tokenService.verifyCliToken(statusOptions.token);
-      const usageRecord = store.getLatestUsageByOwnerId(owner.id);
+    async getAccountUsageStatus(statusOptions = {}) {
+      const { owner, tokenRecord } = await tokenService.verifyCliToken(statusOptions.token);
+      const usageRecord = await store.getLatestUsageByOwnerId(owner.id);
 
       return {
         owner,

@@ -366,6 +366,40 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         latestUsages: Array.from(latestUsagesByOwnerId.values(), clone),
         submittedDevices: Array.from(submittedDevicesById.values(), clone)
       };
+    },
+
+    transaction(runner) {
+      if (typeof runner !== "function") {
+        throw new TypeError("transaction runner must be a function");
+      }
+
+      // Single-threaded snapshot/restore gives all-or-nothing semantics: no
+      // interleaving is possible, so the only source of a partial commit is a
+      // throw part-way through the runner. On failure we restore the state
+      // captured before the runner started. The runner receives the store
+      // itself as its transactional handle.
+      const snapshot = store.exportState();
+      const restore = (error) => {
+        store.clear();
+        hydrateStore(store, snapshot);
+        throw error;
+      };
+
+      let result;
+      try {
+        result = runner(store);
+      } catch (error) {
+        return restore(error);
+      }
+
+      if (result && typeof result.then === "function") {
+        return result.then(
+          (value) => value,
+          (error) => restore(error)
+        );
+      }
+
+      return result;
     }
   };
 

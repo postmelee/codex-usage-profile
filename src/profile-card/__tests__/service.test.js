@@ -15,13 +15,13 @@ import {
 } from "../service.js";
 import { sampleAccountUsageReadResult } from "../fixtures/sample-account-usage.js";
 
-test("reads owner profile and keeps owner and latest usage visibility aligned", () => {
+test("reads owner profile and keeps owner and latest usage visibility aligned", async () => {
   const fixture = createFixture();
-  const initial = fixture.service.getOwnerProfile({ ownerId: OWNER.id });
+  const initial = await fixture.service.getOwnerProfile({ ownerId: OWNER.id });
   assert.equal(initial.visibility, PROFILE_VISIBILITY.PRIVATE);
   assert.deepEqual(initial.usageRecord.usage, sampleAccountUsageReadResult);
 
-  const published = fixture.service.updateVisibility({
+  const published = await fixture.service.updateVisibility({
     ownerId: OWNER.id,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
@@ -47,14 +47,14 @@ test("hides missing, private, and visibility-mismatched public cards", async () 
   }
 });
 
-test("returns a public profile from the owner-linked Account Usage record", () => {
+test("returns a public profile from the owner-linked Account Usage record", async () => {
   const fixture = createFixture();
-  fixture.service.updateVisibility({
+  await fixture.service.updateVisibility({
     ownerId: OWNER.id,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
 
-  const profile = fixture.service.getPublicProfile({ handle: " POSTMELEE " });
+  const profile = await fixture.service.getPublicProfile({ handle: " POSTMELEE " });
 
   assert.equal(profile.owner.id, OWNER.id);
   assert.equal(profile.usageRecord.ownerId, OWNER.id);
@@ -96,7 +96,7 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
       return Buffer.from(`png-${renderCount}`);
     }
   });
-  fixture.service.updateVisibility({
+  await fixture.service.updateVisibility({
     ownerId: OWNER.id,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
@@ -123,7 +123,7 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
 
 test("changes ETag when locale, owner identity, or latest usage changes", async () => {
   const fixture = createFixture({ renderPng: async () => Buffer.from("png") });
-  fixture.service.updateVisibility({
+  await fixture.service.updateVisibility({
     ownerId: OWNER.id,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
@@ -191,7 +191,7 @@ test("rejects unsupported and oversized avatar responses before rendering", asyn
   }
 });
 
-test("accepts only HTTPS avatars.githubusercontent.com URLs", () => {
+test("accepts only HTTPS avatars.githubusercontent.com URLs", async () => {
   assert.equal(
     normalizeGitHubAvatarUrl("https://avatars.githubusercontent.com/u/12345?v=4"),
     "https://avatars.githubusercontent.com/u/12345?v=4"

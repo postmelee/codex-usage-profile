@@ -1,5 +1,11 @@
 export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 1;
 
+// Store methods may return a value or a Promise. Callers must `await` every
+// method so the same service code works against the synchronous memory/file
+// store and the asynchronous Postgres adapter. `transaction(runner)` runs a
+// read-modify-write block atomically: the memory/file store guarantees
+// all-or-nothing via snapshot/restore, the Postgres adapter via a real
+// transaction with FOR UPDATE on the serialization keys below.
 export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
   "clear",
   "deleteCliToken",
@@ -30,7 +36,8 @@ export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
   "saveOAuthState",
   "saveOwner",
   "saveSession",
-  "saveSubmittedDevice"
+  "saveSubmittedDevice",
+  "transaction"
 ]);
 
 export const PROFILE_BACKEND_STORE_RECORDS = deepFreeze({

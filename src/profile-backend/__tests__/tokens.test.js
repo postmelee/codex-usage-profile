@@ -12,7 +12,7 @@ import {
   createMemoryProfileBackendStore
 } from "../index.js";
 
-test("issues a raw CLI token once and stores only a digest", () => {
+test("issues a raw CLI token once and stores only a digest", async () => {
   const store = createStoreWithOwner();
   const service = createCliTokenService({
     store,
@@ -21,7 +21,7 @@ test("issues a raw CLI token once and stores only a digest", () => {
     createToken: createTokenFactory()
   });
 
-  const { token, tokenRecord } = service.issueCliToken({
+  const { token, tokenRecord } = await service.issueCliToken({
     ownerId: "owner_1",
     label: "macbook"
   });
@@ -35,7 +35,7 @@ test("issues a raw CLI token once and stores only a digest", () => {
   assert.equal(Object.hasOwn(storedToken, "token"), false);
 });
 
-test("verifies a valid CLI token and updates lastUsedAt", () => {
+test("verifies a valid CLI token and updates lastUsedAt", async () => {
   const store = createStoreWithOwner();
   let current = new Date("2026-06-08T00:00:00.000Z");
   const service = createCliTokenService({
@@ -44,16 +44,16 @@ test("verifies a valid CLI token and updates lastUsedAt", () => {
     createId: createIdFactory(),
     createToken: createTokenFactory()
   });
-  const { token } = service.issueCliToken({ ownerId: "owner_1" });
+  const { token } = await service.issueCliToken({ ownerId: "owner_1" });
 
   current = new Date("2026-06-08T00:03:00.000Z");
-  const result = service.verifyCliToken(token, { ownerId: "owner_1" });
+  const result = await service.verifyCliToken(token, { ownerId: "owner_1" });
 
   assert.equal(result.owner.id, "owner_1");
   assert.equal(result.tokenRecord.lastUsedAt, "2026-06-08T00:03:00.000Z");
 });
 
-test("lists owner CLI tokens without revoked records by default", () => {
+test("lists owner CLI tokens without revoked records by default", async () => {
   const store = createStoreWithOwner();
   store.saveOwner({
     id: "owner_2",
@@ -70,17 +70,17 @@ test("lists owner CLI tokens without revoked records by default", () => {
     createId: createIdFactory(),
     createToken: createTokenFactory()
   });
-  const first = service.issueCliToken({ ownerId: "owner_1", label: "first" });
-  service.issueCliToken({ ownerId: "owner_2", label: "other" });
+  const first = await service.issueCliToken({ ownerId: "owner_1", label: "first" });
+  await service.issueCliToken({ ownerId: "owner_2", label: "other" });
   current = new Date("2026-06-08T00:01:00.000Z");
-  const second = service.issueCliToken({ ownerId: "owner_1", label: "second" });
-  service.revokeCliToken({
+  const second = await service.issueCliToken({ ownerId: "owner_1", label: "second" });
+  await service.revokeCliToken({
     tokenId: first.tokenRecord.id,
     ownerId: "owner_1"
   });
 
-  const activeTokens = service.listCliTokens({ ownerId: "owner_1" });
-  const allTokens = service.listCliTokens({
+  const activeTokens = await service.listCliTokens({ ownerId: "owner_1" });
+  const allTokens = await service.listCliTokens({
     ownerId: "owner_1",
     includeRevoked: true
   });
@@ -93,7 +93,7 @@ test("lists owner CLI tokens without revoked records by default", () => {
   assert.equal(Object.hasOwn(activeTokens[0], "token"), false);
 });
 
-test("limits active CLI tokens per owner and ignores revoked records", () => {
+test("limits active CLI tokens per owner and ignores revoked records", async () => {
   const store = createStoreWithOwner();
   store.saveOwner({
     id: "owner_2",
@@ -110,52 +110,52 @@ test("limits active CLI tokens per owner and ignores revoked records", () => {
     createToken: createTokenFactory()
   });
   const issued = [
-    service.issueCliToken({ ownerId: "owner_1", label: "first" }),
-    service.issueCliToken({ ownerId: "owner_1", label: "second" }),
-    service.issueCliToken({ ownerId: "owner_1", label: "third" })
+    await service.issueCliToken({ ownerId: "owner_1", label: "first" }),
+    await service.issueCliToken({ ownerId: "owner_1", label: "second" }),
+    await service.issueCliToken({ ownerId: "owner_1", label: "third" })
   ];
 
-  const otherOwner = service.issueCliToken({
+  const otherOwner = await service.issueCliToken({
     ownerId: "owner_2",
     label: "other"
   });
 
   assert.equal(
-    service.listCliTokens({ ownerId: "owner_1" }).length,
+    (await service.listCliTokens({ ownerId: "owner_1" })).length,
     DEFAULT_MAX_ACTIVE_CLI_TOKENS
   );
-  assertBackendError(
+  await assertBackendError(
     () => service.issueCliToken({ ownerId: "owner_1", label: "overflow" }),
     PROFILE_BACKEND_ERROR_CODES.CONFLICT
   );
 
-  service.revokeCliToken({
+  await service.revokeCliToken({
     ownerId: "owner_1",
     tokenId: issued[1].tokenRecord.id
   });
-  const replacement = service.issueCliToken({
+  const replacement = await service.issueCliToken({
     ownerId: "owner_1",
     label: "replacement"
   });
 
   assert.equal(replacement.tokenRecord.label, "replacement");
-  assert.equal(service.listCliTokens({ ownerId: "owner_1" }).length, 3);
+  assert.equal((await service.listCliTokens({ ownerId: "owner_1" })).length, 3);
   assert.deepEqual(
-    service
-      .listCliTokens({ ownerId: "owner_1" })
+    (await service
+      .listCliTokens({ ownerId: "owner_1" }))
       .map((tokenRecord) => tokenRecord.label)
       .sort(),
     ["first", "replacement", "third"]
   );
   assert.deepEqual(
-    service
-      .listCliTokens({ ownerId: "owner_2" })
+    (await service
+      .listCliTokens({ ownerId: "owner_2" }))
       .map((tokenRecord) => tokenRecord.id),
     [otherOwner.tokenRecord.id]
   );
 });
 
-test("rejects invalid, expired, revoked, and owner-mismatched CLI tokens", () => {
+test("rejects invalid, expired, revoked, and owner-mismatched CLI tokens", async () => {
   const store = createStoreWithOwner();
   store.saveOwner({
     id: "owner_2",
@@ -173,38 +173,38 @@ test("rejects invalid, expired, revoked, and owner-mismatched CLI tokens", () =>
     createToken: createTokenFactory()
   });
 
-  const expiring = service.issueCliToken({
+  const expiring = await service.issueCliToken({
     ownerId: "owner_1",
     expiresInMs: 1000
   });
-  const revoked = service.issueCliToken({ ownerId: "owner_1" });
+  const revoked = await service.issueCliToken({ ownerId: "owner_1" });
 
-  assertBackendError(
+  await assertBackendError(
     () => service.verifyCliToken("cup_unknown"),
     PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED
   );
-  assertBackendError(
+  await assertBackendError(
     () => service.verifyCliToken(expiring.token, { ownerId: "owner_2" }),
     PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED
   );
 
   current = new Date("2026-06-08T00:00:01.000Z");
-  assertBackendError(
+  await assertBackendError(
     () => service.verifyCliToken(expiring.token),
     PROFILE_BACKEND_ERROR_CODES.EXPIRED
   );
 
-  service.revokeCliToken({
+  await service.revokeCliToken({
     tokenId: revoked.tokenRecord.id,
     ownerId: "owner_1"
   });
-  assertBackendError(
+  await assertBackendError(
     () => service.verifyCliToken(revoked.token),
     PROFILE_BACKEND_ERROR_CODES.GONE
   );
 });
 
-test("revokes CLI tokens idempotently and validates ownership", () => {
+test("revokes CLI tokens idempotently and validates ownership", async () => {
   const store = createStoreWithOwner();
   const service = createCliTokenService({
     store,
@@ -212,9 +212,9 @@ test("revokes CLI tokens idempotently and validates ownership", () => {
     createId: createIdFactory(),
     createToken: createTokenFactory()
   });
-  const { tokenRecord } = service.issueCliToken({ ownerId: "owner_1" });
+  const { tokenRecord } = await service.issueCliToken({ ownerId: "owner_1" });
 
-  assertBackendError(
+  await assertBackendError(
     () => service.revokeCliToken({
       tokenId: tokenRecord.id,
       ownerId: "owner_2"
@@ -222,11 +222,11 @@ test("revokes CLI tokens idempotently and validates ownership", () => {
     PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED
   );
 
-  const revoked = service.revokeCliToken({
+  const revoked = await service.revokeCliToken({
     tokenId: tokenRecord.id,
     ownerId: "owner_1"
   });
-  const second = service.revokeCliToken({
+  const second = await service.revokeCliToken({
     tokenId: tokenRecord.id,
     ownerId: "owner_1"
   });
@@ -235,7 +235,7 @@ test("revokes CLI tokens idempotently and validates ownership", () => {
   assert.equal(second.revokedAt, revoked.revokedAt);
 });
 
-test("validates token issue inputs", () => {
+test("validates token issue inputs", async () => {
   const store = createStoreWithOwner();
   const service = createCliTokenService({
     store,
@@ -244,11 +244,11 @@ test("validates token issue inputs", () => {
     createToken: createTokenFactory()
   });
 
-  assertBackendError(
+  await assertBackendError(
     () => service.issueCliToken({ ownerId: "missing_owner" }),
     PROFILE_BACKEND_ERROR_CODES.NOT_FOUND
   );
-  assertBackendError(
+  await assertBackendError(
     () => service.issueCliToken({ ownerId: "owner_1", scopes: [42] }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
@@ -285,8 +285,8 @@ function createTokenFactory() {
   };
 }
 
-function assertBackendError(callback, code) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

@@ -46,13 +46,13 @@ export function createOAuthRuntimeService(options = {}) {
   });
 
   return {
-    startGitHubLogin(startOptions = {}) {
+    async startGitHubLogin(startOptions = {}) {
       const clientId = requireNonEmptyString(
         startOptions.githubClientId ?? githubClientId,
         "githubClientId"
       );
       const createdAt = normalizeDate(now());
-      const oauthState = store.saveOAuthState({
+      const oauthState = await store.saveOAuthState({
         id: createId("oauth_state"),
         provider: "github",
         status: OAUTH_STATE_STATUS.PENDING,
@@ -83,34 +83,45 @@ export function createOAuthRuntimeService(options = {}) {
     },
 
     async completeGitHubCallback(callbackOptions = {}) {
-      const state = getOAuthState(store, callbackOptions.state);
-      assertOAuthStateCanBeConsumed(store, state, normalizeDate(now()));
+      const state = await getOAuthState(store, callbackOptions.state);
+      await assertOAuthStateCanBeConsumed(store, state, normalizeDate(now()));
 
+      // The GitHub token exchange is a network call, so it stays outside the
+      // transaction. Consuming the state and committing the owner/session are
+      // done atomically so exactly one callback can consume a pending state.
       const identity = await resolveGitHubIdentityFromCode({
         code: callbackOptions.code,
         githubClient: callbackOptions.githubClient ?? githubClient
       });
-      const owner = accountService.upsertGitHubOwner(identity, {
-        handle: callbackOptions.handle,
-        visibility: callbackOptions.visibility
-      });
-      const { session, cookie: sessionCookie } = sessionService.createSession({
-        ownerId: owner.id
-      });
-      const consumedState = store.saveOAuthState({
-        ...state,
-        status: OAUTH_STATE_STATUS.CONSUMED,
-        consumedAt: normalizeDate(now()).toISOString(),
-        ownerId: owner.id,
-        sessionId: session.id
-      });
 
-      return {
-        owner,
-        session,
-        sessionCookie,
-        oauthState: consumedState
-      };
+      return store.transaction(async (tx) => {
+        const lockedState = await tx.getOAuthState(state.id);
+        checkOAuthStateConsumable(lockedState, normalizeDate(now()));
+
+        const owner = await accountService.upsertGitHubOwner(identity, {
+          handle: callbackOptions.handle,
+          visibility: callbackOptions.visibility,
+          store: tx
+        });
+        const { session, cookie: sessionCookie } = await sessionService.createSession({
+          ownerId: owner.id,
+          store: tx
+        });
+        const consumedState = await tx.saveOAuthState({
+          ...lockedState,
+          status: OAUTH_STATE_STATUS.CONSUMED,
+          consumedAt: normalizeDate(now()).toISOString(),
+          ownerId: owner.id,
+          sessionId: session.id
+        });
+
+        return {
+          owner,
+          session,
+          sessionCookie,
+          oauthState: consumedState
+        };
+      });
     },
 
     logout(logoutOptions = {}) {
@@ -141,9 +152,9 @@ export function resolveCallbackUrl(publicBaseUrl, callbackPath = DEFAULT_GITHUB_
   )).toString();
 }
 
-function getOAuthState(store, stateId) {
+async function getOAuthState(store, stateId) {
   const id = requireNonEmptyString(stateId, "state");
-  const state = store.getOAuthState(id);
+  const state = await store.getOAuthState(id);
 
   if (!state) {
     throw new ProfileBackendError(
@@ -155,15 +166,26 @@ function getOAuthState(store, stateId) {
   return state;
 }
 
-function assertOAuthStateCanBeConsumed(store, state, nowDate) {
-  if (new Date(state.expiresAt).getTime() <= nowDate.getTime()) {
-    if (state.status !== OAUTH_STATE_STATUS.CONSUMED) {
-      store.saveOAuthState({
-        ...state,
-        status: OAUTH_STATE_STATUS.EXPIRED
-      });
-    }
+// Marks an expired pending state EXPIRED (a housekeeping write) and then throws
+// if the state cannot be consumed. Runs before the transaction.
+async function assertOAuthStateCanBeConsumed(store, state, nowDate) {
+  if (
+    new Date(state.expiresAt).getTime() <= nowDate.getTime() &&
+    state.status !== OAUTH_STATE_STATUS.CONSUMED
+  ) {
+    await store.saveOAuthState({
+      ...state,
+      status: OAUTH_STATE_STATUS.EXPIRED
+    });
+  }
 
+  checkOAuthStateConsumable(state, nowDate);
+}
+
+// Pure re-validation used inside the transaction under the row lock so a racing
+// callback that already consumed the state is rejected. Performs no writes.
+function checkOAuthStateConsumable(state, nowDate) {
+  if (new Date(state.expiresAt).getTime() <= nowDate.getTime()) {
     throw new ProfileBackendError(
       PROFILE_BACKEND_ERROR_CODES.EXPIRED,
       "OAuth state has expired"

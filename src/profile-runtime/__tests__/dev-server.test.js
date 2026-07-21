@@ -226,8 +226,8 @@ test("keeps public HTML JSON and PNG synchronized across usage revisions and vis
     now: () => current,
     createId
   });
-  const { token } = tokenService.issueCliToken({ ownerId: owner.id });
-  const { cookie } = sessionService.createSession({ ownerId: owner.id });
+  const { token } = await tokenService.issueCliToken({ ownerId: owner.id });
+  const { cookie } = await sessionService.createSession({ ownerId: owner.id });
   const apiHandler = createProfileRuntimeBackendHandler({
     backendOptions: {
       createId,

@@ -542,7 +542,7 @@ test("rejects settings mutations without session cookies and ignores bearer cred
   const fixture = createFixture();
   fixture.saveOwner();
   const cookie = fixture.saveSession();
-  const { token } = fixture.issueToken({ label: "bearer" });
+  const { token } = await fixture.issueToken({ label: "bearer" });
   const created = await requestJson(
     fixture.handler,
     "POST",
@@ -974,7 +974,7 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
 test("handles bearer snapshot submit and public handle lookup", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
 
   const submitted = await requestJson(
     fixture.handler,
@@ -1004,7 +1004,7 @@ test("handles bearer snapshot submit and public handle lookup", async () => {
 test("submits Account Usage Contract v1 and returns metadata-only status", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
-  const { token } = fixture.issueToken({ label: "account usage" });
+  const { token } = await fixture.issueToken({ label: "account usage" });
   const document = createAccountUsageDocument();
   const headers = {
     authorization: `Bearer ${token}`,
@@ -1075,7 +1075,7 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
 test("rejects Account Usage conflicts and invalid HTTP bodies", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
   const authorization = { authorization: `Bearer ${token}` };
   const document = createAccountUsageDocument();
 
@@ -1140,7 +1140,7 @@ test("returns conflict and Retry-After responses for Account Usage submit", asyn
     })
   });
   fixture.saveOwner();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
   const headers = { authorization: `Bearer ${token}` };
   const document = createAccountUsageDocument();
 
@@ -1183,7 +1183,7 @@ test("handles settings device list and rename after submit", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
   const cookie = fixture.saveSession();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
 
   await requestJson(
     fixture.handler,
@@ -1253,7 +1253,7 @@ test("rejects settings device management without session ownership", async () =>
     visibility: PROFILE_VISIBILITY.PRIVATE
   });
   const otherCookie = fixture.saveSession("owner_2", { id: "session_2" });
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
 
   await requestJson(
     fixture.handler,
@@ -1310,7 +1310,7 @@ test("rejects settings device management without session ownership", async () =>
 test("hides private snapshots behind the same not found response", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
 
   await requestJson(
     fixture.handler,
@@ -1373,7 +1373,7 @@ test("returns stable errors for malformed JSON, missing auth, and unsupported ro
 test("returns validation errors from submit payloads", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
-  const { token } = fixture.issueToken();
+  const { token } = await fixture.issueToken();
   const invalidSnapshot = structuredClone(sampleProfileSnapshot);
   delete invalidSnapshot.schemaVersion;
 
@@ -1446,8 +1446,8 @@ function createFixture(options = {}) {
     store,
     handler,
     githubCalls,
-    issueToken(options = {}) {
-      return tokenService.issueCliToken({
+    async issueToken(options = {}) {
+      return await tokenService.issueCliToken({
         ownerId: "owner_1",
         ...options
       });

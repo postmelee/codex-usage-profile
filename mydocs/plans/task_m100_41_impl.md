@@ -32,17 +32,19 @@ GitHub Issue: [#41](https://github.com/postmelee/codex-usage-profile/issues/41)
 
 수정:
 
-- `src/profile-backend/store-contract.js` — `PROFILE_BACKEND_STORE_METHODS`에 5 atomic operation method 추가, async 계약 주석
-- `src/profile-backend/store.js` — memory store에 `completeOAuthCallback`, `approveCliLogin`, `exchangeCliLogin`, `submitAccountUsage`, `updateVisibility` 구현
-- `src/profile-backend/durable-store.js` — atomic operation을 `MUTATING_METHODS`에 포함, persist 경유
-- `src/profile-backend/oauth-runtime.js`, `cli-login.js`, `account-usage-submit.js`, `accounts.js`, `devices.js`, `session.js`, `tokens.js`, `snapshots.js` — store 호출을 `await`로 전환, 원자 연산은 승격 method 경유
+- `src/profile-backend/store-contract.js` — `PROFILE_BACKEND_STORE_METHODS`에 `transaction` 추가, async 계약 주석
+- `src/profile-backend/store.js` — memory store에 `transaction(fn)` (스냅샷/복원 기반 all-or-nothing) 추가
+- `src/profile-backend/durable-store.js` — `transaction`을 proxy에서 특수 처리(성공 시 1회 persist), 실패 시 memory 복원
+- store 호출 서비스 async 전환: `oauth-runtime.js`, `cli-login.js`, `account-usage-submit.js`, `accounts.js`, `devices.js`, `session.js`, `tokens.js`, `snapshots.js` — store 호출 `await`, 원자 연산은 `store.transaction`으로 감싸고 tx-bound sub-service 사용
 - `src/profile-backend/http.js` — 서비스 호출부 `await` 정합
 
-### 변경 내용
+### 변경 내용 (transaction scope, 2026-07-21 승인 갱신)
 
-- 원자 method는 입력 검증 후 관련 레코드를 순차 write하고, 판정 결과(`created`/`stale`/`conflict`/`idempotent`/`approved` 등)를 반환한다. memory 구현은 동기 실행이지만 계약상 Promise 반환도 허용하도록 서비스는 항상 `await`한다.
-- `store-transactions.test.js`는 각 원자 연산이 (1) 성공 경로, (2) 중복 소비 거부, (3) 부분 commit 부재(실패 시 관련 레코드 원상)를 memory store 기준으로 고정한다. 승격 전 개별 write와 동일한 최종 상태를 내는지 대조한다.
-- 서비스 외부 시그니처와 HTTP 응답 형태는 유지한다(회귀 관점 고정).
+- store는 `transaction(runner)`를 노출한다. memory 구현은 `exportState` 스냅샷 후 runner 실행, 성공 시 반환·실패 시 `clear`+`hydrate`로 복원(all-or-nothing). runner에는 tx로 store 자신을 전달(단일 스레드).
+- file store는 proxy에서 `transaction`을 특수 처리: memory target에서 runner 실행 후 성공하면 1회 persist, 실패하면 memory가 이미 복원되어 persist 불필요.
+- 4개 write 원자 연산은 `await store.transaction(async (tx) => { ... })`로 감싸고, 내부에서 `createAccountService({ store: tx })` 등 tx-bound sub-service를 구성해 read-modify-write 전체를 스코프 안에서 실행한다. 네트워크 호출(GitHub identity)·crypto는 트랜잭션 밖에서 수행한다.
+- `store-transactions.test.js`는 각 원자 연산이 (1) 성공 경로, (2) 중복 소비 거부, (3) 부분 commit 부재(실패 시 관련 레코드 원상)를 memory store 기준으로 고정한다.
+- 서비스 외부 시그니처와 HTTP 응답 형태는 유지한다(회귀 관점 고정). memory/file **store method 자체는 동기 유지**(store-level test 무변경), 서비스 계층만 async.
 
 ### 검증
 
