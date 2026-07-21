@@ -38,9 +38,11 @@ CLI Bearer 요청은 browser cookie에 의존하지 않는다. CLI는 `Origin` �
 
 ## Structured Store Contract
 
-[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider 중립 structured-store 표면과 production adapter의 원자성 요구를 정의한다. 현재 memory/file store는 이 표면의 contract fixture다. file store는 local 개발과 spike에서만 사용하며 Cloud Run 다중 인스턴스 production store가 아니다.
+[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider 중립 structured-store 표면과 production adapter의 원자성 요구를 정의한다. memory/file store는 이 표면의 contract fixture로, `transaction(runner)` 스코프를 단일 프로세스 직렬화(스냅샷/복원)로 구현한다. file store는 local 개발과 spike에서만 사용하며 Cloud Run 다중 인스턴스 production store가 아니다.
 
-Neon adapter는 다음 연산을 DB transaction 또는 동등한 compare-and-swap으로 구현해야 한다.
+production adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다(배포 대상은 Neon). 각 원자 연산의 read-modify-write 전체가 하나의 DB transaction 안에서 실행되고, transaction 내 단일행 조회는 `FOR UPDATE`로 직렬화 키 row를 잠근다. schema는 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)의 versioned migration으로 관리하며, unique constraint 위반은 contract의 `conflict` 오류로 매핑된다.
+
+adapter가 transaction으로 구현하는 연산은 다음과 같다.
 
 | 연산 | 직렬화 키 | 필수 결과 |
 |---|---|---|
@@ -50,9 +52,11 @@ Neon adapter는 다음 연산을 DB transaction 또는 동등한 compare-and-swa
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
 
-부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호해야 한다. 읽기와 목록 API는 owner scope를 우회할 수 없어야 한다.
+부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호하며 schema DDL에서 강제된다. 읽기와 목록 API는 owner scope를 우회할 수 없다. CLI token 검증의 `lastUsedAt` touch는 submit transaction 밖에서 실행된다 — 거부된 submit도 token 사용 시도를 기록하는 기존 동작을 보존하기 위한 의도적 경계다.
 
-현재 서비스 write path는 동기식 file-store API를 사용한다. 따라서 이 문서와 contract test만으로 Neon multi-instance 안전성이 구현되었다고 간주하지 않는다. 실제 Neon schema, async adapter, transaction wiring과 migration이 완료될 때까지 production `PROFILE_STORE_MODE=external`은 전용 adapter 주입 없이는 시작하지 않아야 한다.
+위 다섯 연산은 실 Postgres에서 병렬 중복 소비 거부와 실패 주입 시 부분 commit 부재를 검증하는 test suite로 고정되어 있다(`postgres-store.test.js`, `postgres-concurrency.test.js`, `TEST_DATABASE_URL` 설정 시 실행). production `PROFILE_STORE_MODE=external`은 `NEON_DATABASE_URL`이 없거나 migration이 적용되지 않은 database에 대해 시작을 거부한다.
+
+local file store 스냅샷은 `npm run migrate:seed`(`scripts/migrate-file-store-to-postgres.mjs`)로 Postgres에 one-shot 적재한다. dry-run은 transaction rollback으로 검증만 수행하고, 재실행은 primary-key upsert로 idempotent하며, rollback은 스냅샷에 있는 id만 제거한다. 이 도구는 이전 직후 사용을 전제로 한다.
 
 ## Public Media Contract
 
@@ -90,19 +94,47 @@ Unpublish는 stable public object만 제거한다. immutable revision retention�
 
 `PROFILE_STORE_FILE`은 local/spike 전용이다. production persistent disk나 backup 대체물로 사용하지 않는다.
 
-### 후속 adapter 값
+### Postgres/Neon adapter 값
 
-Neon 연결 문자열, R2 access key/secret과 signing credential은 server-only secret이어야 한다. Neon project/branch id, R2 account/bucket 이름과 public media origin은 민감하지 않을 수 있지만 운영 설정으로 관리한다. 정확한 env 이름은 provider adapter issue에서 확정하며, 이름을 확정하기 전에 임시 credential을 image 또는 Sites bundle에 넣지 않는다.
+| 설정 | 분류 | 설명 |
+|---|---|---|
+| `NEON_DATABASE_URL` | secret | Postgres 연결 문자열. Neon pooled(pgbouncer) endpoint를 사용한다. pool 생성 시점에만 읽으며 config 객체·로그로 전파하지 않는다 |
+| `DATABASE_URL` | secret | `NEON_DATABASE_URL` 부재 시 fallback (로컬/일반 Postgres) |
+| `TEST_DATABASE_URL` | test 전용 | 설정 시 Postgres integration test가 실행되고, 없으면 skip되어 `npm test`는 어디서나 green이다 |
+
+connection pool은 인스턴스당 소형(max 4)이고 idle 연결을 빠르게 반환한다. statement timeout은 transaction마다 `SET LOCAL`로 적용해 transaction-mode pooling에서도 유효하다. migration은 instance 부팅 시 자동 실행하지 않으며 배포 단계에서 `npm run migrate:postgres -- up`으로 명시 실행한다(advisory lock으로 동시 실행 직렬화).
+
+R2 access key/secret과 signing credential은 server-only secret이어야 한다. R2 account/bucket 이름과 public media origin은 민감하지 않을 수 있지만 운영 설정으로 관리한다. R2 env 이름은 provider adapter issue에서 확정한다.
 
 ## Startup, Health, Cache, Rollback
 
-1. Cloud Run process는 `0.0.0.0:$PORT`에서 시작하고 malformed canonical origin, production file store와 누락된 external adapter를 startup 전에 거부한다.
+1. Cloud Run process는 `0.0.0.0:$PORT`에서 시작하고 malformed canonical origin, production file store와 누락된 `NEON_DATABASE_URL`을 startup 전에 거부한다.
 2. `/healthz`는 process liveness만 확인하며 Neon/R2를 변경하지 않고 credential, store path와 payload를 노출하지 않는다.
-3. production readiness를 선언하기 전 Neon migration/connection과 required R2 configuration을 별도 startup check로 검증해야 한다. 일시적인 provider 장애로 모든 instance가 동시에 재시작하지 않도록 liveness와 dependency readiness를 구분한다.
+3. dependency readiness는 liveness와 분리되어 있다. runtime이 직접 생성한 Postgres store는 startup 시 `verifyReadiness()`로 연결과 migration 적용 상태를 검증하고, 미적용 migration이 있으면 실행할 명령을 안내하며 시작을 거부한다. required R2 configuration 검증은 R2 adapter task에서 같은 방식으로 추가한다.
 4. public stable card는 ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 항상 최신 published revision을 가리킨다.
 5. application rollback은 이전 Cloud Run revision으로 되돌린다. DB migration은 최소 한 application rollback 구간 동안 backward compatible해야 한다.
 6. R2 publish 실패 시 이전 stable object를 유지한다. unpublish 실패를 성공으로 응답하지 않는다.
 7. Sites를 배포하지 못하거나 철회해도 Cloud Run `/`을 그대로 canonical landing으로 사용한다. Sites fallback 때문에 Cloud Run CORS나 cookie scope를 확대하지 않는다.
+
+## Data Retention, Backup, PII 최소화
+
+structured store의 기본 정책이다. 세부 보존 기간과 자동화는 Cloud Run 배포 task(#43)에서 운영 값과 함께 확정한다.
+
+### 저장 데이터와 PII 최소화
+
+- 저장하는 개인 식별 정보는 GitHub 공개 identity(login, display name, avatar/profile URL, provider user id)와 owner가 선택한 handle로 한정한다. usage 문서는 analyzer 계약상 identity-free다.
+- raw CLI token, raw device code, GitHub OAuth access token은 저장하지 않는다. schema에 해당 컬럼이 존재하지 않으며(digest 컬럼만 존재), 실 flow가 남긴 전체 상태에 raw 값이 없음을 test로 고정했다(`postgres-concurrency.test.js`의 secret scan과 column allowlist).
+- usage와 snapshot은 owner당 latest 1건만 저장한다. 시계열 히스토리를 축적하지 않는 것 자체가 1차 데이터 최소화 장치다.
+
+### Retention 기본 정책
+
+- expired/consumed OAuth state, expired CLI challenge, expired/revoked session과 token 행은 만료 시점 이후 인증에 사용될 수 없으나 행 자체는 남는다. 타임스탬프는 ISO-8601 UTC text로 사전순 비교가 시간순과 일치하므로, 운영 정리는 `DELETE ... WHERE expires_at < $now` 형태의 명시적 작업으로 수행한다. 자동 정리 주기는 #43에서 확정한다.
+- 계정 삭제(owner 및 종속 레코드 일괄 제거)는 아직 제품 기능이 아니다. README 보안 절의 미해결 항목과 동일하게 후속 task로 관리한다.
+
+### Backup과 복구
+
+- migration은 최소 한 application rollback 구간 동안 backward compatible해야 한다(위 5항). `npm run migrate:postgres -- down`은 스키마 롤백 경로를 제공한다.
+- database 백업/PITR은 Neon project의 기능을 사용하며 보존 기간은 #43에서 플랜과 함께 확정한다. seeding 도구의 rollback은 백업 대체물이 아니라 이전 직후의 원상 복원 수단이다.
 
 ## 검증 상태
 
@@ -113,6 +145,12 @@ Neon 연결 문자열, R2 access key/secret과 signing credential은 server-only
 - Linux amd64 container에서 native PNG render
 - production file store fail-closed와 generic startup error
 - structured/file-store contract fixture와 device persistence
+- Postgres schema migration up/down/재실행과 clean database bootstrap (로컬 Docker Postgres 17)
+- Postgres adapter의 contract 표면, 5개 atomic operation transaction과 `FOR UPDATE` 직렬화
+- 5개 연산의 병렬 중복 소비 거부와 실패 주입 시 부분 commit 부재
+- raw CLI token/device code/OAuth access token 미저장(secret scan·column allowlist)과 owner scope 격리
+- `PROFILE_STORE_MODE=external` production 기동: 미마이그레이션 DB 거부, 마이그레이션 DB 기동·종료
+- file store 스냅샷의 Postgres seeding(dry-run/실행/idempotent 재실행/rollback)
 - media revision/publish/unpublish memory contract
 - external/protocol-relative OAuth redirect 거부
 - explicit cross-origin API/session mutation 거부와 CORS header 부재
@@ -125,17 +163,15 @@ Neon 연결 문자열, R2 access key/secret과 signing credential은 server-only
 ### 설계만 확정됨
 
 - 실제 Cloud Run remote deploy, ingress, custom domain과 Secret Manager 연결
-- Neon schema, transaction, multi-instance concurrency, migration/backup/retention
+- 실제 Neon project 연결(원격 콜드스타트·pooled endpoint 실측)과 백업 보존 기간
 - R2 bucket, immutable object write, stable object materialization과 cache invalidation
 - production observability, alerting, abuse protection와 shared rate limiter
 - ChatGPT Sites remote project 생성과 event/marketing publication
 
-로컬 hosting matrix는 배포 구조와 독립 failure boundary를 검증하는 POC다. 실제 Cloud Run, Neon, R2 또는 Sites 원격 배포 성공을 의미하지 않으며 production readiness 선언에 사용할 수 없다.
+로컬 검증은 로컬 Docker Postgres 기준이다. 원격 Neon 배포 성공을 의미하지 않으며, R2가 도입되기 전까지 공개 card 요청이 Postgres를 직접 조회하므로 Neon scale-to-zero 재개 지연이 card 응답에 노출될 수 있다. 이 리스크는 R2 stable object 도입(#42)으로 해소된다.
 
 ## 후속 작업
 
-1. Neon schema와 async repository adapter를 만들고 contract의 다섯 atomic operation을 transaction test로 검증한다.
-2. local file data를 Neon으로 이전하는 one-shot migration과 rollback 검증을 추가한다.
-3. R2 adapter, immutable revision write, stable object publish/unpublish와 failure injection test를 구현한다.
-4. Cloud Run Secret Manager, custom domain, structured log/metric, shared rate limiter, backup와 retention 정책을 구성한다.
-5. 선택적으로 Sites marketing mirror를 게시하고 Cloud Run CTA, bundle privacy와 Cloud Run-only fallback을 운영 점검한다.
+1. R2 adapter, immutable revision write, stable object publish/unpublish와 failure injection test를 구현한다.
+2. Cloud Run Secret Manager, custom domain, structured log/metric, shared rate limiter와 backup/retention 운영 값을 구성한다.
+3. 선택적으로 Sites marketing mirror를 게시하고 Cloud Run CTA, bundle privacy와 Cloud Run-only fallback을 운영 점검한다.
