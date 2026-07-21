@@ -47,20 +47,22 @@ export function createFileProfileBackendStore(options = {}) {
 
       // A transaction runs its writes against the underlying memory store
       // (bypassing the per-call persist below), so we persist exactly once
-      // after it commits. On failure the memory store has already restored
-      // its pre-transaction state, so the on-disk file stays consistent and
-      // no persist is needed.
+      // per commit. The persist happens inside the runner — still within the
+      // memory store's serialized transaction slot — so the snapshot written
+      // to disk can never include writes from a following transaction. On
+      // failure the memory store restores its pre-transaction state and no
+      // persist runs, so the on-disk file stays consistent.
       if (property === "transaction") {
         return (runner) => {
-          const result = value.call(target, runner);
-          if (result && typeof result.then === "function") {
-            return result.then((committed) => {
-              persist();
-              return committed;
-            });
+          if (typeof runner !== "function") {
+            return value.call(target, runner);
           }
-          persist();
-          return result;
+
+          return value.call(target, async (tx) => {
+            const committed = await runner(tx);
+            persist();
+            return committed;
+          });
         };
       }
 

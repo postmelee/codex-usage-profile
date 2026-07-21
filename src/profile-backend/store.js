@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
@@ -11,6 +13,8 @@ export const PROFILE_VISIBILITY = Object.freeze({
 export const PROFILE_BACKEND_STORE_SCHEMA_VERSION = 1;
 
 export function createMemoryProfileBackendStore(initialState = {}) {
+  const transactionContext = new AsyncLocalStorage();
+  let transactionQueueTail = Promise.resolve();
   const ownersById = new Map();
   const ownerIdByProvider = new Map();
   const ownerIdByHandle = new Map();
@@ -373,32 +377,34 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         throw new TypeError("transaction runner must be a function");
       }
 
-      // Single-threaded snapshot/restore gives all-or-nothing semantics: no
-      // interleaving is possible, so the only source of a partial commit is a
-      // throw part-way through the runner. On failure we restore the state
-      // captured before the runner started. The runner receives the store
-      // itself as its transactional handle.
-      const snapshot = store.exportState();
-      const restore = (error) => {
-        store.clear();
-        hydrateStore(store, snapshot);
-        throw error;
-      };
-
-      let result;
-      try {
-        result = runner(store);
-      } catch (error) {
-        return restore(error);
-      }
-
-      if (result && typeof result.then === "function") {
-        return result.then(
-          (value) => value,
-          (error) => restore(error)
+      // Nested transactions would deadlock on the FIFO queue below, so they
+      // are rejected outright. The AsyncLocalStorage context follows the
+      // runner's async flow, catching nesting through any handle.
+      if (transactionContext.getStore()) {
+        throw new Error(
+          "Nested store transactions are not supported; reuse the active transaction handle"
         );
       }
 
+      // Async runners yield between store calls, so overlapping transactions
+      // must be serialized: without the FIFO queue a failing transaction
+      // would restore a snapshot taken before a concurrent transaction
+      // committed, silently erasing that commit. Inside the queue slot,
+      // snapshot/restore gives all-or-nothing semantics. The runner receives
+      // the store itself as its transactional handle.
+      const run = async () => {
+        const snapshot = store.exportState();
+        try {
+          return await transactionContext.run(true, () => runner(store));
+        } catch (error) {
+          store.clear();
+          hydrateStore(store, snapshot);
+          throw error;
+        }
+      };
+
+      const result = transactionQueueTail.then(run);
+      transactionQueueTail = result.then(noop, noop);
       return result;
     }
   };
@@ -415,6 +421,8 @@ function clone(value) {
 
   return structuredClone(value);
 }
+
+function noop() {}
 
 function providerKey(authProvider, providerUserId) {
   return `${authProvider}:${providerUserId}`;

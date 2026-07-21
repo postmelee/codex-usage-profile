@@ -48,10 +48,22 @@ git diff --check
 - OK — `ℹ tests 314 / ℹ pass 314 / ℹ fail 0` (기존 305 + 신규 store-transactions 9)
 - OK — `git diff --check` 경고 없음
 
+## Stage 1.1 보완 (비판적 재검토 반영, 2026-07-21 승인)
+
+재검토에서 재현 스크립트로 확인한 결함과 수정:
+
+- **[치명 → 해소] 동시 트랜잭션 lost commit**: memory `transaction`이 직렬화 없이 스냅샷/복원만 수행해, 겹치는 두 트랜잭션에서 실패한 쪽의 복원이 커밋된 쪽의 write를 소거함을 재현으로 확인했다(`RESULT: BUG — t1 rollback erased t2's committed write`). FIFO promise-chain 직렬화와 `AsyncLocalStorage` 기반 중첩 transaction 감지(어느 handle로 호출하든 명시 에러)를 추가했고, 재현 시나리오를 회귀 테스트 2건(겹침 직렬화, 중첩 거부·큐 비오염)으로 고정했다. 수정 후 재현 스크립트는 `RESULT: OK (no lost commit)`.
+- **[부수 해소] file store persist 위치**: persist를 직렬화 슬롯 안(runner 완료 직후)으로 이동해, 디스크 스냅샷이 후속 트랜잭션의 부분 write를 담을 수 없게 했다.
+- **[중간 → 해소] updateVisibility의 latestSnapshot 미동기화**: legacy 공개 snapshot 경로([http.js:494](../../src/profile-backend/http.js))가 record.visibility만 보고 서빙하므로 private 전환 후에도 legacy snapshot이 노출되는 간극을 확인, 같은 transaction에서 latestSnapshot의 visibility/handle도 동기화하고 양방향 전환 테스트를 추가했다.
+- **[기록] cliToken lastUsedAt·rate limiter는 tx 밖**: 기존 동기 구현과 동일 동작(회귀 아님)이나 contract의 submitAccountUsage record 목록과 문구 불일치. Stage 3 계약 정합 항목으로 구현계획서에 기록했다.
+- 테스트 변환 신뢰성 전수 스캔(await 누락으로 항상 통과하는 단언 탐지): 의심 2건 모두 multiline await false positive로 **clean** 판정.
+
+보완 후 검증: `npm test` — `ℹ tests 317 / ℹ pass 317 / ℹ fail 0` (store-transactions 9→12), `git diff --check` 무경고.
+
 ## 잔여 위험
 
-- **updateVisibility의 latestSnapshot 미포함**: 현재 transaction은 owner+latestUsage만 동기화한다. contract 문구는 latestSnapshot도 포함하나, 이 저장소에서 snapshot 경로는 legacy(README상 production `/u/:handle` 미사용)다. Stage 3 Postgres updateVisibility 구현·Stage 5 concurrency test에서 latestSnapshot 동기화 포함 여부를 확정한다.
-- **memory transaction의 원자성은 스냅샷/복원 기반**: 실제 잠금 직렬화(FOR UPDATE)와 경쟁 안전성은 Stage 3 Postgres adapter에서 실현된다. Stage 1은 계약·스코프·판정 위치를 고정하는 단계다.
+- **memory transaction의 경쟁 안전성은 단일 프로세스 직렬화 기반**: dev/file 경로의 보장이며, 다중 인스턴스 잠금 직렬화(FOR UPDATE)는 Stage 3 Postgres adapter에서 실현된다. Stage 1은 계약·스코프·판정 위치를 고정하는 단계다.
+- **contract 문구 정합(cliToken)**: 위 기록 항목. Stage 3에서 계약 문서 수정 또는 touch의 tx 포함으로 확정한다.
 
 ## 다음 단계 영향
 
@@ -59,4 +71,4 @@ git diff --check
 
 ## 승인 요청
 
-- Stage 1 산출물과 검증 결과(314/314 pass, diff --check clean)를 승인하면 Stage 2(Postgres schema와 versioned migration)로 진행한다.
+- Stage 1 산출물과 Stage 1.1 보완, 검증 결과(317/317 pass, diff --check clean)를 승인하면 Stage 2(Postgres schema와 versioned migration)로 진행한다.

@@ -60,8 +60,10 @@ export function createProfileCardService(options = {}) {
     },
 
     updateVisibility(updateOptions = {}) {
-      // Owner and the latest usage record must expose one visibility revision,
-      // so the two writes commit together (or not at all).
+      // Owner, latest usage and the legacy latest snapshot must expose one
+      // visibility revision, so all writes commit together (or not at all).
+      // The snapshot sync also keeps the legacy public snapshot route from
+      // serving a record after the owner turns private.
       return store.transaction(async (tx) => {
         const owner = await accountService.updateVisibility({
           ownerId: updateOptions.ownerId,
@@ -76,6 +78,14 @@ export function createProfileCardService(options = {}) {
             visibility: owner.visibility
           })
           : null;
+        const snapshotRecord = await tx.getLatestSnapshotByOwnerId(owner.id);
+        if (snapshotRecord) {
+          await tx.saveLatestSnapshot({
+            ...snapshotRecord,
+            handle: owner.handle,
+            visibility: owner.visibility
+          });
+        }
 
         return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
       });

@@ -114,6 +114,7 @@ Task #41 Stage 2: Postgres schema와 versioned migration runner
 
 - 각 read/list는 owner scope 파라미터를 SQL `WHERE`로 강제해 우회 조회를 차단한다.
 - 5 transaction은 `BEGIN` 내에서 `SELECT … FOR UPDATE`(직렬화 키: oauthState.id / cliLoginChallenge.id / owner.id) 또는 conditional `UPDATE … WHERE`로 stale/conflict/idempotent/new를 원자 판정하고 부분 commit 없이 `COMMIT`한다. 실패 시 `ROLLBACK`.
+- (Stage 1.1 기록) cliToken `lastUsedAt` touch와 rate limiter는 현재 transaction 밖에서 실행된다(기존 동기 구현과 동일 동작, 실패 submit에도 touch 잔존). Stage 3에서 contract의 `submitAccountUsage` record 목록(cliToken 포함)과 실제 tx 경계를 정합시킨다 — 계약 문구를 경계에 맞게 수정하거나 touch를 tx에 포함.
 - `production-server.js`는 external 모드에서 adapter 주입이 없으면 여전히 fail closed(기존 동작 유지), 있으면 Postgres store 사용.
 - `postgres-store.test.js`는 Stage 1의 계약 test 스위트를 Postgres adapter로 재실행한다(env-gated skip).
 

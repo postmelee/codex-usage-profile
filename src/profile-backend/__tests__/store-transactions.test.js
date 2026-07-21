@@ -95,6 +95,58 @@ test("transaction rolls back when an async runner rejects", async () => {
   assert.equal(store.getOwnerById(OWNER.id), null);
 });
 
+test("serializes overlapping transactions so a rollback cannot erase a commit", async () => {
+  const store = createMemoryProfileBackendStore();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+
+  // The failing transaction parks mid-runner; the committing transaction is
+  // requested while the first still holds the queue.
+  const failing = store.transaction(async (tx) => {
+    tx.saveOwner({ ...OWNER, id: "owner_a", providerUserId: "a", handle: "handle-a" });
+    await gate;
+    throw new Error("boom");
+  });
+  const committing = store.transaction((tx) => {
+    tx.saveOwner({ ...OWNER, id: "owner_b", providerUserId: "b", handle: "handle-b" });
+    return "committed";
+  });
+
+  // Let the first runner start and park on the gate: the second transaction
+  // must not have run yet while the first holds the queue.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.getOwnerById("owner_b"), null);
+
+  release();
+  await assert.rejects(failing, /boom/);
+  assert.equal(await committing, "committed");
+
+  // The rollback of the first transaction must not erase the second commit.
+  assert.equal(store.getOwnerById("owner_a"), null);
+  assert.equal(store.getOwnerById("owner_b").id, "owner_b");
+});
+
+test("rejects a nested transaction and keeps the queue usable", async () => {
+  const store = createMemoryProfileBackendStore();
+
+  await assert.rejects(
+    () => store.transaction(async (tx) => {
+      tx.saveOwner({ ...OWNER, id: "owner_x", providerUserId: "x", handle: "handle-x" });
+      await store.transaction(() => {});
+    }),
+    /Nested store transactions are not supported/
+  );
+
+  // The outer transaction rolled back and the queue is not poisoned.
+  assert.equal(store.getOwnerById("owner_x"), null);
+  const result = await store.transaction((tx) => {
+    tx.saveOwner(OWNER);
+    return "ok";
+  });
+  assert.equal(result, "ok");
+  assert.equal(store.getOwnerById(OWNER.id).handle, "postmelee");
+});
+
 // --- completeOAuthCallback: one callback consumes a pending state ------------
 
 test("completeOAuthCallback consumes a pending state exactly once", async () => {
@@ -276,6 +328,46 @@ test("updateVisibility exposes one visibility revision for owner and latest usag
   assert.equal(published.usageRecord.visibility, PROFILE_VISIBILITY.PUBLIC);
   assert.equal(store.getOwnerById(OWNER.id).visibility, PROFILE_VISIBILITY.PUBLIC);
   assert.equal(store.getLatestUsageByOwnerId(OWNER.id).visibility, PROFILE_VISIBILITY.PUBLIC);
+});
+
+test("updateVisibility keeps the legacy latest snapshot on the same visibility revision", async () => {
+  const { usageService, cardService, store, token } = await createVisibilityFixture();
+  await usageService.submitAccountUsage({
+    token,
+    document: createDocument()
+  });
+  store.saveLatestSnapshot({
+    ownerId: OWNER.id,
+    handle: OWNER.handle,
+    visibility: PROFILE_VISIBILITY.PRIVATE,
+    capturedAt: "2026-07-11T00:00:00.000Z",
+    uploadedAt: "2026-07-11T00:01:00.000Z",
+    schemaVersion: 2,
+    snapshot: { schemaVersion: 2 }
+  });
+
+  await cardService.updateVisibility({
+    ownerId: OWNER.id,
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+  assert.equal(
+    store.getLatestSnapshotByOwnerId(OWNER.id).visibility,
+    PROFILE_VISIBILITY.PUBLIC
+  );
+
+  // Turning private must also hide the legacy snapshot record.
+  await cardService.updateVisibility({
+    ownerId: OWNER.id,
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  assert.equal(
+    store.getLatestSnapshotByOwnerId(OWNER.id).visibility,
+    PROFILE_VISIBILITY.PRIVATE
+  );
+  assert.equal(
+    store.getLatestUsageByOwnerId(OWNER.id).visibility,
+    PROFILE_VISIBILITY.PRIVATE
+  );
 });
 
 // --- fixtures ----------------------------------------------------------------
