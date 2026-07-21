@@ -11,10 +11,10 @@ import {
   resolveCallbackUrl
 } from "../index.js";
 
-test("starts GitHub login and stores a pending OAuth state", () => {
+test("starts GitHub login and stores a pending OAuth state", async () => {
   const { service, store } = createFixture();
 
-  const { authorizationUrl, oauthState } = service.startGitHubLogin({
+  const { authorizationUrl, oauthState } = await service.startGitHubLogin({
     cliLoginChallengeId: "cli_login_1",
     redirectTo: "/u/postmelee"
   });
@@ -35,7 +35,7 @@ test("starts GitHub login and stores a pending OAuth state", () => {
 
 test("completes GitHub callback, consumes state, upserts owner, and creates session", async () => {
   const { service, store, githubCalls } = createFixture();
-  const { oauthState } = service.startGitHubLogin();
+  const { oauthState } = await service.startGitHubLogin();
 
   const result = await service.completeGitHubCallback({
     code: "oauth_code_1",
@@ -68,7 +68,7 @@ test("completes GitHub callback, consumes state, upserts owner, and creates sess
 test("rejects replayed and expired OAuth states", async () => {
   const fixture = createFixture();
   const { service, store } = fixture;
-  const { oauthState } = service.startGitHubLogin();
+  const { oauthState } = await service.startGitHubLogin();
 
   await service.completeGitHubCallback({
     code: "oauth_code_1",
@@ -83,7 +83,7 @@ test("rejects replayed and expired OAuth states", async () => {
     PROFILE_BACKEND_ERROR_CODES.GONE
   );
 
-  const expired = service.startGitHubLogin().oauthState;
+  const expired = (await service.startGitHubLogin()).oauthState;
   fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
 
   await assertBackendRejects(
@@ -98,7 +98,7 @@ test("rejects replayed and expired OAuth states", async () => {
 
 test("validates callback inputs and resolves callback URLs", async () => {
   const { service } = createFixture();
-  const { oauthState } = service.startGitHubLogin();
+  const { oauthState } = await service.startGitHubLogin();
 
   await assertBackendRejects(
     () => service.completeGitHubCallback({
@@ -122,13 +122,13 @@ test("validates callback inputs and resolves callback URLs", async () => {
 
 test("logs out through the session service", async () => {
   const { service } = createFixture();
-  const { oauthState } = service.startGitHubLogin();
+  const { oauthState } = await service.startGitHubLogin();
   const result = await service.completeGitHubCallback({
     code: "oauth_code_1",
     state: oauthState.id
   });
 
-  const logout = service.logout({ cookieHeader: result.sessionCookie });
+  const logout = await service.logout({ cookieHeader: result.sessionCookie });
 
   assert.equal(logout.session.id, result.session.id);
   assert.equal(logout.session.revokedAt, "2026-06-08T00:00:00.000Z");
@@ -183,7 +183,7 @@ function createIdFactory() {
 }
 
 async function assertBackendRejects(callback, code) {
-  await assert.rejects(callback, (error) => {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

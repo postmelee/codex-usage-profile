@@ -52,37 +52,52 @@ export function createProfileCardService(options = {}) {
   const avatarCache = createLruCache(cacheEntries);
 
   return {
-    getOwnerProfile(profileOptions = {}) {
-      const owner = requireOwnerById(store, profileOptions.ownerId);
-      const usageRecord = store.getLatestUsageByOwnerId(owner.id);
+    async getOwnerProfile(profileOptions = {}) {
+      const owner = await requireOwnerById(store, profileOptions.ownerId);
+      const usageRecord = await store.getLatestUsageByOwnerId(owner.id);
 
       return { owner, usageRecord, visibility: owner.visibility };
     },
 
     updateVisibility(updateOptions = {}) {
-      const owner = accountService.updateVisibility({
-        ownerId: updateOptions.ownerId,
-        visibility: updateOptions.visibility
-      });
-      const usageRecord = store.getLatestUsageByOwnerId(owner.id);
-      const updatedUsageRecord = usageRecord
-        ? store.saveLatestUsage({
-          ...usageRecord,
-          handle: owner.handle,
-          visibility: owner.visibility
-        })
-        : null;
+      // Owner, latest usage and the legacy latest snapshot must expose one
+      // visibility revision, so all writes commit together (or not at all).
+      // The snapshot sync also keeps the legacy public snapshot route from
+      // serving a record after the owner turns private.
+      return store.transaction(async (tx) => {
+        const owner = await accountService.updateVisibility({
+          ownerId: updateOptions.ownerId,
+          visibility: updateOptions.visibility,
+          store: tx
+        });
+        const usageRecord = await tx.getLatestUsageByOwnerId(owner.id);
+        const updatedUsageRecord = usageRecord
+          ? await tx.saveLatestUsage({
+            ...usageRecord,
+            handle: owner.handle,
+            visibility: owner.visibility
+          })
+          : null;
+        const snapshotRecord = await tx.getLatestSnapshotByOwnerId(owner.id);
+        if (snapshotRecord) {
+          await tx.saveLatestSnapshot({
+            ...snapshotRecord,
+            handle: owner.handle,
+            visibility: owner.visibility
+          });
+        }
 
-      return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
+        return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
+      });
     },
 
-    getPublicProfile(profileOptions = {}) {
+    async getPublicProfile(profileOptions = {}) {
       return requirePublicProfile(store, profileOptions.handle);
     },
 
     async renderOwnerCard(renderOptions = {}) {
-      const owner = requireOwnerById(store, renderOptions.ownerId);
-      const usageRecord = requireUsageByOwnerId(store, owner.id);
+      const owner = await requireOwnerById(store, renderOptions.ownerId);
+      const usageRecord = await requireUsageByOwnerId(store, owner.id);
 
       return renderCard({
         owner,
@@ -94,7 +109,7 @@ export function createProfileCardService(options = {}) {
     },
 
     async renderPublicCard(renderOptions = {}) {
-      const { owner, usageRecord } = requirePublicProfile(
+      const { owner, usageRecord } = await requirePublicProfile(
         store,
         renderOptions.handle
       );
@@ -204,22 +219,22 @@ export function normalizeGitHubAvatarUrl(value) {
   }
 }
 
-function requireOwnerById(store, ownerId) {
-  const owner = store.getOwnerById(ownerId);
+async function requireOwnerById(store, ownerId) {
+  const owner = await store.getOwnerById(ownerId);
   if (!owner) throw cardNotFoundError();
   return owner;
 }
 
-function requireUsageByOwnerId(store, ownerId) {
-  const usageRecord = store.getLatestUsageByOwnerId(ownerId);
+async function requireUsageByOwnerId(store, ownerId) {
+  const usageRecord = await store.getLatestUsageByOwnerId(ownerId);
   if (!usageRecord) throw cardNotFoundError();
   return usageRecord;
 }
 
-function requirePublicProfile(store, value) {
+async function requirePublicProfile(store, value) {
   const handle = normalizePublicHandle(value);
-  const owner = handle ? store.getOwnerByHandle(handle) : null;
-  const usageRecord = owner ? store.getLatestUsageByOwnerId(owner.id) : null;
+  const owner = handle ? await store.getOwnerByHandle(handle) : null;
+  const usageRecord = owner ? await store.getLatestUsageByOwnerId(owner.id) : null;
 
   if (
     !owner || !usageRecord ||

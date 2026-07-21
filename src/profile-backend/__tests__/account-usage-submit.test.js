@@ -17,9 +17,9 @@ import {
   createMemoryProfileBackendStore
 } from "../index.js";
 
-test("stores Account Usage Contract v1 for the bearer token owner", () => {
-  const fixture = createFixture();
-  const result = fixture.service.submitAccountUsage({
+test("stores Account Usage Contract v1 for the bearer token owner", async () => {
+  const fixture = await createFixture();
+  const result = await fixture.service.submitAccountUsage({
     token: fixture.token,
     document: createDocument(),
     device: { id: "device-1", name: "MacBook Pro" }
@@ -37,21 +37,21 @@ test("stores Account Usage Contract v1 for the bearer token owner", () => {
   assert.equal(result.owner.id, OWNER.id);
 });
 
-test("preserves null usage semantics and supports exact idempotent retries", () => {
-  const fixture = createFixture();
+test("preserves null usage semantics and supports exact idempotent retries", async () => {
+  const fixture = await createFixture();
   const document = createDocument({
     summary: Object.fromEntries(
       Object.keys(sampleAccountUsageReadResult.summary).map((key) => [key, null])
     ),
     dailyUsageBuckets: null
   });
-  const first = fixture.service.submitAccountUsage({
+  const first = await fixture.service.submitAccountUsage({
     token: fixture.token,
     document
   });
 
   fixture.setNow("2026-07-11T00:03:00.000Z");
-  const second = fixture.service.submitAccountUsage({
+  const second = await fixture.service.submitAccountUsage({
     token: fixture.token,
     document
   });
@@ -64,21 +64,21 @@ test("preserves null usage semantics and supports exact idempotent retries", () 
   assert.deepEqual(stored.usage.summary, document.summary);
 });
 
-test("rejects stale, conflicting, future, and identity-bearing documents", () => {
-  const fixture = createFixture();
-  fixture.service.submitAccountUsage({
+test("rejects stale, conflicting, future, and identity-bearing documents", async () => {
+  const fixture = await createFixture();
+  await fixture.service.submitAccountUsage({
     token: fixture.token,
     document: createDocument()
   });
 
-  assertBackendError(
+  await assertBackendError(
     () => fixture.service.submitAccountUsage({
       token: fixture.token,
       document: createDocument({ capturedAt: "2026-07-10T00:00:00.000Z" })
     }),
     PROFILE_BACKEND_ERROR_CODES.CONFLICT
   );
-  assertBackendError(
+  await assertBackendError(
     () => fixture.service.submitAccountUsage({
       token: fixture.token,
       document: createDocument({
@@ -91,22 +91,22 @@ test("rejects stale, conflicting, future, and identity-bearing documents", () =>
     PROFILE_BACKEND_ERROR_CODES.CONFLICT
   );
 
-  const futureFixture = createFixture();
-  assertBackendError(
+  const futureFixture = await createFixture();
+  await assertBackendError(
     () => futureFixture.service.submitAccountUsage({
       token: futureFixture.token,
       document: createDocument({ capturedAt: "2026-07-11T00:08:00.000Z" })
     }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => futureFixture.service.submitAccountUsage({
       token: futureFixture.token,
       document: createDocument({ username: "spoofed" })
     }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => futureFixture.service.submitAccountUsage({
       token: futureFixture.token,
       document: createDocument({
@@ -117,13 +117,13 @@ test("rejects stale, conflicting, future, and identity-bearing documents", () =>
   );
 });
 
-test("returns status metadata without returning usage values", () => {
-  const fixture = createFixture();
-  fixture.service.submitAccountUsage({
+test("returns status metadata without returning usage values", async () => {
+  const fixture = await createFixture();
+  await fixture.service.submitAccountUsage({
     token: fixture.token,
     document: createDocument()
   });
-  const status = fixture.service.getAccountUsageStatus({ token: fixture.token });
+  const status = await fixture.service.getAccountUsageStatus({ token: fixture.token });
   const serialized = JSON.stringify({
     owner: { handle: status.owner.handle },
     tokenRecord: { id: status.tokenRecord.id },
@@ -140,7 +140,7 @@ test("returns status metadata without returning usage values", () => {
   assert.equal(serialized.includes(fixture.token), false);
 });
 
-test("rate limiter returns Retry-After and isolates token keys", () => {
+test("rate limiter returns Retry-After and isolates token keys", async () => {
   let current = new Date("2026-07-11T00:00:00.000Z");
   const limiter = createAccountUsageRateLimiter({
     now: () => current,
@@ -165,12 +165,12 @@ test("rate limiter returns Retry-After and isolates token keys", () => {
 });
 
 test("changes the public card ETag after a newer Account Usage submit", async () => {
-  const fixture = createFixture();
+  const fixture = await createFixture();
   fixture.store.saveOwner({
     ...OWNER,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
-  fixture.service.submitAccountUsage({
+  await fixture.service.submitAccountUsage({
     token: fixture.token,
     document: createDocument()
   });
@@ -184,7 +184,7 @@ test("changes the public card ETag after a newer Account Usage submit", async ()
   });
 
   fixture.setNow("2026-07-11T00:03:00.000Z");
-  fixture.service.submitAccountUsage({
+  await fixture.service.submitAccountUsage({
     token: fixture.token,
     document: createDocument({
       capturedAt: "2026-07-11T00:01:00.000Z",
@@ -202,7 +202,7 @@ test("changes the public card ETag after a newer Account Usage submit", async ()
   assert.notEqual(before.etag, after.etag);
 });
 
-function createFixture() {
+async function createFixture() {
   const store = createMemoryProfileBackendStore();
   let current = new Date("2026-07-11T00:02:00.000Z");
   store.saveOwner(OWNER);
@@ -212,7 +212,7 @@ function createFixture() {
     createId: () => "cli_token_1",
     createToken: () => `${CLI_TOKEN_PREFIX}test_account_usage`
   });
-  const { token } = tokenService.issueCliToken({ ownerId: OWNER.id });
+  const { token } = await tokenService.issueCliToken({ ownerId: OWNER.id });
 
   return {
     store,
@@ -239,8 +239,8 @@ function createDocument(overrides = {}) {
   };
 }
 
-function assertBackendError(callback, code) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

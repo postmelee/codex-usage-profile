@@ -15,7 +15,7 @@ import {
 
 const fixedNow = () => new Date("2026-06-08T00:00:00.000Z");
 
-test("normalizes a GitHub identity payload without copying OAuth tokens", () => {
+test("normalizes a GitHub identity payload without copying OAuth tokens", async () => {
   const identity = normalizeGitHubIdentity({
     id: 12345,
     login: "postmelee",
@@ -61,7 +61,7 @@ test("resolves a GitHub identity through a fake client seam", async () => {
 });
 
 test("rejects invalid GitHub identity and callback inputs", async () => {
-  assertBackendError(
+  await assertBackendError(
     () => normalizeGitHubIdentity({ id: 12345 }),
     PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
   );
@@ -76,16 +76,16 @@ test("rejects invalid GitHub identity and callback inputs", async () => {
   );
 });
 
-test("upserts GitHub owners idempotently by provider identity", () => {
+test("upserts GitHub owners idempotently by provider identity", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });
 
-  const first = accounts.upsertGitHubOwner({
+  const first = await accounts.upsertGitHubOwner({
     id: 12345,
     login: "postmelee",
     name: "Post Melee"
   });
-  const second = accounts.upsertGitHubOwner({
+  const second = await accounts.upsertGitHubOwner({
     id: 12345,
     login: "postmelee-renamed",
     name: "Post Melee Updated"
@@ -101,25 +101,25 @@ test("upserts GitHub owners idempotently by provider identity", () => {
   assert.equal(store.listOwners().length, 1);
 });
 
-test("assigns deterministic handles when GitHub logins collide", () => {
+test("assigns deterministic handles when GitHub logins collide", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });
 
-  accounts.upsertGitHubOwner({ id: 1, login: "postmelee" });
-  accounts.upsertGitHubOwner({ id: 2, login: "postmelee" });
-  const third = accounts.upsertGitHubOwner({ id: 3, login: "postmelee" });
+  await accounts.upsertGitHubOwner({ id: 1, login: "postmelee" });
+  await accounts.upsertGitHubOwner({ id: 2, login: "postmelee" });
+  const third = await accounts.upsertGitHubOwner({ id: 3, login: "postmelee" });
 
   assert.equal(store.getOwnerByProviderIdentity("github", "1").handle, "postmelee");
   assert.equal(store.getOwnerByProviderIdentity("github", "2").handle, "postmelee-2");
   assert.equal(third.handle, "postmelee-3");
 });
 
-test("normalizes requested handles and reserves suffixes", () => {
+test("normalizes requested handles and reserves suffixes", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });
 
-  accounts.upsertGitHubOwner({ id: 1, login: "one" }, { handle: "Melee" });
-  const second = accounts.upsertGitHubOwner(
+  await accounts.upsertGitHubOwner({ id: 1, login: "one" }, { handle: "Melee" });
+  const second = await accounts.upsertGitHubOwner(
     { id: 2, login: "two" },
     { handle: "melee" }
   );
@@ -129,11 +129,11 @@ test("normalizes requested handles and reserves suffixes", () => {
   assert.equal(slugifyHandleCandidate(""), "user");
 });
 
-test("validates owner visibility", () => {
+test("validates owner visibility", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });
 
-  assertBackendError(
+  await assertBackendError(
     () => accounts.upsertGitHubOwner(
       { id: 12345, login: "postmelee" },
       { visibility: "team-only" }
@@ -142,17 +142,17 @@ test("validates owner visibility", () => {
   );
 });
 
-test("updates owner visibility using the server-owned owner id", () => {
+test("updates owner visibility using the server-owned owner id", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });
-  const owner = accounts.upsertGitHubOwner({ id: 12345, login: "postmelee" });
-  const updated = accounts.updateVisibility({
+  const owner = await accounts.upsertGitHubOwner({ id: 12345, login: "postmelee" });
+  const updated = await accounts.updateVisibility({
     ownerId: owner.id,
     visibility: PROFILE_VISIBILITY.PUBLIC
   });
   assert.equal(updated.visibility, PROFILE_VISIBILITY.PUBLIC);
   assert.equal(updated.updatedAt, "2026-06-08T00:00:00.000Z");
-  assertBackendError(
+  await assertBackendError(
     () => accounts.updateVisibility({
       ownerId: "missing",
       visibility: PROFILE_VISIBILITY.PUBLIC
@@ -161,8 +161,8 @@ test("updates owner visibility using the server-owned owner id", () => {
   );
 });
 
-function assertBackendError(callback, code) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

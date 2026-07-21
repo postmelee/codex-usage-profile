@@ -2,7 +2,10 @@ import { createServer as createHttpServer } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createFileProfileBackendStore } from "../profile-backend/index.js";
+import {
+  createFileProfileBackendStore,
+  createPostgresProfileBackendStore
+} from "../profile-backend/index.js";
 import {
   hasGitHubOAuthCredentials,
   loadProfileDeploymentConfig,
@@ -48,9 +51,10 @@ export function createProductionStore(options = {}) {
     });
   }
 
-  throw new Error(
-    "PROFILE_STORE_MODE=external requires an injected production store adapter"
-  );
+  // PROFILE_STORE_MODE=external: the Postgres adapter reads its server-only
+  // connection secret (NEON_DATABASE_URL) here and still fails closed when
+  // the secret is missing.
+  return createPostgresProfileBackendStore({ env: options.env });
 }
 
 export function createProductionNodeHandler(options = {}) {
@@ -110,9 +114,23 @@ export async function startProfileProductionServer(options = {}) {
   });
   const store = createProductionStore({
     deploymentConfig,
+    env,
     filePath: runtimeConfig.profileStoreFile,
     store: options.store
   });
+  const ownsStore = !options.store;
+
+  // Dependency readiness is separate from /healthz liveness: a store the
+  // runtime created itself must be reachable and fully migrated before the
+  // server starts accepting traffic. Injected stores are the caller's
+  // responsibility.
+  if (
+    ownsStore &&
+    options.verifyStoreReadiness !== false &&
+    typeof store.verifyReadiness === "function"
+  ) {
+    await store.verifyReadiness();
+  }
   const githubClient = options.githubClient ?? (
     hasGitHubOAuthCredentials(runtimeConfig)
       ? createRuntimeGitHubClient(runtimeConfig, options)
@@ -145,9 +163,19 @@ export async function startProfileProductionServer(options = {}) {
   let closePromise = null;
   const close = () => {
     if (!closePromise) {
-      closePromise = closeServerWithDeadline(server, {
-        timeoutMs: options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
-      });
+      closePromise = (async () => {
+        try {
+          await closeServerWithDeadline(server, {
+            timeoutMs: options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
+          });
+        } finally {
+          // A pool the runtime created would otherwise keep the process
+          // alive after SIGTERM; injected stores stay open for their owner.
+          if (ownsStore && typeof store.close === "function") {
+            await store.close();
+          }
+        }
+      })();
     }
     return closePromise;
   };

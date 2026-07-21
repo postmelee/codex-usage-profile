@@ -22,9 +22,12 @@ export function createSubmittedDeviceService(options = {}) {
   }
 
   return {
-    upsertSubmittedDevice(upsertOptions = {}) {
+    async upsertSubmittedDevice(upsertOptions = {}) {
+      // `store` override lets a caller run this write inside an open
+      // transaction (tx handle) while keeping this service's configuration.
+      const activeStore = upsertOptions.store ?? store;
       const ownerId = requireNonEmptyString(upsertOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
+      const owner = await activeStore.getOwnerById(ownerId);
       if (!owner) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
@@ -33,7 +36,7 @@ export function createSubmittedDeviceService(options = {}) {
       }
 
       const device = normalizeSubmitDeviceMetadata(upsertOptions.device);
-      const existing = store.getSubmittedDeviceByOwnerAndKey(
+      const existing = await activeStore.getSubmittedDeviceByOwnerAndKey(
         ownerId,
         device.deviceKey
       );
@@ -44,7 +47,7 @@ export function createSubmittedDeviceService(options = {}) {
         ?? device.displayName
         ?? null;
 
-      return store.saveSubmittedDevice({
+      return activeStore.saveSubmittedDevice({
         id: existing?.id ?? createId("submitted_device"),
         ownerId,
         deviceKey: device.deviceKey,
@@ -55,9 +58,9 @@ export function createSubmittedDeviceService(options = {}) {
       });
     },
 
-    listSubmittedDevices(listOptions = {}) {
+    async listSubmittedDevices(listOptions = {}) {
       const ownerId = requireNonEmptyString(listOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
+      const owner = await store.getOwnerById(ownerId);
       if (!owner) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
@@ -68,10 +71,10 @@ export function createSubmittedDeviceService(options = {}) {
       return store.listSubmittedDevicesByOwnerId(ownerId);
     },
 
-    renameSubmittedDevice(renameOptions = {}) {
+    async renameSubmittedDevice(renameOptions = {}) {
       const ownerId = requireNonEmptyString(renameOptions.ownerId, "ownerId");
       const deviceId = requireNonEmptyString(renameOptions.deviceId, "deviceId");
-      const existing = store.getSubmittedDeviceById(deviceId);
+      const existing = await store.getSubmittedDeviceById(deviceId);
 
       if (!existing || existing.ownerId !== ownerId) {
         throw new ProfileBackendError(

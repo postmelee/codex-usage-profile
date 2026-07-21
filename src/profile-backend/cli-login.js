@@ -42,7 +42,7 @@ export function createCliLoginService(options = {}) {
   });
 
   return {
-    startCliLogin(startOptions = {}) {
+    async startCliLogin(startOptions = {}) {
       const createdAt = normalizeDate(now());
       const deviceCode = requireNonEmptyString(
         createDeviceCode(),
@@ -78,7 +78,7 @@ export function createCliLoginService(options = {}) {
         cliTokenId: null
       };
 
-      const savedChallenge = store.saveCliLoginChallenge(challenge);
+      const savedChallenge = await store.saveCliLoginChallenge(challenge);
 
       return {
         challenge: savedChallenge,
@@ -92,45 +92,59 @@ export function createCliLoginService(options = {}) {
       };
     },
 
-    approveCliLogin(approveOptions = {}) {
+    async approveCliLogin(approveOptions = {}) {
       const nowDate = normalizeDate(now());
-      const challenge = getChallengeForApproval(store, approveOptions);
-      assertChallengeCanBeApproved(store, challenge, nowDate);
+      const challenge = await getChallengeForApproval(store, approveOptions);
+      await assertChallengeCanBeApproved(store, challenge, nowDate);
 
       const ownerId = requireNonEmptyString(approveOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
-      if (!owner) {
-        throw new ProfileBackendError(
-          PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
-          "Owner not found"
-        );
-      }
 
-      return store.saveCliLoginChallenge({
-        ...challenge,
-        status: CLI_LOGIN_STATUS.APPROVED,
-        approvedAt: nowDate.toISOString(),
-        ownerId
+      // Only a pending, unexpired challenge can be approved once: the state is
+      // re-read under the row lock so a racing approve cannot double-consume.
+      return store.transaction(async (tx) => {
+        const locked = await tx.getCliLoginChallenge(challenge.id);
+        checkChallengeApprovable(locked, nowDate);
+
+        const owner = await tx.getOwnerById(ownerId);
+        if (!owner) {
+          throw new ProfileBackendError(
+            PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+            "Owner not found"
+          );
+        }
+
+        return tx.saveCliLoginChallenge({
+          ...locked,
+          status: CLI_LOGIN_STATUS.APPROVED,
+          approvedAt: nowDate.toISOString(),
+          ownerId
+        });
       });
     },
 
-    exchangeCliLogin(exchangeOptions = {}) {
+    async exchangeCliLogin(exchangeOptions = {}) {
       const nowDate = normalizeDate(now());
-      const challenge = getChallenge(store, exchangeOptions.challengeId);
-      assertChallengeCanBeExchanged(store, challenge, nowDate);
+      const challenge = await getChallenge(store, exchangeOptions.challengeId);
+      await assertChallengeCanBeExchanged(store, challenge, nowDate);
 
-      return exchangeChallenge({
-        store,
-        tokenService,
-        challenge,
-        label: exchangeOptions.label,
-        nowDate
+      // Exactly one token is issued for an approved challenge: re-read under the
+      // lock and issue + mark exchanged in one transaction.
+      return store.transaction(async (tx) => {
+        const locked = await tx.getCliLoginChallenge(challenge.id);
+        checkChallengeExchangeable(locked, nowDate);
+        return exchangeChallenge({
+          store: tx,
+          tokenService,
+          challenge: locked,
+          label: exchangeOptions.label,
+          nowDate
+        });
       });
     },
 
-    pollCliLogin(pollOptions = {}) {
+    async pollCliLogin(pollOptions = {}) {
       const nowDate = normalizeDate(now());
-      const challenge = getChallengeByDeviceCode(store, pollOptions.deviceCode);
+      const challenge = await getChallengeByDeviceCode(store, pollOptions.deviceCode);
 
       if (challenge.status === CLI_LOGIN_STATUS.EXCHANGED) {
         return {
@@ -140,7 +154,7 @@ export function createCliLoginService(options = {}) {
       }
 
       try {
-        assertChallengeNotExpired(store, challenge, nowDate);
+        await assertChallengeNotExpired(store, challenge, nowDate);
       } catch (error) {
         if (
           error instanceof ProfileBackendError &&
@@ -148,7 +162,7 @@ export function createCliLoginService(options = {}) {
         ) {
           return {
             status: CLI_LOGIN_STATUS.EXPIRED,
-            challenge: store.getCliLoginChallenge(challenge.id)
+            challenge: await store.getCliLoginChallenge(challenge.id)
           };
         }
 
@@ -165,13 +179,17 @@ export function createCliLoginService(options = {}) {
       if (challenge.status === CLI_LOGIN_STATUS.APPROVED) {
         return {
           status: CLI_LOGIN_STATUS.APPROVED,
-          ...exchangeChallenge({
-            store,
-            tokenService,
-            challenge,
-            label: pollOptions.label,
-            nowDate
-          })
+          ...(await store.transaction(async (tx) => {
+            const locked = await tx.getCliLoginChallenge(challenge.id);
+            checkChallengeExchangeable(locked, nowDate);
+            return exchangeChallenge({
+              store: tx,
+              tokenService,
+              challenge: locked,
+              label: pollOptions.label,
+              nowDate
+            });
+          }))
         };
       }
 
@@ -220,9 +238,9 @@ export function normalizeUserCode(value) {
   return `${normalized.slice(0, 4)}-${normalized.slice(4)}`;
 }
 
-function getChallenge(store, challengeId) {
+async function getChallenge(store, challengeId) {
   const id = requireNonEmptyString(challengeId, "challengeId");
-  const challenge = store.getCliLoginChallenge(id);
+  const challenge = await store.getCliLoginChallenge(id);
 
   if (!challenge) {
     throw new ProfileBackendError(
@@ -234,13 +252,13 @@ function getChallenge(store, challengeId) {
   return challenge;
 }
 
-function getChallengeForApproval(store, approveOptions) {
+async function getChallengeForApproval(store, approveOptions) {
   if (approveOptions.challengeId) {
     return getChallenge(store, approveOptions.challengeId);
   }
 
   const userCode = normalizeUserCode(approveOptions.userCode);
-  const challenge = store.getCliLoginChallengeByUserCode(userCode);
+  const challenge = await store.getCliLoginChallengeByUserCode(userCode);
 
   if (!challenge) {
     throw new ProfileBackendError(
@@ -252,9 +270,9 @@ function getChallengeForApproval(store, approveOptions) {
   return challenge;
 }
 
-function getChallengeByDeviceCode(store, rawDeviceCode) {
+async function getChallengeByDeviceCode(store, rawDeviceCode) {
   const deviceCodeDigest = createDeviceCodeDigest(rawDeviceCode);
-  const challenge = store.getCliLoginChallengeByDeviceCodeDigest(deviceCodeDigest);
+  const challenge = await store.getCliLoginChallengeByDeviceCodeDigest(deviceCodeDigest);
 
   if (!challenge) {
     throw new ProfileBackendError(
@@ -266,13 +284,14 @@ function getChallengeByDeviceCode(store, rawDeviceCode) {
   return challenge;
 }
 
-function exchangeChallenge({ store, tokenService, challenge, label, nowDate }) {
-  const { token, tokenRecord } = tokenService.issueCliToken({
+async function exchangeChallenge({ store, tokenService, challenge, label, nowDate }) {
+  const { token, tokenRecord } = await tokenService.issueCliToken({
     ownerId: challenge.ownerId,
     label: label ?? challenge.label,
-    sourceChallengeId: challenge.id
+    sourceChallengeId: challenge.id,
+    store
   });
-  const exchangedChallenge = store.saveCliLoginChallenge({
+  const exchangedChallenge = await store.saveCliLoginChallenge({
     ...challenge,
     status: CLI_LOGIN_STATUS.EXCHANGED,
     exchangedAt: nowDate.toISOString(),
@@ -286,8 +305,10 @@ function exchangeChallenge({ store, tokenService, challenge, label, nowDate }) {
   };
 }
 
-function assertChallengeCanBeApproved(store, challenge, nowDate) {
-  assertChallengeNotExpired(store, challenge, nowDate);
+// Marks an expired challenge EXPIRED (a housekeeping write) then throws if the
+// challenge cannot move to the requested state. Runs before the transaction.
+async function assertChallengeCanBeApproved(store, challenge, nowDate) {
+  await assertChallengeNotExpired(store, challenge, nowDate);
 
   if (challenge.status !== CLI_LOGIN_STATUS.PENDING) {
     throw new ProfileBackendError(
@@ -297,8 +318,52 @@ function assertChallengeCanBeApproved(store, challenge, nowDate) {
   }
 }
 
-function assertChallengeCanBeExchanged(store, challenge, nowDate) {
-  assertChallengeNotExpired(store, challenge, nowDate);
+async function assertChallengeCanBeExchanged(store, challenge, nowDate) {
+  await assertChallengeNotExpired(store, challenge, nowDate);
+  checkChallengeExchangeable(challenge, nowDate);
+}
+
+async function assertChallengeNotExpired(store, challenge, nowDate) {
+  if (new Date(challenge.expiresAt).getTime() > nowDate.getTime()) {
+    return;
+  }
+
+  if (challenge.status !== CLI_LOGIN_STATUS.EXCHANGED) {
+    await store.saveCliLoginChallenge({
+      ...challenge,
+      status: CLI_LOGIN_STATUS.EXPIRED
+    });
+  }
+
+  throw new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.EXPIRED,
+    "CLI login challenge has expired"
+  );
+}
+
+// Pure re-validations used inside the transaction under the row lock. No writes.
+function checkChallengeNotExpired(challenge, nowDate) {
+  if (new Date(challenge.expiresAt).getTime() <= nowDate.getTime()) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.EXPIRED,
+      "CLI login challenge has expired"
+    );
+  }
+}
+
+function checkChallengeApprovable(challenge, nowDate) {
+  checkChallengeNotExpired(challenge, nowDate);
+
+  if (challenge.status !== CLI_LOGIN_STATUS.PENDING) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
+      "CLI login challenge cannot be approved"
+    );
+  }
+}
+
+function checkChallengeExchangeable(challenge, nowDate) {
+  checkChallengeNotExpired(challenge, nowDate);
 
   if (challenge.status === CLI_LOGIN_STATUS.EXCHANGED) {
     throw new ProfileBackendError(
@@ -313,24 +378,6 @@ function assertChallengeCanBeExchanged(store, challenge, nowDate) {
       "CLI login challenge has not been approved"
     );
   }
-}
-
-function assertChallengeNotExpired(store, challenge, nowDate) {
-  if (new Date(challenge.expiresAt).getTime() > nowDate.getTime()) {
-    return;
-  }
-
-  if (challenge.status !== CLI_LOGIN_STATUS.EXCHANGED) {
-    store.saveCliLoginChallenge({
-      ...challenge,
-      status: CLI_LOGIN_STATUS.EXPIRED
-    });
-  }
-
-  throw new ProfileBackendError(
-    PROFILE_BACKEND_ERROR_CODES.EXPIRED,
-    "CLI login challenge has expired"
-  );
 }
 
 function buildBrowserUrl(browserUrlBase, challengeId) {

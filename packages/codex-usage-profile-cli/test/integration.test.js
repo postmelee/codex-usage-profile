@@ -14,7 +14,7 @@ import { submitAccountUsage } from "../src/submit.js";
 const SERVICE_ORIGIN = "http://127.0.0.1:5177";
 
 test("updates the stable card ETag through accepted and idempotent CLI submissions", async () => {
-  const fixture = createBackendFixture(PROFILE_VISIBILITY.PUBLIC);
+  const fixture = await createBackendFixture(PROFILE_VISIBILITY.PUBLIC);
   const firstDocument = createDocument();
   const first = await runSubmit(fixture, firstDocument);
   const firstCard = await fixture.fetchImpl(
@@ -52,7 +52,7 @@ test("updates the stable card ETag through accepted and idempotent CLI submissio
 });
 
 test("keeps private owner usage and card visibility private after submit", async () => {
-  const fixture = createBackendFixture(PROFILE_VISIBILITY.PRIVATE);
+  const fixture = await createBackendFixture(PROFILE_VISIBILITY.PRIVATE);
   await runSubmit(fixture, createDocument());
   const card = await fixture.fetchImpl(`${SERVICE_ORIGIN}/u/postmelee/card.png`);
   const usageRecord = fixture.store.getLatestUsageByOwnerId("owner_1");
@@ -72,7 +72,7 @@ async function runSubmit(fixture, document) {
   });
 }
 
-function createBackendFixture(visibility) {
+async function createBackendFixture(visibility) {
   const store = createMemoryProfileBackendStore();
   let current = new Date("2026-07-13T00:02:00.000Z");
   const createId = createIdFactory();
@@ -91,7 +91,7 @@ function createBackendFixture(visibility) {
     createId,
     createToken: () => `${CLI_TOKEN_PREFIX}integration_secret`
   });
-  const { token } = tokenService.issueCliToken({ ownerId: "owner_1" });
+  const { token } = await tokenService.issueCliToken({ ownerId: "owner_1" });
   const handler = createProfileBackendHttpHandler({
     store,
     tokenService,

@@ -44,31 +44,36 @@ export function createSnapshotSubmitService(options = {}) {
   });
 
   return {
-    submitSnapshot(submitOptions = {}) {
-      const { owner } = tokenService.verifyCliToken(submitOptions.token);
+    async submitSnapshot(submitOptions = {}) {
+      const { owner } = await tokenService.verifyCliToken(submitOptions.token);
       const payload = normalizeSnapshotSubmitPayload(submitOptions.payload);
       const uploadedAt = normalizeDate(now()).toISOString();
-      const ownerForSnapshot = updateOwnerHandleIfRequested(store, owner, {
-        handle: payload.handle,
-        uploadedAt
-      });
-      const visibility = normalizeVisibility(
-        payload.visibility ?? ownerForSnapshot.visibility ?? PROFILE_VISIBILITY.PRIVATE
-      );
-      deviceService.upsertSubmittedDevice({
-        ownerId: ownerForSnapshot.id,
-        device: payload.device,
-        submittedAt: uploadedAt
-      });
 
-      return store.saveLatestSnapshot({
-        ownerId: ownerForSnapshot.id,
-        handle: ownerForSnapshot.handle,
-        visibility,
-        capturedAt: payload.capturedAt,
-        uploadedAt,
-        schemaVersion: payload.snapshot.schemaVersion,
-        snapshot: payload.snapshot
+      // Owner handle update, device touch and snapshot save commit together.
+      return store.transaction(async (tx) => {
+        const ownerForSnapshot = await updateOwnerHandleIfRequested(tx, owner, {
+          handle: payload.handle,
+          uploadedAt
+        });
+        const visibility = normalizeVisibility(
+          payload.visibility ?? ownerForSnapshot.visibility ?? PROFILE_VISIBILITY.PRIVATE
+        );
+        await deviceService.upsertSubmittedDevice({
+          ownerId: ownerForSnapshot.id,
+          device: payload.device,
+          submittedAt: uploadedAt,
+          store: tx
+        });
+
+        return tx.saveLatestSnapshot({
+          ownerId: ownerForSnapshot.id,
+          handle: ownerForSnapshot.handle,
+          visibility,
+          capturedAt: payload.capturedAt,
+          uploadedAt,
+          schemaVersion: payload.snapshot.schemaVersion,
+          snapshot: payload.snapshot
+        });
       });
     },
 
@@ -76,9 +81,9 @@ export function createSnapshotSubmitService(options = {}) {
       return store.getLatestSnapshotByOwnerId(ownerId);
     },
 
-    getPublicSnapshotByHandle(handle) {
+    async getPublicSnapshotByHandle(handle) {
       const normalizedHandle = slugifyHandleCandidate(handle);
-      const record = store.getLatestSnapshotByHandle(normalizedHandle);
+      const record = await store.getLatestSnapshotByHandle(normalizedHandle);
 
       if (!record || record.visibility !== PROFILE_VISIBILITY.PUBLIC) {
         return null;
@@ -136,7 +141,7 @@ export function normalizeSnapshotSubmitPayload(payload) {
   };
 }
 
-function updateOwnerHandleIfRequested(store, owner, options) {
+async function updateOwnerHandleIfRequested(store, owner, options) {
   if (!options.handle || options.handle === owner.handle) {
     return owner;
   }

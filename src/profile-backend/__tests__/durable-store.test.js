@@ -46,7 +46,7 @@ test("persists auth records, latest snapshot, and latest card usage", async () =
     }
   });
 
-  const { oauthState } = oauth.startGitHubLogin();
+  const { oauthState } = await oauth.startGitHubLogin();
   const login = await oauth.completeGitHubCallback({
     code: "oauth_code_1",
     state: oauthState.id,
@@ -58,7 +58,7 @@ test("persists auth records, latest snapshot, and latest card usage", async () =
     createId: createIdFactory("token"),
     createToken: () => rawCliToken
   });
-  const { token } = tokenService.issueCliToken({
+  const { token } = await tokenService.issueCliToken({
     ownerId: login.owner.id
   });
   const snapshots = createSnapshotSubmitService({
@@ -67,7 +67,7 @@ test("persists auth records, latest snapshot, and latest card usage", async () =
     tokenService
   });
 
-  snapshots.submitSnapshot({
+  await snapshots.submitSnapshot({
     token,
     payload: {
       snapshot: sampleProfileSnapshot,

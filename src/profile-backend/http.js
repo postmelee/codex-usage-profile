@@ -128,7 +128,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "GET /api/auth/github/login") {
         try {
-          const result = oauthRuntimeService.startGitHubLogin({
+          const result = await oauthRuntimeService.startGitHubLogin({
             cliLoginChallengeId: url.searchParams.get("cli_login_challenge"),
             redirectTo: normalizeRequestedRedirectPath(
               url.searchParams.get("redirect_to")
@@ -154,7 +154,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           state: url.searchParams.get("state")
         });
         const challenge = result.oauthState.cliLoginChallengeId
-          ? cliLoginService.approveCliLogin({
+          ? await cliLoginService.approveCliLogin({
             challengeId: result.oauthState.cliLoginChallengeId,
             ownerId: result.owner.id
           })
@@ -182,7 +182,7 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "GET /api/auth/me") {
-        const { owner, session } = sessionService.verifySessionFromCookie(
+        const { owner, session } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
 
@@ -193,7 +193,7 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "POST /api/auth/logout") {
-        const result = oauthRuntimeService.logout({
+        const result = await oauthRuntimeService.logout({
           cookieHeader: readCookieHeader(request)
         });
 
@@ -205,19 +205,19 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "GET /api/profile") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
-        const profile = cardService.getOwnerProfile({ ownerId: owner.id });
+        const profile = await cardService.getOwnerProfile({ ownerId: owner.id });
         return okResponse(serializeOwnerProfile(profile, request, options.publicBaseUrl));
       }
 
       if (route === "PATCH /api/profile") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
         const body = await readJsonBody(request);
-        const profile = cardService.updateVisibility({
+        const profile = await cardService.updateVisibility({
           ownerId: owner.id,
           visibility: readProfileVisibility(body)
         });
@@ -225,7 +225,7 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "GET /api/profile/card.png") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
         const card = await cardService.renderOwnerCard({
@@ -237,7 +237,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/auth/device") {
         const body = await readJsonBody(request);
-        const result = cliLoginService.startCliLogin({
+        const result = await cliLoginService.startCliLogin({
           label: body.label,
           redirectUri: body.redirectUri,
           verificationUri: body.verificationUri,
@@ -249,10 +249,10 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/auth/device/authorize") {
         const body = await readJsonBody(request);
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
-        const challenge = cliLoginService.approveCliLogin({
+        const challenge = await cliLoginService.approveCliLogin({
           userCode: body.userCode ?? body.user_code,
           challengeId: body.challengeId,
           ownerId: owner.id
@@ -266,7 +266,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/auth/device/poll") {
         const body = await readJsonBody(request);
-        const result = cliLoginService.pollCliLogin({
+        const result = await cliLoginService.pollCliLogin({
           deviceCode: body.deviceCode ?? body.device_code,
           label: body.label
         });
@@ -275,10 +275,10 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "GET /api/settings/tokens") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
-        const tokens = tokenService.listCliTokens({ ownerId: owner.id });
+        const tokens = await tokenService.listCliTokens({ ownerId: owner.id });
 
         return okResponse({
           tokens: tokens.map(serializeCliTokenRecord)
@@ -286,11 +286,11 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "POST /api/settings/tokens") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
         const body = await readJsonBody(request);
-        const result = tokenService.issueCliToken({
+        const result = await tokenService.issueCliToken({
           ownerId: owner.id,
           label: normalizeSettingsTokenLabel(body.label ?? body.name)
         });
@@ -306,11 +306,11 @@ export function createProfileBackendHttpHandler(options = {}) {
         request.method.toUpperCase() === "DELETE" &&
         url.pathname.startsWith(settingsTokenPrefix)
       ) {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
         const tokenId = decodeURIComponent(url.pathname.slice(settingsTokenPrefix.length));
-        const tokenRecord = tokenService.revokeCliToken({
+        const tokenRecord = await tokenService.revokeCliToken({
           tokenId,
           ownerId: owner.id
         });
@@ -321,10 +321,10 @@ export function createProfileBackendHttpHandler(options = {}) {
       }
 
       if (route === "GET /api/settings/devices") {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
-        const devices = deviceService.listSubmittedDevices({ ownerId: owner.id });
+        const devices = await deviceService.listSubmittedDevices({ ownerId: owner.id });
 
         return okResponse({
           devices: devices.map(serializeSubmittedDevice)
@@ -336,12 +336,12 @@ export function createProfileBackendHttpHandler(options = {}) {
         request.method.toUpperCase() === "PATCH" &&
         url.pathname.startsWith(settingsDevicePrefix)
       ) {
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
         const body = await readJsonBody(request);
         const deviceId = decodeURIComponent(url.pathname.slice(settingsDevicePrefix.length));
-        const device = deviceService.renameSubmittedDevice({
+        const device = await deviceService.renameSubmittedDevice({
           ownerId: owner.id,
           deviceId,
           displayName: body.name ?? body.displayName
@@ -358,7 +358,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           code: body.code,
           githubClient
         });
-        const owner = accountService.upsertGitHubOwner(identity, {
+        const owner = await accountService.upsertGitHubOwner(identity, {
           handle: body.handle,
           visibility: body.visibility
         });
@@ -366,7 +366,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           ?? body.cliLoginChallengeId
           ?? body.cli_login_challenge;
         const challenge = challengeId
-          ? cliLoginService.approveCliLogin({ challengeId, ownerId: owner.id })
+          ? await cliLoginService.approveCliLogin({ challengeId, ownerId: owner.id })
           : null;
 
         return okResponse({
@@ -377,7 +377,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/cli/login/start") {
         const body = await readJsonBody(request);
-        const result = cliLoginService.startCliLogin({
+        const result = await cliLoginService.startCliLogin({
           label: body.label,
           redirectUri: body.redirectUri
         });
@@ -396,10 +396,10 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/cli/login/approve") {
         const body = await readJsonBody(request);
-        const { owner } = sessionService.verifySessionFromCookie(
+        const { owner } = await sessionService.verifySessionFromCookie(
           readCookieHeader(request)
         );
-        const challenge = cliLoginService.approveCliLogin({
+        const challenge = await cliLoginService.approveCliLogin({
           challengeId: body.challengeId,
           ownerId: owner.id
         });
@@ -411,7 +411,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "POST /api/cli/login/exchange") {
         const body = await readJsonBody(request);
-        const result = cliLoginService.exchangeCliLogin({
+        const result = await cliLoginService.exchangeCliLogin({
           challengeId: body.challengeId,
           label: body.label
         });
@@ -426,7 +426,7 @@ export function createProfileBackendHttpHandler(options = {}) {
       if (route === "POST /api/snapshots/submit") {
         const token = readBearerToken(request);
         const payload = await readJsonBody(request);
-        const record = snapshotService.submitSnapshot({ token, payload });
+        const record = await snapshotService.submitSnapshot({ token, payload });
 
         return okResponse({
           snapshot: serializeLatestSnapshot(record)
@@ -440,7 +440,7 @@ export function createProfileBackendHttpHandler(options = {}) {
             DEFAULT_ACCOUNT_USAGE_BODY_MAX_BYTES,
           requireJson: true
         });
-        const result = accountUsageService.submitAccountUsage({
+        const result = await accountUsageService.submitAccountUsage({
           token,
           document,
           device: readAccountUsageDeviceHeaders(request)
@@ -458,7 +458,7 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       if (route === "GET /api/account-usage/status") {
         const token = readBearerToken(request);
-        const result = accountUsageService.getAccountUsageStatus({ token });
+        const result = await accountUsageService.getAccountUsageStatus({ token });
 
         return okResponse(serializeAccountUsageStatus(
           result,
@@ -472,7 +472,7 @@ export function createProfileBackendHttpHandler(options = {}) {
         request.method.toUpperCase() === "GET" &&
         url.pathname.startsWith(publicProfilePrefix)
       ) {
-        const profile = cardService.getPublicProfile({
+        const profile = await cardService.getPublicProfile({
           handle: decodePublicHandle(
             url.pathname.slice(publicProfilePrefix.length)
           )
@@ -491,7 +491,7 @@ export function createProfileBackendHttpHandler(options = {}) {
         url.pathname.startsWith(publicSnapshotPrefix)
       ) {
         const handle = decodeURIComponent(url.pathname.slice(publicSnapshotPrefix.length));
-        const record = snapshotService.getPublicSnapshotByHandle(handle);
+        const record = await snapshotService.getPublicSnapshotByHandle(handle);
 
         if (!record) {
           throw new ProfileBackendError(

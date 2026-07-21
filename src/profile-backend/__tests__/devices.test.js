@@ -14,13 +14,13 @@ import {
   normalizeSubmitDeviceMetadata
 } from "../index.js";
 
-test("upserts legacy and named submitted devices for an owner", () => {
+test("upserts legacy and named submitted devices for an owner", async () => {
   const fixture = createFixture();
-  const legacy = fixture.devices.upsertSubmittedDevice({
+  const legacy = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1"
   });
   fixture.setNow(new Date("2026-06-10T00:01:00.000Z"));
-  const named = fixture.devices.upsertSubmittedDevice({
+  const named = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1",
     device: {
       id: "macbook-pro",
@@ -28,7 +28,7 @@ test("upserts legacy and named submitted devices for an owner", () => {
     }
   });
 
-  const list = fixture.devices.listSubmittedDevices({ ownerId: "owner_1" });
+  const list = await fixture.devices.listSubmittedDevices({ ownerId: "owner_1" });
 
   assert.equal(legacy.id, "submitted_device_1");
   assert.equal(legacy.deviceKey, LEGACY_SUBMIT_DEVICE_KEY);
@@ -41,22 +41,22 @@ test("upserts legacy and named submitted devices for an owner", () => {
   );
 });
 
-test("preserves renamed display names on later submit", () => {
+test("preserves renamed display names on later submit", async () => {
   const fixture = createFixture();
-  const submitted = fixture.devices.upsertSubmittedDevice({
+  const submitted = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1",
     device: {
       id: "machine-1",
       name: "Original machine"
     }
   });
-  fixture.devices.renameSubmittedDevice({
+  await fixture.devices.renameSubmittedDevice({
     ownerId: "owner_1",
     deviceId: submitted.id,
     displayName: "Desk setup"
   });
   fixture.setNow(new Date("2026-06-10T00:02:00.000Z"));
-  const nextSubmit = fixture.devices.upsertSubmittedDevice({
+  const nextSubmit = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1",
     device: {
       id: "machine-1",
@@ -69,20 +69,20 @@ test("preserves renamed display names on later submit", () => {
   assert.equal(nextSubmit.lastSubmittedAt, "2026-06-10T00:02:00.000Z");
 });
 
-test("renames and resets submitted device display names", () => {
+test("renames and resets submitted device display names", async () => {
   const fixture = createFixture();
-  const submitted = fixture.devices.upsertSubmittedDevice({
+  const submitted = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1",
     device: {
       id: "machine-1"
     }
   });
-  const renamed = fixture.devices.renameSubmittedDevice({
+  const renamed = await fixture.devices.renameSubmittedDevice({
     ownerId: "owner_1",
     deviceId: submitted.id,
     displayName: "  Desktop  "
   });
-  const reset = fixture.devices.renameSubmittedDevice({
+  const reset = await fixture.devices.renameSubmittedDevice({
     ownerId: "owner_1",
     deviceId: submitted.id,
     displayName: ""
@@ -93,7 +93,7 @@ test("renames and resets submitted device display names", () => {
   assert.equal(getSubmittedDeviceDisplayName(reset), DEFAULT_SUBMIT_DEVICE_NAME);
 });
 
-test("rejects invalid device metadata and unauthorized renames", () => {
+test("rejects invalid device metadata and unauthorized renames", async () => {
   const fixture = createFixture();
   fixture.saveOwner({
     id: "owner_2",
@@ -103,22 +103,22 @@ test("rejects invalid device metadata and unauthorized renames", () => {
     handle: "other",
     visibility: PROFILE_VISIBILITY.PRIVATE
   });
-  const submitted = fixture.devices.upsertSubmittedDevice({
+  const submitted = await fixture.devices.upsertSubmittedDevice({
     ownerId: "owner_1",
     device: {
       id: "machine-1"
     }
   });
 
-  assertBackendError(
+  await assertBackendError(
     () => normalizeSubmitDeviceMetadata({ name: "Missing id" }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => normalizeSubmitDeviceMetadata({ id: "bad\nid" }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => fixture.devices.renameSubmittedDevice({
       ownerId: "owner_1",
       deviceId: submitted.id,
@@ -126,7 +126,7 @@ test("rejects invalid device metadata and unauthorized renames", () => {
     }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => fixture.devices.renameSubmittedDevice({
       ownerId: "owner_1",
       deviceId: submitted.id,
@@ -134,7 +134,7 @@ test("rejects invalid device metadata and unauthorized renames", () => {
     }),
     PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
   );
-  assertBackendError(
+  await assertBackendError(
     () => fixture.devices.renameSubmittedDevice({
       ownerId: "owner_2",
       deviceId: submitted.id,
@@ -181,8 +181,8 @@ function createIdFactory() {
   };
 }
 
-function assertBackendError(callback, code) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     return true;

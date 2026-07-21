@@ -15,8 +15,11 @@ export function createAccountService(options = {}) {
   }
 
   return {
-    updateVisibility(updateOptions = {}) {
-      const owner = store.getOwnerById(updateOptions.ownerId);
+    async updateVisibility(updateOptions = {}) {
+      // `store` override lets a caller run this write inside an open
+      // transaction (tx handle) while keeping this service's configuration.
+      const activeStore = updateOptions.store ?? store;
+      const owner = await activeStore.getOwnerById(updateOptions.ownerId);
       if (!owner) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
@@ -24,21 +27,22 @@ export function createAccountService(options = {}) {
         );
       }
 
-      return store.saveOwner({
+      return activeStore.saveOwner({
         ...owner,
         visibility: normalizeVisibility(updateOptions.visibility),
         updatedAt: toIsoString(now())
       });
     },
 
-    upsertGitHubOwner(identityPayload, upsertOptions = {}) {
+    async upsertGitHubOwner(identityPayload, upsertOptions = {}) {
+      const activeStore = upsertOptions.store ?? store;
       const identity = normalizeGitHubIdentity(identityPayload);
-      const existingOwner = store.getOwnerByProviderIdentity(
+      const existingOwner = await activeStore.getOwnerByProviderIdentity(
         identity.authProvider,
         identity.providerUserId
       );
       const ownerId = existingOwner?.id ?? createOwnerId(identity);
-      const handle = resolveOwnerHandle(store, {
+      const handle = await resolveOwnerHandle(activeStore, {
         ownerId,
         existingHandle: existingOwner?.handle,
         requestedHandle: upsertOptions.handle,
@@ -49,7 +53,7 @@ export function createAccountService(options = {}) {
         upsertOptions.visibility ?? existingOwner?.visibility ?? PROFILE_VISIBILITY.PRIVATE
       );
 
-      return store.saveOwner({
+      return activeStore.saveOwner({
         ...existingOwner,
         id: ownerId,
         authProvider: identity.authProvider,
@@ -76,7 +80,7 @@ export function createOwnerId(identity) {
   return `owner_${safeProvider}_${safeUserId}`;
 }
 
-export function resolveOwnerHandle(store, options) {
+export async function resolveOwnerHandle(store, options) {
   const baseHandle = slugifyHandleCandidate(
     options.requestedHandle || options.existingHandle || options.githubLogin
   );
@@ -106,12 +110,12 @@ export function normalizeVisibility(value) {
   );
 }
 
-function findAvailableHandle(store, baseHandle, ownerId) {
+async function findAvailableHandle(store, baseHandle, ownerId) {
   let handle = baseHandle;
   let suffix = 2;
 
   while (true) {
-    const existingOwner = store.getOwnerByHandle(handle);
+    const existingOwner = await store.getOwnerByHandle(handle);
     if (!existingOwner || existingOwner.id === ownerId) {
       return handle;
     }

@@ -127,9 +127,11 @@ node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37
 ```
 
 The smoke fixture uses `PROFILE_RUNTIME_MODE=spike` with a temporary file
-store. Production mode rejects the file store and requires an injected
-external store adapter; the durable Neon/R2 boundary is intentionally deferred
-to the next hosting stage.
+store. Production mode rejects the file store and starts with the Postgres
+(Neon) adapter from the server-only `NEON_DATABASE_URL` after verifying that
+schema migrations are applied; the durable R2 media boundary is still
+deferred to the next hosting stage. See
+[Production hosting architecture](docs/production-hosting.md).
 
 ## Runtime Configuration
 
@@ -177,7 +179,7 @@ File credentials are bound to the issuing service origin and are never sent to a
 - A Bearer token can update only its bound GitHub owner. Body/header data cannot select another owner.
 - New profiles default to private; public card access follows the web profile visibility setting.
 - Exact retries are idempotent, stale/conflicting revisions are rejected, request bodies are size-limited, and submit is rate-limited.
-- Production deployment still needs TLS, a shared rate limiter, durable database/concurrency policy, backup retention, account deletion and secret management.
+- Production deployment still needs TLS, a shared rate limiter, backup retention values, account deletion and secret management. The durable database and its multi-instance concurrency policy are implemented and verified against local Postgres.
 
 Revoke a CLI token immediately from web Settings when it is exposed or a machine is no longer trusted.
 

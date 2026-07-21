@@ -28,9 +28,12 @@ export function createCliTokenService(options = {}) {
   }
 
   return {
-    issueCliToken(issueOptions = {}) {
+    async issueCliToken(issueOptions = {}) {
+      // `store` override lets a caller run this write inside an open
+      // transaction (tx handle) while keeping this service's configuration.
+      const activeStore = issueOptions.store ?? store;
       const ownerId = requireNonEmptyString(issueOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
+      const owner = await activeStore.getOwnerById(ownerId);
 
       if (!owner) {
         throw new ProfileBackendError(
@@ -39,7 +42,7 @@ export function createCliTokenService(options = {}) {
         );
       }
 
-      assertActiveCliTokenLimitAvailable(store, ownerId, maxActiveTokens);
+      await assertActiveCliTokenLimitAvailable(activeStore, ownerId, maxActiveTokens);
 
       const issuedAt = normalizeDate(now());
       const expiresAt = issueOptions.expiresAt
@@ -61,13 +64,13 @@ export function createCliTokenService(options = {}) {
 
       return {
         token: rawToken,
-        tokenRecord: store.saveCliToken(tokenRecord)
+        tokenRecord: await activeStore.saveCliToken(tokenRecord)
       };
     },
 
-    listCliTokens(listOptions = {}) {
+    async listCliTokens(listOptions = {}) {
       const ownerId = requireNonEmptyString(listOptions.ownerId, "ownerId");
-      const owner = store.getOwnerById(ownerId);
+      const owner = await store.getOwnerById(ownerId);
 
       if (!owner) {
         throw new ProfileBackendError(
@@ -77,16 +80,15 @@ export function createCliTokenService(options = {}) {
       }
 
       const includeRevoked = Boolean(listOptions.includeRevoked);
-      return store
-        .listCliTokensByOwnerId(ownerId)
+      return (await store.listCliTokensByOwnerId(ownerId))
         .filter((tokenRecord) => includeRevoked || !tokenRecord.revokedAt);
     },
 
-    verifyCliToken(rawToken, verifyOptions = {}) {
+    async verifyCliToken(rawToken, verifyOptions = {}) {
       const tokenDigest = createCliTokenDigest(
         requireNonEmptyString(rawToken, "token")
       );
-      const tokenRecord = store.getCliTokenByDigest(tokenDigest);
+      const tokenRecord = await store.getCliTokenByDigest(tokenDigest);
 
       if (!tokenRecord) {
         throw new ProfileBackendError(
@@ -104,7 +106,7 @@ export function createCliTokenService(options = {}) {
         );
       }
 
-      const owner = store.getOwnerById(tokenRecord.ownerId);
+      const owner = await store.getOwnerById(tokenRecord.ownerId);
       if (!owner) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.UNAUTHORIZED,
@@ -112,7 +114,7 @@ export function createCliTokenService(options = {}) {
         );
       }
 
-      const updatedToken = store.saveCliToken({
+      const updatedToken = await store.saveCliToken({
         ...tokenRecord,
         lastUsedAt: normalizeDate(now()).toISOString()
       });
@@ -123,9 +125,9 @@ export function createCliTokenService(options = {}) {
       };
     },
 
-    revokeCliToken(revokeOptions = {}) {
+    async revokeCliToken(revokeOptions = {}) {
       const tokenId = requireNonEmptyString(revokeOptions.tokenId, "tokenId");
-      const tokenRecord = store.getCliTokenById(tokenId);
+      const tokenRecord = await store.getCliTokenById(tokenId);
 
       if (!tokenRecord) {
         throw new ProfileBackendError(
@@ -181,9 +183,8 @@ function assertTokenUsable(tokenRecord, nowDate) {
   }
 }
 
-function assertActiveCliTokenLimitAvailable(store, ownerId, maxActiveTokens) {
-  const activeTokenCount = store
-    .listCliTokensByOwnerId(ownerId)
+async function assertActiveCliTokenLimitAvailable(store, ownerId, maxActiveTokens) {
+  const activeTokenCount = (await store.listCliTokensByOwnerId(ownerId))
     .filter((tokenRecord) => !tokenRecord.revokedAt)
     .length;
 

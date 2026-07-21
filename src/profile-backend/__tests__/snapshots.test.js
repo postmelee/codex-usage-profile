@@ -14,9 +14,9 @@ import {
 } from "../index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 
-test("submits a valid snapshot and writes latest metadata", () => {
-  const fixture = createFixture();
-  const result = fixture.snapshots.submitSnapshot({
+test("submits a valid snapshot and writes latest metadata", async () => {
+  const fixture = await createFixture();
+  const result = await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -37,9 +37,9 @@ test("submits a valid snapshot and writes latest metadata", () => {
   assert.equal(tokenRecord.lastUsedAt, "2026-06-10T00:00:00.000Z");
 });
 
-test("submits snapshot device metadata as web service metadata", () => {
-  const fixture = createFixture();
-  const result = fixture.snapshots.submitSnapshot({
+test("submits snapshot device metadata as web service metadata", async () => {
+  const fixture = await createFixture();
+  const result = await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -63,10 +63,10 @@ test("submits snapshot device metadata as web service metadata", () => {
   assert.equal(Object.hasOwn(result.snapshot, "device"), false);
 });
 
-test("submits legacy device metadata when no device is provided", () => {
-  const fixture = createFixture();
+test("submits legacy device metadata when no device is provided", async () => {
+  const fixture = await createFixture();
 
-  fixture.snapshots.submitSnapshot({
+  await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: createSubmitPayload()
   });
@@ -78,10 +78,10 @@ test("submits legacy device metadata when no device is provided", () => {
   assert.equal(device.displayName, "Legacy submissions");
 });
 
-test("updates the same owner's latest snapshot and optional handle", () => {
-  const fixture = createFixture();
+test("updates the same owner's latest snapshot and optional handle", async () => {
+  const fixture = await createFixture();
 
-  fixture.snapshots.submitSnapshot({
+  await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -89,7 +89,7 @@ test("updates the same owner's latest snapshot and optional handle", () => {
       visibility: PROFILE_VISIBILITY.PUBLIC
     }
   });
-  const updated = fixture.snapshots.submitSnapshot({
+  const updated = await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -109,10 +109,10 @@ test("updates the same owner's latest snapshot and optional handle", () => {
   );
 });
 
-test("returns only public snapshots from public handle lookup", () => {
-  const fixture = createFixture();
+test("returns only public snapshots from public handle lookup", async () => {
+  const fixture = await createFixture();
 
-  fixture.snapshots.submitSnapshot({
+  await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -120,9 +120,9 @@ test("returns only public snapshots from public handle lookup", () => {
       visibility: PROFILE_VISIBILITY.PRIVATE
     }
   });
-  assert.equal(fixture.snapshots.getPublicSnapshotByHandle("postmelee"), null);
+  assert.equal(await fixture.snapshots.getPublicSnapshotByHandle("postmelee"), null);
 
-  fixture.snapshots.submitSnapshot({
+  await fixture.snapshots.submitSnapshot({
     token: fixture.token,
     payload: {
       snapshot: sampleProfileSnapshot,
@@ -132,17 +132,17 @@ test("returns only public snapshots from public handle lookup", () => {
   });
 
   assert.equal(
-    fixture.snapshots.getPublicSnapshotByHandle("PostMelee").ownerId,
+    (await fixture.snapshots.getPublicSnapshotByHandle("PostMelee")).ownerId,
     "owner_1"
   );
 });
 
-test("rejects invalid snapshots with validation details", () => {
-  const fixture = createFixture();
+test("rejects invalid snapshots with validation details", async () => {
+  const fixture = await createFixture();
   const invalidSnapshot = structuredClone(sampleProfileSnapshot);
   delete invalidSnapshot.schemaVersion;
 
-  assertBackendError(
+  await assertBackendError(
     () => fixture.snapshots.submitSnapshot({
       token: fixture.token,
       payload: {
@@ -157,12 +157,12 @@ test("rejects invalid snapshots with validation details", () => {
   );
 });
 
-test("rejects token-like wrapper and nested snapshot payload fields", () => {
-  const fixture = createFixture();
+test("rejects token-like wrapper and nested snapshot payload fields", async () => {
+  const fixture = await createFixture();
   const snapshotWithSecret = structuredClone(sampleProfileSnapshot);
   snapshotWithSecret.access_token = "gho_1234567890abcdefghijklmnopqrstuv";
 
-  assertBackendError(
+  await assertBackendError(
     () => normalizeSnapshotSubmitPayload({
       snapshot: sampleProfileSnapshot,
       capturedAt: sampleProfileSnapshot.capturedAt,
@@ -170,7 +170,7 @@ test("rejects token-like wrapper and nested snapshot payload fields", () => {
     }),
     PROFILE_BACKEND_ERROR_CODES.FORBIDDEN_SECRET
   );
-  assertBackendError(
+  await assertBackendError(
     () => fixture.snapshots.submitSnapshot({
       token: fixture.token,
       payload: {
@@ -182,11 +182,11 @@ test("rejects token-like wrapper and nested snapshot payload fields", () => {
   );
 });
 
-test("rejects expired and revoked submit tokens", () => {
-  const fixture = createFixture({ expiresInMs: 1000 });
+test("rejects expired and revoked submit tokens", async () => {
+  const fixture = await createFixture({ expiresInMs: 1000 });
   fixture.setNow(new Date("2026-06-10T00:00:01.000Z"));
 
-  assertBackendError(
+  await assertBackendError(
     () => fixture.snapshots.submitSnapshot({
       token: fixture.token,
       payload: createSubmitPayload()
@@ -194,13 +194,13 @@ test("rejects expired and revoked submit tokens", () => {
     PROFILE_BACKEND_ERROR_CODES.EXPIRED
   );
 
-  const revokedFixture = createFixture();
-  revokedFixture.tokenService.revokeCliToken({
+  const revokedFixture = await createFixture();
+  await revokedFixture.tokenService.revokeCliToken({
     tokenId: revokedFixture.tokenRecord.id,
     ownerId: "owner_1"
   });
 
-  assertBackendError(
+  await assertBackendError(
     () => revokedFixture.snapshots.submitSnapshot({
       token: revokedFixture.token,
       payload: createSubmitPayload()
@@ -209,8 +209,8 @@ test("rejects expired and revoked submit tokens", () => {
   );
 });
 
-test("rejects handle conflicts during submit", () => {
-  const fixture = createFixture();
+test("rejects handle conflicts during submit", async () => {
+  const fixture = await createFixture();
   fixture.store.saveOwner({
     id: "owner_2",
     authProvider: "github",
@@ -220,7 +220,7 @@ test("rejects handle conflicts during submit", () => {
     visibility: PROFILE_VISIBILITY.PRIVATE
   });
 
-  assertBackendError(
+  await assertBackendError(
     () => fixture.snapshots.submitSnapshot({
       token: fixture.token,
       payload: {
@@ -232,7 +232,7 @@ test("rejects handle conflicts during submit", () => {
   );
 });
 
-test("normalizes submit payload metadata", () => {
+test("normalizes submit payload metadata", async () => {
   const normalized = normalizeSnapshotSubmitPayload({
     snapshot: sampleProfileSnapshot,
     capturedAt: "2026-06-06T17:22:18+09:00",
@@ -253,7 +253,7 @@ test("normalizes submit payload metadata", () => {
   });
 });
 
-function createFixture(options = {}) {
+async function createFixture(options = {}) {
   const store = createMemoryProfileBackendStore();
   store.saveOwner({
     id: "owner_1",
@@ -271,7 +271,7 @@ function createFixture(options = {}) {
     createId: createIdFactory(),
     createToken: createTokenFactory()
   });
-  const { token, tokenRecord } = tokenService.issueCliToken({
+  const { token, tokenRecord } = await tokenService.issueCliToken({
     ownerId: "owner_1",
     expiresInMs: options.expiresInMs
   });
@@ -324,8 +324,8 @@ function createTokenFactory() {
   };
 }
 
-function assertBackendError(callback, code, inspect = () => {}) {
-  assert.throws(callback, (error) => {
+async function assertBackendError(callback, code, inspect = () => {}) {
+  await assert.rejects(async () => callback(), (error) => {
     assert.equal(error instanceof ProfileBackendError, true);
     assert.equal(error.code, code);
     inspect(error);
