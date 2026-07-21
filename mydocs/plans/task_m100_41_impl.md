@@ -107,8 +107,10 @@ Task #41 Stage 2: Postgres schema와 versioned migration runner
 수정:
 
 - `src/profile-backend/index.js` — adapter export 추가
-- `src/profile-runtime/production-server.js` — `createProductionStore` external branch에서 Postgres store 생성
-- `src/profile-runtime/config.js` / `deployment-config.js` — Postgres 연결 env(서버 전용) 로딩, dependency readiness 검증
+- `src/profile-runtime/production-server.js` — `createProductionStore` external branch에서 Postgres store 생성, readiness 호출, 종료 시 pool close
+- (Stage 3 조정) 연결 env 로딩은 `postgres/pool.js`에 한정한다 — 서버 전용 secret을 config 객체로 전파하지 않기 위해 `config.js`/`deployment-config.js`는 수정하지 않는다. readiness는 adapter `verifyReadiness()` + production-server 호출로 구현
+- (Stage 3 조정) `account-usage-submit.js` — transaction 첫 read를 `tx.getOwnerById(owner.id)`로 변경해 직렬화 키(owner.id) row를 먼저 잠그고, 재조회한 owner의 handle/visibility로 usage를 기록(visibility 변경과의 정합)
+- (Stage 3 조정, L1 해소) `store-contract.js` — `submitAccountUsage.records`에서 `cliToken` 제거. lastUsedAt touch는 의도적으로 tx 밖(기존 동작 보존)임을 주석으로 명문화
 
 ### 변경 내용
 

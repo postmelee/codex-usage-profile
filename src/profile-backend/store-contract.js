@@ -102,8 +102,12 @@ export const PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS = deepFreeze({
     invariant: "exactly one token is issued for an approved challenge",
     failurePolicy: "rollback"
   },
+  // The CLI token verification (including its lastUsedAt touch) runs before
+  // this transaction on purpose: it preserves the long-standing behavior that
+  // a rejected submit still records the token use, and it keeps the token row
+  // out of the submit serialization scope.
   submitAccountUsage: {
-    records: ["cliToken", "latestUsage", "submittedDevice"],
+    records: ["latestUsage", "submittedDevice"],
     serializationKey: "owner.id",
     invariant: "capturedAt and contentDigest provide stale, conflict, and idempotent outcomes",
     failurePolicy: "rollback"

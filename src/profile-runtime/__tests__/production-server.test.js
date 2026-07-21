@@ -9,7 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createMemoryProfileBackendStore } from "../../profile-backend/index.js";
+import {
+  assertProfileBackendStoreContract,
+  createMemoryProfileBackendStore
+} from "../../profile-backend/index.js";
 import {
   createProductionNodeHandler,
   createProductionStore,
@@ -165,13 +168,30 @@ test("starts the production host on an arbitrary port and closes idempotently", 
   }
 });
 
-test("requires an injected adapter for external storage", () => {
+test("fails closed when external storage lacks its connection secret", () => {
   assert.throws(
     () => createProductionStore({
-      deploymentConfig: { storeMode: "external" }
+      deploymentConfig: { storeMode: "external" },
+      env: {}
     }),
-    /requires an injected production store adapter/
+    /NEON_DATABASE_URL is required/
   );
+});
+
+test("creates a contract-satisfying Postgres store for external storage", async () => {
+  const store = createProductionStore({
+    deploymentConfig: { storeMode: "external" },
+    env: {
+      NEON_DATABASE_URL: "postgres://user:secret@127.0.0.1:5432/profiles"
+    }
+  });
+
+  try {
+    assert.equal(assertProfileBackendStoreContract(store), store);
+    assert.equal(typeof store.verifyReadiness, "function");
+  } finally {
+    await store.close();
+  }
 });
 
 async function startTestServer(options) {

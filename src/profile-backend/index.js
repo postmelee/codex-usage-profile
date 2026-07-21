@@ -21,6 +21,17 @@ export {
 } from "./durable-store.js";
 
 export {
+  DEFAULT_POSTGRES_POOL_MAX,
+  createPostgresPool,
+  resolvePostgresConnectionString
+} from "./postgres/pool.js";
+
+export {
+  DEFAULT_POSTGRES_STATEMENT_TIMEOUT_MS,
+  createPostgresProfileBackendStore
+} from "./postgres/store.js";
+
+export {
   ACCOUNT_USAGE_DEVICE_ID_HEADER,
   ACCOUNT_USAGE_DEVICE_NAME_HEADER,
   DEFAULT_ACCOUNT_USAGE_BODY_MAX_BYTES,

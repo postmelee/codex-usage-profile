@@ -47,10 +47,15 @@ export function createAccountUsageSubmitService(options = {}) {
       const uploadedAt = normalizeDate(now()).toISOString();
 
       // capturedAt and contentDigest decide stale/conflict/idempotent/new
-      // atomically: the previous record is read under the owner row lock and
-      // the usage save plus device touch commit together.
+      // atomically: the owner row — the operation's serialization key — is
+      // read (and, in adapters with row locks, locked) first, so concurrent
+      // submits for the same owner serialize before the previous record is
+      // compared, and the usage save plus device touch commit together. The
+      // re-read also keeps handle/visibility coherent with a visibility
+      // change that committed after the token was verified.
       return store.transaction(async (tx) => {
-        const previous = await tx.getLatestUsageByOwnerId(owner.id);
+        const currentOwner = (await tx.getOwnerById(owner.id)) ?? owner;
+        const previous = await tx.getLatestUsageByOwnerId(currentOwner.id);
         const comparison = compareUsageDocuments(previous, document, contentDigest);
 
         if (comparison === "stale") {
@@ -61,7 +66,7 @@ export function createAccountUsageSubmitService(options = {}) {
         }
 
         const device = await deviceService.upsertSubmittedDevice({
-          ownerId: owner.id,
+          ownerId: currentOwner.id,
           device: submitOptions.device,
           submittedAt: uploadedAt,
           store: tx
@@ -69,7 +74,7 @@ export function createAccountUsageSubmitService(options = {}) {
 
         if (comparison === "idempotent") {
           return {
-            owner,
+            owner: currentOwner,
             tokenRecord,
             usageRecord: previous,
             device,
@@ -79,9 +84,9 @@ export function createAccountUsageSubmitService(options = {}) {
         }
 
         const usageRecord = await tx.saveLatestUsage({
-          ownerId: owner.id,
-          handle: owner.handle,
-          visibility: owner.visibility,
+          ownerId: currentOwner.id,
+          handle: currentOwner.handle,
+          visibility: currentOwner.visibility,
           contractVersion: document.contractVersion,
           capturedAt: document.capturedAt,
           uploadedAt,
@@ -90,7 +95,7 @@ export function createAccountUsageSubmitService(options = {}) {
         });
 
         return {
-          owner,
+          owner: currentOwner,
           tokenRecord,
           usageRecord,
           device,
