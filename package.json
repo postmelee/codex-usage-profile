@@ -15,6 +15,7 @@
     "build:marketing": "npm run build:sites",
     "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
     "migrate:postgres": "node src/profile-backend/postgres/migrate.js",
+    "migrate:seed": "node scripts/migrate-file-store-to-postgres.mjs",
     "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",
     "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
     "smoke:hosting-matrix": "node scripts/smoke-hosting-matrix.mjs",
