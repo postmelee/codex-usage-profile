@@ -10,7 +10,10 @@ import {
 } from "../../profile-backend/index.js";
 import { CARD_OUTPUT_HEIGHT, CARD_OUTPUT_WIDTH } from "../renderer.js";
 import {
+  createProfileCardEtag,
+  createProfileCardRevision,
   createProfileCardService,
+  createProfileCardSourceDigest,
   normalizeGitHubAvatarUrl
 } from "../service.js";
 import { sampleAccountUsageReadResult } from "../fixtures/sample-account-usage.js";
@@ -113,6 +116,10 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
   });
 
   assert.match(first.etag, /^"[A-Za-z0-9_-]{43}"$/);
+  assert.match(first.revision, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(first.sourceDigest, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(first.revision, createProfileCardRevision(first.body));
+  assert.equal(first.etag, createProfileCardEtag(first.body));
   assert.deepEqual(second.body, first.body);
   assert.equal(conditional.notModified, true);
   assert.equal(conditional.body, null);
@@ -121,7 +128,7 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
   assert.equal(renderCount, 1);
 });
 
-test("changes ETag when locale, owner identity, or latest usage changes", async () => {
+test("separates renderer source digests from final PNG revisions", async () => {
   const fixture = createFixture({ renderPng: async () => Buffer.from("png") });
   await fixture.service.updateVisibility({
     ownerId: OWNER.id,
@@ -150,9 +157,47 @@ test("changes ETag when locale, owner identity, or latest usage changes", async 
     handle: OWNER.handle, includeBody: false
   });
 
-  assert.notEqual(english.etag, korean.etag);
-  assert.notEqual(english.etag, identityChanged.etag);
-  assert.notEqual(identityChanged.etag, usageChanged.etag);
+  assert.notEqual(english.sourceDigest, korean.sourceDigest);
+  assert.notEqual(english.sourceDigest, identityChanged.sourceDigest);
+  assert.notEqual(identityChanged.sourceDigest, usageChanged.sourceDigest);
+  assert.equal(english.revision, korean.revision);
+  assert.equal(english.etag, identityChanged.etag);
+  assert.equal(identityChanged.etag, usageChanged.etag);
+});
+
+test("changes final revision when avatar bytes change at the same URL", async () => {
+  const renderPng = async (_viewModel, options) => Buffer.from(options.avatarSource);
+  const first = createFixture({
+    fetchImpl: async () => new Response(Buffer.from("avatar-one"), {
+      headers: { "content-type": "image/png" }
+    }),
+    renderPng
+  });
+  const second = createFixture({
+    fetchImpl: async () => new Response(Buffer.from("avatar-two"), {
+      headers: { "content-type": "image/png" }
+    }),
+    renderPng
+  });
+
+  const firstCard = await first.service.renderOwnerCard({ ownerId: OWNER.id });
+  const secondCard = await second.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(firstCard.sourceDigest, secondCard.sourceDigest);
+  assert.notEqual(firstCard.revision, secondCard.revision);
+  assert.notEqual(firstCard.etag, secondCard.etag);
+});
+
+test("validates profile card digest helper inputs", () => {
+  const options = {
+    locale: "en",
+    owner: OWNER,
+    usage: sampleAccountUsageReadResult,
+    usageRecord: { uploadedAt: "2026-06-11T00:01:00.000Z" }
+  };
+  assert.match(createProfileCardSourceDigest(options), /^[A-Za-z0-9_-]{43}$/);
+  assert.throws(() => createProfileCardRevision(Buffer.alloc(0)), /must not be empty/);
+  assert.throws(() => createProfileCardEtag("png"), /Buffer or Uint8Array/);
 });
 
 test("renders a valid PNG when avatar loading fails", async () => {

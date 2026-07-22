@@ -28,3 +28,5 @@ export {
 } from "./s3/client.js";
 
 export { createS3ProfileMediaStore } from "./s3/store.js";
+
+export { createProfilePublicationService } from "./publication-service.js";

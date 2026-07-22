@@ -14,11 +14,13 @@ import {
   createAccountUsageRateLimiter,
   createCliTokenService,
   createMemoryProfileBackendStore,
+  createProfileBackendError,
   createProfileBackendHttpHandler
 } from "../index.js";
 import { ACCOUNT_USAGE_CONTRACT_VERSION } from "../../profile-card/index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
+import { createMemoryProfileMediaStore } from "../../profile-media/index.js";
 
 const BASE_URL = "http://localhost";
 
@@ -898,6 +900,117 @@ test("updates only the session owner's card visibility", async () => {
   assert.equal(fixture.store.getOwnerById("owner_2").visibility, PROFILE_VISIBILITY.PRIVATE);
 });
 
+test("delegates authenticated profile visibility to the publication service", async () => {
+  const calls = [];
+  const fixture = createFixture({
+    createPublicationService(store) {
+      return {
+        async updateVisibility(options) {
+          calls.push(options);
+          const owner = store.saveOwner({
+            ...store.getOwnerById(options.ownerId),
+            visibility: options.visibility
+          });
+          const usageRecord = store.saveLatestUsage({
+            ...store.getLatestUsageByOwnerId(options.ownerId),
+            visibility: options.visibility
+          });
+          return { owner, usageRecord, visibility: options.visibility };
+        }
+      };
+    }
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [{
+    ownerId: "owner_1",
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  }]);
+  assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(response.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
+});
+
+test("creates the publication service when a media store is configured", async () => {
+  const mediaStore = createMemoryProfileMediaStore();
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(`card:${viewModel.locale}`)
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+  const english = await mediaStore.getPublishedCard({ handle: "postmelee" });
+  const korean = await mediaStore.getPublishedCard({
+    handle: "postmelee",
+    locale: "ko"
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(english.body, Buffer.from("card:en"));
+  assert.deepEqual(korean.body, Buffer.from("card:ko"));
+  assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+});
+
+test("returns a generic 503 when profile publication is unavailable", async () => {
+  const fixture = createFixture({
+    createPublicationService() {
+      return {
+        async updateVisibility() {
+          throw createProfileBackendError(
+            PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+            "Profile media is temporarily unavailable",
+            {
+              details: {
+                compensation: "failed",
+                internalEndpoint: "must-not-leak"
+              }
+            }
+          );
+        }
+      };
+    }
+  });
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(JSON.stringify(response.body).includes("must-not-leak"), false);
+});
+
 test("serves a private owner preview without public caching", async () => {
   const fixture = createFixture();
   fixture.saveOwner();
@@ -1412,6 +1525,9 @@ function createFixture(options = {}) {
     createToken
   });
   const githubCalls = [];
+  const publicationService = typeof options.createPublicationService === "function"
+    ? options.createPublicationService(store)
+    : options.publicationService;
   const handler = createProfileBackendHttpHandler({
     store,
     tokenService,
@@ -1439,7 +1555,10 @@ function createFixture(options = {}) {
       }
     },
     accountUsageBodyMaxBytes: options.accountUsageBodyMaxBytes,
-    accountUsageRateLimiter: options.accountUsageRateLimiter
+    accountUsageRateLimiter: options.accountUsageRateLimiter,
+    mediaStore: options.mediaStore,
+    profileCardRenderPng: options.profileCardRenderPng,
+    publicationService
   });
 
   return {

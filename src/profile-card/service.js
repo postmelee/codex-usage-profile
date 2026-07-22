@@ -127,7 +127,7 @@ export function createProfileCardService(options = {}) {
   async function renderCard(renderOptions) {
     const locale = resolveCardLocale(renderOptions.locale);
     const usage = normalizeAccountUsageReadResult(renderOptions.usageRecord.usage);
-    const etag = createProfileCardEtag({
+    const sourceDigest = createProfileCardSourceDigest({
       locale,
       owner: renderOptions.owner,
       rendererVersion,
@@ -135,14 +135,7 @@ export function createProfileCardService(options = {}) {
       usageRecord: renderOptions.usageRecord
     });
 
-    if (matchesIfNoneMatch(renderOptions.ifNoneMatch, etag)) {
-      return { body: null, etag, locale, notModified: true };
-    }
-    if (!renderOptions.includeBody) {
-      return { body: null, etag, locale, notModified: false };
-    }
-
-    let body = pngCache.get(etag);
+    let body = pngCache.get(sourceDigest);
     if (!body) {
       const avatarSource = await loadOwnerAvatar(renderOptions.owner);
       const viewModel = buildCardViewModel({
@@ -151,10 +144,22 @@ export function createProfileCardService(options = {}) {
         usage
       });
       body = Buffer.from(await renderPng(viewModel, { avatarSource }));
-      pngCache.set(etag, body);
+      pngCache.set(sourceDigest, body);
     }
 
-    return { body: Buffer.from(body), etag, locale, notModified: false };
+    const revision = createProfileCardRevision(body);
+    const etag = createProfileCardEtag(body);
+    const notModified = matchesIfNoneMatch(renderOptions.ifNoneMatch, etag);
+    const includeBody = renderOptions.includeBody && !notModified;
+
+    return {
+      body: includeBody ? Buffer.from(body) : null,
+      etag,
+      locale,
+      notModified,
+      revision,
+      sourceDigest
+    };
   }
 
   async function loadOwnerAvatar(owner) {
@@ -180,7 +185,7 @@ export function createProfileCardService(options = {}) {
   }
 }
 
-export function createProfileCardEtag(options = {}) {
+export function createProfileCardSourceDigest(options = {}) {
   const payload = JSON.stringify({
     rendererVersion: options.rendererVersion ?? CARD_RENDERER_VERSION,
     locale: resolveCardLocale(options.locale),
@@ -198,8 +203,21 @@ export function createProfileCardEtag(options = {}) {
       usage: options.usage
     }
   });
-  const digest = createHash("sha256").update(payload).digest("base64url");
-  return `"${digest}"`;
+  return createHash("sha256").update(payload).digest("base64url");
+}
+
+export function createProfileCardRevision(body) {
+  if (!Buffer.isBuffer(body) && !(body instanceof Uint8Array)) {
+    throw new TypeError("profile card body must be a Buffer or Uint8Array");
+  }
+  if (body.byteLength === 0) {
+    throw new TypeError("profile card body must not be empty");
+  }
+  return createHash("sha256").update(body).digest("base64url");
+}
+
+export function createProfileCardEtag(body) {
+  return `"${createProfileCardRevision(body)}"`;
 }
 
 export function normalizeGitHubAvatarUrl(value) {

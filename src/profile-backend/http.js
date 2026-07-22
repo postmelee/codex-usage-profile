@@ -2,6 +2,7 @@ import { createAccountService } from "./accounts.js";
 import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
 import { createProfileCardService } from "../profile-card/service.js";
+import { createProfilePublicationService } from "../profile-media/publication-service.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
 import {
@@ -108,6 +109,17 @@ export function createProfileBackendHttpHandler(options = {}) {
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
     cacheEntries: options.profileCardCacheEntries
   });
+  const publicationService = options.publicationService ?? (
+    options.mediaStore
+      ? createProfilePublicationService({
+        store,
+        mediaStore: options.mediaStore,
+        cardService,
+        now,
+        createId
+      })
+      : null
+  );
   const accountUsageService = options.accountUsageService ??
     createAccountUsageSubmitService({
       store,
@@ -217,7 +229,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           readCookieHeader(request)
         );
         const body = await readJsonBody(request);
-        const profile = await cardService.updateVisibility({
+        const profile = await (publicationService ?? cardService).updateVisibility({
           ownerId: owner.id,
           visibility: readProfileVisibility(body)
         });

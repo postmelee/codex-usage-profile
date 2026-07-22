@@ -45,6 +45,8 @@ export {
   DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS,
   DEFAULT_PROFILE_CARD_CACHE_ENTRIES,
   createProfileCardEtag,
+  createProfileCardRevision,
   createProfileCardService,
+  createProfileCardSourceDigest,
   normalizeGitHubAvatarUrl
 } from "./service.js";
