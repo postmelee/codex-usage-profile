@@ -82,6 +82,48 @@ test("S3 adapter satisfies publication contract with a command client", async ()
   assert.equal(client.commandNames.includes("HeadBucketCommand"), true);
 });
 
+test("S3 adapter fails closed when a HEAD references a missing locale revision", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createTestIdentity();
+  await store.putRevision(identity.en);
+  await store.putRevision(identity.ko);
+  await store.publishRevision({
+    ownerId: identity.ownerId,
+    handle: identity.handle,
+    publicationId: identity.publicationId,
+    representations: {
+      en: { revision: identity.en.revision, etag: identity.en.etag },
+      ko: { revision: identity.ko.revision, etag: identity.ko.etag }
+    }
+  });
+  await client.send(new DeleteObjectCommand({
+    Bucket: "cards",
+    Key: createProfileMediaRevisionKey(identity.ko)
+  }));
+
+  await assert.rejects(
+    () => store.getPublishedCard({
+      handle: identity.handle,
+      locale: "ko",
+      includeBody: false
+    }),
+    (error) => error.code === "not_found"
+  );
+  await assert.rejects(
+    () => store.getPublishedCard({
+      handle: identity.handle,
+      locale: "ko",
+      ifNoneMatch: identity.ko.etag
+    }),
+    (error) => error.code === "not_found"
+  );
+});
+
 const integrationConfig = resolveTestProfileMediaStoreOptions(process.env);
 test("S3 adapter satisfies contract against configured endpoint", {
   skip: integrationConfig.enabled ? false : integrationConfig.reason

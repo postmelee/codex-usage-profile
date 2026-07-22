@@ -3,6 +3,10 @@ import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
 import { createProfileCardService } from "../profile-card/service.js";
 import { createProfilePublicationService } from "../profile-media/publication-service.js";
+import {
+  PROFILE_MEDIA_CACHE_CONTROL,
+  PROFILE_MEDIA_CONTENT_TYPE
+} from "../profile-media/media-store-contract.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
 import {
@@ -26,7 +30,6 @@ const JSON_HEADERS = Object.freeze({
 const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
 const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
 const PRIVATE_CARD_CACHE_CONTROL = "private, no-store";
-const PUBLIC_CARD_CACHE_CONTROL = "public, no-cache, must-revalidate";
 
 export const ACCOUNT_USAGE_DEVICE_ID_HEADER = "x-codex-usage-profile-device-id";
 export const ACCOUNT_USAGE_DEVICE_NAME_HEADER = "x-codex-usage-profile-device-name";
@@ -109,11 +112,12 @@ export function createProfileBackendHttpHandler(options = {}) {
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
     cacheEntries: options.profileCardCacheEntries
   });
+  const mediaStore = options.mediaStore ?? null;
   const publicationService = options.publicationService ?? (
-    options.mediaStore
+    mediaStore
       ? createProfilePublicationService({
         store,
-        mediaStore: options.mediaStore,
+        mediaStore,
         cardService,
         now,
         createId
@@ -519,15 +523,18 @@ export function createProfileBackendHttpHandler(options = {}) {
 
       const publicCardMatch = url.pathname.match(/^\/u\/([^/]+)\/card\.png$/);
       if (publicCardMatch && ["GET", "HEAD"].includes(request.method.toUpperCase())) {
-        const card = await cardService.renderPublicCard({
+        const method = request.method.toUpperCase();
+        const card = await readPublishedMediaCard({
+          mediaStore,
           handle: decodePublicCardHandle(publicCardMatch[1]),
           locale: url.searchParams.get("locale"),
           ifNoneMatch: request.headers.get("if-none-match"),
-          includeBody: request.method.toUpperCase() === "GET"
+          includeBody: method === "GET"
         });
         return cardPngResponse(card, {
-          cacheControl: PUBLIC_CARD_CACHE_CONTROL,
-          head: request.method.toUpperCase() === "HEAD"
+          cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
+          contentType: PROFILE_MEDIA_CONTENT_TYPE,
+          head: method === "HEAD"
         });
       }
 
@@ -1096,9 +1103,47 @@ function decodePublicCardHandle(value) {
 function cardPngResponse(card, options) {
   const headers = {
     "cache-control": options.cacheControl,
-    "content-type": "image/png",
+    "content-type": options.contentType ?? "image/png",
     etag: card.etag
   };
   if (card.notModified) return new Response(null, { status: 304, headers });
   return new Response(options.head ? null : card.body, { status: 200, headers });
+}
+
+async function readPublishedMediaCard(options) {
+  try {
+    if (!options.mediaStore || typeof options.mediaStore.getPublishedCard !== "function") {
+      throw new Error("media store is unavailable");
+    }
+    const card = await options.mediaStore.getPublishedCard({
+      handle: options.handle,
+      locale: options.locale,
+      ifNoneMatch: options.ifNoneMatch,
+      includeBody: options.includeBody
+    });
+    if (!isPublishedMediaCard(card, { includeBody: options.includeBody })) {
+      throw new Error("published media is unavailable");
+    }
+    return card;
+  } catch {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+      "Card not found"
+    );
+  }
+}
+
+function isPublishedMediaCard(card, options) {
+  if (
+    !card ||
+    card.contentType !== PROFILE_MEDIA_CONTENT_TYPE ||
+    card.cacheControl !== PROFILE_MEDIA_CACHE_CONTROL ||
+    typeof card.etag !== "string" ||
+    !/^"[A-Za-z0-9_-]{43}"$/.test(card.etag) ||
+    typeof card.notModified !== "boolean"
+  ) return false;
+
+  if (card.notModified || options.includeBody === false) return card.body === null;
+  return (Buffer.isBuffer(card.body) || card.body instanceof Uint8Array) &&
+    card.body.byteLength > 0;
 }

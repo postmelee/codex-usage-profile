@@ -18,6 +18,7 @@ import {
 import {
   sampleAccountUsageReadResult
 } from "../../profile-card/fixtures/sample-account-usage.js";
+import { createMemoryProfileMediaStore } from "../../profile-media/index.js";
 import {
   createNodeRequestUrl,
   createProfileRuntimeBackendHandler,
@@ -228,9 +229,11 @@ test("keeps public HTML JSON and PNG synchronized across usage revisions and vis
   });
   const { token } = await tokenService.issueCliToken({ ownerId: owner.id });
   const { cookie } = await sessionService.createSession({ ownerId: owner.id });
+  const mediaStore = createMemoryProfileMediaStore();
   const apiHandler = createProfileRuntimeBackendHandler({
     backendOptions: {
       createId,
+      mediaStore,
       now: () => current,
       sessionService,
       tokenService
@@ -362,6 +365,16 @@ test("keeps public HTML JSON and PNG synchronized across usage revisions and vis
   const changedJson = await requestRuntimeApi(
     apiHandler, "GET", "/api/profiles/public/runtime-user"
   );
+  const stalePng = await requestRuntimeApi(
+    apiHandler,
+    "GET",
+    "/u/runtime-user/card.png",
+    { headers: { "if-none-match": firstEtag }, parseJson: false }
+  );
+  const repaired = await requestRuntimeApi(apiHandler, "PATCH", "/api/profile", {
+    body: { visibility: PROFILE_VISIBILITY.PUBLIC },
+    headers: { cookie }
+  });
   const changedPng = await requestRuntimeApi(
     apiHandler,
     "GET",
@@ -371,6 +384,8 @@ test("keeps public HTML JSON and PNG synchronized across usage revisions and vis
   const changedPngBody = Buffer.from(await changedPng.response.arrayBuffer());
 
   assert.equal(changedSubmit.status, 201);
+  assert.equal(stalePng.status, 304);
+  assert.equal(repaired.status, 200);
   assert.equal(changedJson.body.data.usage.capturedAt, changedDocument.capturedAt);
   assert.equal(
     changedJson.body.data.usage.usage.summary.lifetimeTokens,

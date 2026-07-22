@@ -60,6 +60,23 @@ export function createS3ProfileMediaStore(options = {}) {
       const includeBody = getOptions.includeBody !== false && !notModified;
       let body = null;
 
+      if (locale !== PROFILE_MEDIA_DEFAULT_LOCALE && !includeBody) {
+        const revision = await headRevision({
+          locale,
+          ownerId: publication.ownerId,
+          revision: representation.revision
+        });
+        if (!revision) {
+          throw createProfileMediaStoreError("not_found", "media revision not found");
+        }
+        if (revision.etag !== representation.etag) {
+          throw createProfileMediaStoreError(
+            "conflict",
+            "media revision ETag does not match publication metadata"
+          );
+        }
+      }
+
       if (includeBody) {
         const key = locale === PROFILE_MEDIA_DEFAULT_LOCALE
           ? publication.stableKey
