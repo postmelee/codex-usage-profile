@@ -14,14 +14,17 @@
     "build:cloud-run": "vite build --configLoader runner",
     "build:marketing": "npm run build:sites",
     "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
+    "build:sites-fullstack": "vite build --config vite.sites-fullstack.config.js",
     "cleanup:card-media": "node scripts/cleanup-orphan-card-media.mjs",
     "migrate:postgres": "node src/profile-backend/postgres/migrate.js",
     "migrate:seed": "node scripts/migrate-file-store-to-postgres.mjs",
     "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",
+    "preview:sites-fullstack": "vite preview --config vite.sites-fullstack.config.js --host 127.0.0.1 --port 4175",
     "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
     "smoke:hosting-matrix": "node scripts/smoke-hosting-matrix.mjs",
     "test": "node --test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify:sites-fullstack": "node scripts/verify-sites-fullstack-artifact.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -37,8 +40,10 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
     "@playwright/test": "^1.60.0",
     "@vitejs/plugin-react": "^6.0.2",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "wrangler": "4.92.0"
   }
 }
