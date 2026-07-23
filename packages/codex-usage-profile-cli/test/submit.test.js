@@ -107,7 +107,7 @@ test("maps every analyzer error code without forwarding raw messages", () => {
   assert.equal(unknown.message.includes("cup_secret_value"), false);
 });
 
-test("maps auth, conflict, rate limit, contract, network, and unknown submit errors", () => {
+test("maps auth, conflict, media, rate limit, contract, network, and unknown submit errors", () => {
   const cases = [
     [new ServiceClientError("unauthorized", "secret", { status: 401 }), "submit_auth_failed"],
     [new ServiceClientError("gone", "secret", { status: 410 }), "submit_auth_failed"],
@@ -116,6 +116,10 @@ test("maps auth, conflict, rate limit, contract, network, and unknown submit err
       status: 429,
       retryAfterSeconds: 9
     }), "submit_rate_limited"],
+    [new ServiceClientError("media_unavailable", "secret", {
+      status: 503,
+      retryAfterSeconds: 5
+    }), "submit_media_unavailable"],
     [new ServiceClientError("invalid_request", "secret", { status: 413 }), "submit_contract_rejected"],
     [new ServiceClientError("network_error", "secret"), "submit_network_failed"],
     [new Error("cup_secret_value"), "submit_failed"]
@@ -127,6 +131,8 @@ test("maps auth, conflict, rate limit, contract, network, and unknown submit err
     assert.equal(mapped.message.includes("secret"), false);
   }
   assert.match(mapSubmitError(cases[3][0]).message, /9 seconds/);
+  assert.match(mapSubmitError(cases[4][0]).message, /saved/);
+  assert.match(mapSubmitError(cases[4][0]).message, /again safely/);
 });
 
 test("does not retry deterministic submit failures", async () => {
@@ -144,6 +150,33 @@ test("does not retry deterministic submit failures", async () => {
       deviceId: "device_1"
     }),
     (error) => error.code === "submit_conflict"
+  );
+  assert.equal(requests, 1);
+});
+
+test("does not retry a committed usage result when media refresh is unavailable", async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => submitAccountUsage({
+      readAccountUsage: async () => createDocument(),
+      client: {
+        async submitAccountUsage() {
+          requests += 1;
+          throw new ServiceClientError(
+            "media_unavailable",
+            "temporary failure",
+            { status: 503, retryAfterSeconds: 5 }
+          );
+        }
+      },
+      token: "cup_secret_value",
+      deviceId: "device_1"
+    }),
+    (error) => {
+      assert.equal(error.code, "submit_media_unavailable");
+      assert.equal(error.message.includes("credential"), false);
+      return true;
+    }
   );
   assert.equal(requests, 1);
 });

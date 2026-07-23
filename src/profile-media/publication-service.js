@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 
 import {
   PROFILE_BACKEND_ERROR_CODES,
-  ProfileBackendError
+  ProfileBackendError,
+  createProfileMediaUnavailableError
 } from "../profile-backend/errors.js";
 import { normalizeVisibility } from "../profile-backend/accounts.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store.js";
@@ -11,8 +12,6 @@ import {
   assertProfileMediaStoreContract,
   createProfileMediaStoreError
 } from "./media-store-contract.js";
-
-const MEDIA_UNAVAILABLE_MESSAGE = "Profile media is temporarily unavailable";
 
 export function createProfilePublicationService(options = {}) {
   const store = requireStructuredStore(options.store);
@@ -211,16 +210,12 @@ export function createProfilePublicationService(options = {}) {
 
     let compensation = "not_needed";
     if (mutation) compensation = await compensateMediaMutation(mutation);
-    return new ProfileBackendError(
-      PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
-      MEDIA_UNAVAILABLE_MESSAGE,
-      {
-        details: {
-          compensation,
-          operation: mutation?.type ?? "media_operation"
-        }
+    return createProfileMediaUnavailableError({
+      details: {
+        compensation,
+        operation: mutation?.type ?? "media_operation"
       }
-    );
+    });
   }
 
   async function compensateMediaMutation(mutation) {

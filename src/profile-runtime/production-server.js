@@ -7,6 +7,12 @@ import {
   createPostgresProfileBackendStore
 } from "../profile-backend/index.js";
 import {
+  assertProfileMediaStoreContract,
+  createMemoryProfileMediaStore,
+  createS3ProfileMediaStore,
+  resolveR2ProfileMediaStoreOptions
+} from "../profile-media/index.js";
+import {
   hasGitHubOAuthCredentials,
   loadProfileDeploymentConfig,
   loadProfileRuntimeConfig
@@ -55,6 +61,38 @@ export function createProductionStore(options = {}) {
   // connection secret (NEON_DATABASE_URL) here and still fails closed when
   // the secret is missing.
   return createPostgresProfileBackendStore({ env: options.env });
+}
+
+export function createProductionMediaStore(options = {}) {
+  const { deploymentConfig } = options;
+  if (!deploymentConfig) {
+    throw new TypeError("deploymentConfig is required");
+  }
+
+  if (options.mediaStore) {
+    return assertProfileMediaStoreContract(options.mediaStore);
+  }
+  if (typeof options.createMediaStore === "function") {
+    return assertProfileMediaStoreContract(options.createMediaStore({
+      deploymentConfig,
+      env: options.env
+    }));
+  }
+
+  const mediaMode = deploymentConfig.mediaMode ?? (
+    deploymentConfig.runtimeMode === "production" ? "external" : "memory"
+  );
+  if (mediaMode === "memory") {
+    return createMemoryProfileMediaStore();
+  }
+  if (mediaMode !== "external") {
+    throw new TypeError("PROFILE_MEDIA_MODE must be one of: external, memory");
+  }
+
+  return createS3ProfileMediaStore({
+    ...resolveR2ProfileMediaStoreOptions(options.env),
+    client: options.mediaClient
+  });
 }
 
 export function createProductionNodeHandler(options = {}) {
@@ -119,46 +157,92 @@ export async function startProfileProductionServer(options = {}) {
     store: options.store
   });
   const ownsStore = !options.store;
+  let mediaStore;
+  try {
+    mediaStore = createProductionMediaStore({
+      createMediaStore: options.createMediaStore,
+      deploymentConfig,
+      env,
+      mediaClient: options.mediaClient,
+      mediaStore: options.mediaStore
+    });
+  } catch (error) {
+    if (ownsStore && typeof store.close === "function") {
+      await store.close();
+    }
+    throw error;
+  }
+  const ownsMediaStore = !options.mediaStore;
 
   // Dependency readiness is separate from /healthz liveness: a store the
   // runtime created itself must be reachable and fully migrated before the
   // server starts accepting traffic. Injected stores are the caller's
   // responsibility.
-  if (
-    ownsStore &&
-    options.verifyStoreReadiness !== false &&
-    typeof store.verifyReadiness === "function"
-  ) {
-    await store.verifyReadiness();
+  try {
+    if (
+      ownsStore &&
+      options.verifyStoreReadiness !== false &&
+      typeof store.verifyReadiness === "function"
+    ) {
+      await store.verifyReadiness();
+    }
+    if (
+      ownsMediaStore &&
+      options.verifyMediaReadiness !== false &&
+      typeof mediaStore.verifyReadiness === "function"
+    ) {
+      await mediaStore.verifyReadiness();
+    }
+  } catch (error) {
+    await closeOwnedDependencies({
+      mediaStore,
+      ownsMediaStore,
+      ownsStore,
+      store
+    });
+    throw error;
   }
-  const githubClient = options.githubClient ?? (
-    hasGitHubOAuthCredentials(runtimeConfig)
-      ? createRuntimeGitHubClient(runtimeConfig, options)
-      : createMissingGitHubOAuthClient()
-  );
-  const apiHandler = options.apiHandler ?? createProfileRuntimeBackendHandler({
-    ...options,
-    config: runtimeConfig,
-    env: runtimeEnv,
-    githubClient,
-    store
-  });
-  const frontendHandler = options.frontendHandler ?? createStaticAssetHandler({
-    rootDirectory
-  });
-  const server = options.server ?? createHttpServer(
-    createProductionNodeHandler({
-      apiHandler,
-      apiPrefix: options.apiPrefix ?? DEFAULT_API_PREFIX,
-      frontendHandler,
-      publicBaseUrl: deploymentConfig.canonicalAppOrigin
-    })
-  );
+  let server;
+  try {
+    const githubClient = options.githubClient ?? (
+      hasGitHubOAuthCredentials(runtimeConfig)
+        ? createRuntimeGitHubClient(runtimeConfig, options)
+        : createMissingGitHubOAuthClient()
+    );
+    const apiHandler = options.apiHandler ?? createProfileRuntimeBackendHandler({
+      ...options,
+      config: runtimeConfig,
+      env: runtimeEnv,
+      githubClient,
+      mediaStore,
+      store
+    });
+    const frontendHandler = options.frontendHandler ?? createStaticAssetHandler({
+      rootDirectory
+    });
+    server = options.server ?? createHttpServer(
+      createProductionNodeHandler({
+        apiHandler,
+        apiPrefix: options.apiPrefix ?? DEFAULT_API_PREFIX,
+        frontendHandler,
+        publicBaseUrl: deploymentConfig.canonicalAppOrigin
+      })
+    );
 
-  await listen(server, {
-    host: deploymentConfig.bindHost,
-    port: deploymentConfig.port
-  });
+    await listen(server, {
+      host: deploymentConfig.bindHost,
+      port: deploymentConfig.port
+    });
+  } catch (error) {
+    if (server?.listening) await closeServer(server);
+    await closeOwnedDependencies({
+      mediaStore,
+      ownsMediaStore,
+      ownsStore,
+      store
+    });
+    throw error;
+  }
 
   let closePromise = null;
   const close = () => {
@@ -169,11 +253,12 @@ export async function startProfileProductionServer(options = {}) {
             timeoutMs: options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
           });
         } finally {
-          // A pool the runtime created would otherwise keep the process
-          // alive after SIGTERM; injected stores stay open for their owner.
-          if (ownsStore && typeof store.close === "function") {
-            await store.close();
-          }
+          await closeOwnedDependencies({
+            mediaStore,
+            ownsMediaStore,
+            ownsStore,
+            store
+          });
         }
       })();
     }
@@ -183,6 +268,7 @@ export async function startProfileProductionServer(options = {}) {
   return {
     close,
     deploymentConfig,
+    mediaStore,
     rootDirectory,
     runtimeConfig,
     server,
@@ -191,6 +277,25 @@ export async function startProfileProductionServer(options = {}) {
       defaultPort: deploymentConfig.port
     })
   };
+}
+
+async function closeOwnedDependencies(options) {
+  let firstError = null;
+  if (options.ownsMediaStore && typeof options.mediaStore?.close === "function") {
+    try {
+      await options.mediaStore.close();
+    } catch (error) {
+      firstError = error;
+    }
+  }
+  if (options.ownsStore && typeof options.store?.close === "function") {
+    try {
+      await options.store.close();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError) throw firstError;
 }
 
 export function installProductionSignalHandlers(runtime, options = {}) {

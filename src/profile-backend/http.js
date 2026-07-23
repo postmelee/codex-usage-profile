@@ -12,6 +12,7 @@ import { createCliLoginService } from "./cli-login.js";
 import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError,
+  createProfileMediaUnavailableError,
   isProfileBackendError
 } from "./errors.js";
 import { createOAuthRuntimeService } from "./oauth-runtime.js";
@@ -461,6 +462,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           document,
           device: readAccountUsageDeviceHeaders(request)
         });
+        await refreshPublicProfileMedia(result, publicationService);
 
         return okResponse(
           serializeAccountUsageSubmission(
@@ -1108,6 +1110,34 @@ function cardPngResponse(card, options) {
   };
   if (card.notModified) return new Response(null, { status: 304, headers });
   return new Response(options.head ? null : card.body, { status: 200, headers });
+}
+
+async function refreshPublicProfileMedia(result, publicationService) {
+  if (result?.owner?.visibility !== PROFILE_VISIBILITY.PUBLIC) return;
+
+  if (
+    !publicationService ||
+    typeof publicationService.refreshPublishedCard !== "function"
+  ) {
+    throw createProfileMediaUnavailableError();
+  }
+
+  try {
+    await publicationService.refreshPublishedCard({
+      ownerId: result.owner.id
+    });
+  } catch (error) {
+    if (
+      isProfileBackendError(error) &&
+      error.code === PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE &&
+      error.headers?.["retry-after"]
+    ) {
+      throw error;
+    }
+    throw createProfileMediaUnavailableError({
+      details: isProfileBackendError(error) ? error.details : null
+    });
+  }
 }
 
 async function readPublishedMediaCard(options) {

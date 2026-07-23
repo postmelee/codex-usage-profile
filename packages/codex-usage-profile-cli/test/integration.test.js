@@ -6,8 +6,7 @@ import {
   PROFILE_VISIBILITY,
   createCliTokenService,
   createMemoryProfileBackendStore,
-  createProfileBackendHttpHandler,
-  createSessionService
+  createProfileBackendHttpHandler
 } from "../../../src/profile-backend/index.js";
 import { createMemoryProfileMediaStore } from "../../../src/profile-media/index.js";
 import { createServiceClient } from "../src/service-client.js";
@@ -15,16 +14,19 @@ import { submitAccountUsage } from "../src/submit.js";
 
 const SERVICE_ORIGIN = "http://127.0.0.1:5177";
 
-test("keeps the stable card ETag unchanged until explicit republish after CLI submissions", async () => {
+test("refreshes the stable card after accepted and idempotent CLI submissions", async () => {
   const fixture = await createBackendFixture(PROFILE_VISIBILITY.PUBLIC);
   const firstDocument = createDocument();
   const first = await runSubmit(fixture, firstDocument);
-  const firstPublication = await fixture.republish();
   const firstCard = await fixture.fetchImpl(
     `${SERVICE_ORIGIN}/u/postmelee/card.png`,
     { method: "HEAD" }
   );
   const repeated = await runSubmit(fixture, firstDocument);
+  const repeatedCard = await fixture.fetchImpl(
+    `${SERVICE_ORIGIN}/u/postmelee/card.png`,
+    { method: "HEAD" }
+  );
 
   fixture.setNow("2026-07-13T00:03:00.000Z");
   const later = await runSubmit(fixture, createDocument({
@@ -34,11 +36,6 @@ test("keeps the stable card ETag unchanged until explicit republish after CLI su
       lifetimeTokens: firstDocument.summary.lifetimeTokens + 1
     }
   }));
-  const staleCard = await fixture.fetchImpl(
-    `${SERVICE_ORIGIN}/u/postmelee/card.png`,
-    { method: "HEAD" }
-  );
-  const laterPublication = await fixture.republish();
   const laterCard = await fixture.fetchImpl(
     `${SERVICE_ORIGIN}/u/postmelee/card.png`,
     { method: "HEAD" }
@@ -47,14 +44,12 @@ test("keeps the stable card ETag unchanged until explicit republish after CLI su
   const device = fixture.store.getSubmittedDeviceByOwnerAndKey("owner_1", "device_1");
 
   assert.equal(first.submission.status, "accepted");
-  assert.equal(firstPublication.status, 200);
   assert.equal(repeated.submission.status, "unchanged");
   assert.equal(repeated.submission.idempotent, true);
   assert.equal(later.submission.status, "accepted");
   assert.equal(firstCard.status, 200);
-  assert.equal(staleCard.status, 200);
-  assert.equal(staleCard.headers.get("etag"), firstCard.headers.get("etag"));
-  assert.equal(laterPublication.status, 200);
+  assert.equal(repeatedCard.status, 200);
+  assert.equal(repeatedCard.headers.get("etag"), firstCard.headers.get("etag"));
   assert.equal(laterCard.status, 200);
   assert.notEqual(firstCard.headers.get("etag"), laterCard.headers.get("etag"));
   assert.equal(usageRecord.visibility, PROFILE_VISIBILITY.PUBLIC);
@@ -103,18 +98,11 @@ async function createBackendFixture(visibility) {
     createId,
     createToken: () => `${CLI_TOKEN_PREFIX}integration_secret`
   });
-  const sessionService = createSessionService({
-    store,
-    now: () => current,
-    createId
-  });
   const { token } = await tokenService.issueCliToken({ ownerId: "owner_1" });
-  const { cookie } = await sessionService.createSession({ ownerId: "owner_1" });
   const mediaStore = createMemoryProfileMediaStore();
   const handler = createProfileBackendHttpHandler({
     store,
     tokenService,
-    sessionService,
     mediaStore,
     now: () => current,
     createId,
@@ -133,16 +121,6 @@ async function createBackendFixture(visibility) {
       serviceOrigin: SERVICE_ORIGIN,
       fetchImpl
     }),
-    republish() {
-      return fetchImpl(`${SERVICE_ORIGIN}/api/profile`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          cookie
-        },
-        body: JSON.stringify({ visibility: PROFILE_VISIBILITY.PUBLIC })
-      });
-    },
     setNow(value) {
       current = new Date(value);
     }

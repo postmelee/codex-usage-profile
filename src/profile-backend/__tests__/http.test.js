@@ -22,7 +22,8 @@ import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-sn
 import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 import {
   createMemoryProfileMediaStore,
-  createProfileMediaRevisionDigest
+  createProfileMediaRevisionDigest,
+  createProfileMediaStoreError
 } from "../../profile-media/index.js";
 
 const BASE_URL = "http://localhost";
@@ -1004,6 +1005,7 @@ test("returns a generic 503 when profile publication is unavailable", async () =
   );
 
   assert.equal(response.status, 503);
+  assert.equal(response.headers.get("retry-after"), "5");
   assert.deepEqual(response.body, {
     ok: false,
     error: {
@@ -1300,6 +1302,108 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
   });
   assert.equal(serializedResponses.includes("lifetimeTokens"), false);
   assert.equal(serializedResponses.includes(token), false);
+});
+
+test("refreshes public media after accepted and exact idempotent Account Usage submits", async () => {
+  const calls = [];
+  const fixture = createFixture({
+    publicationService: {
+      async refreshPublishedCard(options) {
+        calls.push(options);
+        return { operation: "publish" };
+      },
+      async updateVisibility() {
+        throw new Error("not used");
+      }
+    }
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const { token } = await fixture.issueToken();
+  const headers = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const accepted = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const repeated = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+
+  assert.equal(accepted.status, 201);
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.body.data.submission.idempotent, true);
+  assert.deepEqual(calls, [
+    { ownerId: "owner_1" },
+    { ownerId: "owner_1" }
+  ]);
+});
+
+test("preserves committed usage and recovers media on an exact retry", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  let failNextWrite = true;
+  const mediaStore = wrapMediaStore(baseMediaStore, {
+    async putRevision(options) {
+      if (failNextWrite) {
+        failNextWrite = false;
+        throw createProfileMediaStoreError(
+          "unavailable",
+          "injected media write failure"
+        );
+      }
+      return baseMediaStore.putRevision(options);
+    }
+  });
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(
+      `card:${viewModel.locale}:${viewModel.usage.summary.lifetimeTokens}`
+    )
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const { token } = await fixture.issueToken();
+  const headers = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const failedRefresh = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const committed = fixture.store.getLatestUsageByOwnerId("owner_1");
+  const recovered = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const published = await baseMediaStore.getPublishedCard({
+    handle: "postmelee"
+  });
+
+  assert.equal(failedRefresh.status, 503);
+  assert.equal(failedRefresh.headers.get("retry-after"), "5");
+  assert.deepEqual(failedRefresh.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(committed.capturedAt, document.capturedAt);
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.body.data.submission.idempotent, true);
+  assert.notEqual(published, null);
 });
 
 test("rejects Account Usage conflicts and invalid HTTP bodies", async () => {

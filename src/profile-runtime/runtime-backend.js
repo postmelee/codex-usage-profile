@@ -2,6 +2,7 @@ import {
   createFileProfileBackendStore,
   createProfileBackendHttpHandler
 } from "../profile-backend/index.js";
+import { createMemoryProfileMediaStore } from "../profile-media/index.js";
 import {
   hasGitHubOAuthCredentials,
   loadProfileRuntimeConfig
@@ -21,14 +22,19 @@ export function createProfileRuntimeBackendHandler(options = {}) {
     config,
     options
   );
+  const backendOptions = options.backendOptions ?? {};
+  const mediaStore = backendOptions.mediaStore ??
+    options.mediaStore ??
+    createMemoryProfileMediaStore();
 
   return createProfileBackendHttpHandler({
     store,
     githubClient,
     githubClientId: config.githubClientId,
+    mediaStore,
     publicBaseUrl: config.publicBaseUrl,
     secureCookies: config.secureCookies,
-    ...options.backendOptions
+    ...backendOptions
   });
 }
 

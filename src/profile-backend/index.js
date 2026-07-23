@@ -8,8 +8,10 @@ export {
 
 export {
   PROFILE_BACKEND_ERROR_CODES,
+  PROFILE_MEDIA_RETRY_AFTER_SECONDS,
   ProfileBackendError,
   createProfileBackendError,
+  createProfileMediaUnavailableError,
   isProfileBackendError
 } from "./errors.js";
 

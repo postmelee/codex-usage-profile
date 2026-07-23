@@ -15,6 +15,11 @@ export const PROFILE_STORE_MODES = Object.freeze([
   "file"
 ]);
 
+export const PROFILE_MEDIA_MODES = Object.freeze([
+  "external",
+  "memory"
+]);
+
 export function loadProfileDeploymentConfig(options = {}) {
   const env = options.env ?? globalThis.process?.env ?? {};
   const runtimeMode = normalizeRuntimeMode(
@@ -25,6 +30,13 @@ export function loadProfileDeploymentConfig(options = {}) {
     env.PROFILE_STORE_MODE ?? "file",
     PROFILE_STORE_MODES,
     "PROFILE_STORE_MODE"
+  );
+  const mediaMode = normalizeEnum(
+    env.PROFILE_MEDIA_MODE ?? (
+      runtimeMode === "production" ? "external" : "memory"
+    ),
+    PROFILE_MEDIA_MODES,
+    "PROFILE_MEDIA_MODE"
   );
   const canonicalAppOrigin = normalizeCanonicalAppOrigin(
     env.CANONICAL_APP_ORIGIN ?? env.PUBLIC_BASE_URL ?? (
@@ -49,10 +61,16 @@ export function loadProfileDeploymentConfig(options = {}) {
       "PROFILE_STORE_MODE=file is not allowed in production"
     );
   }
+  if (runtimeMode === "production" && mediaMode === "memory") {
+    throw new TypeError(
+      "PROFILE_MEDIA_MODE=memory is not allowed in production"
+    );
+  }
 
   return Object.freeze({
     bindHost,
     canonicalAppOrigin,
+    mediaMode,
     port,
     runtimeMode,
     storeMode

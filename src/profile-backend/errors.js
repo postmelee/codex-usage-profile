@@ -12,6 +12,8 @@ export const PROFILE_BACKEND_ERROR_CODES = Object.freeze({
   VALIDATION_FAILED: "validation_failed"
 });
 
+export const PROFILE_MEDIA_RETRY_AFTER_SECONDS = 5;
+
 const DEFAULT_STATUS_BY_CODE = {
   [PROFILE_BACKEND_ERROR_CODES.CONFLICT]: 409,
   [PROFILE_BACKEND_ERROR_CODES.EXPIRED]: 410,
@@ -26,6 +28,12 @@ const DEFAULT_STATUS_BY_CODE = {
   [PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED]: 400
 };
 
+const DEFAULT_HEADERS_BY_CODE = {
+  [PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE]: Object.freeze({
+    "retry-after": String(PROFILE_MEDIA_RETRY_AFTER_SECONDS)
+  })
+};
+
 export class ProfileBackendError extends Error {
   constructor(code, message, options = {}) {
     super(message);
@@ -33,7 +41,7 @@ export class ProfileBackendError extends Error {
     this.name = "ProfileBackendError";
     this.code = code;
     this.details = options.details ?? null;
-    this.headers = options.headers ?? null;
+    this.headers = options.headers ?? DEFAULT_HEADERS_BY_CODE[code] ?? null;
     this.status = options.status ?? DEFAULT_STATUS_BY_CODE[code] ?? 500;
   }
 
@@ -50,6 +58,21 @@ export class ProfileBackendError extends Error {
 
 export function createProfileBackendError(code, message, options = {}) {
   return new ProfileBackendError(code, message, options);
+}
+
+export function createProfileMediaUnavailableError(options = {}) {
+  return new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+    "Profile media is temporarily unavailable",
+    {
+      details: options.details,
+      headers: {
+        "retry-after": String(
+          options.retryAfterSeconds ?? PROFILE_MEDIA_RETRY_AFTER_SECONDS
+        )
+      }
+    }
+  );
 }
 
 export function isProfileBackendError(error) {
