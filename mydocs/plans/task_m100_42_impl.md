@@ -13,6 +13,7 @@ GitHub Issue: [#42](https://github.com/postmelee/codex-usage-profile/issues/42)
 | 3 | 공개 stable route와 locale/private 경계 | `http.js`, media/card/backend test | R2-only lookup, GET/HEAD/304/404, `en`/`ko`, private non-persistence |
 | 4 | future submit refresh와 runtime wiring | runtime media mode/readiness, submit refresh, CLI 오류 안내 | changed/idempotent refresh, fail-closed, secret/bundle 검사 |
 | 5 | failure/concurrency·retention·문서 통합 | failure matrix, cleanup 도구, 공식 문서 | 부분 실패·경쟁, retention guard, 전체 test/build |
+| 6 | PR 리뷰 public media 가용성 보완 | public 404/503 분리, stable read bounded retry | invalid/missing 404, provider/timeout·반복 412 503 |
 
 ## 문서 위치 확인
 
@@ -143,7 +144,7 @@ Task #42 Stage 2: owner publish/unpublish orchestration
 
 - `GET|HEAD /u/{handle}/card.png`는 canonical handle과 locale만 정규화한 뒤 `mediaStore.getPublishedCard`를 호출한다. `cardService`, structured store, owner/usage record를 조회하지 않는다.
 - query 없는 URL과 unsupported locale fallback은 `en`, `locale=ko`는 `ko` representation을 선택한다. URL 계약은 변경하지 않는다.
-- stable이 없거나 metadata가 불완전하거나 referenced `ko` immutable이 없으면 동일한 public 404를 반환한다. owner 존재 여부, visibility와 storage 내부 오류 정보는 노출하지 않는다.
+- stable이 없거나 metadata가 불완전하거나 referenced `ko` immutable이 없으면 동일한 public 404를 반환한다. Stage 6 보완 후 provider·timeout·bucket 장애는 storage 내부 정보를 숨긴 generic 503으로 구분한다.
 - application ETag가 `If-None-Match`에 일치하면 304, HEAD는 GET과 같은 status/header를 반환하되 body는 비운다. content type/cache control은 media contract 상수만 사용한다.
 - `GET /api/profile/card.png`는 기존 session-authenticated on-demand render와 `private, no-store`를 유지한다. media store spy로 revision/stable write가 없음을 고정한다.
 - public route test는 structured store getter와 renderer가 호출되면 실패하는 spy를 주입해 Neon/on-demand 경계 제거를 증명한다.
@@ -257,6 +258,46 @@ env-gated S3 endpoint가 제공되면 Stage 1 integration suite를 다시 실행
 Task #42 Stage 5: failure·retention 검증과 public media 문서
 ```
 
+## Stage 6 — PR 리뷰 public media 가용성 보완
+
+### 산출물
+
+수정:
+
+- `src/profile-media/media-store-contract.js` — malformed object를 나타내는 `invalid` store error 분류
+- `src/profile-media/s3/store.js` — `NoSuchBucket` unavailable 분리, default locale stable conditional GET의 1회 bounded retry
+- `src/profile-media/__tests__/s3-store.test.js`, `s3-failure.test.js` — invalid metadata, 성공 retry와 반복 412 failure fixture
+- `src/profile-backend/http.js`, `src/profile-backend/__tests__/http.test.js` — invalid/missing 404와 transient/unknown 503 분기
+- `src/profile-media/publication-service.js`, 관련 test — `invalid` publication을 incomplete repair 대상으로 유지
+- `docs/production-hosting.md`, `docs/readme-card.md` — public read recovery·status 계약 현행화
+- `mydocs/report/task_m100_42_report.md` — Stage 6과 최종 수용 기준 결과 반영
+
+### 변경 내용
+
+- media store error는 `not_found`, `conflict`, `invalid`, `unavailable`로 구분한다. metadata/header/body가 publication contract를 만족하지 않는 object는 `invalid`, provider·timeout·credential·bucket 장애는 `unavailable`이다.
+- public route는 stable 없음, referenced revision 없음/불일치, malformed card인 `not_found`/`conflict`/`invalid`를 owner-agnostic 404로 반환한다.
+- `unavailable`과 예상 밖 adapter exception은 credential, endpoint, bucket, cause를 포함하지 않는 `media_unavailable` 503과 `Retry-After: 5`로 반환한다.
+- default locale GET은 stable HEAD의 storage ETag를 `IfMatch`로 유지한다. HEAD→GET 사이 412 conflict가 발생하면 최신 publication HEAD부터 한 번만 다시 읽고, 두 번째 412는 `unavailable`로 정규화해 503으로 반환한다.
+- `NoSuchBucket`은 object 부재가 아닌 backend availability 오류로 분류한다. `NoSuchKey`와 stable null만 publication 부재로 처리한다.
+- review 발견 2의 cleanup 전수 재확인, 발견 3의 incomplete metadata fail-safe 중단, 발견 4의 metadata 호환 shape는 변경하지 않는다.
+
+### 검증
+
+```bash
+node --test src/profile-media/__tests__/s3-store.test.js src/profile-media/__tests__/s3-failure.test.js
+node --test src/profile-media/__tests__/publication-service.test.js
+node --test src/profile-backend/__tests__/http.test.js
+npm test
+npm run build
+git diff --check
+```
+
+### 커밋
+
+```text
+Task #42 Stage 6: public media 가용성 리뷰 반영
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 해당 단계 보고서 작성 전에 실행한다. 실패한 검증은 단계 완료로 처리하지 않는다.
@@ -277,6 +318,7 @@ Task #42 Stage 5: failure·retention 검증과 public media 문서
 - Stage 3은 Stage 2의 stable metadata/publication service contract 확정 후 진행한다.
 - Stage 4는 Stage 2 publish/refresh API와 Stage 3 public route 경계 확정 후 진행한다.
 - Stage 5는 Stage 1~4의 adapter, orchestration, serving, runtime 계약 확정 후 failure matrix와 문서를 최종 고정한다.
+- Stage 6은 PR #48 리뷰 승인에 따라 Stage 3의 public error status와 Stage 1 S3 conditional read를 함께 보완한다.
 - 각 Stage 완료보고서 승인 없이 다음 Stage로 진행하지 않는다.
 
 ## 위험과 대응
@@ -288,6 +330,7 @@ Task #42 Stage 5: failure·retention 검증과 public media 문서
 - **보상 동작도 실패하는 distributed failure**: 성공으로 숨기지 않고 generic partial-failure로 반환하며 stable/visibility 관측 상태와 안전한 retry를 failure test로 고정한다.
 - **cleanup 오삭제**: default dry-run, 90일+최근 5개 guard, exact prefix, stable reference 재확인, 명시적 `--apply`를 모두 통과해야 삭제한다.
 - **실제 R2 remote 미검증**: 동일 suite가 실제 endpoint를 받을 수 있게 하되 resource 생성은 하지 않는다. remote 결과는 #43과 최종 보고에서 별도 구분한다.
+- **transient 404의 proxy cache 영향**: publication 부재·불완전 상태와 provider 장애를 분리하고, 412 read race는 한 번 재시도한 뒤 generic 503으로 반환한다.
 
 ## 승인 요청 사항
 
@@ -295,3 +338,4 @@ Task #42 Stage 5: failure·retention 검증과 public media 문서
 - 기존 `PATCH /api/profile` 호환 facade, 공개 owner submit 후 동기 refresh와 `media_unavailable` 503/exact retry 계약을 승인한다.
 - owner row transaction 안의 bounded R2 I/O로 mutation을 다중 인스턴스 직렬화하는 방식을 승인한다.
 - 승인 시 구현계획서를 커밋한 뒤 Stage 1만 착수하고, Stage 1 완료보고서 승인 전에는 Stage 2로 진행하지 않는다.
+- 2026-07-23 PR 리뷰 발견 1·5의 Stage 6 보완을 승인했으며 발견 2·3·4는 본 Stage에서 변경하지 않는다.
