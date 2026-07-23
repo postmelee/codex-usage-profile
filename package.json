@@ -14,6 +14,7 @@
     "build:cloud-run": "vite build --configLoader runner",
     "build:marketing": "npm run build:sites",
     "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
+    "cleanup:card-media": "node scripts/cleanup-orphan-card-media.mjs",
     "migrate:postgres": "node src/profile-backend/postgres/migrate.js",
     "migrate:seed": "node scripts/migrate-file-store-to-postgres.mjs",
     "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",

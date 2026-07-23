@@ -261,6 +261,40 @@ test("keeps public visibility when stable deletion fails", async () => {
   );
 });
 
+test("keeps a deleted stable object absent until unpublish retry converges private", async () => {
+  const fixture = createFixture();
+  await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
+  failNextTransactionAfterRunner(fixture.store);
+
+  await assert.rejects(
+    () => fixture.service.unpublishOwnerCard({ ownerId: OWNER.id }),
+    (error) => {
+      assert.deepEqual(error.details, {
+        compensation: "not_needed",
+        operation: "unpublish"
+      });
+      return true;
+    }
+  );
+  assert.equal(
+    fixture.store.getOwnerById(OWNER.id).visibility,
+    PROFILE_VISIBILITY.PUBLIC
+  );
+  assert.equal(
+    await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle }),
+    null
+  );
+
+  const retried = await fixture.service.unpublishOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(retried.visibility, PROFILE_VISIBILITY.PRIVATE);
+  assert.equal(retried.idempotent, true);
+  assert.equal(
+    fixture.store.getOwnerById(OWNER.id).visibility,
+    PROFILE_VISIBILITY.PRIVATE
+  );
+});
+
 test("unpublishes only the stable object and reads the owner first in its transaction", async () => {
   const fixture = createFixture();
   await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
@@ -345,6 +379,19 @@ function failTransactionAfterRunner(store) {
   store.transaction = (runner) => transaction(async (tx) => {
     await runner(tx);
     throw new Error("injected structured commit failure");
+  });
+}
+
+function failNextTransactionAfterRunner(store) {
+  const transaction = store.transaction.bind(store);
+  let shouldFail = true;
+  store.transaction = (runner) => transaction(async (tx) => {
+    const result = await runner(tx);
+    if (shouldFail) {
+      shouldFail = false;
+      throw new Error("injected structured commit failure");
+    }
+    return result;
   });
 }
 

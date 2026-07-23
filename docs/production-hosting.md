@@ -62,17 +62,23 @@ local file store 스냅샷은 `npm run migrate:seed`(`scripts/migrate-file-store
 
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
-- immutable revision: `cards/v1/owners/{ownerId}/revisions/{revision}.png`
-- stable public object: `cards/v1/owners/{ownerId}/card.png`
+- contract version: `2`
+- immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
+- stable public object: `cards/v2/public/{handle}/card.png`
+- locale: `en`, `ko`를 하나의 publication metadata로 함께 가리킨다. query가 없거나 지원하지 않는 locale은 `en`으로 fallback한다.
 - content type: `image/png`
 - cache policy: `public, no-cache, must-revalidate`
-- validation metadata: revision, ETag, created/published timestamp
+- validation metadata: owner, handle, publication id, locale별 immutable key/revision/application ETag, created/published timestamp
 
-Publish는 immutable revision을 먼저 보존한 뒤 stable object를 원자적으로 새 revision으로 전환해야 한다. 같은 revision과 같은 bytes의 재시도는 idempotent다. 같은 revision에 다른 bytes나 ETag를 쓰면 conflict다. 새 revision 저장이나 stable object 갱신이 실패하면 이전 stable card를 유지한다.
+revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted application ETag도 같은 정규화 값을 사용한다. storage ETag는 S3/R2 conditional copy와 body 일관성 검증에만 사용하고 HTTP ETag로 노출하지 않는다.
 
-Unpublish는 stable public object만 제거한다. immutable revision retention과 삭제 주기는 별도 정책으로 관리한다. private preview는 Cloud Run에서 요청 시 render하며 R2에 저장하거나 public cache header를 적용하지 않는다.
+Publish는 `en`, `ko` immutable revision을 모두 저장·HEAD 검증한 뒤 `en` source를 stable key로 copy하고 locale pointer metadata를 한 번에 교체한다. 같은 revision과 같은 bytes의 재시도는 idempotent다. 같은 revision에 다른 bytes나 ETag를 쓰면 conflict다. immutable write·validation·copy가 실패하면 이전 stable card와 locale metadata를 유지한다.
 
-이번 단계에는 R2 SDK, bucket credential, object write와 public route 연결이 포함되지 않는다. memory media store는 계약 검증용이며 production storage가 아니다.
+`GET|HEAD /u/{handle}/card.png`는 R2-compatible media store만 조회하며 Neon, owner/usage record와 on-demand renderer를 호출하지 않는다. stable 또는 locale revision이 없거나 metadata가 불완전하면 같은 public `404`를 반환한다. private preview는 Cloud Run에서 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+
+Public 전환은 두 locale revision과 stable copy를 완료한 뒤 structured visibility를 commit한다. Unpublish는 stable public object만 제거한 뒤 structured visibility를 private으로 commit하며 immutable revision은 retention 대상으로 남긴다. delete 실패는 public visibility를 유지한다. delete 성공 뒤 structured commit이 실패하면 PNG는 `404`로 닫아 두고 다음 unpublish retry가 private으로 수렴한다.
+
+Public Account Usage submit은 usage transaction commit 뒤 별도 owner transaction에서 현재 visibility/latest usage를 다시 읽고 stable publication을 refresh한다. media refresh 실패는 usage commit을 되돌리지 않고 `503 media_unavailable`, `Retry-After: 5`를 반환한다. 같은 document의 exact retry는 idempotent usage 결과로 publication을 다시 시도한다.
 
 ## Runtime Configuration
 
@@ -84,6 +90,7 @@ Unpublish는 stable public object만 제거한다. immutable revision retention�
 |---|---|---|
 | `PROFILE_RUNTIME_MODE=production` | server config | production validation과 secure-cookie 강제 |
 | `PROFILE_STORE_MODE=external` | server config | file store production 사용 차단 |
+| `PROFILE_MEDIA_MODE=external` | server config | memory media production 사용 차단과 R2 adapter 선택 |
 | `CANONICAL_APP_ORIGIN` / `PUBLIC_BASE_URL` | public config | HTTPS canonical origin과 OAuth callback/card URL 기준 |
 | `PORT` | platform config | Cloud Run이 주입하는 listen port |
 | `HOST` | server config | 기본값 `0.0.0.0`; 일반적으로 override 불필요 |
@@ -104,13 +111,24 @@ Unpublish는 stable public object만 제거한다. immutable revision retention�
 
 connection pool은 인스턴스당 소형(max 4)이고 idle 연결을 빠르게 반환한다. statement timeout은 transaction마다 `SET LOCAL`로 적용해 transaction-mode pooling에서도 유효하다. migration은 instance 부팅 시 자동 실행하지 않으며 배포 단계에서 `npm run migrate:postgres -- up`으로 명시 실행한다(advisory lock으로 동시 실행 직렬화).
 
-R2 access key/secret과 signing credential은 server-only secret이어야 한다. R2 account/bucket 이름과 public media origin은 민감하지 않을 수 있지만 운영 설정으로 관리한다. R2 env 이름은 provider adapter issue에서 확정한다.
+### R2/S3-compatible media 값
+
+| 설정 | 분류 | 설명 |
+|---|---|---|
+| `R2_ENDPOINT` | server config | R2 S3-compatible origin. path, query와 embedded credential을 허용하지 않는다 |
+| `R2_BUCKET` | server config | public card revision/stable object 전용 bucket |
+| `R2_ACCESS_KEY_ID` | secret | server-side S3 signing access key |
+| `R2_SECRET_ACCESS_KEY` | secret | server-side S3 signing secret |
+| `R2_REGION` | server config | optional, 기본값 `auto` |
+| `TEST_S3_ENDPOINT`, `TEST_S3_BUCKET`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` | test 전용 | 모두 설정된 경우에만 MinIO/R2-compatible integration suite 실행 |
+
+R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽고 runtime config, application response, log와 frontend bundle에 포함하지 않는다. runtime이 직접 생성한 S3 client만 shutdown에서 닫으며 injected test fixture의 수명은 caller가 관리한다.
 
 ## Startup, Health, Cache, Rollback
 
-1. Cloud Run process는 `0.0.0.0:$PORT`에서 시작하고 malformed canonical origin, production file store와 누락된 `NEON_DATABASE_URL`을 startup 전에 거부한다.
+1. Cloud Run process는 `0.0.0.0:$PORT`에서 시작하고 malformed canonical origin, production file/memory store, 누락된 `NEON_DATABASE_URL` 또는 불완전한 `R2_*`를 startup 전에 거부한다.
 2. `/healthz`는 process liveness만 확인하며 Neon/R2를 변경하지 않고 credential, store path와 payload를 노출하지 않는다.
-3. dependency readiness는 liveness와 분리되어 있다. runtime이 직접 생성한 Postgres store는 startup 시 `verifyReadiness()`로 연결과 migration 적용 상태를 검증하고, 미적용 migration이 있으면 실행할 명령을 안내하며 시작을 거부한다. required R2 configuration 검증은 R2 adapter task에서 같은 방식으로 추가한다.
+3. dependency readiness는 liveness와 분리되어 있다. runtime이 직접 생성한 Postgres store와 R2 media store는 startup 시 각각 migration 적용 상태와 bucket 접근을 검증하고, 둘 중 하나라도 실패하면 listen하지 않는다.
 4. public stable card는 ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 항상 최신 published revision을 가리킨다.
 5. application rollback은 이전 Cloud Run revision으로 되돌린다. DB migration은 최소 한 application rollback 구간 동안 backward compatible해야 한다.
 6. R2 publish 실패 시 이전 stable object를 유지한다. unpublish 실패를 성공으로 응답하지 않는다.
@@ -130,6 +148,10 @@ structured store의 기본 정책이다. 세부 보존 기간과 자동화는 Cl
 
 - expired/consumed OAuth state, expired CLI challenge, expired/revoked session과 token 행은 만료 시점 이후 인증에 사용될 수 없으나 행 자체는 남는다. 타임스탬프는 ISO-8601 UTC text로 사전순 비교가 시간순과 일치하므로, 운영 정리는 `DELETE ... WHERE expires_at < $now` 형태의 명시적 작업으로 수행한다. 자동 정리 주기는 #43에서 확정한다.
 - 계정 삭제(owner 및 종속 레코드 일괄 제거)는 아직 제품 기능이 아니다. README 보안 절의 미해결 항목과 동일하게 후속 task로 관리한다.
+- public stable object는 현재 publication이므로 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 모든 key, owner+locale별 최근 5개, 생성 후 90일 이내를 보호한다. 나머지만 orphan candidate다.
+- `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
+- 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.
+- 자동 cleanup schedule과 90일/최근 5개 운영 값의 조정은 #43에서 배포 비용·복구 목표와 함께 결정한다.
 
 ### Backup과 복구
 
@@ -152,6 +174,11 @@ structured store의 기본 정책이다. 세부 보존 기간과 자동화는 Cl
 - `PROFILE_STORE_MODE=external` production 기동: 미마이그레이션 DB 거부, 마이그레이션 DB 기동·종료
 - file store 스냅샷의 Postgres seeding(dry-run/실행/idempotent 재실행/rollback)
 - media revision/publish/unpublish memory contract
+- S3-compatible contract v2 command adapter와 immutable/head/copy/get/delete/timeout failure matrix
+- public submit accepted/idempotent refresh, media 503와 exact retry 복구
+- production external media config, bucket readiness, runtime-owned shutdown과 frontend credential/client 부재
+- same-owner publish/publish, publish/unpublish, refresh/unpublish ordering(memory fixture)
+- paginated orphan scan, dry-run 기본값, 90일+최근 5개 guard와 apply 직전 stable race recheck
 - external/protocol-relative OAuth redirect 거부
 - explicit cross-origin API/session mutation 거부와 CORS header 부재
 - sample-only Sites client/Worker/manifest build와 browser preview
@@ -164,14 +191,14 @@ structured store의 기본 정책이다. 세부 보존 기간과 자동화는 Cl
 
 - 실제 Cloud Run remote deploy, ingress, custom domain과 Secret Manager 연결
 - 실제 Neon project 연결(원격 콜드스타트·pooled endpoint 실측)과 백업 보존 기간
-- R2 bucket, immutable object write, stable object materialization과 cache invalidation
+- 실제 R2 bucket/credential 연결, remote object round trip과 Cloud Run cold-start/readiness 실측
 - production observability, alerting, abuse protection와 shared rate limiter
 - ChatGPT Sites remote project 생성과 event/marketing publication
 
-로컬 검증은 로컬 Docker Postgres 기준이다. 원격 Neon 배포 성공을 의미하지 않으며, R2가 도입되기 전까지 공개 card 요청이 Postgres를 직접 조회하므로 Neon scale-to-zero 재개 지연이 card 응답에 노출될 수 있다. 이 리스크는 R2 stable object 도입(#42)으로 해소된다.
+로컬 검증은 memory/fake-command media와 로컬 Docker Postgres 기준이다. `TEST_S3_*`가 없으면 실제 S3-compatible round trip은 skip되며 원격 Neon/R2 배포 성공을 의미하지 않는다. 공개 PNG 경로의 Neon/on-demand 의존성은 제거되었지만 provider latency, credential 권한과 bucket lifecycle은 #43 remote 검증이 필요하다.
 
 ## 후속 작업
 
-1. R2 adapter, immutable revision write, stable object publish/unpublish와 failure injection test를 구현한다.
-2. Cloud Run Secret Manager, custom domain, structured log/metric, shared rate limiter와 backup/retention 운영 값을 구성한다.
+1. Cloud Run Secret Manager에 Neon/R2 secret을 연결하고 실제 bucket round trip, custom domain과 cold-start/readiness를 검증한다.
+2. structured log/metric, shared rate limiter, database/media backup과 cleanup schedule·운영 retention 값을 구성한다.
 3. 선택적으로 Sites marketing mirror를 게시하고 Cloud Run CTA, bundle privacy와 Cloud Run-only fallback을 운영 점검한다.

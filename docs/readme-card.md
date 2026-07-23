@@ -61,10 +61,12 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 - 오래된 timestamp 또는 같은 timestamp의 다른 내용은 `409`로 거부한다.
 - 성공 응답은 Profile URL, card URL과 README Markdown을 반환하지만 CLI는 opaque revision을 사용자 출력에서 제거한다.
 - valid submit은 token에 연결된 owner의 latest usage와 device submit 시각을 갱신한다. visibility는 기존 웹 profile 설정을 유지한다.
+- public owner의 accepted submit과 exact retry는 usage 저장 transaction 뒤 현재 owner/latest usage를 다시 확인하고 stable card를 갱신한다.
+- usage는 저장됐지만 public media 갱신이 실패하면 `503 media_unavailable`과 `Retry-After`를 반환한다. CLI가 안내하는 대로 같은 submit을 다시 실행하면 저장된 usage와 credential을 바꾸지 않고 publication을 안전하게 재시도한다.
 
 ## 공개 프로필 경계
 
-공개 HTML, JSON과 PNG는 같은 owner record, latest Account Usage record, visibility와 handle 일치 조건을 사용한다.
+공개 HTML과 JSON은 owner/latest Account Usage visibility와 handle 일치 조건을 사용한다. 공개 PNG는 publish 시 생성된 stable media object만 읽고 structured store나 on-demand renderer를 조회하지 않는다.
 
 | Surface | URL | 역할 |
 |---|---|---|
@@ -72,7 +74,7 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 | 공개 JSON | `/api/profiles/public/{handle}` | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
 | 공개 PNG | `/u/{handle}/card.png` | README에 삽입하는 안정적인 이미지 endpoint다. |
 
-profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON과 PNG는 `404`를 반환한다. 공개 HTML은 로그인 여부를 노출하지 않는 동일한 unavailable 상태를 표시한다.
+profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON은 `404`를 반환한다. Publish가 완료되지 않았거나 private 전환으로 stable object가 제거됐거나 locale metadata/revision이 불완전하면 공개 PNG도 owner 존재 여부를 노출하지 않는 동일한 `404`를 반환한다. 공개 HTML은 로그인 여부를 노출하지 않는 unavailable 상태를 표시한다.
 
 현재 공개 프로필과 카드는 Account Usage Contract v1이 제공하는 누적/최대 토큰, 최장 작업, 연속 기록과 일별 버킷만 지원한다. favorite model, token breakdown, skill/plugin ranking은 이 계약에 없으므로 현재 제품 화면에 표시하지 않는다.
 
@@ -92,6 +94,8 @@ https://profiles.example.com/u/{handle}/card.png?locale=ko
 
 현재 지원 언어는 `en`, `ko`다. 지원하지 않는 locale은 영문으로 렌더링된다. README에 삽입한 URL은 계정 visibility 또는 언어를 바꿀 때만 수정하면 된다.
 
+최초 **Publish card**는 영문/한국어 immutable revision을 모두 생성한 뒤 하나의 stable publication metadata로 연결한다. 영문은 stable object body, 한국어는 metadata가 가리키는 immutable body를 제공한다. 두 locale 준비가 모두 끝나기 전에는 public visibility를 노출하지 않는다.
+
 ## 자동 갱신 방식
 
 공개 카드 응답은 다음 cache contract를 사용한다.
@@ -102,7 +106,7 @@ Cache-Control: public, no-cache, must-revalidate
 ETag: "..."
 ```
 
-- CLI submit이 변경된 최신 사용량을 저장하면 카드 콘텐츠 hash와 ETag가 바뀐다. exact retry는 같은 ETag를 유지한다.
+- CLI submit이 변경된 최신 사용량을 저장하면 public owner의 카드 콘텐츠 hash와 ETag가 바뀐다. exact retry도 누락된 publication을 복구하지만 콘텐츠가 같으면 같은 ETag를 유지한다.
 - 브라우저나 이미지 프록시는 기존 URL을 다시 요청할 때 `If-None-Match`로 검증한다.
 - 콘텐츠가 같으면 `304 Not Modified`, 달라지면 새 PNG와 ETag를 받는다.
 - URL에 timestamp나 무작위 query를 붙일 필요가 없다.

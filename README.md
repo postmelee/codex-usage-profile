@@ -62,6 +62,8 @@ ETag: "..."
 
 Each changed submit produces a new ETag. GitHub's image proxy can delay visible README refresh even after the origin returns the new card. See [README card usage and cache behavior](docs/readme-card.md).
 
+If usage is stored but the public media refresh fails, the CLI reports that the submit is safe to run again. The exact retry keeps the stored usage revision and retries only the public card convergence.
+
 ## Data Boundary
 
 The active CLI path uses the official Codex App Server `account/usage/read` result through the installed [`codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer) package.
@@ -129,8 +131,10 @@ node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37
 The smoke fixture uses `PROFILE_RUNTIME_MODE=spike` with a temporary file
 store. Production mode rejects the file store and starts with the Postgres
 (Neon) adapter from the server-only `NEON_DATABASE_URL` after verifying that
-schema migrations are applied; the durable R2 media boundary is still
-deferred to the next hosting stage. See
+schema migrations are applied. It also requires `PROFILE_MEDIA_MODE=external`,
+creates the R2 adapter from server-only `R2_*` values, and verifies bucket
+readiness before listening. Actual Cloud Run, Neon, R2 and Secret Manager
+resources remain deployment work in #43. See
 [Production hosting architecture](docs/production-hosting.md).
 
 ## Runtime Configuration
@@ -143,6 +147,9 @@ Copy `.env.example` to a local `.env`. `.env` is ignored by git and must never b
 | `GITHUB_CLIENT_SECRET` | Server-side secret used during OAuth code exchange |
 | `PUBLIC_BASE_URL` | Public origin used to build OAuth callback and card URLs |
 | `PROFILE_STORE_FILE` | Local durable store path for development |
+| `PROFILE_MEDIA_MODE` | `memory` for local development; production accepts `external` only |
+| `R2_ENDPOINT`, `R2_BUCKET`, `R2_REGION` | External public-card media location and region |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Server-only R2 credentials; read only when external media is created |
 | `SESSION_SECURE_COOKIES` | Enables secure cookies behind HTTPS hosting |
 
 GitHub OAuth callback URL:
@@ -179,7 +186,8 @@ File credentials are bound to the issuing service origin and are never sent to a
 - A Bearer token can update only its bound GitHub owner. Body/header data cannot select another owner.
 - New profiles default to private; public card access follows the web profile visibility setting.
 - Exact retries are idempotent, stale/conflicting revisions are rejected, request bodies are size-limited, and submit is rate-limited.
-- Production deployment still needs TLS, a shared rate limiter, backup retention values, account deletion and secret management. The durable database and its multi-instance concurrency policy are implemented and verified against local Postgres.
+- Public PNG requests read only the stable media object. Private previews remain authenticated on-demand renders and are never persisted to public media.
+- Production deployment still needs TLS, a shared rate limiter, backup values, account deletion, cleanup scheduling and secret management. Durable database/media adapters and concurrency/failure contracts are implemented locally; remote Neon/R2 validation remains #43 work.
 
 Revoke a CLI token immediately from web Settings when it is exposed or a machine is no longer trusted.
 

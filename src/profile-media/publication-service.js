@@ -219,6 +219,13 @@ export function createProfilePublicationService(options = {}) {
   }
 
   async function compensateMediaMutation(mutation) {
+    if (mutation.type === "unpublish") {
+      // A successful stable delete is already fail-closed. If the structured
+      // commit then rolls back, leave the public PNG missing so a retry can
+      // converge the still-public owner to private without re-exposing media.
+      return "not_needed";
+    }
+
     try {
       if (mutation.previousPublication) {
         await mediaStore.publishRevision({
