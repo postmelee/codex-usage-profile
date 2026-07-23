@@ -126,6 +126,12 @@ export function mapSubmitError(error) {
       : "";
     return new CliError("submit_rate_limited", `Usage submission was rate limited.${suffix}`);
   }
+  if (error.status === 503 && error.code === "media_unavailable") {
+    return new CliError(
+      "submit_media_unavailable",
+      "Usage was saved, but the public card could not be refreshed. Run submit again safely."
+    );
+  }
   if ([413, 415].includes(error.status)) {
     return new CliError("submit_contract_rejected", "The service rejected the usage contract.");
   }

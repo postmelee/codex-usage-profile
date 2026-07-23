@@ -14,6 +14,11 @@ import {
   createMemoryProfileBackendStore
 } from "../../profile-backend/index.js";
 import {
+  assertProfileMediaStoreContract,
+  createMemoryProfileMediaStore
+} from "../../profile-media/index.js";
+import {
+  createProductionMediaStore,
   createProductionNodeHandler,
   createProductionStore,
   startProfileProductionServer
@@ -137,6 +142,15 @@ test("routes health, API, public card, and frontend without leaking health detai
 test("starts the production host on an arbitrary port and closes idempotently", async () => {
   const fixture = createStaticFixture();
   const store = createMemoryProfileBackendStore();
+  const mediaStore = createMemoryProfileMediaStore();
+  let mediaReadinessCalls = 0;
+  let mediaCloseCalls = 0;
+  mediaStore.verifyReadiness = async () => {
+    mediaReadinessCalls += 1;
+  };
+  mediaStore.close = async () => {
+    mediaCloseCalls += 1;
+  };
 
   try {
     const runtime = await startProfileProductionServer({
@@ -144,10 +158,12 @@ test("starts the production host on an arbitrary port and closes idempotently", 
       deploymentConfig: {
         bindHost: "127.0.0.1",
         canonicalAppOrigin: "https://profiles.example.test",
+        mediaMode: "external",
         port: 0,
         runtimeMode: "production",
         storeMode: "external"
       },
+      mediaStore,
       rootDirectory: fixture.root,
       runtimeConfig: {
         githubClientId: null,
@@ -163,6 +179,52 @@ test("starts the production host on an arbitrary port and closes idempotently", 
     assert.equal((await fetch(`${runtime.url}/healthz`)).status, 200);
     await Promise.all([runtime.close(), runtime.close()]);
     assert.equal(runtime.server.listening, false);
+    assert.equal(mediaReadinessCalls, 0);
+    assert.equal(mediaCloseCalls, 0);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("verifies and closes a runtime-owned media store", async () => {
+  const fixture = createStaticFixture();
+  const store = createMemoryProfileBackendStore();
+  const mediaStore = createMemoryProfileMediaStore();
+  const calls = [];
+  mediaStore.verifyReadiness = async () => {
+    calls.push("ready");
+    return { ready: true };
+  };
+  mediaStore.close = async () => {
+    calls.push("close");
+  };
+
+  try {
+    const runtime = await startProfileProductionServer({
+      apiHandler: async () => new Response("Not found", { status: 404 }),
+      createMediaStore: () => mediaStore,
+      deploymentConfig: {
+        bindHost: "127.0.0.1",
+        canonicalAppOrigin: "https://profiles.example.test",
+        mediaMode: "external",
+        port: 0,
+        runtimeMode: "production",
+        storeMode: "external"
+      },
+      rootDirectory: fixture.root,
+      runtimeConfig: {
+        githubClientId: null,
+        githubClientSecret: null,
+        profileStoreFile: "/unused/profile-store.json",
+        publicBaseUrl: "https://profiles.example.test",
+        secureCookies: true
+      },
+      store
+    });
+
+    assert.deepEqual(calls, ["ready"]);
+    await runtime.close();
+    assert.deepEqual(calls, ["ready", "close"]);
   } finally {
     fixture.cleanup();
   }
@@ -191,6 +253,47 @@ test("creates a contract-satisfying Postgres store for external storage", async 
     assert.equal(typeof store.verifyReadiness, "function");
   } finally {
     await store.close();
+  }
+});
+
+test("fails closed when external media lacks complete R2 settings", () => {
+  assert.throws(
+    () => createProductionMediaStore({
+      deploymentConfig: {
+        mediaMode: "external",
+        runtimeMode: "production"
+      },
+      env: {
+        R2_ACCESS_KEY_ID: "r2_access_key",
+        R2_BUCKET: "profile-cards",
+        R2_ENDPOINT: "https://account.r2.cloudflarestorage.com"
+      }
+    }),
+    /R2_SECRET_ACCESS_KEY is required/
+  );
+});
+
+test("creates a contract-satisfying external media store without exposing secrets", async () => {
+  const mediaStore = createProductionMediaStore({
+    deploymentConfig: {
+      mediaMode: "external",
+      runtimeMode: "production"
+    },
+    env: {
+      R2_ACCESS_KEY_ID: "r2_access_key",
+      R2_BUCKET: "profile-cards",
+      R2_ENDPOINT: "https://account.r2.cloudflarestorage.com",
+      R2_REGION: "auto",
+      R2_SECRET_ACCESS_KEY: "r2_secret_value"
+    }
+  });
+
+  try {
+    assert.equal(assertProfileMediaStoreContract(mediaStore), mediaStore);
+    assert.equal(typeof mediaStore.verifyReadiness, "function");
+    assert.equal(JSON.stringify(mediaStore).includes("r2_secret_value"), false);
+  } finally {
+    await mediaStore.close();
   }
 });
 

@@ -1,7 +1,10 @@
 export const DEFAULT_PUBLIC_BASE_URL = "http://127.0.0.1:5173";
 export const DEFAULT_PROFILE_STORE_FILE = ".data/profile-store.json";
 
-export { loadProfileDeploymentConfig } from "./deployment-config.js";
+export {
+  PROFILE_MEDIA_MODES,
+  loadProfileDeploymentConfig
+} from "./deployment-config.js";
 
 export function loadProfileRuntimeConfig(options = {}) {
   const env = options.env ?? globalThis.process?.env ?? {};

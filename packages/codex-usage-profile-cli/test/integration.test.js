@@ -8,12 +8,13 @@ import {
   createMemoryProfileBackendStore,
   createProfileBackendHttpHandler
 } from "../../../src/profile-backend/index.js";
+import { createMemoryProfileMediaStore } from "../../../src/profile-media/index.js";
 import { createServiceClient } from "../src/service-client.js";
 import { submitAccountUsage } from "../src/submit.js";
 
 const SERVICE_ORIGIN = "http://127.0.0.1:5177";
 
-test("updates the stable card ETag through accepted and idempotent CLI submissions", async () => {
+test("refreshes the stable card after accepted and idempotent CLI submissions", async () => {
   const fixture = await createBackendFixture(PROFILE_VISIBILITY.PUBLIC);
   const firstDocument = createDocument();
   const first = await runSubmit(fixture, firstDocument);
@@ -22,6 +23,10 @@ test("updates the stable card ETag through accepted and idempotent CLI submissio
     { method: "HEAD" }
   );
   const repeated = await runSubmit(fixture, firstDocument);
+  const repeatedCard = await fixture.fetchImpl(
+    `${SERVICE_ORIGIN}/u/postmelee/card.png`,
+    { method: "HEAD" }
+  );
 
   fixture.setNow("2026-07-13T00:03:00.000Z");
   const later = await runSubmit(fixture, createDocument({
@@ -43,6 +48,8 @@ test("updates the stable card ETag through accepted and idempotent CLI submissio
   assert.equal(repeated.submission.idempotent, true);
   assert.equal(later.submission.status, "accepted");
   assert.equal(firstCard.status, 200);
+  assert.equal(repeatedCard.status, 200);
+  assert.equal(repeatedCard.headers.get("etag"), firstCard.headers.get("etag"));
   assert.equal(laterCard.status, 200);
   assert.notEqual(firstCard.headers.get("etag"), laterCard.headers.get("etag"));
   assert.equal(usageRecord.visibility, PROFILE_VISIBILITY.PUBLIC);
@@ -92,12 +99,17 @@ async function createBackendFixture(visibility) {
     createToken: () => `${CLI_TOKEN_PREFIX}integration_secret`
   });
   const { token } = await tokenService.issueCliToken({ ownerId: "owner_1" });
+  const mediaStore = createMemoryProfileMediaStore();
   const handler = createProfileBackendHttpHandler({
     store,
     tokenService,
+    mediaStore,
     now: () => current,
     createId,
-    publicBaseUrl: SERVICE_ORIGIN
+    publicBaseUrl: SERVICE_ORIGIN,
+    profileCardRenderPng: async (viewModel) => Buffer.from(
+      `card:${viewModel.locale}:${viewModel.usage.summary.lifetimeTokens}`
+    )
   });
   const fetchImpl = (url, options = {}) => handler(new Request(url, options));
 

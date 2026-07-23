@@ -190,7 +190,7 @@ test("changes the public card ETag after a newer Account Usage submit", async ()
       capturedAt: "2026-07-11T00:01:00.000Z",
       summary: {
         ...sampleAccountUsageReadResult.summary,
-        lifetimeTokens: sampleAccountUsageReadResult.summary.lifetimeTokens + 1
+        lifetimeTokens: sampleAccountUsageReadResult.summary.lifetimeTokens + 1_000_000_000
       }
     })
   });

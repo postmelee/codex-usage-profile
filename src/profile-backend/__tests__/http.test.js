@@ -14,11 +14,18 @@ import {
   createAccountUsageRateLimiter,
   createCliTokenService,
   createMemoryProfileBackendStore,
+  createProfileBackendError,
   createProfileBackendHttpHandler
 } from "../index.js";
 import { ACCOUNT_USAGE_CONTRACT_VERSION } from "../../profile-card/index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
+import {
+  PROFILE_MEDIA_STORE_ERROR_CODES,
+  createMemoryProfileMediaStore,
+  createProfileMediaRevisionDigest,
+  createProfileMediaStoreError
+} from "../../profile-media/index.js";
 
 const BASE_URL = "http://localhost";
 
@@ -898,8 +905,122 @@ test("updates only the session owner's card visibility", async () => {
   assert.equal(fixture.store.getOwnerById("owner_2").visibility, PROFILE_VISIBILITY.PRIVATE);
 });
 
+test("delegates authenticated profile visibility to the publication service", async () => {
+  const calls = [];
+  const fixture = createFixture({
+    createPublicationService(store) {
+      return {
+        async updateVisibility(options) {
+          calls.push(options);
+          const owner = store.saveOwner({
+            ...store.getOwnerById(options.ownerId),
+            visibility: options.visibility
+          });
+          const usageRecord = store.saveLatestUsage({
+            ...store.getLatestUsageByOwnerId(options.ownerId),
+            visibility: options.visibility
+          });
+          return { owner, usageRecord, visibility: options.visibility };
+        }
+      };
+    }
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [{
+    ownerId: "owner_1",
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  }]);
+  assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(response.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
+});
+
+test("creates the publication service when a media store is configured", async () => {
+  const mediaStore = createMemoryProfileMediaStore();
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(`card:${viewModel.locale}`)
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+  const english = await mediaStore.getPublishedCard({ handle: "postmelee" });
+  const korean = await mediaStore.getPublishedCard({
+    handle: "postmelee",
+    locale: "ko"
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(english.body, Buffer.from("card:en"));
+  assert.deepEqual(korean.body, Buffer.from("card:ko"));
+  assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+});
+
+test("returns a generic 503 when profile publication is unavailable", async () => {
+  const fixture = createFixture({
+    createPublicationService() {
+      return {
+        async updateVisibility() {
+          throw createProfileBackendError(
+            PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+            "Profile media is temporarily unavailable",
+            {
+              details: {
+                compensation: "failed",
+                internalEndpoint: "must-not-leak"
+              }
+            }
+          );
+        }
+      };
+    }
+  });
+  fixture.saveOwner();
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("retry-after"), "5");
+  assert.deepEqual(response.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(JSON.stringify(response.body).includes("must-not-leak"), false);
+});
+
 test("serves a private owner preview without public caching", async () => {
-  const fixture = createFixture();
+  const mediaCalls = [];
+  const mediaStore = wrapMediaStore(createMemoryProfileMediaStore(), {}, mediaCalls);
+  const fixture = createFixture({ mediaStore });
   fixture.saveOwner();
   fixture.saveLatestUsage();
   const cookie = fixture.saveSession();
@@ -915,10 +1036,12 @@ test("serves a private owner preview without public caching", async () => {
   assert.equal(response.headers.get("content-type"), "image/png");
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.equal(body.subarray(1, 4).toString(), "PNG");
+  assert.deepEqual(mediaCalls, []);
 });
 
 test("serves public GET and HEAD cards with ETag revalidation", async () => {
-  const fixture = createFixture();
+  const mediaStore = createMemoryProfileMediaStore();
+  const fixture = createFixture({ mediaStore });
   fixture.saveOwner();
   fixture.saveLatestUsage();
   const cookie = fixture.saveSession();
@@ -931,6 +1054,12 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   );
   const getResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?locale=ko"
+  );
+  const englishResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png"
+  );
+  const fallbackResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?locale=unsupported"
   );
   const etag = getResponse.headers.get("etag");
   const headResponse = await requestResponse(
@@ -952,6 +1081,8 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
     "public, no-cache, must-revalidate"
   );
   assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
+  assert.equal(fallbackResponse.headers.get("etag"), englishResponse.headers.get("etag"));
+  assert.notEqual(englishResponse.headers.get("etag"), etag);
   assert.equal(headResponse.status, 200);
   assert.equal(headResponse.headers.get("etag"), etag);
   assert.equal((await headResponse.arrayBuffer()).byteLength, 0);
@@ -969,6 +1100,166 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const missing = await requestJson(fixture.handler, "GET", "/u/missing/card.png");
   assert.equal(hiddenAgain.status, 404);
   assert.deepEqual(hiddenAgain.body, missing.body);
+});
+
+test("serves public cards without reading the structured store or renderer", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  await publishMediaFixture(baseMediaStore, { handle: "media-only" });
+  const mediaCalls = [];
+  const mediaStore = wrapMediaStore(baseMediaStore, {}, mediaCalls);
+  const forbiddenStore = new Proxy(createMemoryProfileBackendStore(), {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      return () => { throw new Error(`structured store access: ${String(property)}`); };
+    }
+  });
+  const cardService = {
+    getOwnerProfile() { throw new Error("card service access"); },
+    renderOwnerCard() { throw new Error("renderer access"); },
+    renderPublicCard() { throw new Error("public renderer access"); },
+    updateVisibility() { throw new Error("card visibility access"); }
+  };
+  const handler = createProfileBackendHttpHandler({
+    store: forbiddenStore,
+    cardService,
+    mediaStore,
+    publicationService: {
+      updateVisibility() { throw new Error("publication mutation access"); }
+    }
+  });
+
+  const response = await requestResponse(
+    handler,
+    "GET",
+    "/u/media-only/card.png?locale=ko"
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from("media:ko"));
+  assert.deepEqual(mediaCalls, [["getPublishedCard", {
+    handle: "media-only",
+    locale: "ko",
+    ifNoneMatch: null,
+    includeBody: true
+  }]]);
+});
+
+test("maps missing, malformed, invalid, and conflicting public media to the same 404", async () => {
+  const missingFixture = createFixture({
+    mediaStore: createMemoryProfileMediaStore()
+  });
+  const baseMediaStore = createMemoryProfileMediaStore();
+  await publishMediaFixture(baseMediaStore, { handle: "postmelee" });
+  const invalidFixture = createFixture({
+    mediaStore: wrapMediaStore(baseMediaStore, {
+      async getPublishedCard() {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+          "secret invalid metadata"
+        );
+      }
+    })
+  });
+  const conflictFixture = createFixture({
+    mediaStore: wrapMediaStore(baseMediaStore, {
+      async getPublishedCard() {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+          "secret publication conflict"
+        );
+      }
+    })
+  });
+  const malformedFixture = createFixture({
+    mediaStore: wrapMediaStore(baseMediaStore, {
+      async getPublishedCard() {
+        return {
+          body: Buffer.from("media"),
+          cacheControl: "private",
+          contentType: "application/octet-stream",
+          etag: "storage-secret",
+          notModified: false
+        };
+      }
+    })
+  });
+  const missingLocaleFixture = createFixture({
+    mediaStore: wrapMediaStore(baseMediaStore, {
+      async getPublishedCard(options) {
+        if (options.locale === "ko") {
+          const error = new Error("referenced revision missing");
+          error.code = "not_found";
+          throw error;
+        }
+        return baseMediaStore.getPublishedCard(options);
+      }
+    })
+  });
+
+  const responses = await Promise.all([
+    requestJson(missingFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(invalidFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(conflictFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(malformedFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(missingLocaleFixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"),
+    requestJson(missingLocaleFixture.handler, "GET", "/u/%2F/card.png")
+  ]);
+  const expected = {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+      message: "Card not found"
+    }
+  };
+
+  for (const [index, response] of responses.entries()) {
+    assert.equal(response.status, 404, `response ${index}`);
+    assert.deepEqual(response.body, expected);
+    assert.equal(JSON.stringify(response.body).includes("secret"), false);
+  }
+});
+
+test("maps transient and unexpected public media failures to a generic 503", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  const fixtures = [
+    createFixture({
+      mediaStore: wrapMediaStore(baseMediaStore, {
+        async getPublishedCard() {
+          throw createProfileMediaStoreError(
+            PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+            "secret storage endpoint"
+          );
+        }
+      })
+    }),
+    createFixture({
+      mediaStore: wrapMediaStore(baseMediaStore, {
+        async getPublishedCard() {
+          throw new Error("secret unexpected adapter failure");
+        }
+      })
+    })
+  ];
+
+  for (const fixture of fixtures) {
+    const response = await requestJson(
+      fixture.handler,
+      "GET",
+      "/u/postmelee/card.png"
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "5");
+    assert.deepEqual(response.body, {
+      ok: false,
+      error: {
+        code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+        message: "Profile media is temporarily unavailable"
+      }
+    });
+    assert.equal(JSON.stringify(response.body).includes("secret"), false);
+  }
 });
 
 test("handles bearer snapshot submit and public handle lookup", async () => {
@@ -1070,6 +1361,108 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
   });
   assert.equal(serializedResponses.includes("lifetimeTokens"), false);
   assert.equal(serializedResponses.includes(token), false);
+});
+
+test("refreshes public media after accepted and exact idempotent Account Usage submits", async () => {
+  const calls = [];
+  const fixture = createFixture({
+    publicationService: {
+      async refreshPublishedCard(options) {
+        calls.push(options);
+        return { operation: "publish" };
+      },
+      async updateVisibility() {
+        throw new Error("not used");
+      }
+    }
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const { token } = await fixture.issueToken();
+  const headers = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const accepted = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const repeated = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+
+  assert.equal(accepted.status, 201);
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.body.data.submission.idempotent, true);
+  assert.deepEqual(calls, [
+    { ownerId: "owner_1" },
+    { ownerId: "owner_1" }
+  ]);
+});
+
+test("preserves committed usage and recovers media on an exact retry", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  let failNextWrite = true;
+  const mediaStore = wrapMediaStore(baseMediaStore, {
+    async putRevision(options) {
+      if (failNextWrite) {
+        failNextWrite = false;
+        throw createProfileMediaStoreError(
+          "unavailable",
+          "injected media write failure"
+        );
+      }
+      return baseMediaStore.putRevision(options);
+    }
+  });
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(
+      `card:${viewModel.locale}:${viewModel.usage.summary.lifetimeTokens}`
+    )
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const { token } = await fixture.issueToken();
+  const headers = { authorization: `Bearer ${token}` };
+  const document = createAccountUsageDocument();
+
+  const failedRefresh = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const committed = fixture.store.getLatestUsageByOwnerId("owner_1");
+  const recovered = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/account-usage/submit",
+    document,
+    headers
+  );
+  const published = await baseMediaStore.getPublishedCard({
+    handle: "postmelee"
+  });
+
+  assert.equal(failedRefresh.status, 503);
+  assert.equal(failedRefresh.headers.get("retry-after"), "5");
+  assert.deepEqual(failedRefresh.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(committed.capturedAt, document.capturedAt);
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.body.data.submission.idempotent, true);
+  assert.notEqual(published, null);
 });
 
 test("rejects Account Usage conflicts and invalid HTTP bodies", async () => {
@@ -1412,6 +1805,9 @@ function createFixture(options = {}) {
     createToken
   });
   const githubCalls = [];
+  const publicationService = typeof options.createPublicationService === "function"
+    ? options.createPublicationService(store)
+    : options.publicationService;
   const handler = createProfileBackendHttpHandler({
     store,
     tokenService,
@@ -1439,7 +1835,10 @@ function createFixture(options = {}) {
       }
     },
     accountUsageBodyMaxBytes: options.accountUsageBodyMaxBytes,
-    accountUsageRateLimiter: options.accountUsageRateLimiter
+    accountUsageRateLimiter: options.accountUsageRateLimiter,
+    mediaStore: options.mediaStore,
+    profileCardRenderPng: options.profileCardRenderPng,
+    publicationService
   });
 
   return {
@@ -1489,6 +1888,49 @@ function createFixture(options = {}) {
       current = value;
     }
   };
+}
+
+async function publishMediaFixture(mediaStore, options = {}) {
+  const ownerId = options.ownerId ?? "owner_media";
+  const handle = options.handle ?? "postmelee";
+  const representations = {};
+  for (const locale of ["en", "ko"]) {
+    const body = Buffer.from(`media:${locale}`);
+    const revision = createProfileMediaRevisionDigest(body);
+    const etag = `"${revision}"`;
+    await mediaStore.putRevision({
+      body,
+      createdAt: "2026-07-22T00:00:00.000Z",
+      etag,
+      locale,
+      ownerId,
+      revision
+    });
+    representations[locale] = { etag, revision };
+  }
+  return mediaStore.publishRevision({
+    handle,
+    ownerId,
+    publicationId: "profile_media_fixture",
+    publishedAt: "2026-07-22T00:01:00.000Z",
+    representations
+  });
+}
+
+function wrapMediaStore(base, overrides = {}, calls = null) {
+  return Object.fromEntries([
+    "getPublishedCard",
+    "getRevision",
+    "publishRevision",
+    "putRevision",
+    "unpublishCard"
+  ].map((method) => [method, async (...args) => {
+    if (calls) calls.push([method, ...args]);
+    if (typeof overrides[method] === "function") {
+      return overrides[method](...args);
+    }
+    return base[method](...args);
+  }]));
 }
 
 function createAccountUsageDocument(overrides = {}) {

@@ -17,6 +17,7 @@ test("loads a loopback file-store development config by default", () => {
   assert.deepEqual(loadProfileDeploymentConfig({ env: {} }), {
     bindHost: DEFAULT_DEVELOPMENT_HOST,
     canonicalAppOrigin: DEFAULT_CANONICAL_APP_ORIGIN,
+    mediaMode: "memory",
     port: DEFAULT_DEVELOPMENT_PORT,
     runtimeMode: "development",
     storeMode: "file"
@@ -29,11 +30,13 @@ test("loads an external-store production config for Cloud Run", () => {
       CANONICAL_APP_ORIGIN: "https://profiles.example.test/",
       NODE_ENV: "production",
       PORT: "9090",
+      PROFILE_MEDIA_MODE: "external",
       PROFILE_STORE_MODE: "external"
     }
   }), {
     bindHost: DEFAULT_PRODUCTION_HOST,
     canonicalAppOrigin: "https://profiles.example.test",
+    mediaMode: "external",
     port: 9090,
     runtimeMode: "production",
     storeMode: "external"
@@ -70,6 +73,28 @@ test("allows an explicit file store only outside production", () => {
       }
     }),
     /PROFILE_STORE_MODE=file is not allowed in production/
+  );
+});
+
+test("allows memory media only outside production", () => {
+  const spikeConfig = loadProfileDeploymentConfig({
+    env: {
+      PROFILE_MEDIA_MODE: "memory",
+      PROFILE_RUNTIME_MODE: "spike"
+    }
+  });
+
+  assert.equal(spikeConfig.mediaMode, "memory");
+  assert.throws(
+    () => loadProfileDeploymentConfig({
+      env: {
+        CANONICAL_APP_ORIGIN: "https://profiles.example.test",
+        PROFILE_MEDIA_MODE: "memory",
+        PROFILE_RUNTIME_MODE: "production",
+        PROFILE_STORE_MODE: "external"
+      }
+    }),
+    /PROFILE_MEDIA_MODE=memory is not allowed in production/
   );
 });
 
@@ -141,5 +166,11 @@ test("rejects unknown runtime and store modes", () => {
       env: { PROFILE_STORE_MODE: "sqlite" }
     }),
     /PROFILE_STORE_MODE must be one of/
+  );
+  assert.throws(
+    () => loadProfileDeploymentConfig({
+      env: { PROFILE_MEDIA_MODE: "filesystem" }
+    }),
+    /PROFILE_MEDIA_MODE must be one of/
   );
 });
