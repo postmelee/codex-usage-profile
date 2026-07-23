@@ -4,13 +4,18 @@ import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
 } from "./errors.js";
+import {
+  createTransactionalProfileBackendAtomicOperations
+} from "./atomic-operations.js";
+import {
+  PROFILE_BACKEND_STORE_SCHEMA_VERSION,
+  PROFILE_VISIBILITY
+} from "./store-values.js";
 
-export const PROFILE_VISIBILITY = Object.freeze({
-  PRIVATE: "private",
-  PUBLIC: "public"
-});
-
-export const PROFILE_BACKEND_STORE_SCHEMA_VERSION = 1;
+export {
+  PROFILE_BACKEND_STORE_SCHEMA_VERSION,
+  PROFILE_VISIBILITY
+} from "./store-values.js";
 
 export function createMemoryProfileBackendStore(initialState = {}) {
   const transactionContext = new AsyncLocalStorage();
@@ -409,6 +414,7 @@ export function createMemoryProfileBackendStore(initialState = {}) {
     }
   };
 
+  store.atomic = createTransactionalProfileBackendAtomicOperations(store);
   hydrateStore(store, initialState);
 
   return store;

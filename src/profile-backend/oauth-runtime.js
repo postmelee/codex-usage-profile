@@ -94,34 +94,25 @@ export function createOAuthRuntimeService(options = {}) {
         githubClient: callbackOptions.githubClient ?? githubClient
       });
 
-      return store.transaction(async (tx) => {
-        const lockedState = await tx.getOAuthState(state.id);
-        checkOAuthStateConsumable(lockedState, normalizeDate(now()));
-
-        const owner = await accountService.upsertGitHubOwner(identity, {
-          handle: callbackOptions.handle,
-          visibility: callbackOptions.visibility,
-          store: tx
-        });
-        const { session, cookie: sessionCookie } = await sessionService.createSession({
-          ownerId: owner.id,
-          store: tx
-        });
-        const consumedState = await tx.saveOAuthState({
-          ...lockedState,
-          status: OAUTH_STATE_STATUS.CONSUMED,
-          consumedAt: normalizeDate(now()).toISOString(),
-          ownerId: owner.id,
-          sessionId: session.id
-        });
-
-        return {
-          owner,
-          session,
-          sessionCookie,
-          oauthState: consumedState
-        };
+      const operationNow = normalizeDate(now()).toISOString();
+      const owner = await accountService.prepareGitHubOwner(identity, {
+        handle: callbackOptions.handle,
+        visibility: callbackOptions.visibility
       });
+      const preparedSession = sessionService.prepareSession({
+        ownerId: owner.id
+      });
+      const result = await store.atomic.completeOAuthCallback({
+        stateId: state.id,
+        now: operationNow,
+        owner,
+        session: preparedSession.session
+      });
+
+      return {
+        ...result,
+        sessionCookie: sessionService.serializeSessionCookie(result.session)
+      };
     },
 
     logout(logoutOptions = {}) {

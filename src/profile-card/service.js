@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { createAccountService } from "../profile-backend/accounts.js";
+import { normalizeVisibility } from "../profile-backend/accounts.js";
 import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
 } from "../profile-backend/errors.js";
-import { PROFILE_VISIBILITY } from "../profile-backend/store.js";
+import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
 import {
   CARD_RENDERER_VERSION,
@@ -47,7 +47,6 @@ export function createProfileCardService(options = {}) {
     throw new TypeError("renderPng must be a function");
   }
 
-  const accountService = options.accountService ?? createAccountService({ store, now });
   const pngCache = createLruCache(cacheEntries);
   const avatarCache = createLruCache(cacheEntries);
 
@@ -59,35 +58,17 @@ export function createProfileCardService(options = {}) {
       return { owner, usageRecord, visibility: owner.visibility };
     },
 
-    updateVisibility(updateOptions = {}) {
+    async updateVisibility(updateOptions = {}) {
       // Owner, latest usage and the legacy latest snapshot must expose one
       // visibility revision, so all writes commit together (or not at all).
       // The snapshot sync also keeps the legacy public snapshot route from
       // serving a record after the owner turns private.
-      return store.transaction(async (tx) => {
-        const owner = await accountService.updateVisibility({
-          ownerId: updateOptions.ownerId,
-          visibility: updateOptions.visibility,
-          store: tx
-        });
-        const usageRecord = await tx.getLatestUsageByOwnerId(owner.id);
-        const updatedUsageRecord = usageRecord
-          ? await tx.saveLatestUsage({
-            ...usageRecord,
-            handle: owner.handle,
-            visibility: owner.visibility
-          })
-          : null;
-        const snapshotRecord = await tx.getLatestSnapshotByOwnerId(owner.id);
-        if (snapshotRecord) {
-          await tx.saveLatestSnapshot({
-            ...snapshotRecord,
-            handle: owner.handle,
-            visibility: owner.visibility
-          });
-        }
-
-        return { owner, usageRecord: updatedUsageRecord, visibility: owner.visibility };
+      const owner = await requireOwnerById(store, updateOptions.ownerId);
+      return store.atomic.updateVisibility({
+        ownerId: owner.id,
+        expectedOwnerUpdatedAt: owner.updatedAt ?? null,
+        visibility: normalizeVisibility(updateOptions.visibility),
+        updatedAt: nextOwnerRevisionTimestamp(owner.updatedAt, now())
       });
     },
 
@@ -183,6 +164,27 @@ export function createProfileCardService(options = {}) {
     avatarCache.set(cacheKey, avatar);
     return avatar;
   }
+}
+
+function normalizeServiceDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError("Expected a valid date");
+  }
+  return date;
+}
+
+function nextOwnerRevisionTimestamp(currentValue, nextValue) {
+  const next = normalizeServiceDate(nextValue);
+  if (currentValue === undefined || currentValue === null) {
+    return next.toISOString();
+  }
+
+  const current = normalizeServiceDate(currentValue);
+  return new Date(Math.max(
+    next.getTime(),
+    current.getTime() + 1
+  )).toISOString();
 }
 
 export function createProfileCardSourceDigest(options = {}) {

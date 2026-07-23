@@ -20,7 +20,7 @@ import {
 import { createOAuthRuntimeService } from "./oauth-runtime.js";
 import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
-import { PROFILE_VISIBILITY } from "./store.js";
+import { PROFILE_VISIBILITY } from "./store-values.js";
 import { createCliTokenService } from "./tokens.js";
 import {
   createSubmittedDeviceService,

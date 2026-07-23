@@ -117,6 +117,26 @@ test("Sites config can require the future logical data bindings", () => {
   assert.equal(config.media, media);
 });
 
+test("Sites config can require D1 independently before the R2 stage", () => {
+  assert.throws(
+    () => loadProfileSitesConfig({
+      environment: {},
+      requestUrl: "https://profile.example/",
+      requireDatabase: true
+    }),
+    /Sites binding DB is required/
+  );
+
+  const database = {};
+  const config = loadProfileSitesConfig({
+    environment: { DB: database },
+    requestUrl: "https://profile.example/",
+    requireDatabase: true
+  });
+  assert.equal(config.database, database);
+  assert.equal(config.media, null);
+});
+
 test("Sites request origin accepts only absolute HTTP URLs", () => {
   assert.equal(
     normalizeRequestOrigin("http://localhost:4175/settings"),

@@ -25,7 +25,10 @@ export function createProfileSitesWorker(options = {}) {
           config,
           environment,
           executionContext
-        })
+        }),
+        createBackendApiHandler: options.createBackendApiHandler,
+        database: config.database,
+        rateLimiterOptions: options.rateLimiterOptions
       });
       const hostHandler = createProfileHostAdapter({
         apiHandler: backendHandler,

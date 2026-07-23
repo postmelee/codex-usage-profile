@@ -27,7 +27,36 @@ export function createCliTokenService(options = {}) {
     throw new TypeError("store is required");
   }
 
+  const prepareCliToken = (issueOptions = {}) => {
+    const ownerId = requireNonEmptyString(issueOptions.ownerId, "ownerId");
+    const issuedAt = normalizeDate(now());
+    const expiresAt = issueOptions.expiresAt
+      ? normalizeDate(issueOptions.expiresAt)
+      : new Date(issuedAt.getTime() + (issueOptions.expiresInMs ?? tokenTtlMs));
+    const rawToken = createToken();
+    const tokenRecord = {
+      id: createId("cli_token"),
+      ownerId,
+      tokenDigest: createCliTokenDigest(rawToken),
+      label: normalizeNullableString(issueOptions.label),
+      scopes: normalizeScopes(issueOptions.scopes),
+      sourceChallengeId: normalizeNullableString(issueOptions.sourceChallengeId),
+      createdAt: issuedAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      revokedAt: null,
+      lastUsedAt: null
+    };
+
+    return {
+      token: rawToken,
+      tokenRecord,
+      maxActiveTokens
+    };
+  };
+
   return {
+    prepareCliToken,
+
     async issueCliToken(issueOptions = {}) {
       // `store` override lets a caller run this write inside an open
       // transaction (tx handle) while keeping this service's configuration.
@@ -44,27 +73,13 @@ export function createCliTokenService(options = {}) {
 
       await assertActiveCliTokenLimitAvailable(activeStore, ownerId, maxActiveTokens);
 
-      const issuedAt = normalizeDate(now());
-      const expiresAt = issueOptions.expiresAt
-        ? normalizeDate(issueOptions.expiresAt)
-        : new Date(issuedAt.getTime() + (issueOptions.expiresInMs ?? tokenTtlMs));
-      const rawToken = createToken();
-      const tokenRecord = {
-        id: createId("cli_token"),
-        ownerId,
-        tokenDigest: createCliTokenDigest(rawToken),
-        label: normalizeNullableString(issueOptions.label),
-        scopes: normalizeScopes(issueOptions.scopes),
-        sourceChallengeId: normalizeNullableString(issueOptions.sourceChallengeId),
-        createdAt: issuedAt.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-        revokedAt: null,
-        lastUsedAt: null
-      };
-
+      const prepared = prepareCliToken({
+        ...issueOptions,
+        ownerId
+      });
       return {
-        token: rawToken,
-        tokenRecord: await activeStore.saveCliToken(tokenRecord)
+        token: prepared.token,
+        tokenRecord: await activeStore.saveCliToken(prepared.tokenRecord)
       };
     },
 

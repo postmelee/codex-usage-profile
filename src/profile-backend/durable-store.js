@@ -66,6 +66,27 @@ export function createFileProfileBackendStore(options = {}) {
         };
       }
 
+      if (property === "atomic") {
+        return new Proxy(value, {
+          get(atomicTarget, operation, atomicReceiver) {
+            const atomicOperation = Reflect.get(
+              atomicTarget,
+              operation,
+              atomicReceiver
+            );
+            if (typeof atomicOperation !== "function") {
+              return atomicOperation;
+            }
+
+            return async (...args) => {
+              const result = await atomicOperation(...args);
+              persist();
+              return result;
+            };
+          }
+        });
+      }
+
       if (typeof property !== "string" || !MUTATING_METHODS.has(property)) {
         return value;
       }

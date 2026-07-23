@@ -20,6 +20,7 @@ export function loadProfileSitesConfig(options = {}) {
     environment.GITHUB_CLIENT_SECRET
   );
   const requireGitHubOAuth = options.requireGitHubOAuth === true;
+  const requireDatabase = options.requireDatabase === true;
   const requireDataBindings = options.requireDataBindings === true;
 
   if (requireGitHubOAuth) {
@@ -29,6 +30,9 @@ export function loadProfileSitesConfig(options = {}) {
   if (requireDataBindings) {
     requireBinding(environment.DB, PROFILE_SITES_BINDINGS.database);
     requireBinding(environment.PROFILE_MEDIA, PROFILE_SITES_BINDINGS.media);
+  }
+  if (requireDatabase) {
+    requireBinding(environment.DB, PROFILE_SITES_BINDINGS.database);
   }
 
   const callbackUrl = new URL(

@@ -11,7 +11,45 @@ export function createProfileSitesBackendHandler(options = {}) {
     return options.backendHandler;
   }
 
+  if (
+    options.database &&
+    typeof options.createBackendApiHandler === "function"
+  ) {
+    const dependencies = createProfileSitesBackendDependencies(options);
+    const handler = options.createBackendApiHandler(dependencies);
+    if (typeof handler !== "function") {
+      throw new TypeError("Sites backend API factory must return a request handler");
+    }
+    return handler;
+  }
+
   return createUnavailableProfileSitesBackendHandler();
+}
+
+export function createProfileSitesBackendDependencies(options = {}) {
+  const database = options.database;
+  if (
+    !database ||
+    typeof database.prepare !== "function" ||
+    typeof database.batch !== "function"
+  ) {
+    throw new TypeError("Sites D1 DB binding is required");
+  }
+
+  const store = options.store ?? createD1ProfileBackendStore({
+    database,
+    createNonce: options.createNonce
+  });
+  const rateLimiter = options.rateLimiter ?? createD1AccountUsageRateLimiter({
+    database,
+    ...options.rateLimiterOptions
+  });
+
+  return Object.freeze({
+    database,
+    rateLimiter,
+    store
+  });
 }
 
 export function createUnavailableProfileSitesBackendHandler() {
@@ -27,3 +65,9 @@ export function createUnavailableProfileSitesBackendHandler() {
     });
   };
 }
+import {
+  createD1AccountUsageRateLimiter
+} from "../../profile-backend/d1/rate-limiter.js";
+import {
+  createD1ProfileBackendStore
+} from "../../profile-backend/d1/store.js";
