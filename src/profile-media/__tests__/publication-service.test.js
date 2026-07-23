@@ -64,7 +64,7 @@ test("keeps an exact public request idempotent and repairs a missing stable publ
   );
 });
 
-test("repairs a public publication whose stable metadata cannot be read", async () => {
+test("repairs a public publication whose stable metadata is invalid", async () => {
   const fixture = createFixture();
   const first = await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
   let failInspection = true;
@@ -72,7 +72,7 @@ test("repairs a public publication whose stable metadata cannot be read", async 
     async getPublishedCard(options) {
       if (failInspection) {
         failInspection = false;
-        throw createProfileMediaStoreError("unavailable", "invalid stable metadata");
+        throw createProfileMediaStoreError("invalid", "invalid stable metadata");
       }
       return fixture.mediaStore.getPublishedCard(options);
     }

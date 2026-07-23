@@ -74,7 +74,9 @@ revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted applicatio
 
 Publish는 `en`, `ko` immutable revision을 모두 저장·HEAD 검증한 뒤 `en` source를 stable key로 copy하고 locale pointer metadata를 한 번에 교체한다. 같은 revision과 같은 bytes의 재시도는 idempotent다. 같은 revision에 다른 bytes나 ETag를 쓰면 conflict다. immutable write·validation·copy가 실패하면 이전 stable card와 locale metadata를 유지한다.
 
-`GET|HEAD /u/{handle}/card.png`는 R2-compatible media store만 조회하며 Neon, owner/usage record와 on-demand renderer를 호출하지 않는다. stable 또는 locale revision이 없거나 metadata가 불완전하면 같은 public `404`를 반환한다. private preview는 Cloud Run에서 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+`GET|HEAD /u/{handle}/card.png`는 R2-compatible media store만 조회하며 Neon, owner/usage record와 on-demand renderer를 호출하지 않는다. stable 또는 locale revision이 없거나 metadata가 불완전하면 같은 public `404`를 반환한다. R2 provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 Cloud Run에서 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+
+기본 `en` GET은 HEAD에서 확인한 storage ETag를 `If-Match`로 사용해 publication metadata와 body가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되어 412가 발생하면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다. `If-Match`를 제거해 서로 다른 publication의 metadata/body를 조합하지 않는다.
 
 Public 전환은 두 locale revision과 stable copy를 완료한 뒤 structured visibility를 commit한다. Unpublish는 stable public object만 제거한 뒤 structured visibility를 private으로 commit하며 immutable revision은 retention 대상으로 남긴다. delete 실패는 public visibility를 유지한다. delete 성공 뒤 structured commit이 실패하면 PNG는 `404`로 닫아 두고 다음 unpublish retry가 private으로 수렴한다.
 

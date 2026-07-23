@@ -8,6 +8,7 @@ import {
 import { normalizeVisibility } from "../profile-backend/accounts.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store.js";
 import {
+  PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
   assertProfileMediaStoreContract,
   createProfileMediaStoreError
@@ -200,7 +201,12 @@ export function createProfilePublicationService(options = {}) {
         })
       };
     } catch (error) {
-      if (error?.code !== "unavailable") throw error;
+      if (![
+        PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+        PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE
+      ].includes(error?.code)) {
+        throw error;
+      }
       return { incomplete: true, publication: null };
     }
   }

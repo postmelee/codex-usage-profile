@@ -5,7 +5,9 @@ import { createProfileCardService } from "../profile-card/service.js";
 import { createProfilePublicationService } from "../profile-media/publication-service.js";
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
-  PROFILE_MEDIA_CONTENT_TYPE
+  PROFILE_MEDIA_CONTENT_TYPE,
+  PROFILE_MEDIA_STORE_ERROR_CODES,
+  createProfileMediaStableKey
 } from "../profile-media/media-store-contract.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
@@ -1099,7 +1101,13 @@ function decodePublicHandle(value) {
 }
 
 function decodePublicCardHandle(value) {
-  return decodePublicHandle(value);
+  const handle = decodePublicHandle(value);
+  try {
+    createProfileMediaStableKey({ handle });
+    return handle;
+  } catch {
+    throw publicCardNotFoundError();
+  }
 }
 
 function cardPngResponse(card, options) {
@@ -1141,26 +1149,43 @@ async function refreshPublicProfileMedia(result, publicationService) {
 }
 
 async function readPublishedMediaCard(options) {
+  if (
+    !options.mediaStore ||
+    typeof options.mediaStore.getPublishedCard !== "function"
+  ) {
+    throw createProfileMediaUnavailableError();
+  }
+
+  let card;
   try {
-    if (!options.mediaStore || typeof options.mediaStore.getPublishedCard !== "function") {
-      throw new Error("media store is unavailable");
-    }
-    const card = await options.mediaStore.getPublishedCard({
+    card = await options.mediaStore.getPublishedCard({
       handle: options.handle,
       locale: options.locale,
       ifNoneMatch: options.ifNoneMatch,
       includeBody: options.includeBody
     });
-    if (!isPublishedMediaCard(card, { includeBody: options.includeBody })) {
-      throw new Error("published media is unavailable");
+  } catch (error) {
+    if ([
+      PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND
+    ].includes(error?.code)) {
+      throw publicCardNotFoundError();
     }
-    return card;
-  } catch {
-    throw new ProfileBackendError(
-      PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
-      "Card not found"
-    );
+    throw createProfileMediaUnavailableError();
   }
+
+  if (!isPublishedMediaCard(card, { includeBody: options.includeBody })) {
+    throw publicCardNotFoundError();
+  }
+  return card;
+}
+
+function publicCardNotFoundError() {
+  return new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+    "Card not found"
+  );
 }
 
 function isPublishedMediaCard(card, options) {

@@ -5,6 +5,12 @@ export const PROFILE_MEDIA_CONTENT_TYPE = "image/png";
 export const PROFILE_MEDIA_CACHE_CONTROL = "public, no-cache, must-revalidate";
 export const PROFILE_MEDIA_DEFAULT_LOCALE = "en";
 export const PROFILE_MEDIA_SUPPORTED_LOCALES = Object.freeze(["en", "ko"]);
+export const PROFILE_MEDIA_STORE_ERROR_CODES = Object.freeze({
+  CONFLICT: "conflict",
+  INVALID: "invalid",
+  NOT_FOUND: "not_found",
+  UNAVAILABLE: "unavailable"
+});
 
 const PROFILE_MEDIA_REVISION_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PROFILE_MEDIA_HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

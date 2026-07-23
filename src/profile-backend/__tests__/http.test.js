@@ -21,6 +21,7 @@ import { ACCOUNT_USAGE_CONTRACT_VERSION } from "../../profile-card/index.js";
 import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 import { sampleAccountUsageReadResult } from "../../profile-card/fixtures/sample-account-usage.js";
 import {
+  PROFILE_MEDIA_STORE_ERROR_CODES,
   createMemoryProfileMediaStore,
   createProfileMediaRevisionDigest,
   createProfileMediaStoreError
@@ -1144,14 +1145,29 @@ test("serves public cards without reading the structured store or renderer", asy
   }]]);
 });
 
-test("maps missing, malformed, and unavailable public media to the same 404", async () => {
-  const missingFixture = createFixture();
+test("maps missing, malformed, invalid, and conflicting public media to the same 404", async () => {
+  const missingFixture = createFixture({
+    mediaStore: createMemoryProfileMediaStore()
+  });
   const baseMediaStore = createMemoryProfileMediaStore();
   await publishMediaFixture(baseMediaStore, { handle: "postmelee" });
-  const unavailableFixture = createFixture({
+  const invalidFixture = createFixture({
     mediaStore: wrapMediaStore(baseMediaStore, {
       async getPublishedCard() {
-        throw new Error("secret storage endpoint");
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+          "secret invalid metadata"
+        );
+      }
+    })
+  });
+  const conflictFixture = createFixture({
+    mediaStore: wrapMediaStore(baseMediaStore, {
+      async getPublishedCard() {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+          "secret publication conflict"
+        );
       }
     })
   });
@@ -1183,7 +1199,8 @@ test("maps missing, malformed, and unavailable public media to the same 404", as
 
   const responses = await Promise.all([
     requestJson(missingFixture.handler, "GET", "/u/postmelee/card.png"),
-    requestJson(unavailableFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(invalidFixture.handler, "GET", "/u/postmelee/card.png"),
+    requestJson(conflictFixture.handler, "GET", "/u/postmelee/card.png"),
     requestJson(malformedFixture.handler, "GET", "/u/postmelee/card.png"),
     requestJson(missingLocaleFixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"),
     requestJson(missingLocaleFixture.handler, "GET", "/u/%2F/card.png")
@@ -1196,9 +1213,51 @@ test("maps missing, malformed, and unavailable public media to the same 404", as
     }
   };
 
-  for (const response of responses) {
-    assert.equal(response.status, 404);
+  for (const [index, response] of responses.entries()) {
+    assert.equal(response.status, 404, `response ${index}`);
     assert.deepEqual(response.body, expected);
+    assert.equal(JSON.stringify(response.body).includes("secret"), false);
+  }
+});
+
+test("maps transient and unexpected public media failures to a generic 503", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  const fixtures = [
+    createFixture({
+      mediaStore: wrapMediaStore(baseMediaStore, {
+        async getPublishedCard() {
+          throw createProfileMediaStoreError(
+            PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+            "secret storage endpoint"
+          );
+        }
+      })
+    }),
+    createFixture({
+      mediaStore: wrapMediaStore(baseMediaStore, {
+        async getPublishedCard() {
+          throw new Error("secret unexpected adapter failure");
+        }
+      })
+    })
+  ];
+
+  for (const fixture of fixtures) {
+    const response = await requestJson(
+      fixture.handler,
+      "GET",
+      "/u/postmelee/card.png"
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "5");
+    assert.deepEqual(response.body, {
+      ok: false,
+      error: {
+        code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+        message: "Profile media is temporarily unavailable"
+      }
+    });
     assert.equal(JSON.stringify(response.body).includes("secret"), false);
   }
 });

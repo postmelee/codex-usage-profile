@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import {
+  PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaRevisionKey,
   createProfileMediaS3Client,
   createProfileMediaStableKey,
@@ -121,6 +122,37 @@ test("S3 adapter fails closed when a HEAD references a missing locale revision",
       ifNoneMatch: identity.ko.etag
     }),
     (error) => error.code === "not_found"
+  );
+});
+
+test("S3 adapter classifies malformed stable metadata as invalid", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createTestIdentity();
+  await store.putRevision(identity.en);
+  await store.putRevision(identity.ko);
+  await store.publishRevision({
+    ownerId: identity.ownerId,
+    handle: identity.handle,
+    publicationId: identity.publicationId,
+    representations: {
+      en: { revision: identity.en.revision, etag: identity.en.etag },
+      ko: { revision: identity.ko.revision, etag: identity.ko.etag }
+    }
+  });
+  const stableKey = createProfileMediaStableKey({ handle: identity.handle });
+  client.objects.get(stableKey).Metadata = {
+    kind: "publication",
+    handle: identity.handle
+  };
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.INVALID
   );
 });
 

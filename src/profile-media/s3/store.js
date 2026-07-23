@@ -11,6 +11,7 @@ import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
@@ -47,66 +48,11 @@ export function createS3ProfileMediaStore(options = {}) {
 
   const store = {
     async getPublishedCard(getOptions = {}) {
-      const handle = normalizeHandle(getOptions.handle);
-      const locale = normalizeProfileMediaLocale(getOptions.locale);
-      const publication = await headPublication(handle);
-      if (!publication) return null;
-
-      const representation = publication.representations[locale];
-      const notModified = matchesProfileMediaIfNoneMatch(
-        getOptions.ifNoneMatch,
-        representation.etag
-      );
-      const includeBody = getOptions.includeBody !== false && !notModified;
-      let body = null;
-
-      if (locale !== PROFILE_MEDIA_DEFAULT_LOCALE && !includeBody) {
-        const revision = await headRevision({
-          locale,
-          ownerId: publication.ownerId,
-          revision: representation.revision
-        });
-        if (!revision) {
-          throw createProfileMediaStoreError("not_found", "media revision not found");
-        }
-        if (revision.etag !== representation.etag) {
-          throw createProfileMediaStoreError(
-            "conflict",
-            "media revision ETag does not match publication metadata"
-          );
-        }
-      }
-
-      if (includeBody) {
-        const key = locale === PROFILE_MEDIA_DEFAULT_LOCALE
-          ? publication.stableKey
-          : representation.revisionKey;
-        const response = await send(new GetObjectCommand({
-          Bucket: bucket,
-          IfMatch: locale === PROFILE_MEDIA_DEFAULT_LOCALE
-            ? publication.storageEtag
-            : undefined,
-          Key: key
-        }), "read published media");
-        const responseBody = await readSdkBody(response.Body);
-        if (locale === PROFILE_MEDIA_DEFAULT_LOCALE) {
-          assertResponseMediaHeaders(response);
-          body = responseBody;
-        } else {
-          body = revisionRecordFromResponse(response, {
-            body: responseBody,
-            locale,
-            ownerId: publication.ownerId,
-            revision: representation.revision,
-            revisionKey: representation.revisionKey
-          }).body;
-        }
-      }
-
-      return createSelectedPublicationRecord(publication, {
-        body,
-        locale,
-        notModified
+      return readPublishedCard({
+        handle: normalizeHandle(getOptions.handle),
+        ifNoneMatch: getOptions.ifNoneMatch,
+        includeBody: getOptions.includeBody,
+        locale: normalizeProfileMediaLocale(getOptions.locale)
       });
     },
 
@@ -234,6 +180,86 @@ export function createS3ProfileMediaStore(options = {}) {
 
   return store;
 
+  async function readPublishedCard(getOptions, stableReadAttempt = 0) {
+    const publication = await headPublication(getOptions.handle);
+    if (!publication) return null;
+
+    const representation = publication.representations[getOptions.locale];
+    const notModified = matchesProfileMediaIfNoneMatch(
+      getOptions.ifNoneMatch,
+      representation.etag
+    );
+    const includeBody = getOptions.includeBody !== false && !notModified;
+    let body = null;
+
+    if (getOptions.locale !== PROFILE_MEDIA_DEFAULT_LOCALE && !includeBody) {
+      const revision = await headRevision({
+        locale: getOptions.locale,
+        ownerId: publication.ownerId,
+        revision: representation.revision
+      });
+      if (!revision) {
+        throw createProfileMediaStoreError("not_found", "media revision not found");
+      }
+      if (revision.etag !== representation.etag) {
+        throw createProfileMediaStoreError(
+          "conflict",
+          "media revision ETag does not match publication metadata"
+        );
+      }
+    }
+
+    if (includeBody) {
+      const stableLocale = getOptions.locale === PROFILE_MEDIA_DEFAULT_LOCALE;
+      const key = stableLocale
+        ? publication.stableKey
+        : representation.revisionKey;
+      let response;
+      try {
+        response = await send(new GetObjectCommand({
+          Bucket: bucket,
+          IfMatch: stableLocale ? publication.storageEtag : undefined,
+          Key: key
+        }), "read published media");
+      } catch (error) {
+        if (
+          stableLocale &&
+          error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT
+        ) {
+          if (stableReadAttempt === 0) {
+            return readPublishedCard(getOptions, stableReadAttempt + 1);
+          }
+          throw createProfileMediaStoreError(
+            PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+            "stable media changed repeatedly during read",
+            { cause: error }
+          );
+        }
+        throw error;
+      }
+
+      const responseBody = await readSdkBody(response.Body);
+      if (stableLocale) {
+        assertResponseMediaHeaders(response);
+        body = responseBody;
+      } else {
+        body = revisionRecordFromResponse(response, {
+          body: responseBody,
+          locale: getOptions.locale,
+          ownerId: publication.ownerId,
+          revision: representation.revision,
+          revisionKey: representation.revisionKey
+        }).body;
+      }
+    }
+
+    return createSelectedPublicationRecord(publication, {
+      body,
+      locale: getOptions.locale,
+      notModified
+    });
+  }
+
   async function headRevision(options) {
     const revisionKey = createProfileMediaRevisionKey(options);
     try {
@@ -302,63 +328,78 @@ function publicationMetadata(publication) {
 }
 
 function revisionRecordFromResponse(response, expected) {
-  assertResponseMediaHeaders(response);
-  const metadata = normalizeMetadata(response.Metadata);
-  if (metadata[METADATA_KIND] !== "revision") {
-    throw malformedMetadataError();
-  }
+  try {
+    assertResponseMediaHeaders(response);
+    const metadata = normalizeMetadata(response.Metadata);
+    if (metadata[METADATA_KIND] !== "revision") {
+      throw malformedMetadataError();
+    }
 
-  const record = normalizeProfileMediaRevisionRecord({
-    body: expected.body ?? Buffer.from([1]),
-    cacheControl: response.CacheControl,
-    contentType: response.ContentType,
-    createdAt: requireMetadata(metadata, METADATA_CREATED_AT),
-    etag: quoteDigest(requireMetadata(metadata, METADATA_ETAG)),
-    locale: requireMetadata(metadata, METADATA_LOCALE),
-    ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
-    revision: requireMetadata(metadata, METADATA_REVISION)
-  });
-  if (
-    record.ownerId !== expected.ownerId ||
-    record.locale !== normalizeProfileMediaLocale(expected.locale, { fallback: false }) ||
-    record.revision !== expected.revision ||
-    record.revisionKey !== expected.revisionKey
-  ) {
-    throw malformedMetadataError();
+    const record = normalizeProfileMediaRevisionRecord({
+      body: expected.body ?? Buffer.from([1]),
+      cacheControl: response.CacheControl,
+      contentType: response.ContentType,
+      createdAt: requireMetadata(metadata, METADATA_CREATED_AT),
+      etag: quoteDigest(requireMetadata(metadata, METADATA_ETAG)),
+      locale: requireMetadata(metadata, METADATA_LOCALE),
+      ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
+      revision: requireMetadata(metadata, METADATA_REVISION)
+    });
+    if (
+      record.ownerId !== expected.ownerId ||
+      record.locale !== normalizeProfileMediaLocale(expected.locale, { fallback: false }) ||
+      record.revision !== expected.revision ||
+      record.revisionKey !== expected.revisionKey
+    ) {
+      throw malformedMetadataError();
+    }
+    return {
+      ...record,
+      body: expected.body ? Buffer.from(expected.body) : null,
+      storageEtag: requireStorageEtag(response.ETag)
+    };
+  } catch (error) {
+    if (error?.name === "ProfileMediaStoreError") throw error;
+    throw malformedMetadataError(error);
   }
-  return {
-    ...record,
-    body: expected.body ? Buffer.from(expected.body) : null,
-    storageEtag: requireStorageEtag(response.ETag)
-  };
 }
 
 function publicationFromHead(response, expected) {
-  assertResponseMediaHeaders(response);
-  const metadata = normalizeMetadata(response.Metadata);
-  if (metadata[METADATA_KIND] !== "publication") throw malformedMetadataError();
+  try {
+    assertResponseMediaHeaders(response);
+    const metadata = normalizeMetadata(response.Metadata);
+    if (metadata[METADATA_KIND] !== "publication") {
+      throw malformedMetadataError();
+    }
 
-  const representations = Object.fromEntries(
-    PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [locale, {
-      etag: quoteDigest(requireMetadata(metadata, `${locale}-etag`)),
-      revision: requireMetadata(metadata, `${locale}-revision`),
-      revisionKey: requireMetadata(metadata, `${locale}-key`)
-    }])
-  );
-  const normalized = normalizeProfileMediaPublicationInput({
-    handle: requireMetadata(metadata, METADATA_HANDLE),
-    ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
-    publicationId: requireMetadata(metadata, METADATA_PUBLICATION_ID),
-    publishedAt: requireMetadata(metadata, METADATA_PUBLISHED_AT),
-    representations
-  });
-  if (normalized.handle !== expected.handle || normalized.stableKey !== expected.stableKey) {
-    throw malformedMetadataError();
+    const representations = Object.fromEntries(
+      PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [locale, {
+        etag: quoteDigest(requireMetadata(metadata, `${locale}-etag`)),
+        revision: requireMetadata(metadata, `${locale}-revision`),
+        revisionKey: requireMetadata(metadata, `${locale}-key`)
+      }])
+    );
+    const normalized = normalizeProfileMediaPublicationInput({
+      handle: requireMetadata(metadata, METADATA_HANDLE),
+      ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
+      publicationId: requireMetadata(metadata, METADATA_PUBLICATION_ID),
+      publishedAt: requireMetadata(metadata, METADATA_PUBLISHED_AT),
+      representations
+    });
+    if (
+      normalized.handle !== expected.handle ||
+      normalized.stableKey !== expected.stableKey
+    ) {
+      throw malformedMetadataError();
+    }
+    return {
+      ...normalized,
+      storageEtag: requireStorageEtag(response.ETag)
+    };
+  } catch (error) {
+    if (error?.name === "ProfileMediaStoreError") throw error;
+    throw malformedMetadataError(error);
   }
-  return {
-    ...normalized,
-    storageEtag: requireStorageEtag(response.ETag)
-  };
 }
 
 function createSelectedPublicationRecord(publication, options) {
@@ -391,7 +432,7 @@ function assertResponseMediaHeaders(response) {
     response.CacheControl !== PROFILE_MEDIA_CACHE_CONTROL
   ) {
     throw createProfileMediaStoreError(
-      "unavailable",
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
       "profile media object has invalid response metadata"
     );
   }
@@ -399,7 +440,10 @@ function assertResponseMediaHeaders(response) {
 
 async function readSdkBody(body) {
   if (!body) {
-    throw createProfileMediaStoreError("unavailable", "profile media object body is missing");
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "profile media object body is missing"
+    );
   }
   if (typeof body.transformToByteArray === "function") {
     const bytes = await body.transformToByteArray();
@@ -417,7 +461,10 @@ async function readSdkBody(body) {
     if (result.byteLength === 0) throw emptyBodyError();
     return result;
   }
-  throw createProfileMediaStoreError("unavailable", "profile media object body is unreadable");
+  throw createProfileMediaStoreError(
+    PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+    "profile media object body is unreadable"
+  );
 }
 
 function sameImmutableRevision(left, right) {
@@ -436,9 +483,16 @@ function mapS3Error(error, operation) {
   if (error?.name === "ProfileMediaStoreError") return error;
   const status = error?.$metadata?.httpStatusCode;
   const code = error?.Code ?? error?.code ?? error?.name;
+  if (code === "NoSuchBucket") {
+    return createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+      `${operation} failed`,
+      { cause: error }
+    );
+  }
   if (
     status === 404 ||
-    ["NotFound", "NoSuchKey", "NoSuchBucket"].includes(code)
+    ["NotFound", "NoSuchKey"].includes(code)
   ) {
     return createProfileMediaStoreError("not_found", "profile media object not found");
   }
@@ -447,7 +501,7 @@ function mapS3Error(error, operation) {
     status === 412 ||
     ["ConditionalRequestConflict", "PreconditionFailed"].includes(code)
   ) {
-    return createProfileMediaStoreError("conflict", "profile media write conflict");
+    return createProfileMediaStoreError("conflict", `${operation} conflict`);
   }
   return createProfileMediaStoreError(
     "unavailable",
@@ -487,15 +541,19 @@ function normalizeHandle(value) {
     .at(-2);
 }
 
-function malformedMetadataError() {
+function malformedMetadataError(cause) {
   return createProfileMediaStoreError(
-    "unavailable",
-    "profile media object metadata is invalid"
+    PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+    "profile media object metadata is invalid",
+    { cause }
   );
 }
 
 function emptyBodyError() {
-  return createProfileMediaStoreError("unavailable", "profile media object body is empty");
+  return createProfileMediaStoreError(
+    PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+    "profile media object body is empty"
+  );
 }
 
 function requirePositiveInteger(value, label) {

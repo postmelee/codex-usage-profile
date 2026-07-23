@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import {
+  PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaRevisionKey,
   createProfileMediaStableKey,
   createS3ProfileMediaStore
@@ -63,6 +64,68 @@ test("stable HEAD and GET failures are unavailable without mutating publication"
   fixture.client.failNext("GetObjectCommand", { key: stableKey });
   await assertUnavailable(() => fixture.store.getPublishedCard({ handle: HANDLE }));
   await assertPreviousPublication(fixture);
+});
+
+test("stable GET retries one concurrent republish and returns one coherent publication", async () => {
+  const fixture = await createPublishedFixture();
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  const next = createRepresentations("next");
+  await fixture.store.putRevision(next.en);
+  await fixture.store.putRevision(next.ko);
+  await fixture.store.publishRevision(
+    publicationInput(next, "publication_next")
+  );
+  const nextStable = fixture.client.snapshotObject(stableKey);
+  await fixture.store.publishRevision(
+    publicationInput(fixture.representations, PREVIOUS_PUBLICATION_ID)
+  );
+  fixture.client.replaceBeforeNextGets(stableKey, [nextStable]);
+
+  const current = await fixture.store.getPublishedCard({ handle: HANDLE });
+
+  assert.equal(current.publicationId, "publication_next");
+  assert.equal(current.etag, next.en.etag);
+  assert.deepEqual(current.body, next.en.body);
+});
+
+test("stable GET maps a repeated conditional read race to unavailable", async () => {
+  const fixture = await createPublishedFixture();
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  const next = createRepresentations("next");
+  await fixture.store.putRevision(next.en);
+  await fixture.store.putRevision(next.ko);
+  await fixture.store.publishRevision(
+    publicationInput(next, "publication_next")
+  );
+  const nextStable = fixture.client.snapshotObject(stableKey);
+  await fixture.store.publishRevision(
+    publicationInput(fixture.representations, PREVIOUS_PUBLICATION_ID)
+  );
+  const previousStable = fixture.client.snapshotObject(stableKey);
+  fixture.client.replaceBeforeNextGets(stableKey, [
+    nextStable,
+    previousStable
+  ]);
+
+  await assert.rejects(
+    () => fixture.store.getPublishedCard({ handle: HANDLE }),
+    (error) =>
+      error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE &&
+      error.message === "stable media changed repeatedly during read"
+  );
+});
+
+test("missing media bucket is unavailable rather than an unpublished object", async () => {
+  const fixture = await createPublishedFixture();
+  fixture.client.failNext("HeadObjectCommand", {
+    key: createProfileMediaStableKey({ handle: HANDLE }),
+    name: "NoSuchBucket",
+    status: 404
+  });
+
+  await assertUnavailable(() => fixture.store.getPublishedCard({
+    handle: HANDLE
+  }));
 });
 
 test("stable DELETE failure keeps the previous public object", async () => {
@@ -166,14 +229,38 @@ class FailureS3Client {
     this.etagSequence = 0;
     this.failures = [];
     this.objects = new Map();
+    this.replacementsBeforeGet = new Map();
   }
 
   failNext(commandName, options = {}) {
-    this.failures.push({ commandName, key: options.key, timeout: false });
+    this.failures.push({
+      commandName,
+      key: options.key,
+      name: options.name ?? "ServiceUnavailable",
+      status: options.status ?? 503,
+      timeout: false
+    });
   }
 
   timeoutNext(commandName, options = {}) {
-    this.failures.push({ commandName, key: options.key, timeout: true });
+    this.failures.push({
+      commandName,
+      key: options.key,
+      name: "ServiceUnavailable",
+      status: 503,
+      timeout: true
+    });
+  }
+
+  replaceBeforeNextGets(key, replacements) {
+    this.replacementsBeforeGet.set(
+      key,
+      replacements.map((object) => this.cloneObject(object))
+    );
+  }
+
+  snapshotObject(key) {
+    return this.cloneObject(this.requireObject(key));
   }
 
   async send(command, options = {}) {
@@ -187,7 +274,7 @@ class FailureS3Client {
       if (failure.timeout) {
         await rejectOnAbort(options.abortSignal);
       }
-      throw s3Error("ServiceUnavailable", 503);
+      throw s3Error(failure.name, failure.status);
     }
 
     if (command instanceof HeadBucketCommand) return {};
@@ -202,6 +289,13 @@ class FailureS3Client {
       return this.responseFor(this.requireObject(input.Key), false);
     }
     if (command instanceof GetObjectCommand) {
+      const replacements = this.replacementsBeforeGet.get(input.Key);
+      if (replacements?.length > 0) {
+        this.objects.set(input.Key, this.cloneObject(replacements.shift()));
+        if (replacements.length === 0) {
+          this.replacementsBeforeGet.delete(input.Key);
+        }
+      }
       const object = this.requireObject(input.Key);
       if (input.IfMatch && input.IfMatch !== object.ETag) {
         throw s3Error("PreconditionFailed", 412);
@@ -234,6 +328,14 @@ class FailureS3Client {
       ContentType: input.ContentType,
       ETag: `"storage-${this.etagSequence}"`,
       Metadata: { ...input.Metadata }
+    };
+  }
+
+  cloneObject(object) {
+    return {
+      ...object,
+      Body: Buffer.from(object.Body),
+      Metadata: { ...object.Metadata }
     };
   }
 
