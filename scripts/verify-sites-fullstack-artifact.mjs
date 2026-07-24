@@ -40,11 +40,7 @@ export async function verifySitesFullStackArtifact(options = {}) {
   await requireFile(hostingPath, "Sites hosting manifest");
 
   const hosting = JSON.parse(await readFile(hostingPath, "utf8"));
-  if (hosting.d1 !== null || hosting.r2 !== null || "project_id" in hosting) {
-    throw new Error(
-      "Pre-hosted Sites manifest must keep d1/r2 null and omit project_id"
-    );
-  }
+  const hostingMode = validateHostingManifest(hosting);
 
   const migrationFiles = (await listFiles(migrationsDirectory))
     .filter((path) => path.endsWith(".sql"));
@@ -110,6 +106,7 @@ export async function verifySitesFullStackArtifact(options = {}) {
     clientFileCount: clientFiles.length,
     fontFileCount: fontFiles.length,
     hostingPath,
+    hostingMode,
     migrationFileCount: migrationFiles.length,
     outputDirectory,
     wasmFileCount: wasmFiles.length,
@@ -193,6 +190,37 @@ async function requireFile(path, label) {
   }
 }
 
+function validateHostingManifest(hosting) {
+  const keys = Object.keys(hosting).sort();
+  if (
+    keys.length === 2 &&
+    keys[0] === "d1" &&
+    keys[1] === "r2" &&
+    hosting.d1 === null &&
+    hosting.r2 === null
+  ) {
+    return "pre-hosted";
+  }
+
+  if (
+    keys.length === 3 &&
+    keys[0] === "d1" &&
+    keys[1] === "project_id" &&
+    keys[2] === "r2" &&
+    typeof hosting.project_id === "string" &&
+    hosting.project_id.trim() !== "" &&
+    hosting.d1 === "DB" &&
+    hosting.r2 === "PROFILE_MEDIA"
+  ) {
+    return "hosted";
+  }
+
+  throw new Error(
+    "Sites manifest must be either unprovisioned or use the approved " +
+    "project_id/DB/PROFILE_MEDIA linkage"
+  );
+}
+
 const invokedPath = process.argv[1]
   ? pathToFileURL(resolve(process.argv[1])).href
   : null;
@@ -204,6 +232,7 @@ if (invokedPath === import.meta.url) {
     });
     console.log(JSON.stringify({
       clientFileCount: result.clientFileCount,
+      hostingMode: result.hostingMode,
       migrationFileCount: result.migrationFileCount,
       ok: true,
       workerCompressedBytes: result.workerCompressedBytes,

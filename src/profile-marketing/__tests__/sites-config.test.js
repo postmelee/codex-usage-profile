@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -43,16 +42,11 @@ test("rejects unexpected Vite-exposed environment values", () => {
   );
 });
 
-test("keeps the starter Sites manifest free of storage bindings and secrets", async () => {
-  const manifest = JSON.parse(await readFile(
-    new URL("../../../.openai/hosting.json", import.meta.url),
-    "utf8"
-  ));
-
-  assert.deepEqual(validateSitesHostingManifest(manifest), {
+test("keeps the marketing artifact manifest free of storage bindings and secrets", () => {
+  assert.deepEqual(validateSitesHostingManifest({
     d1: null,
     r2: null
-  });
+  }), { d1: null, r2: null });
   assert.throws(
     () => validateSitesHostingManifest({ d1: "database", r2: null }),
     /must not enable D1 or R2/

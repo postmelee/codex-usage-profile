@@ -1,4 +1,11 @@
-import { copyFile, mkdir, readFile, rename, rm } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 export function sitesArtifactPlugin({ outputDirectory, projectDirectory }) {
@@ -10,7 +17,6 @@ export function sitesArtifactPlugin({ outputDirectory, projectDirectory }) {
     "src/profile-marketing/sites-worker.js"
   );
   const workerOutput = resolve(outputDirectory, "server/index.js");
-  const hostingSource = resolve(projectDirectory, ".openai/hosting.json");
   const hostingOutput = resolve(outputDirectory, ".openai/hosting.json");
   const sampleCardSource = resolve(
     projectDirectory,
@@ -32,7 +38,10 @@ export function sitesArtifactPlugin({ outputDirectory, projectDirectory }) {
       await mkdir(dirname(hostingOutput), { recursive: true });
       await mkdir(dirname(sampleCardOutput), { recursive: true });
       await copyFile(workerSource, workerOutput);
-      await copyFile(hostingSource, hostingOutput);
+      await writeFile(
+        hostingOutput,
+        `${JSON.stringify({ d1: null, r2: null }, null, 2)}\n`
+      );
       await copyFile(sampleCardSource, sampleCardOutput);
 
       const workerContents = await readFile(workerOutput, "utf8");

@@ -13,8 +13,22 @@ test("full-stack artifact verifier accepts the Stage 4 Sites shape", async () =>
   const result = await verifySitesFullStackArtifact({ outputDirectory });
 
   assert.equal(result.clientFileCount, 2);
+  assert.equal(result.hostingMode, "pre-hosted");
   assert.equal(result.migrationFileCount, 2);
   assert.equal(result.workerFileCount, 1);
+});
+
+test("full-stack artifact verifier accepts the approved hosted linkage", async () => {
+  const outputDirectory = await createArtifact({
+    hosting: {
+      project_id: "opaque-sites-project-id",
+      d1: "DB",
+      r2: "PROFILE_MEDIA"
+    }
+  });
+  const result = await verifySitesFullStackArtifact({ outputDirectory });
+
+  assert.equal(result.hostingMode, "hosted");
 });
 
 test("full-stack artifact verifier rejects server-only values in the client", async () => {
@@ -52,7 +66,7 @@ test("full-stack artifact verifier keeps pre-hosted bindings unprovisioned", asy
 
   await assert.rejects(
     () => verifySitesFullStackArtifact({ outputDirectory }),
-    /must keep d1\/r2 null/
+    /approved project_id\/DB\/PROFILE_MEDIA linkage/
   );
 });
 
