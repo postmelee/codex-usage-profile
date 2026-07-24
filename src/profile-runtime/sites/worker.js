@@ -27,8 +27,13 @@ export function createProfileSitesWorker(options = {}) {
           executionContext
         }),
         createBackendApiHandler: options.createBackendApiHandler,
+        config,
         database: config.database,
+        fetchImpl: options.fetchImpl ?? globalThis.fetch,
+        githubClient: options.githubClient,
         media: config.media,
+        profileCardRenderPng: options.profileCardRenderPng,
+        profileCardRendererVersion: options.profileCardRendererVersion,
         rateLimiterOptions: options.rateLimiterOptions
       });
       const hostHandler = createProfileHostAdapter({

@@ -33,6 +33,12 @@ export {
 } from "./renderer.js";
 
 export {
+  WORKER_CARD_RENDERER_VERSION,
+  createWorkerProfileCardRenderer,
+  createWorkerProfileCardSvg
+} from "./worker-renderer.js";
+
+export {
   CARD_LOCALES,
   buildCardViewModel,
   formatCardStreak,

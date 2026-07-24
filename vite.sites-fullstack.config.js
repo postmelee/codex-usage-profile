@@ -9,10 +9,21 @@ import {
 } from "./build/sites-fullstack-vite-plugin.js";
 
 const rootDirectory = fileURLToPath(new URL(".", import.meta.url));
-const outputDirectory = resolve(rootDirectory, "dist-sites-fullstack");
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 export default defineConfig(async () => {
+  const isLocalSmokeBuild =
+    process.env.SITES_FULLSTACK_LOCAL_SMOKE === "1";
+  const outputDirectory = resolve(
+    rootDirectory,
+    isLocalSmokeBuild
+      ? "dist-sites-fullstack-local-smoke"
+      : "dist-sites-fullstack"
+  );
+  const workerEntry = isLocalSmokeBuild
+    ? "./src/profile-runtime/sites/__tests__/_full-stack-worker-harness.js"
+    : "./src/profile-runtime/sites/worker-entry.js";
+
   process.env.WRANGLER_WRITE_LOGS ??= "false";
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
@@ -46,7 +57,7 @@ export default defineConfig(async () => {
             run_worker_first: true
           },
           compatibility_flags: ["nodejs_compat"],
-          main: "./src/profile-runtime/sites/worker.js",
+          main: workerEntry,
           name: "codex-usage-profile-sites-fullstack"
         },
         inspectorPort: false,

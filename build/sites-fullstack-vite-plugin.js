@@ -26,7 +26,7 @@ export function sitesFullStackArtifactPlugin(options = {}) {
       const metadataOutput = resolve(outputDirectory, ".openai");
       const hostingSource = resolve(projectDirectory, ".openai/hosting.json");
       const hostingOutput = resolve(metadataOutput, "hosting.json");
-      const migrationsSource = resolve(projectDirectory, "drizzle");
+      const migrationsSource = resolve(projectDirectory, "db/migrations");
       const migrationsOutput = resolve(metadataOutput, "drizzle");
 
       await rm(metadataOutput, { force: true, recursive: true });

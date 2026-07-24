@@ -65,7 +65,7 @@ test("Sites backend injects the native PROFILE_MEDIA binding adapter", () => {
   assert.equal(typeof dependencies.mediaStore.unpublishCard, "function");
 });
 
-test("Sites backend remains fail-closed until the Stage 4 API factory is present", async () => {
+test("Sites backend remains fail-closed without complete D1/R2 composition", async () => {
   const handler = createProfileSitesBackendHandler({
     database: {
       batch() {},

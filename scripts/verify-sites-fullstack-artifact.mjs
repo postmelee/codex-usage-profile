@@ -5,8 +5,12 @@ import {
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 
 const DEFAULT_OUTPUT_DIRECTORY = resolve("dist-sites-fullstack");
+const MAX_FREE_WORKER_COMPRESSED_BYTES = 3_000_000;
+const gzipAsync = promisify(gzip);
 const FORBIDDEN_CLIENT_PATTERNS = Object.freeze([
   /GITHUB_CLIENT_SECRET/,
   /R2_SECRET_ACCESS_KEY/,
@@ -29,6 +33,7 @@ export async function verifySitesFullStackArtifact(options = {}) {
   );
   const clientDirectory = resolve(outputDirectory, "client");
   const hostingPath = resolve(outputDirectory, ".openai/hosting.json");
+  const migrationsDirectory = resolve(outputDirectory, ".openai/drizzle");
   const indexPath = resolve(clientDirectory, "index.html");
 
   await requireFile(indexPath, "Sites full-stack client index");
@@ -37,7 +42,15 @@ export async function verifySitesFullStackArtifact(options = {}) {
   const hosting = JSON.parse(await readFile(hostingPath, "utf8"));
   if (hosting.d1 !== null || hosting.r2 !== null || "project_id" in hosting) {
     throw new Error(
-      "Stage 1 Sites manifest must keep d1/r2 null and omit project_id"
+      "Pre-hosted Sites manifest must keep d1/r2 null and omit project_id"
+    );
+  }
+
+  const migrationFiles = (await listFiles(migrationsDirectory))
+    .filter((path) => path.endsWith(".sql"));
+  if (migrationFiles.length !== 2) {
+    throw new Error(
+      `Expected two packaged D1 migrations, found ${migrationFiles.length}`
     );
   }
 
@@ -59,7 +72,8 @@ export async function verifySitesFullStackArtifact(options = {}) {
 
   const workerMainPath = resolve(dirname(workerConfigPath), workerConfig.main);
   await requireFile(workerMainPath, "Sites Worker ESM entry");
-  const workerFiles = (await listFiles(dirname(workerConfigPath)))
+  const allWorkerFiles = await listFiles(dirname(workerConfigPath));
+  const workerFiles = allWorkerFiles
     .filter((path) => /\.(?:js|mjs)$/.test(path));
   const workerText = await readTextFiles(workerFiles);
   assertPatternsAbsent(workerText, FORBIDDEN_WORKER_PATTERNS, "Worker artifact");
@@ -69,13 +83,41 @@ export async function verifySitesFullStackArtifact(options = {}) {
     throw new Error("Sites Worker artifact must expose an ESM default export");
   }
 
+  const wasmFiles = allWorkerFiles.filter((path) => path.endsWith(".wasm"));
+  const fontFiles = allWorkerFiles.filter((path) => path.endsWith(".bin"));
+  if (wasmFiles.length !== 1) {
+    throw new Error(`Expected one bundled renderer Wasm, found ${wasmFiles.length}`);
+  }
+  if (fontFiles.length !== 4) {
+    throw new Error(`Expected four bundled renderer fonts, found ${fontFiles.length}`);
+  }
+
+  const deployableWorkerFiles = [
+    ...workerFiles,
+    ...wasmFiles,
+    ...fontFiles
+  ];
+  const workerRawBytes = await sumFileBytes(deployableWorkerFiles);
+  const workerCompressedBytes = await sumGzipBytes(deployableWorkerFiles);
+  if (workerCompressedBytes > MAX_FREE_WORKER_COMPRESSED_BYTES) {
+    throw new Error(
+      `Worker artifact compressed size ${workerCompressedBytes} exceeds ` +
+      `${MAX_FREE_WORKER_COMPRESSED_BYTES}`
+    );
+  }
+
   return Object.freeze({
     clientFileCount: clientFiles.length,
+    fontFileCount: fontFiles.length,
     hostingPath,
+    migrationFileCount: migrationFiles.length,
     outputDirectory,
+    wasmFileCount: wasmFiles.length,
+    workerCompressedBytes,
     workerConfigPath,
     workerFileCount: workerFiles.length,
-    workerMainPath
+    workerMainPath,
+    workerRawBytes
   });
 }
 
@@ -123,6 +165,18 @@ async function readTextFiles(files) {
   return contents.join("\n");
 }
 
+async function sumFileBytes(files) {
+  const contents = await Promise.all(files.map((path) => readFile(path)));
+  return contents.reduce((total, body) => total + body.byteLength, 0);
+}
+
+async function sumGzipBytes(files) {
+  const contents = await Promise.all(files.map(async (path) => (
+    gzipAsync(await readFile(path), { level: 9 })
+  )));
+  return contents.reduce((total, body) => total + body.byteLength, 0);
+}
+
 function assertPatternsAbsent(text, patterns, label) {
   for (const pattern of patterns) {
     if (pattern.test(text)) {
@@ -150,8 +204,11 @@ if (invokedPath === import.meta.url) {
     });
     console.log(JSON.stringify({
       clientFileCount: result.clientFileCount,
+      migrationFileCount: result.migrationFileCount,
       ok: true,
-      workerFileCount: result.workerFileCount
+      workerCompressedBytes: result.workerCompressedBytes,
+      workerFileCount: result.workerFileCount,
+      workerRawBytes: result.workerRawBytes
     }));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

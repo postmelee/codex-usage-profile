@@ -1,7 +1,7 @@
 import { createAccountService } from "./accounts.js";
 import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
-import { createProfileCardService } from "../profile-card/service.js";
+import { createProfileCardServiceCore } from "../profile-card/service-core.js";
 import { createProfilePublicationService } from "../profile-media/publication-service.js";
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
@@ -105,12 +105,13 @@ export function createProfileBackendHttpHandler(options = {}) {
     deviceService,
     createId
   });
-  const cardService = options.cardService ?? createProfileCardService({
+  const cardService = options.cardService ?? createProfileCardServiceCore({
     store,
     accountService,
     now,
     fetchImpl: options.profileCardFetchImpl ?? options.fetchImpl,
     renderPng: options.profileCardRenderPng,
+    rendererVersion: options.profileCardRendererVersion,
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
     cacheEntries: options.profileCardCacheEntries

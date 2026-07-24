@@ -282,6 +282,10 @@ function truncateText(context, text, maxWidth) {
 async function resolveAvatarImage(source) {
   if (!source) return null;
 
+  if (source?.bytes instanceof Uint8Array) {
+    return loadImage(source.bytes);
+  }
+
   if (
     typeof source === "object" &&
     typeof source.width === "number" &&

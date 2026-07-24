@@ -8,11 +8,12 @@ import {
   verifySitesFullStackArtifact
 } from "../verify-sites-fullstack-artifact.mjs";
 
-test("full-stack artifact verifier accepts the Stage 1 Sites shape", async () => {
+test("full-stack artifact verifier accepts the Stage 4 Sites shape", async () => {
   const outputDirectory = await createArtifact();
   const result = await verifySitesFullStackArtifact({ outputDirectory });
 
   assert.equal(result.clientFileCount, 2);
+  assert.equal(result.migrationFileCount, 2);
   assert.equal(result.workerFileCount, 1);
 });
 
@@ -41,7 +42,7 @@ test("full-stack artifact verifier rejects Node-only hosted imports", async () =
   );
 });
 
-test("full-stack artifact verifier keeps Stage 1 bindings unprovisioned", async () => {
+test("full-stack artifact verifier keeps pre-hosted bindings unprovisioned", async () => {
   const outputDirectory = await createArtifact({
     hosting: {
       d1: "DB",
@@ -62,10 +63,11 @@ async function createArtifact(options = {}) {
   const clientDirectory = join(outputDirectory, "client");
   const workerDirectory = join(outputDirectory, "profile-sites");
   const metadataDirectory = join(outputDirectory, ".openai");
+  const migrationsDirectory = join(metadataDirectory, "drizzle");
 
   await mkdir(join(clientDirectory, "assets"), { recursive: true });
   await mkdir(workerDirectory, { recursive: true });
-  await mkdir(metadataDirectory, { recursive: true });
+  await mkdir(migrationsDirectory, { recursive: true });
   await writeFile(
     join(clientDirectory, "index.html"),
     '<script type="module" src="/assets/app.js"></script>'
@@ -79,6 +81,15 @@ async function createArtifact(options = {}) {
     options.workerScript ??
       "const worker={fetch(){return new Response('ok')}};export{worker as default};"
   );
+  await writeFile(join(workerDirectory, "renderer.wasm"), "wasm");
+  for (const name of [
+    "korean-400.bin",
+    "korean-600.bin",
+    "latin-400.bin",
+    "latin-600.bin"
+  ]) {
+    await writeFile(join(workerDirectory, name), `font:${name}`);
+  }
   await writeFile(
     join(workerDirectory, "wrangler.json"),
     JSON.stringify({
@@ -95,6 +106,14 @@ async function createArtifact(options = {}) {
       d1: null,
       r2: null
     })
+  );
+  await writeFile(
+    join(migrationsDirectory, "0001_profile_backend.sql"),
+    "CREATE TABLE owners (id TEXT PRIMARY KEY);"
+  );
+  await writeFile(
+    join(migrationsDirectory, "0002_account_usage_rate_limits.sql"),
+    "CREATE TABLE rate_limits (id TEXT PRIMARY KEY);"
   );
 
   return outputDirectory;
