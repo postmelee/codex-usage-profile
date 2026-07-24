@@ -42,6 +42,29 @@ test("Sites backend requires a real D1-shaped binding for dependency creation", 
   );
 });
 
+test("Sites backend injects the native PROFILE_MEDIA binding adapter", () => {
+  const database = {
+    batch() {},
+    prepare() {}
+  };
+  const media = {
+    get() {},
+    head() {},
+    put() {}
+  };
+  const dependencies = createProfileSitesBackendDependencies({
+    database,
+    media,
+    rateLimiter: { name: "rate-limiter" },
+    store: { name: "store" }
+  });
+
+  assert.equal(dependencies.media, media);
+  assert.equal(typeof dependencies.mediaStore.getPublishedCard, "function");
+  assert.equal(typeof dependencies.mediaStore.inspectStableCard, "function");
+  assert.equal(typeof dependencies.mediaStore.unpublishCard, "function");
+});
+
 test("Sites backend remains fail-closed until the Stage 4 API factory is present", async () => {
   const handler = createProfileSitesBackendHandler({
     database: {

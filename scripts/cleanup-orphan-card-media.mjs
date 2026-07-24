@@ -183,6 +183,16 @@ async function readStableReferences(options) {
       throw error;
     }
     const metadata = normalizeMetadata(response.Metadata);
+    if (metadata.kind === "unpublished") {
+      // Native R2 uses a stable tombstone because R2 delete has no storage
+      // precondition. It intentionally protects no immutable revision and is
+      // never itself a cleanup candidate.
+      stableCount += 1;
+      continue;
+    }
+    if (metadata.kind !== undefined && metadata.kind !== "publication") {
+      throw new Error("stable media metadata kind is invalid");
+    }
     for (const locale of ["en", "ko"]) {
       const revisionKey = metadata[`${locale}-key`];
       if (

@@ -71,13 +71,16 @@ GitHub Issue: [#49](https://github.com/postmelee/codex-usage-profile/issues/49)
 
 ### native R2와 HTTP ETag
 
-- native adapter는 Worker `R2Bucket` binding의 `head`, `get`, `put`, `delete`만 사용한다. access key, S3 endpoint와 AWS SDK를 hosted path에서 읽지 않는다.
+- native adapter는 Worker `R2Bucket` binding의 `head`, `get`, `put`만 사용한다. R2 `delete`에는 storage precondition이 없으므로 stable publication의 경쟁 안전한 상태 전환에 사용하지 않는다. access key, S3 endpoint와 AWS SDK를 hosted path에서 읽지 않는다.
 - immutable revision key와 stable public key는 media contract v2를 유지한다.
   - immutable: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
   - stable: `cards/v2/public/{handle}/card.png`
 - application ETag는 최종 PNG SHA-256 base64url digest를 quote한 값으로 유지한다. R2 storage ETag는 `onlyIf` 등 storage conditional operation에만 사용한다.
 - R2 binding에 server-side copy가 없으면 작은 immutable PNG를 bounded `get`한 뒤 stable `put`으로 materialize한다. stable metadata에 publication id와 `en`/`ko` pointer/application ETag를 함께 기록한다.
-- stable update 경쟁은 expected publication/owner visibility revision과 storage precondition으로 검출한다. bounded retry가 소진되면 `unavailable`로 반환하며 이전 stable object를 잘못된 새 publication으로 간주하지 않는다.
+- stable update와 unpublish 경쟁은 expected publication/owner visibility revision과 storage precondition으로 검출한다. unpublish와 structured commit 실패 보상은 직전에 확인하거나 쓴 storage ETag가 일치할 때만 stable key를 tombstone object로 조건부 교체한다. 기존 public publication 복구도 자신이 쓴 tombstone ETag가 그대로일 때만 허용한다.
+- tombstone은 명시적인 unpublished metadata와 빈 body를 가진 stable object다. public read는 tombstone/private/missing을 동일한 unpublished 결과로 취급하며, 이후 publish는 tombstone의 storage ETag를 조건으로 정상 PNG로 교체한다. immutable revision은 유지한다.
+- native R2 경로는 unconditional delete가 다른 동시 요청의 stable object를 제거할 수 있으므로 MVP에서 stable tombstone을 물리 삭제하지 않는다. public card는 R2 bucket URL이 아니라 Worker route로만 서빙하며 cleanup 도구는 stable tombstone을 orphan으로 간주하지 않는다.
+- bounded retry가 소진되거나 storage 보상에 실패하면 `unavailable`/repair-required로 반환하며 이전 stable object를 잘못된 새 publication으로 간주하지 않는다.
 - private preview `/api/profile/card.png`는 계속 on-demand/no-store이며 R2에 쓰지 않는다. public route는 stable object만 읽고 missing/unpublished/private는 동일한 404를 유지한다.
 
 ### Worker renderer 수용 기준
@@ -267,10 +270,11 @@ Task #49 Stage 2: D1 store와 named atomic operation POC
 - `putRevision`은 create-only conditional write 후 same bytes/application ETag를 멱등으로, 다른 bytes/metadata를 conflict로 판정한다.
 - `publishRevision`은 referenced `en`/`ko` immutable object를 먼저 검증하고 `en` body를 stable key에 materialize한다. stable custom metadata에 두 representation pointer, application ETag, publication id와 published timestamp를 기록한다.
 - `getPublishedCard`는 stable metadata를 검증하고 `en`은 stable body, `ko`는 immutable pointer body를 반환한다. `If-None-Match`, HEAD body 생략과 304는 application ETag만 사용한다.
-- `unpublishCard`는 stable key만 idempotent 삭제하고 immutable revision을 보존한다.
-- publication service는 R2 I/O와 D1 CAS를 분리한다. 최초 publish에서 structured commit 실패 시 자신이 쓴 stable publication만 조건부 제거하고, 기존 public stable을 경쟁 요청의 결과로 오인해 삭제하지 않는다.
-- public→private는 stable 삭제 성공과 D1 visibility CAS의 순서를 failure matrix로 검증한다. 보상 후에도 일관성을 복구할 수 없는 case는 generic 503과 repair-required internal result로 fail closed한다.
-- existing S3 adapter/common tests를 계속 통과시키고 hosted import graph에는 `@aws-sdk/client-s3`가 들어오지 않게 한다.
+- `unpublishCard`는 stable key를 현재 storage ETag가 일치할 때만 tombstone으로 교체하고 immutable revision을 보존한다. 이미 tombstone/missing이면 unpublished 멱등 결과를 반환한다.
+- publication service는 R2 I/O와 D1 CAS를 분리한다. 최초 publish에서 structured commit 실패 시 자신이 쓴 stable publication의 storage ETag가 그대로일 때만 tombstone으로 조건부 교체하고, 기존 또는 경쟁 요청의 stable object를 보상 삭제하지 않는다.
+- public→private는 stable tombstone 전환 성공과 D1 visibility CAS의 순서를 failure matrix로 검증한다. D1 CAS가 실패하면 자신이 쓴 tombstone ETag가 그대로일 때만 이전 PNG를 조건부 복구한다. 보상 후에도 일관성을 복구할 수 없는 case는 generic 503과 repair-required internal result로 fail closed한다.
+- public route가 tombstone을 404로 처리하고 direct R2 public URL을 전제로 하지 않음을 검증한다. cleanup은 stable tombstone을 orphan 삭제 대상으로 삼지 않는다.
+- existing S3 adapter/common tests를 계속 통과시키되 공통 계약의 `unpublishCard` 의미는 물리 삭제가 아니라 public read에서 unpublished 상태가 되는 것으로 정의한다. hosted import graph에는 `@aws-sdk/client-s3`가 들어오지 않게 한다.
 
 ### 검증
 
@@ -291,8 +295,9 @@ git diff --check
 
 ### 중단 조건
 
-- stable materialization 경쟁에서 이전 publication을 잘못 덮거나 다른 요청의 stable object를 보상 삭제할 수 있다.
+- stable materialization·tombstone 경쟁에서 이전 publication을 잘못 덮거나 다른 요청의 stable object를 보상 전환/복구할 수 있다.
 - private/unpublished/missing route가 404로 닫히지 않거나 private preview가 R2에 저장된다.
+- public card가 Worker route를 우회한 direct R2 URL에 의존하거나 stable tombstone을 cleanup 대상으로 처리해야 한다.
 - native R2 adapter를 위해 S3 credential/AWS SDK를 hosted artifact에 포함해야 한다.
 
 ### 커밋

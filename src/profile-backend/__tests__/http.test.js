@@ -1921,6 +1921,7 @@ function wrapMediaStore(base, overrides = {}, calls = null) {
   return Object.fromEntries([
     "getPublishedCard",
     "getRevision",
+    "inspectStableCard",
     "publishRevision",
     "putRevision",
     "unpublishCard"

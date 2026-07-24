@@ -44,12 +44,20 @@ export function createProfileSitesBackendDependencies(options = {}) {
     database,
     ...options.rateLimiterOptions
   });
+  const mediaStore = options.mediaStore ?? (
+    options.media
+      ? createR2BindingProfileMediaStore({ bucket: options.media })
+      : null
+  );
 
-  return Object.freeze({
+  const dependencies = {
     database,
     rateLimiter,
     store
-  });
+  };
+  if (options.media) dependencies.media = options.media;
+  if (mediaStore) dependencies.mediaStore = mediaStore;
+  return Object.freeze(dependencies);
 }
 
 export function createUnavailableProfileSitesBackendHandler() {
@@ -71,3 +79,6 @@ import {
 import {
   createD1ProfileBackendStore
 } from "../../profile-backend/d1/store.js";
+import {
+  createR2BindingProfileMediaStore
+} from "../../profile-media/r2-binding/store.js";

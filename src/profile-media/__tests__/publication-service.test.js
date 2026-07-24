@@ -69,12 +69,12 @@ test("repairs a public publication whose stable metadata is invalid", async () =
   const first = await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
   let failInspection = true;
   const mediaStore = wrapMediaStore(fixture.mediaStore, {
-    async getPublishedCard(options) {
+    async inspectStableCard(options) {
       if (failInspection) {
         failInspection = false;
         throw createProfileMediaStoreError("invalid", "invalid stable metadata");
       }
-      return fixture.mediaStore.getPublishedCard(options);
+      return fixture.mediaStore.inspectStableCard(options);
     }
   });
   const service = createPublicationService({
@@ -143,9 +143,9 @@ test("rolls back private visibility when an immutable write fails", async () => 
   assert.equal(await baseMediaStore.getPublishedCard({ handle: OWNER.handle }), null);
 });
 
-test("removes a newly published stable object when the structured transaction fails", async () => {
+test("hides a newly published stable object when the visibility CAS fails", async () => {
   const fixture = createFixture();
-  failTransactionAfterRunner(fixture.store);
+  failVisibilityUpdate(fixture.store);
 
   await assert.rejects(
     () => fixture.service.publishOwnerCard({ ownerId: OWNER.id }),
@@ -171,7 +171,7 @@ test("records failed publication compensation without exposing its cause", async
     }
   });
   const fixture = createFixture({ mediaStore });
-  failTransactionAfterRunner(fixture.store);
+  failVisibilityUpdate(fixture.store);
 
   await assert.rejects(
     () => fixture.service.publishOwnerCard({ ownerId: OWNER.id }),
@@ -261,16 +261,16 @@ test("keeps public visibility when stable deletion fails", async () => {
   );
 });
 
-test("keeps a deleted stable object absent until unpublish retry converges private", async () => {
+test("restores a public stable object when the private visibility CAS fails", async () => {
   const fixture = createFixture();
   await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
-  failNextTransactionAfterRunner(fixture.store);
+  failNextVisibilityUpdate(fixture.store);
 
   await assert.rejects(
     () => fixture.service.unpublishOwnerCard({ ownerId: OWNER.id }),
     (error) => {
       assert.deepEqual(error.details, {
-        compensation: "not_needed",
+        compensation: "succeeded",
         operation: "unpublish"
       });
       return true;
@@ -280,7 +280,7 @@ test("keeps a deleted stable object absent until unpublish retry converges priva
     fixture.store.getOwnerById(OWNER.id).visibility,
     PROFILE_VISIBILITY.PUBLIC
   );
-  assert.equal(
+  assert.notEqual(
     await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle }),
     null
   );
@@ -288,22 +288,27 @@ test("keeps a deleted stable object absent until unpublish retry converges priva
   const retried = await fixture.service.unpublishOwnerCard({ ownerId: OWNER.id });
 
   assert.equal(retried.visibility, PROFILE_VISIBILITY.PRIVATE);
-  assert.equal(retried.idempotent, true);
+  assert.equal(retried.idempotent, false);
   assert.equal(
     fixture.store.getOwnerById(OWNER.id).visibility,
     PROFILE_VISIBILITY.PRIVATE
   );
 });
 
-test("unpublishes only the stable object and reads the owner first in its transaction", async () => {
+test("unpublishes only stable state and reads the owner before visibility CAS", async () => {
   const fixture = createFixture();
   await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
   const published = await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle });
-  const calls = recordTransactionCalls(fixture.store);
+  const calls = recordVisibilityCalls(fixture.store);
 
   const result = await fixture.service.unpublishOwnerCard({ ownerId: OWNER.id });
 
   assert.equal(calls[0], "getOwnerById");
+  assert.equal(calls.includes("atomic.updateVisibility"), true);
+  assert.equal(
+    calls.indexOf("getOwnerById") < calls.indexOf("atomic.updateVisibility"),
+    true
+  );
   assert.equal(result.visibility, PROFILE_VISIBILITY.PRIVATE);
   assert.equal(await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle }), null);
   for (const locale of ["en", "ko"]) {
@@ -367,6 +372,7 @@ function wrapMediaStore(base, overrides = {}) {
   return {
     getPublishedCard: (...args) => base.getPublishedCard(...args),
     getRevision: (...args) => base.getRevision(...args),
+    inspectStableCard: (...args) => base.inspectStableCard(...args),
     publishRevision: (...args) => base.publishRevision(...args),
     putRevision: (...args) => base.putRevision(...args),
     unpublishCard: (...args) => base.unpublishCard(...args),
@@ -374,40 +380,45 @@ function wrapMediaStore(base, overrides = {}) {
   };
 }
 
-function failTransactionAfterRunner(store) {
-  const transaction = store.transaction.bind(store);
-  store.transaction = (runner) => transaction(async (tx) => {
-    await runner(tx);
-    throw new Error("injected structured commit failure");
-  });
-}
-
-function failNextTransactionAfterRunner(store) {
-  const transaction = store.transaction.bind(store);
-  let shouldFail = true;
-  store.transaction = (runner) => transaction(async (tx) => {
-    const result = await runner(tx);
-    if (shouldFail) {
-      shouldFail = false;
+function failVisibilityUpdate(store) {
+  store.atomic = {
+    ...store.atomic,
+    async updateVisibility() {
       throw new Error("injected structured commit failure");
     }
-    return result;
-  });
+  };
 }
 
-function recordTransactionCalls(store) {
-  const calls = [];
-  const transaction = store.transaction.bind(store);
-  store.transaction = (runner) => transaction((tx) => runner(new Proxy(tx, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value !== "function") return value;
-      return (...args) => {
-        calls.push(String(property));
-        return value.apply(target, args);
-      };
+function failNextVisibilityUpdate(store) {
+  const updateVisibility = store.atomic.updateVisibility.bind(store.atomic);
+  let shouldFail = true;
+  store.atomic = {
+    ...store.atomic,
+    async updateVisibility(command) {
+      if (shouldFail) {
+        shouldFail = false;
+        throw new Error("injected structured commit failure");
+      }
+      return updateVisibility(command);
     }
-  })));
+  };
+}
+
+function recordVisibilityCalls(store) {
+  const calls = [];
+  const getOwnerById = store.getOwnerById.bind(store);
+  const updateVisibility = store.atomic.updateVisibility.bind(store.atomic);
+  store.getOwnerById = (...args) => {
+    calls.push("getOwnerById");
+    return getOwnerById(...args);
+  };
+  store.atomic = {
+    ...store.atomic,
+    updateVisibility(command) {
+      calls.push("atomic.updateVisibility");
+      return updateVisibility(command);
+    }
+  };
   return calls;
 }
 

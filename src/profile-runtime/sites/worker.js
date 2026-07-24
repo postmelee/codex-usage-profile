@@ -28,6 +28,7 @@ export function createProfileSitesWorker(options = {}) {
         }),
         createBackendApiHandler: options.createBackendApiHandler,
         database: config.database,
+        media: config.media,
         rateLimiterOptions: options.rateLimiterOptions
       });
       const hostHandler = createProfileHostAdapter({

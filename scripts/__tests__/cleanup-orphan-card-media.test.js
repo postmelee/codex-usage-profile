@@ -77,6 +77,27 @@ test("apply deletes only the exact candidate after the race guard", async () => 
   );
 });
 
+test("stable tombstones are retained without protecting immutable revisions", async () => {
+  const fixture = createCleanupFixture({ includeTombstone: true });
+
+  const result = await cleanupOrphanCardMedia({
+    bucket: "cards",
+    client: fixture.client,
+    log: () => {},
+    now: NOW
+  });
+
+  assert.equal(result.summary.scannedStable, 2);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.key),
+    [fixture.candidateKey]
+  );
+  assert.equal(
+    fixture.client.deletedKeys.some((key) => key.endsWith("/card.png")),
+    false
+  );
+});
+
 test("CLI accepts only help and explicit apply", () => {
   assert.deepEqual(parseCleanupArgs([]), { apply: false, help: false });
   assert.deepEqual(parseCleanupArgs(["--apply"]), { apply: true, help: false });
@@ -115,20 +136,34 @@ function createCleanupFixture(options = {}) {
   });
 
   const stableKey = "cards/v2/public/owner-a/card.png";
+  const tombstoneKey = "cards/v2/public/retired-owner/card.png";
+  const stableObjects = [
+    { Key: stableKey, LastModified: daysAgo(1) }
+  ];
+  const stableMetadata = new Map([[
+    stableKey,
+    {
+      "en-key": referencedOldKey,
+      "ko-key": koreanKey,
+      "owner-id": "owner_a"
+    }
+  ]]);
+  if (options.includeTombstone) {
+    stableObjects.push({ Key: tombstoneKey, LastModified: daysAgo(1) });
+    stableMetadata.set(tombstoneKey, {
+      handle: "retired-owner",
+      kind: "unpublished",
+      "tombstone-id": "tombstone_1",
+      "unpublished-at": "2026-07-20T00:00:00.000Z"
+    });
+  }
   const client = new CleanupFakeS3Client({
     objects: [
-      { Key: stableKey, LastModified: daysAgo(1) },
+      ...stableObjects,
       ...revisions
     ],
     pageSize: 3,
-    stableMetadata: new Map([[
-      stableKey,
-      {
-        "en-key": referencedOldKey,
-        "ko-key": koreanKey,
-        "owner-id": "owner_a"
-      }
-    ]]),
+    stableMetadata,
     onStableList(callCount, metadata) {
       if (options.referenceCandidateOnRecheck && callCount === 2) {
         metadata.get(stableKey)["en-key"] = candidateKey;

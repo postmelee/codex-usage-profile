@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const PROFILE_MEDIA_STORE_CONTRACT_VERSION = 2;
+export const PROFILE_MEDIA_STORE_CONTRACT_VERSION = 3;
 export const PROFILE_MEDIA_CONTENT_TYPE = "image/png";
 export const PROFILE_MEDIA_CACHE_CONTROL = "public, no-cache, must-revalidate";
 export const PROFILE_MEDIA_DEFAULT_LOCALE = "en";
@@ -11,6 +11,11 @@ export const PROFILE_MEDIA_STORE_ERROR_CODES = Object.freeze({
   NOT_FOUND: "not_found",
   UNAVAILABLE: "unavailable"
 });
+export const PROFILE_MEDIA_STABLE_STATE_KINDS = Object.freeze({
+  MISSING: "missing",
+  PUBLICATION: "publication",
+  UNPUBLISHED: "unpublished"
+});
 
 const PROFILE_MEDIA_REVISION_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PROFILE_MEDIA_HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -18,6 +23,7 @@ const PROFILE_MEDIA_HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const PROFILE_MEDIA_STORE_METHODS = Object.freeze([
   "getPublishedCard",
   "getRevision",
+  "inspectStableCard",
   "publishRevision",
   "putRevision",
   "unpublishCard"
@@ -144,14 +150,17 @@ export function assertProfileMediaStoreContract(store) {
 
 export function createMemoryProfileMediaStore() {
   const revisions = new Map();
-  const publishedByHandle = new Map();
+  const stableByHandle = new Map();
+  let nextStorageRevision = 1;
 
   return {
     async getPublishedCard(options = {}) {
       const handle = requireProfileMediaHandle(options.handle);
-      const publication = publishedByHandle.get(handle);
-      if (!publication) return null;
-      return selectPublishedRepresentation(publication, options);
+      const stable = stableByHandle.get(handle);
+      if (!stable || stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) {
+        return null;
+      }
+      return selectPublishedRepresentation(stable.publication, options);
     },
 
     async getRevision(options = {}) {
@@ -178,10 +187,41 @@ export function createMemoryProfileMediaStore() {
       return { idempotent: false, record: cloneRevisionRecord(record) };
     },
 
+    async inspectStableCard(options = {}) {
+      const handle = requireProfileMediaHandle(options.handle);
+      const stableKey = createProfileMediaStableKey({ handle });
+      const stable = stableByHandle.get(handle);
+      if (!stable) {
+        return {
+          handle,
+          kind: PROFILE_MEDIA_STABLE_STATE_KINDS.MISSING,
+          stableKey,
+          storageEtag: null
+        };
+      }
+      if (stable.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED) {
+        return { ...stable };
+      }
+      return {
+        handle,
+        kind: PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION,
+        publication: selectPublishedRepresentation(stable.publication, {
+          includeBody: options.includeBody === true,
+          locale: PROFILE_MEDIA_DEFAULT_LOCALE
+        }),
+        stableKey,
+        storageEtag: stable.storageEtag
+      };
+    },
+
     async publishRevision(options = {}) {
       const publicationInput = normalizeProfileMediaPublicationInput(options);
-      const previous = publishedByHandle.get(publicationInput.handle);
-      if (previous && previous.ownerId !== publicationInput.ownerId) {
+      const previous = stableByHandle.get(publicationInput.handle);
+      assertExpectedStorageEtag(previous, options);
+      if (
+        previous?.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION &&
+        previous.publication.ownerId !== publicationInput.ownerId
+      ) {
         throw createProfileMediaStoreError(
           "conflict",
           "stable media handle is already published by another owner"
@@ -204,11 +244,18 @@ export function createMemoryProfileMediaStore() {
         representationRecords[locale] = cloneRevisionRecord(revision);
       }
 
-      const published = createPublishedRecord(publicationInput, representationRecords);
-      publishedByHandle.set(
-        publicationInput.handle,
-        clonePublishedRecord(published, { includeRepresentationBodies: true })
-      );
+      const storageEtag = createMemoryStorageEtag(nextStorageRevision++);
+      const published = {
+        ...createPublishedRecord(publicationInput, representationRecords),
+        storageEtag
+      };
+      stableByHandle.set(publicationInput.handle, {
+        kind: PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION,
+        publication: clonePublishedRecord(published, {
+          includeRepresentationBodies: true
+        }),
+        storageEtag
+      });
       return selectPublishedRepresentation(published, {
         locale: PROFILE_MEDIA_DEFAULT_LOCALE
       });
@@ -216,13 +263,33 @@ export function createMemoryProfileMediaStore() {
 
     async unpublishCard(options = {}) {
       const handle = requireProfileMediaHandle(options.handle);
-      const previous = publishedByHandle.get(handle) ?? null;
-      publishedByHandle.delete(handle);
-      return previous
-        ? selectPublishedRepresentation(previous, {
+      const previous = stableByHandle.get(handle) ?? null;
+      assertExpectedStorageEtag(previous, options);
+      if (
+        !previous ||
+        previous.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED
+      ) {
+        return null;
+      }
+
+      const storageEtag = createMemoryStorageEtag(nextStorageRevision++);
+      stableByHandle.set(handle, {
+        handle,
+        kind: PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED,
+        stableKey: createProfileMediaStableKey({ handle }),
+        storageEtag,
+        tombstoneId: requireOptionalKeySegment(
+          options.tombstoneId,
+          `tombstone_memory_${nextStorageRevision - 1}`
+        ),
+        unpublishedAt: normalizeIsoDate(options.unpublishedAt)
+      });
+      return {
+        ...selectPublishedRepresentation(previous.publication, {
           locale: PROFILE_MEDIA_DEFAULT_LOCALE
-        })
-        : null;
+        }),
+        unpublishedStorageEtag: storageEtag
+      };
     }
   };
 }
@@ -325,6 +392,25 @@ function clonePublishedRecord(value, options = {}) {
   return cloned;
 }
 
+function assertExpectedStorageEtag(stable, options) {
+  if (!Object.hasOwn(options, "expectedStorageEtag")) return;
+  const expected = options.expectedStorageEtag;
+  if (expected !== null && (typeof expected !== "string" || expected === "")) {
+    throw new TypeError("expectedStorageEtag must be a non-empty string or null");
+  }
+  const actual = stable?.storageEtag ?? null;
+  if (actual !== expected) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+      "stable media storage revision changed"
+    );
+  }
+}
+
+function createMemoryStorageEtag(revision) {
+  return `"memory-${revision}"`;
+}
+
 function sameImmutableRevision(left, right) {
   return left.etag === right.etag &&
     left.locale === right.locale &&
@@ -397,6 +483,10 @@ function requireKeySegment(value, label) {
     throw new TypeError(`${label} must be a safe object-key segment`);
   }
   return segment;
+}
+
+function requireOptionalKeySegment(value, fallback) {
+  return requireKeySegment(value ?? fallback, "tombstoneId");
 }
 
 function requireNonEmptyString(value, label) {

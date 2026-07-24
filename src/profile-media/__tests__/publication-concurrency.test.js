@@ -17,7 +17,7 @@ import {
   createProfilePublicationService
 } from "../index.js";
 
-test("memory fixture serializes publish followed by publish for one owner", async () => {
+test("memory fixture fences two concurrent publishes for one owner", async () => {
   const fixture = await createMemoryFixture();
   const gate = createGate();
   const service = createPublicationService(fixture, gateMediaPublication(
@@ -32,10 +32,14 @@ test("memory fixture serializes publish followed by publish for one owner", asyn
   assert.equal(gate.calls, 1);
 
   gate.release.resolve();
-  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+  const results = await Promise.allSettled([firstPromise, secondPromise]);
 
-  assert.equal(first.idempotent, false);
-  assert.equal(second.idempotent, true);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal(
+    results.find((result) => result.status === "rejected").reason.code,
+    "media_unavailable"
+  );
   assert.equal(
     fixture.store.getOwnerById(OWNER_A.id).visibility,
     PROFILE_VISIBILITY.PUBLIC
@@ -46,7 +50,7 @@ test("memory fixture serializes publish followed by publish for one owner", asyn
   );
 });
 
-test("memory fixture serializes publish followed by unpublish for one owner", async () => {
+test("memory fixture leaves one coherent result for concurrent publish and unpublish", async () => {
   const fixture = await createMemoryFixture();
   const gate = createGate();
   const service = createPublicationService(fixture, gateMediaPublication(
@@ -61,19 +65,19 @@ test("memory fixture serializes publish followed by unpublish for one owner", as
   assert.equal(gate.calls, 1);
 
   gate.release.resolve();
-  await Promise.all([publishPromise, unpublishPromise]);
-
+  const results = await Promise.allSettled([publishPromise, unpublishPromise]);
+  assert.equal(results.some((result) => result.status === "fulfilled"), true);
+  const owner = fixture.store.getOwnerById(OWNER_A.id);
+  const publication = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER_A.handle
+  });
   assert.equal(
-    fixture.store.getOwnerById(OWNER_A.id).visibility,
-    PROFILE_VISIBILITY.PRIVATE
-  );
-  assert.equal(
-    await fixture.mediaStore.getPublishedCard({ handle: OWNER_A.handle }),
-    null
+    owner.visibility === PROFILE_VISIBILITY.PUBLIC,
+    publication !== null
   );
 });
 
-test("memory fixture serializes submit refresh followed by unpublish", async () => {
+test("memory fixture keeps one coherent state after refresh races with unpublish", async () => {
   const fixture = await createMemoryFixture();
   const initialService = createPublicationService(fixture, fixture.mediaStore);
   await initialService.publishOwnerCard({ ownerId: OWNER_A.id });
@@ -96,16 +100,17 @@ test("memory fixture serializes submit refresh followed by unpublish", async () 
   assert.equal(gate.calls, 1);
 
   gate.release.resolve();
-  await Promise.all([refreshPromise, unpublishPromise]);
+  const results = await Promise.allSettled([refreshPromise, unpublishPromise]);
 
+  const owner = fixture.store.getOwnerById(OWNER_A.id);
+  const publication = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER_A.handle
+  });
   assert.equal(
-    fixture.store.getOwnerById(OWNER_A.id).visibility,
-    PROFILE_VISIBILITY.PRIVATE
+    owner.visibility === PROFILE_VISIBILITY.PUBLIC,
+    publication !== null
   );
-  assert.equal(
-    await fixture.mediaStore.getPublishedCard({ handle: OWNER_A.handle }),
-    null
-  );
+  assert.equal(results.some((result) => result.status === "fulfilled"), true);
 });
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "";
@@ -236,6 +241,7 @@ function wrapMediaStore(base, overrides = {}) {
   return {
     getPublishedCard: (...args) => base.getPublishedCard(...args),
     getRevision: (...args) => base.getRevision(...args),
+    inspectStableCard: (...args) => base.inspectStableCard(...args),
     publishRevision: (...args) => base.publishRevision(...args),
     putRevision: (...args) => base.putRevision(...args),
     unpublishCard: (...args) => base.unpublishCard(...args),
