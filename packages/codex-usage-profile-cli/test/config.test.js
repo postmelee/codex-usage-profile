@@ -2,11 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_SERVICE_ORIGIN,
   DEFAULT_REQUEST_TIMEOUT_MS,
   normalizeRequestTimeout,
   normalizeServiceOrigin,
   resolveServiceOrigin
 } from "../src/config.js";
+
+test("defines the approved Sites production service origin", () => {
+  assert.equal(
+    DEFAULT_SERVICE_ORIGIN,
+    "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site"
+  );
+});
 
 test("resolves service origin by CLI, environment, stored, then default precedence", () => {
   assert.equal(resolveServiceOrigin({

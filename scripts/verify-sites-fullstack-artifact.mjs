@@ -3,12 +3,12 @@ import {
   readFile,
   readdir
 } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 
-const DEFAULT_OUTPUT_DIRECTORY = resolve("dist-sites-fullstack");
+const DEFAULT_OUTPUT_DIRECTORY = resolve("dist");
 const MAX_FREE_WORKER_COMPRESSED_BYTES = 3_000_000;
 const gzipAsync = promisify(gzip);
 const FORBIDDEN_CLIENT_PATTERNS = Object.freeze([
@@ -54,7 +54,11 @@ export async function verifySitesFullStackArtifact(options = {}) {
   const clientText = await readTextFiles(clientFiles);
   assertPatternsAbsent(clientText, FORBIDDEN_CLIENT_PATTERNS, "client artifact");
 
-  const workerConfigPath = await findWorkerConfig(outputDirectory);
+  const serverDirectory = resolve(outputDirectory, "server");
+  const workerConfigPath = resolve(serverDirectory, "wrangler.json");
+  const packagedWorkerEntry = resolve(serverDirectory, "index.js");
+  await requireFile(workerConfigPath, "Sites Worker config");
+  await requireFile(packagedWorkerEntry, "Sites packaged Worker entry");
   const workerConfig = JSON.parse(await readFile(workerConfigPath, "utf8"));
   if (workerConfig.main === undefined) {
     throw new Error("Sites Worker config must declare main");
@@ -66,9 +70,12 @@ export async function verifySitesFullStackArtifact(options = {}) {
     throw new Error("Sites Worker must run before static assets");
   }
 
-  const workerMainPath = resolve(dirname(workerConfigPath), workerConfig.main);
+  const workerMainPath = resolve(serverDirectory, workerConfig.main);
+  if (workerMainPath !== packagedWorkerEntry) {
+    throw new Error("Sites Worker config main must resolve to server/index.js");
+  }
   await requireFile(workerMainPath, "Sites Worker ESM entry");
-  const allWorkerFiles = await listFiles(dirname(workerConfigPath));
+  const allWorkerFiles = await listFiles(serverDirectory);
   const workerFiles = allWorkerFiles
     .filter((path) => /\.(?:js|mjs)$/.test(path));
   const workerText = await readTextFiles(workerFiles);
@@ -116,20 +123,6 @@ export async function verifySitesFullStackArtifact(options = {}) {
     workerMainPath,
     workerRawBytes
   });
-}
-
-async function findWorkerConfig(outputDirectory) {
-  const candidates = (await listFiles(outputDirectory))
-    .filter((path) => path.endsWith("/wrangler.json") ||
-      path === resolve(outputDirectory, "wrangler.json"));
-
-  if (candidates.length !== 1) {
-    throw new Error(
-      `Expected one Sites Worker config, found ${candidates.length}`
-    );
-  }
-
-  return candidates[0];
 }
 
 async function listFiles(directory) {

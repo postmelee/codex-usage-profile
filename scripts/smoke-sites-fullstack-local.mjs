@@ -31,7 +31,7 @@ const OUTPUT_ROOT = resolve(
 );
 const WORKER_ROOT = resolve(
   OUTPUT_ROOT,
-  "codex_usage_profile_sites_fullstack"
+  "server"
 );
 const CLIENT_ROOT = resolve(OUTPUT_ROOT, "client");
 

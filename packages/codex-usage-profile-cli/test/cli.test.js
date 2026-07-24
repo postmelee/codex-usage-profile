@@ -6,6 +6,7 @@ import {
   parseCliArgs,
   runCli
 } from "../src/cli.js";
+import { DEFAULT_SERVICE_ORIGIN } from "../src/config.js";
 import { ServiceClientError } from "../src/service-client.js";
 
 test("prints help and version without loading credentials", async () => {
@@ -16,7 +17,57 @@ test("prints help and version without loading credentials", async () => {
   assert.equal(await runCli(["--version"], version), 0);
   assert.match(help.stdout.value, /login/);
   assert.match(help.stdout.value, /submit/);
+  assert.match(help.stdout.value, new RegExp(DEFAULT_SERVICE_ORIGIN));
   assert.equal(version.stdout.value, `${CLI_VERSION}\n`);
+});
+
+test("uses the production service by default without weakening overrides", async () => {
+  const observedOrigins = [];
+  const createClient = ({ serviceOrigin }) => {
+    observedOrigins.push(serviceOrigin);
+    return {};
+  };
+  const loginWithDeviceCode = async ({ serviceOrigin }) => {
+    observedOrigins.push(serviceOrigin);
+  };
+  const defaultIo = createIo({
+    env: {},
+    credentialStore: createMemoryCredentialStore(),
+    createClient,
+    loginWithDeviceCode
+  });
+  const environmentIo = createIo({
+    env: {
+      CODEX_USAGE_PROFILE_URL: "https://environment.example.test"
+    },
+    credentialStore: createMemoryCredentialStore(),
+    createClient,
+    loginWithDeviceCode
+  });
+  const cliIo = createIo({
+    env: {
+      CODEX_USAGE_PROFILE_URL: "https://environment.example.test"
+    },
+    credentialStore: createMemoryCredentialStore(),
+    createClient,
+    loginWithDeviceCode
+  });
+
+  assert.equal(await runCli(["login"], defaultIo), 0);
+  assert.equal(await runCli(["login"], environmentIo), 0);
+  assert.equal(await runCli([
+    "login",
+    "--server",
+    "https://cli.example.test"
+  ], cliIo), 0);
+  assert.deepEqual(observedOrigins, [
+    DEFAULT_SERVICE_ORIGIN,
+    DEFAULT_SERVICE_ORIGIN,
+    "https://environment.example.test",
+    "https://environment.example.test",
+    "https://cli.example.test",
+    "https://cli.example.test"
+  ]);
 });
 
 test("parses supported commands and rejects unknown or misplaced options", () => {

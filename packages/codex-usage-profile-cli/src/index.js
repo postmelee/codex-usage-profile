@@ -6,6 +6,7 @@ export {
 } from "./cli.js";
 
 export {
+  DEFAULT_SERVICE_ORIGIN,
   DEFAULT_REQUEST_TIMEOUT_MS,
   MAX_REQUEST_TIMEOUT_MS,
   SERVICE_URL_ENV,

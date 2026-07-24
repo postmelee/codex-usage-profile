@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-sites/
 dist-sites-fullstack/
+dist-sites-fullstack-local-smoke/
 dist-marketing/
 playwright-report/
 test-results/
