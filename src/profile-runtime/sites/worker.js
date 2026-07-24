@@ -145,11 +145,22 @@ export function createSitesAssetHandler(environment = {}) {
       return textResponse("Static asset binding unavailable", 503);
     }
 
+    const pathname = new URL(request.url).pathname;
+    const method = request.method.toUpperCase();
+    if (
+      pathname !== "/" &&
+      ["GET", "HEAD"].includes(method) &&
+      !looksLikeStaticAsset(pathname)
+    ) {
+      const fallbackUrl = new URL(INDEX_PATH, request.url);
+      return environment.ASSETS.fetch(new Request(fallbackUrl, request));
+    }
+
     const response = await environment.ASSETS.fetch(request);
     if (
       response.status !== 404 ||
-      !["GET", "HEAD"].includes(request.method.toUpperCase()) ||
-      looksLikeStaticAsset(new URL(request.url).pathname)
+      !["GET", "HEAD"].includes(method) ||
+      looksLikeStaticAsset(pathname)
     ) {
       return response;
     }

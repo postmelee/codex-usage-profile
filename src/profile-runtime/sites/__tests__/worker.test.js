@@ -86,9 +86,39 @@ test("Sites Worker serves direct assets and SPA fallback from ASSETS", async () 
   assert.equal(missingAssetResponse.status, 404);
   assert.deepEqual(requests, [
     "/assets/app.js",
-    "/settings",
     "/index.html",
     "/assets/missing.css"
+  ]);
+});
+
+test("Sites Worker bypasses provider redirects for SPA deep links", async () => {
+  const requests = [];
+  const environment = {
+    ASSETS: createAssetBinding((request) => {
+      const pathname = new URL(request.url).pathname;
+      requests.push(pathname);
+      if (pathname === "/index.html") {
+        return new Response("<main>profile app</main>", {
+          headers: { "content-type": "text/html" }
+        });
+      }
+      return Response.redirect("https://profile.example/", 302);
+    })
+  };
+  const worker = createProfileSitesWorker();
+
+  for (const pathname of ["/device?user_code=ABCD-1234", "/profile", "/settings"]) {
+    const response = await worker.fetch(
+      new Request(`https://profile.example${pathname}`),
+      environment
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "<main>profile app</main>");
+  }
+  assert.deepEqual(requests, [
+    "/index.html",
+    "/index.html",
+    "/index.html"
   ]);
 });
 
