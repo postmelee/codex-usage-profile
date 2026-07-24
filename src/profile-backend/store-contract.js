@@ -1,11 +1,13 @@
-export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 1;
+import { assertProfileBackendAtomicOperations } from "./atomic-operations.js";
+
+export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 2;
 
 // Store methods may return a value or a Promise. Callers must `await` every
 // method so the same service code works against the synchronous memory/file
-// store and the asynchronous Postgres adapter. `transaction(runner)` runs a
-// read-modify-write block atomically: the memory/file store guarantees
-// all-or-nothing via snapshot/restore, the Postgres adapter via a real
-// transaction with FOR UPDATE on the serialization keys below.
+// store, asynchronous Postgres adapter, and D1 adapter. Multi-record writes
+// are exposed only through store.atomic named operations. Memory/file and
+// Postgres may retain transaction(runner) as an adapter-local compatibility
+// primitive; D1 intentionally does not implement it.
 export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
   "clear",
   "deleteCliToken",
@@ -36,8 +38,7 @@ export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
   "saveOAuthState",
   "saveOwner",
   "saveSession",
-  "saveSubmittedDevice",
-  "transaction"
+  "saveSubmittedDevice"
 ]);
 
 export const PROFILE_BACKEND_STORE_RECORDS = deepFreeze({
@@ -135,6 +136,7 @@ export function assertProfileBackendStoreContract(store) {
     );
   }
 
+  assertProfileBackendAtomicOperations(store.atomic);
   return store;
 }
 

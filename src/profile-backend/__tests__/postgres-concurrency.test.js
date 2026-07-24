@@ -21,7 +21,8 @@ import {
   createCliTokenDigest,
   createCliTokenService,
   createDeviceCodeDigest,
-  createOAuthRuntimeService
+  createOAuthRuntimeService,
+  createTransactionalProfileBackendAtomicOperations
 } from "../index.js";
 import { loadMigrations, migrateUp } from "../postgres/migrate.js";
 import { createPostgresProfileBackendStore } from "../postgres/store.js";
@@ -520,6 +521,7 @@ function withFailingSave(store, methodName) {
       }
     }))
   );
+  failing.atomic = createTransactionalProfileBackendAtomicOperations(failing);
   return failing;
 }
 

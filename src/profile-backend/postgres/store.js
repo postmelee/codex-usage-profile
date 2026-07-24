@@ -4,7 +4,10 @@ import {
   PROFILE_BACKEND_ERROR_CODES,
   ProfileBackendError
 } from "../errors.js";
-import { PROFILE_BACKEND_STORE_SCHEMA_VERSION } from "../store.js";
+import {
+  createTransactionalProfileBackendAtomicOperations
+} from "../atomic-operations.js";
+import { PROFILE_BACKEND_STORE_SCHEMA_VERSION } from "../store-values.js";
 import { loadMigrations } from "./migrate.js";
 import { createPostgresPool } from "./pool.js";
 
@@ -503,6 +506,7 @@ export function createPostgresProfileBackendStore(options = {}) {
     }
   };
 
+  store.atomic = createTransactionalProfileBackendAtomicOperations(store);
   return store;
 }
 

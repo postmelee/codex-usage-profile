@@ -3,7 +3,7 @@ import {
   ProfileBackendError
 } from "./errors.js";
 import { normalizeGitHubIdentity } from "./auth.js";
-import { PROFILE_VISIBILITY } from "./store.js";
+import { PROFILE_VISIBILITY } from "./store-values.js";
 
 const DEFAULT_HANDLE = "user";
 
@@ -36,38 +36,54 @@ export function createAccountService(options = {}) {
 
     async upsertGitHubOwner(identityPayload, upsertOptions = {}) {
       const activeStore = upsertOptions.store ?? store;
-      const identity = normalizeGitHubIdentity(identityPayload);
-      const existingOwner = await activeStore.getOwnerByProviderIdentity(
-        identity.authProvider,
-        identity.providerUserId
+      return activeStore.saveOwner(
+        await prepareGitHubOwnerRecord(activeStore, identityPayload, {
+          ...upsertOptions,
+          now
+        })
       );
-      const ownerId = existingOwner?.id ?? createOwnerId(identity);
-      const handle = await resolveOwnerHandle(activeStore, {
-        ownerId,
-        existingHandle: existingOwner?.handle,
-        requestedHandle: upsertOptions.handle,
-        githubLogin: identity.githubLogin
-      });
-      const nowIso = toIsoString(now());
-      const visibility = normalizeVisibility(
-        upsertOptions.visibility ?? existingOwner?.visibility ?? PROFILE_VISIBILITY.PRIVATE
-      );
+    },
 
-      return activeStore.saveOwner({
-        ...existingOwner,
-        id: ownerId,
-        authProvider: identity.authProvider,
-        providerUserId: identity.providerUserId,
-        githubLogin: identity.githubLogin,
-        displayName: identity.displayName,
-        avatarUrl: identity.avatarUrl,
-        profileUrl: identity.profileUrl,
-        handle,
-        visibility,
-        createdAt: existingOwner?.createdAt ?? nowIso,
-        updatedAt: nowIso
+    prepareGitHubOwner(identityPayload, prepareOptions = {}) {
+      return prepareGitHubOwnerRecord(store, identityPayload, {
+        ...prepareOptions,
+        now
       });
     }
+  };
+}
+
+export async function prepareGitHubOwnerRecord(store, identityPayload, options = {}) {
+  const identity = normalizeGitHubIdentity(identityPayload);
+  const existingOwner = await store.getOwnerByProviderIdentity(
+    identity.authProvider,
+    identity.providerUserId
+  );
+  const ownerId = existingOwner?.id ?? createOwnerId(identity);
+  const handle = await resolveOwnerHandle(store, {
+    ownerId,
+    existingHandle: existingOwner?.handle,
+    requestedHandle: options.handle,
+    githubLogin: identity.githubLogin
+  });
+  const nowIso = toIsoString((options.now ?? (() => new Date()))());
+  const visibility = normalizeVisibility(
+    options.visibility ?? existingOwner?.visibility ?? PROFILE_VISIBILITY.PRIVATE
+  );
+
+  return {
+    ...existingOwner,
+    id: ownerId,
+    authProvider: identity.authProvider,
+    providerUserId: identity.providerUserId,
+    githubLogin: identity.githubLogin,
+    displayName: identity.displayName,
+    avatarUrl: identity.avatarUrl,
+    profileUrl: identity.profileUrl,
+    handle,
+    visibility,
+    createdAt: existingOwner?.createdAt ?? nowIso,
+    updatedAt: nowIso
   };
 }
 

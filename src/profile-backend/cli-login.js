@@ -101,25 +101,12 @@ export function createCliLoginService(options = {}) {
 
       // Only a pending, unexpired challenge can be approved once: the state is
       // re-read under the row lock so a racing approve cannot double-consume.
-      return store.transaction(async (tx) => {
-        const locked = await tx.getCliLoginChallenge(challenge.id);
-        checkChallengeApprovable(locked, nowDate);
-
-        const owner = await tx.getOwnerById(ownerId);
-        if (!owner) {
-          throw new ProfileBackendError(
-            PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
-            "Owner not found"
-          );
-        }
-
-        return tx.saveCliLoginChallenge({
-          ...locked,
-          status: CLI_LOGIN_STATUS.APPROVED,
-          approvedAt: nowDate.toISOString(),
-          ownerId
-        });
+      const result = await store.atomic.approveCliLogin({
+        challengeId: challenge.id,
+        ownerId,
+        now: nowDate.toISOString()
       });
+      return result.challenge;
     },
 
     async exchangeCliLogin(exchangeOptions = {}) {
@@ -129,16 +116,12 @@ export function createCliLoginService(options = {}) {
 
       // Exactly one token is issued for an approved challenge: re-read under the
       // lock and issue + mark exchanged in one transaction.
-      return store.transaction(async (tx) => {
-        const locked = await tx.getCliLoginChallenge(challenge.id);
-        checkChallengeExchangeable(locked, nowDate);
-        return exchangeChallenge({
-          store: tx,
-          tokenService,
-          challenge: locked,
-          label: exchangeOptions.label,
-          nowDate
-        });
+      return exchangeChallenge({
+        store,
+        tokenService,
+        challenge,
+        label: exchangeOptions.label,
+        nowDate
       });
     },
 
@@ -179,16 +162,12 @@ export function createCliLoginService(options = {}) {
       if (challenge.status === CLI_LOGIN_STATUS.APPROVED) {
         return {
           status: CLI_LOGIN_STATUS.APPROVED,
-          ...(await store.transaction(async (tx) => {
-            const locked = await tx.getCliLoginChallenge(challenge.id);
-            checkChallengeExchangeable(locked, nowDate);
-            return exchangeChallenge({
-              store: tx,
-              tokenService,
-              challenge: locked,
-              label: pollOptions.label,
-              nowDate
-            });
+          ...(await exchangeChallenge({
+            store,
+            tokenService,
+            challenge,
+            label: pollOptions.label,
+            nowDate
           }))
         };
       }
@@ -285,24 +264,18 @@ async function getChallengeByDeviceCode(store, rawDeviceCode) {
 }
 
 async function exchangeChallenge({ store, tokenService, challenge, label, nowDate }) {
-  const { token, tokenRecord } = await tokenService.issueCliToken({
+  const prepared = tokenService.prepareCliToken({
     ownerId: challenge.ownerId,
     label: label ?? challenge.label,
-    sourceChallengeId: challenge.id,
-    store
+    sourceChallengeId: challenge.id
   });
-  const exchangedChallenge = await store.saveCliLoginChallenge({
-    ...challenge,
-    status: CLI_LOGIN_STATUS.EXCHANGED,
-    exchangedAt: nowDate.toISOString(),
-    cliTokenId: tokenRecord.id
+  return store.atomic.exchangeCliLogin({
+    challengeId: challenge.id,
+    now: nowDate.toISOString(),
+    token: prepared.token,
+    tokenRecord: prepared.tokenRecord,
+    maxActiveTokens: prepared.maxActiveTokens
   });
-
-  return {
-    token,
-    tokenRecord,
-    challenge: exchangedChallenge
-  };
 }
 
 // Marks an expired challenge EXPIRED (a housekeeping write) then throws if the

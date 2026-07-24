@@ -2,6 +2,10 @@ import {
   createFileProfileBackendStore,
   createProfileBackendHttpHandler
 } from "../profile-backend/index.js";
+import {
+  CARD_RENDERER_VERSION,
+  renderProfileCardPng
+} from "../profile-card/renderer.js";
 import { createMemoryProfileMediaStore } from "../profile-media/index.js";
 import {
   hasGitHubOAuthCredentials,
@@ -34,6 +38,8 @@ export function createProfileRuntimeBackendHandler(options = {}) {
     mediaStore,
     publicBaseUrl: config.publicBaseUrl,
     secureCookies: config.secureCookies,
+    profileCardRenderPng: renderProfileCardPng,
+    profileCardRendererVersion: CARD_RENDERER_VERSION,
     ...backendOptions
   });
 }

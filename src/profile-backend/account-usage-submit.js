@@ -10,8 +10,8 @@ import {
   ProfileBackendError
 } from "./errors.js";
 import { assertNoForbiddenSecrets } from "./security.js";
-import { createSubmittedDeviceService } from "./devices.js";
-import { createCliTokenService } from "./tokens.js";
+import { normalizeSubmitDeviceMetadata } from "./devices.js";
+import { createCliTokenService, defaultCreateId } from "./tokens.js";
 
 export const DEFAULT_ACCOUNT_USAGE_BURST_LIMIT = 5;
 export const DEFAULT_ACCOUNT_USAGE_BURST_WINDOW_MS = 10_000;
@@ -29,17 +29,13 @@ export function createAccountUsageSubmitService(options = {}) {
   }
 
   const tokenService = options.tokenService ?? createCliTokenService({ store, now });
-  const deviceService = options.deviceService ?? createSubmittedDeviceService({
-    store,
-    now,
-    createId: options.createId
-  });
+  const createId = options.createId ?? defaultCreateId;
   const rateLimiter = options.rateLimiter ?? createAccountUsageRateLimiter({ now });
 
   return {
     async submitAccountUsage(submitOptions = {}) {
       const { owner, tokenRecord } = await tokenService.verifyCliToken(submitOptions.token);
-      rateLimiter.consume(tokenRecord.id);
+      await rateLimiter.consume(tokenRecord.id);
 
       assertNoForbiddenSecrets(submitOptions.document);
       const document = normalizeSubmittedDocument(submitOptions.document, { now });
@@ -53,56 +49,25 @@ export function createAccountUsageSubmitService(options = {}) {
       // compared, and the usage save plus device touch commit together. The
       // re-read also keeps handle/visibility coherent with a visibility
       // change that committed after the token was verified.
-      return store.transaction(async (tx) => {
-        const currentOwner = (await tx.getOwnerById(owner.id)) ?? owner;
-        const previous = await tx.getLatestUsageByOwnerId(currentOwner.id);
-        const comparison = compareUsageDocuments(previous, document, contentDigest);
-
-        if (comparison === "stale") {
-          throw conflictError("Account usage document is older than the stored revision");
-        }
-        if (comparison === "conflict") {
-          throw conflictError("Account usage timestamp already has different content");
-        }
-
-        const device = await deviceService.upsertSubmittedDevice({
-          ownerId: currentOwner.id,
-          device: submitOptions.device,
-          submittedAt: uploadedAt,
-          store: tx
-        });
-
-        if (comparison === "idempotent") {
-          return {
-            owner: currentOwner,
-            tokenRecord,
-            usageRecord: previous,
-            device,
-            idempotent: true,
-            revision: createAccountUsageRevision(contentDigest)
-          };
-        }
-
-        const usageRecord = await tx.saveLatestUsage({
-          ownerId: currentOwner.id,
-          handle: currentOwner.handle,
-          visibility: currentOwner.visibility,
-          contractVersion: document.contractVersion,
-          capturedAt: document.capturedAt,
-          uploadedAt,
-          contentDigest,
-          usage: projectAccountUsageReadResult(document)
-        });
-
-        return {
-          owner: currentOwner,
-          tokenRecord,
-          usageRecord,
-          device,
-          idempotent: false,
-          revision: createAccountUsageRevision(contentDigest)
-        };
+      const previous = await store.getLatestUsageByOwnerId(owner.id);
+      const result = await store.atomic.submitAccountUsage({
+        ownerId: owner.id,
+        tokenRecord,
+        document,
+        usage: projectAccountUsageReadResult(document),
+        contentDigest,
+        expectedLegacyContentDigest: previous
+          ? resolveStoredContentDigest(previous)
+          : null,
+        uploadedAt,
+        device: normalizeSubmitDeviceMetadata(submitOptions.device),
+        deviceId: createId("submitted_device")
       });
+
+      return {
+        ...result,
+        revision: createAccountUsageRevision(contentDigest)
+      };
     },
 
     async getAccountUsageStatus(statusOptions = {}) {
@@ -195,25 +160,6 @@ function normalizeSubmittedDocument(value, options) {
   }
 }
 
-function compareUsageDocuments(previous, document, contentDigest) {
-  if (!previous) {
-    return "new";
-  }
-
-  const previousTime = new Date(previous.capturedAt).getTime();
-  const nextTime = new Date(document.capturedAt).getTime();
-  if (nextTime < previousTime) {
-    return "stale";
-  }
-  if (nextTime > previousTime) {
-    return "new";
-  }
-
-  return resolveStoredContentDigest(previous) === contentDigest
-    ? "idempotent"
-    : "conflict";
-}
-
 function resolveStoredContentDigest(record) {
   if (typeof record.contentDigest === "string" && record.contentDigest !== "") {
     return record.contentDigest;
@@ -225,13 +171,6 @@ function resolveStoredContentDigest(record) {
     summary: record.usage.summary,
     dailyUsageBuckets: record.usage.dailyUsageBuckets
   });
-}
-
-function conflictError(message) {
-  return new ProfileBackendError(
-    PROFILE_BACKEND_ERROR_CODES.CONFLICT,
-    message
-  );
 }
 
 function rateLimitedError(retryAfterMs) {

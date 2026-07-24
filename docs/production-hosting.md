@@ -2,14 +2,16 @@
 
 ## 결정
 
-MVP 제품의 canonical architecture는 Cloud Run + Neon + R2다.
+M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**다.
 
-- Cloud Run은 제품 프론트엔드, GitHub OAuth, browser session, device login, CLI submit, private card preview와 render를 같은 origin에서 제공한다.
-- Neon은 owner, OAuth state, session, CLI challenge와 token digest, device, latest usage와 visibility 같은 structured record의 durable source다.
-- R2는 공개된 card media만 제공한다. private preview와 비공개 사용자의 데이터는 R2에 기록하지 않는다.
-- ChatGPT Sites는 선택적인 marketing mirror다. sample card, 제품 설명, Quickstart와 Cloud Run 이동 CTA만 포함하며 제품 API나 사용자 데이터를 호출하지 않는다.
+- Sites Worker는 제품 frontend, app-owned GitHub OAuth, browser session, device login, CLI submit, private card preview와 public card route를 같은 origin에서 제공한다.
+- D1은 owner, OAuth state, session, CLI challenge/token digest, device, latest Account Usage와 visibility의 durable source다.
+- native R2 binding은 immutable card revision과 stable public card publication만 저장한다. private preview는 session 인증 뒤 on-demand render하며 R2에 저장하지 않는다.
+- Worker-compatible JS/Wasm renderer가 Sites의 hosted card renderer다.
 
-Sites 배포 실패는 MVP release를 막지 않는다. Cloud Run landing이 제품 진입점과 marketing fallback을 모두 담당한다.
+이 결정은 Task #49 Stage 5의 실제 hosted OAuth, CLI, D1, R2와 renderer 검증에 따른 **architecture 적합성 PASS**다. 현재 Stage 5 Site, D1/R2와 test OAuth app은 owner-only 검증 자원이며 production cutover가 아니다. canonical build 전환, production OAuth app/custom domain, production data 경계, monitoring/backup과 공개 access는 별도 migration task에서 승인받는다.
+
+기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
 ## 요청과 신뢰 경계
 
@@ -17,32 +19,48 @@ Sites 배포 실패는 MVP release를 막지 않는다. Cloud Run landing이 제
 browser / CLI
       |
       v
-Cloud Run (canonical HTTPS origin)
+ChatGPT Sites (canonical MVP HTTPS origin)
   |        |
   |        +-- private preview: render on demand
   |
-  +-- Neon: structured account and usage state
+  +-- D1 binding DB: structured account and usage state
   |
-  +-- R2: public immutable revisions + stable public card object
+  +-- native R2 binding PROFILE_MEDIA
+        +-- immutable revisions
+        +-- stable public card / unpublished tombstone
 
-ChatGPT Sites (optional marketing only)
-  +-- full-page CTA --> Cloud Run /
-  +-- no OAuth, session, API, Neon, R2, or user data access
+Fallback:
+Cloud Run (same product/API contract)
+  +-- Neon: structured state
+  +-- S3-compatible R2: public media
 ```
 
-Cloud Run API는 same-origin 제품 경계다. 외부 `Origin`이 포함된 `/api/*` 요청은 기본적으로 거부하며 `Access-Control-Allow-Origin`을 추가하지 않는다. Sites도 Cloud Run credential이나 API를 가져오지 않는다.
+Sites API는 same-origin 제품 경계다. 외부 `Origin`이 포함된 `/api/*` 요청은 기본적으로 거부하며 `Access-Control-Allow-Origin`을 추가하지 않는다. CLI Bearer 요청은 `Origin`을 보내지 않는 별도 protocol이다. fallback Cloud Run도 같은 HTTP/security contract를 사용한다.
 
-Browser session mutation의 CSRF 방어는 host-only session cookie, `HttpOnly`, production `Secure`, `SameSite=Lax`, explicit cross-origin `Origin` 거부와 `Sec-Fetch-Site: same-origin` 검사를 함께 사용한다. 브라우저가 해당 헤더를 보내지 않는 요청은 기존 session 검증을 계속 적용한다. OAuth state는 일회용이며 `redirect_to`는 `/`로 시작하는 Cloud Run local path만 허용한다. external URL, protocol-relative URL, backslash와 control character가 포함된 값은 저장하지 않는다.
+Browser session mutation의 CSRF 방어는 host-only session cookie, `HttpOnly`, production `Secure`, `SameSite=Lax`, explicit cross-origin `Origin` 거부와 `Sec-Fetch-Site: same-origin` 검사를 함께 사용한다. 브라우저가 해당 헤더를 보내지 않는 요청은 기존 session 검증을 계속 적용한다. OAuth state는 일회용이며 `redirect_to`는 `/`로 시작하는 same-origin local path만 허용한다. external URL, protocol-relative URL, backslash와 control character가 포함된 값은 저장하지 않는다.
 
 CLI Bearer 요청은 browser cookie에 의존하지 않는다. CLI는 `Origin` 헤더를 보내지 않으며 token digest로 owner가 고정된다. raw CLI token과 GitHub OAuth access token은 durable store에 기록하지 않는다. OAuth state ID와 session ID는 인증성 secret으로 분류해 application log, metric과 trace에 기록하지 않는다.
 
+## 판정 근거와 위험 수용
+
+| 기준 | Stage 5 근거 | 판정 |
+|---|---|---|
+| 현재 계정의 증분 인프라 비용 | Sites/D1/R2 생성·migration·배포·공개 smoke 과정에서 결제나 plan upgrade 없이 동작 | PASS — 현재 계정/현재 beta 관찰로 한정 |
+| GitHub OAuth와 browser session | 실제 code exchange, GitHub identity, secure session과 logout | PASS |
+| packed CLI와 Account Usage | device approve/exchange, Contract v1 submit, token revoke | PASS |
+| D1 원자성 | real-workerd 5개 named operation 경쟁 test와 hosted duplicate submit/exchange | PASS |
+| native R2 publication | hosted publish/unpublish, GET/HEAD/304/404와 concurrency | PASS |
+| Worker renderer | hosted private/public PNG와 build/runtime 한도 | PASS |
+| secret/private-data 경계 | response/header/client asset와 짧은 오류 log scan | PASS |
+| provider 장애 보상 | local native R2 failure/concurrency suite 통과; managed remote fault injection은 미실행 | 승인된 위험 수용 |
+
+managed production bucket에 fault-injection seam을 추가하는 것은 개인·비상업 MVP의 위험과 복잡도를 늘린다. remote R2 장애 주입 공백은 작업지시자가 승인한 위험으로 수용하고, local contract/failure test와 hosted 정상·경쟁 결과를 근거로 사용한다. 공개 cutover task는 provider 장애 시 public route가 generic 503/404로 닫히는지 운영 관찰하고, repair/export 절차를 준비한다.
+
 ## Structured Store Contract
 
-[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider 중립 structured-store 표면과 production adapter의 원자성 요구를 정의한다. memory/file store는 이 표면의 contract fixture로, `transaction(runner)` 스코프를 단일 프로세스 직렬화(스냅샷/복원)로 구현한다. file store는 local 개발과 spike에서만 사용하며 Cloud Run 다중 인스턴스 production store가 아니다.
+[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v2와 production adapter의 다섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다.
 
-production adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다(배포 대상은 Neon). 각 원자 연산의 read-modify-write 전체가 하나의 DB transaction 안에서 실행되고, transaction 내 단일행 조회는 `FOR UPDATE`로 직렬화 키 row를 잠근다. schema는 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)의 versioned migration으로 관리하며, unique constraint 위반은 contract의 `conflict` 오류로 매핑된다.
-
-adapter가 transaction으로 구현하는 연산은 다음과 같다.
+canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1/)의 D1 구현이다. schema와 ordered migration은 [`db/migrations/`](../db/migrations/)에 있고 Sites artifact의 `.openai/drizzle/`에 package된다. D1 adapter는 prepared statement, conditional update와 batch를 사용하며 process memory lock으로 원자성을 보완하지 않는다.
 
 | 연산 | 직렬화 키 | 필수 결과 |
 |---|---|---|
@@ -52,41 +70,72 @@ adapter가 transaction으로 구현하는 연산은 다음과 같다.
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
 
-부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호하며 schema DDL에서 강제된다. 읽기와 목록 API는 owner scope를 우회할 수 없다. CLI token 검증의 `lastUsedAt` touch는 submit transaction 밖에서 실행된다 — 거부된 submit도 token 사용 시도를 기록하는 기존 동작을 보존하기 위한 의도적 경계다.
+부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호한다. 읽기와 목록 API는 owner scope를 우회할 수 없다. shared Account Usage rate limit도 D1 row의 atomic window update를 사용하며 raw token을 key나 record로 저장하지 않는다.
 
-위 다섯 연산은 실 Postgres에서 병렬 중복 소비 거부와 실패 주입 시 부분 commit 부재를 검증하는 test suite로 고정되어 있다(`postgres-store.test.js`, `postgres-concurrency.test.js`, `TEST_DATABASE_URL` 설정 시 실행). production `PROFILE_STORE_MODE=external`은 `NEON_DATABASE_URL`이 없거나 migration이 적용되지 않은 database에 대해 시작을 거부한다.
+위 다섯 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility와 rollback을 검증한다. Stage 5에서는 실제 hosted duplicate submit/exchange도 한 결과만 commit했다.
 
-local file store 스냅샷은 `npm run migrate:seed`(`scripts/migrate-file-store-to-postgres.mjs`)로 Postgres에 one-shot 적재한다. dry-run은 transaction rollback으로 검증만 수행하고, 재실행은 primary-key upsert로 idempotent하며, rollback은 스냅샷에 있는 id만 제거한다. 이 도구는 이전 직후 사용을 전제로 한다.
+fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
 ## Public Media Contract
 
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
-- contract version: `2`
+- contract version: `3`
 - immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
 - stable public object: `cards/v2/public/{handle}/card.png`
 - locale: `en`, `ko`를 하나의 publication metadata로 함께 가리킨다. query가 없거나 지원하지 않는 locale은 `en`으로 fallback한다.
 - content type: `image/png`
 - cache policy: `public, no-cache, must-revalidate`
+- stable state: `publication` 또는 `unpublished` tombstone
 - validation metadata: owner, handle, publication id, locale별 immutable key/revision/application ETag, created/published timestamp
 
 revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted application ETag도 같은 정규화 값을 사용한다. storage ETag는 S3/R2 conditional copy와 body 일관성 검증에만 사용하고 HTTP ETag로 노출하지 않는다.
 
-Publish는 `en`, `ko` immutable revision을 모두 저장·HEAD 검증한 뒤 `en` source를 stable key로 copy하고 locale pointer metadata를 한 번에 교체한다. 같은 revision과 같은 bytes의 재시도는 idempotent다. 같은 revision에 다른 bytes나 ETag를 쓰면 conflict다. immutable write·validation·copy가 실패하면 이전 stable card와 locale metadata를 유지한다.
+canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-binding/)의 native `R2Bucket` 구현이다. `putRevision`은 create-only conditional write를 사용한다. Publish는 `en`, `ko` immutable revision을 검증한 뒤 stable key에 `en` body와 두 locale pointer metadata를 조건부 materialize한다. 같은 revision과 bytes의 재시도는 idempotent이고 다른 bytes/metadata는 conflict다.
 
-`GET|HEAD /u/{handle}/card.png`는 R2-compatible media store만 조회하며 Neon, owner/usage record와 on-demand renderer를 호출하지 않는다. stable 또는 locale revision이 없거나 metadata가 불완전하면 같은 public `404`를 반환한다. R2 provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 Cloud Run에서 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+`GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. stable publication/locale revision이 없거나 stable state가 tombstone이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
 
-기본 `en` GET은 HEAD에서 확인한 storage ETag를 `If-Match`로 사용해 publication metadata와 body가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되어 412가 발생하면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다. `If-Match`를 제거해 서로 다른 publication의 metadata/body를 조합하지 않는다.
+stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
-Public 전환은 두 locale revision과 stable copy를 완료한 뒤 structured visibility를 commit한다. Unpublish는 stable public object만 제거한 뒤 structured visibility를 private으로 commit하며 immutable revision은 retention 대상으로 남긴다. delete 실패는 public visibility를 유지한다. delete 성공 뒤 structured commit이 실패하면 PNG는 `404`로 닫아 두고 다음 unpublish retry가 private으로 수렴한다.
+Public 전환은 두 locale revision과 stable materialization을 완료한 뒤 D1 visibility CAS를 commit한다. Unpublish는 native R2 `delete`의 conditional precondition 부재 때문에 stable object를 물리 삭제하지 않고, 직전 storage ETag가 일치할 때만 tombstone으로 교체한 뒤 D1 visibility를 private으로 commit한다. immutable revision은 retention 대상으로 남는다.
 
-Public Account Usage submit은 usage transaction commit 뒤 별도 owner transaction에서 현재 visibility/latest usage를 다시 읽고 stable publication을 refresh한다. media refresh 실패는 usage commit을 되돌리지 않고 `503 media_unavailable`, `Retry-After: 5`를 반환한다. 같은 document의 exact retry는 idempotent usage 결과로 publication을 다시 시도한다.
+D1 CAS가 실패하면 자신이 쓴 stable publication/tombstone의 storage ETag가 그대로일 때만 조건부 보상한다. 더 최신 publication을 덮거나 tombstone으로 바꾸지 못한다. 보상으로 일관성을 증명할 수 없으면 generic 503과 internal repair-required 결과로 fail closed한다.
+
+Public Account Usage submit은 usage commit 뒤 현재 visibility/latest usage를 다시 읽고 stable publication을 refresh한다. media refresh 실패는 usage commit을 되돌리지 않고 `503 media_unavailable`, `Retry-After: 5`를 반환한다. 같은 document의 exact retry는 idempotent usage 결과로 publication을 다시 시도한다.
+
+fallback S3 adapter도 public HTTP contract는 같지만 stable object를 물리 삭제할 수 있다. provider 내부 보상 방식이 달라도 public/private, application ETag와 404/503 의미는 같아야 한다.
+
+## Hosted Renderer Contract
+
+Sites Worker는 [`worker-renderer.js`](../src/profile-card/worker-renderer.js)의 `@resvg/resvg-wasm` renderer와 bundled Noto Sans KR font를 사용한다.
+
+- output: 결정적 1497×918 PNG
+- locale: `en`, `ko`
+- application revision/ETag: 최종 PNG digest
+- avatar: HTTPS allowlist, timeout/body-size/content-type 제한 뒤 실패 시 initial fallback
+- private preview: on-demand/no-store
+- public card: renderer를 호출하지 않고 R2 stable publication만 조회
+
+native `@napi-rs/canvas` renderer와 Node runtime은 Cloud Run fallback에서 유지한다. 두 renderer는 byte-identical일 필요는 없지만 같은 정보 구조, locale, 크기와 가독성을 유지한다.
 
 ## Runtime Configuration
 
-실제 값은 Secret Manager 또는 배포 플랫폼 설정에 저장하며 저장소와 image에 포함하지 않는다.
+실제 값은 Sites runtime environment 또는 fallback Secret Manager에 저장하며 저장소와 build artifact에 포함하지 않는다. `.openai/hosting.json`에는 opaque `project_id`와 logical D1/R2 binding 이름만 기록한다.
 
-### 현재 runtime 값
+### Sites canonical 값
+
+| 설정·binding | 분류 | 설명 |
+|---|---|---|
+| `DB` | D1 binding | structured store, named atomic operation과 shared rate-limit state |
+| `PROFILE_MEDIA` | R2 binding | immutable card revision, stable publication과 tombstone |
+| `GITHUB_CLIENT_ID` | public identifier | app-owned GitHub OAuth application identifier |
+| `GITHUB_CLIENT_SECRET` | secret | OAuth code exchange 전용 server secret |
+| request origin | derived public config | canonical origin과 OAuth callback/public card URL 기준 |
+| `ASSETS` | Sites binding | built frontend asset과 SPA fallback |
+
+Sites hosted runtime은 S3 access key, `NEON_DATABASE_URL`, `R2_*`, `PORT`, `HOST`와 filesystem path를 요구하지 않는다. D1/R2 migration과 logical binding은 saved version package와 Sites linkage로 관리한다.
+
+### Cloud Run fallback runtime 값
 
 | 설정 | 분류 | 설명 |
 |---|---|---|
@@ -103,7 +152,7 @@ Public Account Usage submit은 usage transaction commit 뒤 별도 owner transac
 
 `PROFILE_STORE_FILE`은 local/spike 전용이다. production persistent disk나 backup 대체물로 사용하지 않는다.
 
-### Postgres/Neon adapter 값
+### Cloud Run fallback Postgres/Neon 값
 
 | 설정 | 분류 | 설명 |
 |---|---|---|
@@ -113,7 +162,7 @@ Public Account Usage submit은 usage transaction commit 뒤 별도 owner transac
 
 connection pool은 인스턴스당 소형(max 4)이고 idle 연결을 빠르게 반환한다. statement timeout은 transaction마다 `SET LOCAL`로 적용해 transaction-mode pooling에서도 유효하다. migration은 instance 부팅 시 자동 실행하지 않으며 배포 단계에서 `npm run migrate:postgres -- up`으로 명시 실행한다(advisory lock으로 동시 실행 직렬화).
 
-### R2/S3-compatible media 값
+### Cloud Run fallback R2/S3-compatible media 값
 
 | 설정 | 분류 | 설명 |
 |---|---|---|
@@ -128,79 +177,102 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 ## Startup, Health, Cache, Rollback
 
-1. Cloud Run process는 `0.0.0.0:$PORT`에서 시작하고 malformed canonical origin, production file/memory store, 누락된 `NEON_DATABASE_URL` 또는 불완전한 `R2_*`를 startup 전에 거부한다.
-2. `/healthz`는 process liveness만 확인하며 Neon/R2를 변경하지 않고 credential, store path와 payload를 노출하지 않는다.
-3. dependency readiness는 liveness와 분리되어 있다. runtime이 직접 생성한 Postgres store와 R2 media store는 startup 시 각각 migration 적용 상태와 bucket 접근을 검증하고, 둘 중 하나라도 실패하면 listen하지 않는다.
-4. public stable card는 ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 항상 최신 published revision을 가리킨다.
-5. application rollback은 이전 Cloud Run revision으로 되돌린다. DB migration은 최소 한 application rollback 구간 동안 backward compatible해야 한다.
-6. R2 publish 실패 시 이전 stable object를 유지한다. unpublish 실패를 성공으로 응답하지 않는다.
-7. Sites를 배포하지 못하거나 철회해도 Cloud Run `/`을 그대로 canonical landing으로 사용한다. Sites fallback 때문에 Cloud Run CORS나 cookie scope를 확대하지 않는다.
+1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
+2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
+3. `/healthz`는 binding existence만 숨김없이 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
+4. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
+5. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
+6. application rollback은 이전 saved version deployment로 수행한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
+7. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
+8. fallback 전환 시 기존 Cloud Run artifact를 배포하고 Neon/S3-compatible R2 설정을 연결한다. fallback 때문에 Sites 또는 Cloud Run의 CORS/cookie scope를 확대하지 않는다.
+
+Cloud Run fallback은 계속 `0.0.0.0:$PORT`, production file/memory store 거부, explicit migration, dependency readiness와 previous revision rollback 계약을 유지한다.
+
+## 비용·한도와 stop/fallback 조건
+
+Task #49에서 현재 ChatGPT 유료 계정의 Sites, D1과 R2 linkage·migration·배포·공개 smoke는 별도 결제나 plan upgrade 없이 완료됐다. 이 문서의 “증분 비용 0원”은 해당 계정과 당시 Sites beta에서 관찰한 결과이지 장기 가격·무제한 quota 보장이 아니다.
+
+다음 중 하나가 발생하면 신규 공개/submit을 중단하고 Site를 owner-only 또는 maintenance 상태로 전환한 뒤 Cloud Run fallback을 평가한다.
+
+- 별도 유료 plan, 결제수단 또는 자동 초과 과금 활성화를 요구한다.
+- Worker/D1/R2 quota 부족으로 정상 login, submit, private preview 또는 stable card serving을 유지할 수 없다.
+- Sites beta 정책 변경으로 app-owned GitHub OAuth, public CLI API 또는 required binding을 지원하지 않는다.
+- 반복되는 provider failure에서 public/private fail-closed 계약이나 data export/복구 가능성을 보장할 수 없다.
+- production monitoring에서 비용 0원 조건 또는 개인 프로젝트의 운영 한도를 벗어나는 사용량 증가가 확인된다.
+
+MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자가 늘면 architecture와 hosting channel을 점진적으로 재평가한다. 자동 유료 전환은 허용하지 않는다.
 
 ## Data Retention, Backup, PII 최소화
 
-structured store의 기본 정책이다. 세부 보존 기간과 자동화는 Cloud Run 배포 task(#43)에서 운영 값과 함께 확정한다.
+structured store의 기본 정책이다. 세부 보존 기간, D1 export/backup과 자동화는 Sites MVP migration task에서 운영 값과 함께 확정한다.
 
 ### 저장 데이터와 PII 최소화
 
 - 저장하는 개인 식별 정보는 GitHub 공개 identity(login, display name, avatar/profile URL, provider user id)와 owner가 선택한 handle로 한정한다. usage 문서는 analyzer 계약상 identity-free다.
-- raw CLI token, raw device code, GitHub OAuth access token은 저장하지 않는다. schema에 해당 컬럼이 존재하지 않으며(digest 컬럼만 존재), 실 flow가 남긴 전체 상태에 raw 값이 없음을 test로 고정했다(`postgres-concurrency.test.js`의 secret scan과 column allowlist).
+- raw CLI token, raw device code, GitHub OAuth access token은 저장하지 않는다. D1/Postgres schema에는 digest와 record metadata만 있고, local/hosted flow와 client artifact scan으로 raw credential 비저장을 검증한다.
 - usage와 snapshot은 owner당 latest 1건만 저장한다. 시계열 히스토리를 축적하지 않는 것 자체가 1차 데이터 최소화 장치다.
 
 ### Retention 기본 정책
 
-- expired/consumed OAuth state, expired CLI challenge, expired/revoked session과 token 행은 만료 시점 이후 인증에 사용될 수 없으나 행 자체는 남는다. 타임스탬프는 ISO-8601 UTC text로 사전순 비교가 시간순과 일치하므로, 운영 정리는 `DELETE ... WHERE expires_at < $now` 형태의 명시적 작업으로 수행한다. 자동 정리 주기는 #43에서 확정한다.
+- expired/consumed OAuth state, expired CLI challenge, expired/revoked session과 token 행은 만료 시점 이후 인증에 사용될 수 없으나 행 자체는 남는다. 타임스탬프는 ISO-8601 UTC text로 사전순 비교가 시간순과 일치하므로, D1 운영 정리는 `DELETE ... WHERE expires_at < ?` 형태의 명시적 작업으로 수행한다. 자동 정리 주기는 migration task에서 확정한다.
 - 계정 삭제(owner 및 종속 레코드 일괄 제거)는 아직 제품 기능이 아니다. README 보안 절의 미해결 항목과 동일하게 후속 task로 관리한다.
-- public stable object는 현재 publication이므로 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 모든 key, owner+locale별 최근 5개, 생성 후 90일 이내를 보호한다. 나머지만 orphan candidate다.
+- public stable object와 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 모든 key, owner+locale별 최근 5개, 생성 후 90일 이내를 보호한다. 나머지만 orphan candidate다.
 - `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
 - 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.
-- 자동 cleanup schedule과 90일/최근 5개 운영 값의 조정은 #43에서 배포 비용·복구 목표와 함께 결정한다.
+- 자동 cleanup schedule과 90일/최근 5개 운영 값의 조정은 migration task에서 비용·복구 목표와 함께 결정한다.
 
 ### Backup과 복구
 
-- migration은 최소 한 application rollback 구간 동안 backward compatible해야 한다(위 5항). `npm run migrate:postgres -- down`은 스키마 롤백 경로를 제공한다.
-- database 백업/PITR은 Neon project의 기능을 사용하며 보존 기간은 #43에서 플랜과 함께 확정한다. seeding 도구의 rollback은 백업 대체물이 아니라 이전 직후의 원상 복원 수단이다.
+- D1 migration은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다. production data를 넣기 전에 export/restore smoke와 보존 위치를 확정한다.
+- R2는 stable/tombstone과 immutable revision을 함께 export할 수 있어야 한다. cleanup apply 전에 export/복구 가능성을 확인한다.
+- fallback Postgres의 `npm run migrate:postgres -- down`, Neon backup/PITR와 seeding rollback은 계속 보존하지만 Sites D1 backup을 대신하지 않는다.
+- Stage 5 test owner/집계 usage와 immutable media는 owner-only/private 상태로 유지 중이다. production cutover 전 별도 production resource를 만들거나 승인된 cleanup으로 test data를 제거한다.
 
 ## 검증 상태
 
-### 로컬에서 검증됨
+### 실제 Sites에서 검증됨
 
-- Vite middleware 없는 production Node host와 built static asset 제공
-- `0.0.0.0`, 임의 `PORT`, `/healthz`, API/card routing과 SIGTERM 종료
-- Linux amd64 container에서 native PNG render
-- production file store fail-closed와 generic startup error
-- structured/file-store contract fixture와 device persistence
-- Postgres schema migration up/down/재실행과 clean database bootstrap (로컬 Docker Postgres 17)
-- Postgres adapter의 contract 표면, 5개 atomic operation transaction과 `FOR UPDATE` 직렬화
-- 5개 연산의 병렬 중복 소비 거부와 실패 주입 시 부분 commit 부재
-- raw CLI token/device code/OAuth access token 미저장(secret scan·column allowlist)과 owner scope 격리
-- `PROFILE_STORE_MODE=external` production 기동: 미마이그레이션 DB 거부, 마이그레이션 DB 기동·종료
-- file store 스냅샷의 Postgres seeding(dry-run/실행/idempotent 재실행/rollback)
-- media revision/publish/unpublish memory contract
-- S3-compatible contract v2 command adapter와 immutable/head/copy/get/delete/timeout failure matrix
-- public submit accepted/idempotent refresh, media 503와 exact retry 복구
-- production external media config, bucket readiness, runtime-owned shutdown과 frontend credential/client 부재
-- same-owner publish/publish, publish/unpublish, refresh/unpublish ordering(memory fixture)
-- paginated orphan scan, dry-run 기본값, 90일+최근 5개 guard와 apply 직전 stable race recheck
-- external/protocol-relative OAuth redirect 거부
-- explicit cross-origin API/session mutation 거부와 CORS header 부재
-- sample-only Sites client/Worker/manifest build와 browser preview
-- Sites artifact의 API/account/session/provider secret 및 사용자 fixture 부재
-- configured Cloud Run root CTA와 query, OAuth state, 사용자 식별자 부재
-- Sites 시작 전·실행 중·종료 후 Cloud Run health/API/frontend 독립 동작
-- Cloud Run Home과 Sites mirror의 desktop/mobile marketing layout 비교
+- saved version 2와 production deployment `succeeded`
+- logical D1 `DB`, native R2 `PROFILE_MEDIA`, migration 2개와 Worker renderer composition
+- app-owned GitHub OAuth code exchange, GitHub identity, secure browser session과 logout
+- packed CLI device login/approve/exchange, Contract v1 submit과 token revoke
+- authenticated private preview 200/no-store와 private/public/missing 404
+- publish/unpublish, stable GET/HEAD/If-None-Match 304와 application ETag
+- duplicate usage submit의 accepted/idempotent 결과와 one-token device exchange
+- cross-origin session mutation 거부
+- client asset/response/header secret·private-data 비노출
+- public smoke 종료 뒤 owner-only access, private visibility와 revoked token/session 원복
 
-### 설계만 확정됨
+### local real runtime/contract에서 검증됨
 
-- 실제 Cloud Run remote deploy, ingress, custom domain과 Secret Manager 연결
-- 실제 Neon project 연결(원격 콜드스타트·pooled endpoint 실측)과 백업 보존 기간
-- 실제 R2 bucket/credential 연결, remote object round trip과 Cloud Run cold-start/readiness 실측
-- production observability, alerting, abuse protection와 shared rate limiter
-- ChatGPT Sites remote project 생성과 event/marketing publication
+- real-workerd D1 migration, store, shared rate limit과 다섯 named atomic operation
+- D1 duplicate callback/exchange, concurrent submit/visibility와 failure rollback
+- native R2 contract v3 revision/stable/tombstone, conditional write/read와 failure/concurrency matrix
+- publication service의 D1 CAS 보상, newer publication 비침범과 repair-required fail closed
+- Worker renderer의 1497×918 결정성, `en`/`ko`, avatar success/fallback과 browser/CLI full-stack
+- Worker hosted import graph의 Node/native/Postgres/S3 credential 부재
+- 기존 Node/Cloud Run/Postgres/S3-compatible fallback build와 contract 회귀
+- orphan cleanup dry-run/apply guard와 stable tombstone 보존
 
-로컬 검증은 memory/fake-command media와 로컬 Docker Postgres 기준이다. `TEST_S3_*`가 없으면 실제 S3-compatible round trip은 skip되며 원격 Neon/R2 배포 성공을 의미하지 않는다. 공개 PNG 경로의 Neon/on-demand 의존성은 제거되었지만 provider latency, credential 권한과 bucket lifecycle은 #43 remote 검증이 필요하다.
+### production cutover 전에 남음
+
+- Stage 5 test resource와 분리된 production data/resource 정책 또는 승인된 test data cleanup
+- production OAuth app/custom domain과 최종 public access
+- D1/R2 export, backup/restore와 account deletion/retention job
+- structured log/metric, alerting, abuse protection와 quota/비용 stop signal
+- managed remote provider fault injection을 대신하는 운영 관찰·repair procedure
+
+Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수용이다. 정상 hosted contract와 local failure/concurrency test가 깨지면 PASS 근거도 무효가 된다.
 
 ## 후속 작업
 
-1. Cloud Run Secret Manager에 Neon/R2 secret을 연결하고 실제 bucket round trip, custom domain과 cold-start/readiness를 검증한다.
-2. structured log/metric, shared rate limiter, database/media backup과 cleanup schedule·운영 retention 값을 구성한다.
-3. 선택적으로 Sites marketing mirror를 게시하고 Cloud Run CTA, bundle privacy와 Cloud Run-only fallback을 운영 점검한다.
+별도 Sites MVP migration task에서 다음을 순서대로 수행한다.
+
+1. canonical product build를 Sites full-stack surface로 정리하되 Cloud Run/Neon/S3 fallback artifact와 tests를 삭제하지 않는다.
+2. production OAuth app, custom domain, public access와 CLI 기본 service origin을 exact 값으로 승인받는다.
+3. Stage 5 test D1/R2를 재사용할지 production resource를 분리할지 결정하고, test owner/usage/media cleanup 또는 migration을 수행한다.
+4. D1/R2 export, backup/restore, retention/account deletion과 repair procedure를 구현·검증한다.
+5. log/metric, alerting, abuse/rate-limit 운영 값과 비용·quota stop/fallback runbook을 구성한다.
+6. owner-only candidate → 제한 public smoke → production cutover를 별도 Gate로 진행한다.
+
+GitHub Issue #43과 #46은 Task #49에서 close하거나 수정하지 않았다. migration task를 등록할 때 #43은 Cloud Run fallback deployment로 유지·재범위화하고, #46의 marketing-only 원격 게시 범위는 Sites canonical full-stack 전환과 중복되지 않도록 별도 결정한다.

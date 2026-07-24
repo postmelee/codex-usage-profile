@@ -11,7 +11,7 @@ import {
   slugifyHandleCandidate
 } from "./accounts.js";
 import { assertNoForbiddenSecrets } from "./security.js";
-import { PROFILE_VISIBILITY } from "./store.js";
+import { PROFILE_VISIBILITY } from "./store-values.js";
 import { createCliTokenService } from "./tokens.js";
 import {
   createSubmittedDeviceService,

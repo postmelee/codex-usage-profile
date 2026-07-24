@@ -2,6 +2,7 @@ export {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_STORE_METHODS,
@@ -29,5 +30,6 @@ export {
 } from "./s3/client.js";
 
 export { createS3ProfileMediaStore } from "./s3/store.js";
+export { createR2BindingProfileMediaStore } from "./r2-binding/store.js";
 
 export { createProfilePublicationService } from "./publication-service.js";

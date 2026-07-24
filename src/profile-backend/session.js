@@ -41,6 +41,15 @@ export function createSessionService(options = {}) {
   };
 
   return {
+    prepareSession(createOptions = {}) {
+      return prepareSessionRecord({
+        ...createOptions,
+        now,
+        createId,
+        sessionTtlMs
+      });
+    },
+
     async createSession(createOptions = {}) {
       // `store` override lets a caller run this write inside an open
       // transaction (tx handle) while keeping this service's cookie config.
@@ -55,14 +64,12 @@ export function createSessionService(options = {}) {
         );
       }
 
-      const createdAt = normalizeDate(now());
-      const session = {
-        id: createId("session"),
+      const { createdAt, session } = prepareSessionRecord({
         ownerId,
-        createdAt: createdAt.toISOString(),
-        expiresAt: new Date(createdAt.getTime() + sessionTtlMs).toISOString(),
-        revokedAt: null
-      };
+        now,
+        createId,
+        sessionTtlMs
+      });
       const savedSession = await activeStore.saveSession(session);
 
       return {
@@ -131,6 +138,23 @@ export function createSessionService(options = {}) {
       return serializeExpiredSessionCookie(cookieOptions);
     }
   };
+}
+
+export function prepareSessionRecord(options = {}) {
+  const ownerId = requireNonEmptyString(options.ownerId, "ownerId");
+  const now = options.now ?? (() => new Date());
+  const createId = options.createId ?? defaultCreateId;
+  const sessionTtlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+  const createdAt = normalizeDate(now());
+  const session = {
+    id: createId("session"),
+    ownerId,
+    createdAt: createdAt.toISOString(),
+    expiresAt: new Date(createdAt.getTime() + sessionTtlMs).toISOString(),
+    revokedAt: null
+  };
+
+  return { createdAt, session };
 }
 
 export function serializeSessionCookie(session, options = {}) {

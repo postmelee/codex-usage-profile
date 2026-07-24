@@ -1,5 +1,6 @@
 export const DEFAULT_GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 export const DEFAULT_GITHUB_USER_URL = "https://api.github.com/user";
+export const DEFAULT_GITHUB_USER_AGENT = "codex-usage-profile";
 
 export class GitHubOAuthClientError extends Error {
   constructor(message, options = {}) {
@@ -63,6 +64,7 @@ export function createGitHubOAuthClient(options = {}) {
         headers: {
           accept: "application/vnd.github+json",
           authorization: `Bearer ${requireNonEmptyString(accessToken, "accessToken")}`,
+          "user-agent": DEFAULT_GITHUB_USER_AGENT,
           "x-github-api-version": "2022-11-28"
         },
         method: "GET"

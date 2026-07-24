@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_GITHUB_TOKEN_URL,
+  DEFAULT_GITHUB_USER_AGENT,
   DEFAULT_GITHUB_USER_URL,
   GitHubOAuthClientError,
   createGitHubOAuthClient
@@ -57,6 +58,7 @@ test("exchanges a GitHub authorization code and loads the authenticated user", a
   assert.equal(requests[1].options.method, "GET");
   assert.equal(requests[1].options.headers.authorization, "Bearer gho_test_access_token");
   assert.equal(requests[1].options.headers.accept, "application/vnd.github+json");
+  assert.equal(requests[1].options.headers["user-agent"], DEFAULT_GITHUB_USER_AGENT);
 });
 
 test("surfaces GitHub token exchange errors without leaking the client secret", async () => {

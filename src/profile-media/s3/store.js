@@ -11,6 +11,7 @@ import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
   createProfileMediaRevisionDigest,
@@ -76,6 +77,31 @@ export function createS3ProfileMediaStore(options = {}) {
       }
     },
 
+    async inspectStableCard(inspectOptions = {}) {
+      const handle = normalizeHandle(inspectOptions.handle);
+      const stableKey = createProfileMediaStableKey({ handle });
+      const publication = await headPublication(handle);
+      if (!publication) {
+        return {
+          handle,
+          kind: PROFILE_MEDIA_STABLE_STATE_KINDS.MISSING,
+          stableKey,
+          storageEtag: null
+        };
+      }
+      return {
+        handle,
+        kind: PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION,
+        publication: createSelectedPublicationRecord(publication, {
+          body: null,
+          locale: PROFILE_MEDIA_DEFAULT_LOCALE,
+          notModified: false
+        }),
+        stableKey,
+        storageEtag: publication.storageEtag
+      };
+    },
+
     async putRevision(putOptions = {}) {
       const record = normalizeProfileMediaRevisionRecord(putOptions);
       if (createProfileMediaRevisionDigest(record.body) !== record.revision) {
@@ -112,6 +138,7 @@ export function createS3ProfileMediaStore(options = {}) {
     async publishRevision(publishOptions = {}) {
       const publicationInput = normalizeProfileMediaPublicationInput(publishOptions);
       const previous = await headPublication(publicationInput.handle);
+      assertExpectedStorageEtag(previous, publishOptions);
       if (previous && previous.ownerId !== publicationInput.ownerId) {
         throw createProfileMediaStoreError(
           "conflict",
@@ -160,12 +187,14 @@ export function createS3ProfileMediaStore(options = {}) {
     async unpublishCard(unpublishOptions = {}) {
       const handle = normalizeHandle(unpublishOptions.handle);
       const previous = await store.getPublishedCard({ handle });
+      assertExpectedStorageEtag(previous, unpublishOptions);
       if (!previous) return null;
       await send(new DeleteObjectCommand({
         Bucket: bucket,
+        IfMatch: previous.storageEtag,
         Key: createProfileMediaStableKey({ handle })
       }), "unpublish stable media");
-      return previous;
+      return { ...previous, unpublishedStorageEtag: null };
     },
 
     async verifyReadiness() {
@@ -422,8 +451,23 @@ function createSelectedPublicationRecord(publication, options) {
     ),
     revision: representation.revision,
     revisionKey: representation.revisionKey,
-    stableKey: publication.stableKey
+    stableKey: publication.stableKey,
+    storageEtag: publication.storageEtag
   };
+}
+
+function assertExpectedStorageEtag(stable, options) {
+  if (!Object.hasOwn(options, "expectedStorageEtag")) return;
+  const expected = options.expectedStorageEtag;
+  if (expected !== null && (typeof expected !== "string" || expected === "")) {
+    throw new TypeError("expectedStorageEtag must be a non-empty string or null");
+  }
+  if ((stable?.storageEtag ?? null) !== expected) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+      "stable media storage revision changed"
+    );
+  }
 }
 
 function assertResponseMediaHeaders(response) {

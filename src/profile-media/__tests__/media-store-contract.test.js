@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
+  PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   assertProfileMediaStoreContract,
   createMemoryProfileMediaStore,
@@ -18,7 +19,7 @@ const EN_REVISION = createProfileMediaRevisionDigest(Buffer.from("english-png"))
 const KO_REVISION = createProfileMediaRevisionDigest(Buffer.from("korean-png"));
 
 test("media contract creates owner revision and handle stable keys", () => {
-  assert.equal(PROFILE_MEDIA_STORE_CONTRACT_VERSION, 2);
+  assert.equal(PROFILE_MEDIA_STORE_CONTRACT_VERSION, 3);
   assert.deepEqual(createProfileMediaObjectKeys({
     ownerId: "owner_1",
     handle: "postmelee",
@@ -72,6 +73,7 @@ test("media contract publishes one atomic locale set behind a stable handle", as
   const retry = await store.putRevision(en);
   await store.putRevision(ko);
   const published = await store.publishRevision(createPublication({ en, ko }));
+  const stable = await store.inspectStableCard({ handle: "postmelee" });
 
   assert.equal(first.idempotent, false);
   assert.equal(retry.idempotent, true);
@@ -79,6 +81,17 @@ test("media contract publishes one atomic locale set behind a stable handle", as
   assert.equal(published.contentType, PROFILE_MEDIA_CONTENT_TYPE);
   assert.equal(published.cacheControl, PROFILE_MEDIA_CACHE_CONTROL);
   assert.equal(published.publicationId, "publication_1");
+  assert.equal(stable.kind, PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION);
+  assert.equal(stable.storageEtag, published.storageEtag);
+  await assert.rejects(
+    () => store.unpublishCard({
+      expectedStorageEtag: '"stale"',
+      handle: "postmelee",
+      tombstoneId: "tombstone_stale",
+      unpublishedAt: "2026-07-21T00:02:00.000Z"
+    }),
+    (error) => error.code === "conflict"
+  );
   assert.deepEqual(published.body, Buffer.from("english-png"));
   assert.deepEqual(
     (await store.getPublishedCard({ handle: "postmelee", locale: "ko" })).body,
@@ -150,17 +163,25 @@ test("immutable conflicts and stable handle ownership fail closed", async () => 
   );
 });
 
-test("unpublish removes only the stable publication and retains revisions", async () => {
+test("unpublish hides the stable publication and retains revisions", async () => {
   const store = createMemoryProfileMediaStore();
   const en = createRevision("en", "english-png");
   const ko = createRevision("ko", "korean-png");
   await store.putRevision(en);
   await store.putRevision(ko);
-  await store.publishRevision(createPublication({ en, ko }));
+  const published = await store.publishRevision(createPublication({ en, ko }));
 
-  const removed = await store.unpublishCard({ handle: "postmelee" });
+  const removed = await store.unpublishCard({
+    expectedStorageEtag: published.storageEtag,
+    handle: "postmelee",
+    tombstoneId: "tombstone_1",
+    unpublishedAt: "2026-07-21T00:02:00.000Z"
+  });
+  const stable = await store.inspectStableCard({ handle: "postmelee" });
 
   assert.equal(removed.publicationId, "publication_1");
+  assert.equal(stable.kind, PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED);
+  assert.equal(stable.storageEtag, removed.unpublishedStorageEtag);
   assert.equal(await store.getPublishedCard({ handle: "postmelee" }), null);
   assert.equal(
     (await store.getRevision({

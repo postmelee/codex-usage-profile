@@ -14,7 +14,8 @@ import {
   createCliLoginService,
   createCliTokenService,
   createMemoryProfileBackendStore,
-  createOAuthRuntimeService
+  createOAuthRuntimeService,
+  createTransactionalProfileBackendAtomicOperations
 } from "../index.js";
 import { createProfileCardService } from "../../profile-card/service.js";
 
@@ -290,6 +291,7 @@ test("submitAccountUsage rolls back the device touch when the usage save fails",
     });
     return runner(txProxy);
   });
+  failingStore.atomic = createTransactionalProfileBackendAtomicOperations(failingStore);
 
   const service = createAccountUsageSubmitService({
     store: failingStore,

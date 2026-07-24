@@ -7,6 +7,22 @@ export {
 } from "./store-contract.js";
 
 export {
+  PROFILE_BACKEND_ATOMIC_OPERATION_NAMES,
+  assertProfileBackendAtomicCommand,
+  assertProfileBackendAtomicOperations,
+  assertProfileBackendAtomicResult,
+  createTransactionalProfileBackendAtomicOperations
+} from "./atomic-operations.js";
+
+export {
+  createD1ProfileBackendStore
+} from "./d1/store.js";
+
+export {
+  createD1AccountUsageRateLimiter
+} from "./d1/rate-limiter.js";
+
+export {
   PROFILE_BACKEND_ERROR_CODES,
   PROFILE_MEDIA_RETRY_AFTER_SECONDS,
   ProfileBackendError,
@@ -56,6 +72,7 @@ export {
   createAccountService,
   createOwnerId,
   normalizeVisibility,
+  prepareGitHubOwnerRecord,
   resolveOwnerHandle,
   slugifyHandleCandidate
 } from "./accounts.js";
@@ -124,7 +141,8 @@ export {
   parseCookieHeader,
   readSessionIdFromCookie,
   serializeExpiredSessionCookie,
-  serializeSessionCookie
+  serializeSessionCookie,
+  prepareSessionRecord
 } from "./session.js";
 
 export {

@@ -1837,7 +1837,12 @@ function createFixture(options = {}) {
     accountUsageBodyMaxBytes: options.accountUsageBodyMaxBytes,
     accountUsageRateLimiter: options.accountUsageRateLimiter,
     mediaStore: options.mediaStore,
-    profileCardRenderPng: options.profileCardRenderPng,
+    profileCardRenderPng: options.profileCardRenderPng ??
+      (async (viewModel) => Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+        Buffer.from(`:${viewModel.locale}`)
+      ])),
+    profileCardRendererVersion: "http-test-renderer-1",
     publicationService
   });
 
@@ -1921,6 +1926,7 @@ function wrapMediaStore(base, overrides = {}, calls = null) {
   return Object.fromEntries([
     "getPublishedCard",
     "getRevision",
+    "inspectStableCard",
     "publishRevision",
     "putRevision",
     "unpublishCard"

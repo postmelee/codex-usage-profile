@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-sites/
+dist-sites-fullstack/
 dist-marketing/
 playwright-report/
 test-results/
@@ -8,3 +9,4 @@ test-results/
 .env.*
 !.env.example
 .data/
+.wrangler/
