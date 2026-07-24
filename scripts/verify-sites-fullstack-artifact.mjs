@@ -9,14 +9,15 @@ import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 
 const DEFAULT_OUTPUT_DIRECTORY = resolve("dist");
-const MAX_FREE_WORKER_COMPRESSED_BYTES = 3_000_000;
+export const MAX_FREE_WORKER_COMPRESSED_BYTES = 3_000_000;
 const gzipAsync = promisify(gzip);
 const FORBIDDEN_CLIENT_PATTERNS = Object.freeze([
   /GITHUB_CLIENT_SECRET/,
   /R2_SECRET_ACCESS_KEY/,
   /TEST_S3_SECRET_ACCESS_KEY/,
   /sites_backend_unavailable/,
-  /profile-runtime\/sites/
+  /profile-runtime\/sites/,
+  /\/(?:Users|home)\/[^/\s]+/
 ]);
 const FORBIDDEN_WORKER_PATTERNS = Object.freeze([
   /(?:from\s*|import\()["']node:(?:fs|http|path)/,
@@ -24,7 +25,11 @@ const FORBIDDEN_WORKER_PATTERNS = Object.freeze([
   /@aws-sdk\/client-s3/,
   /(?:from\s*|import\()["']pg["']/,
   /PROFILE_STORE_FILE/,
-  /R2_SECRET_ACCESS_KEY/
+  /R2_SECRET_ACCESS_KEY/,
+  /LOCAL_FULL_STACK_TEST/,
+  /SITES_FULLSTACK_LOCAL_SMOKE/,
+  /local-(?:maintenance-secret|github-access-token|oauth-code)/,
+  /\/(?:Users|home)\/[^/\s]+/
 ]);
 
 export async function verifySitesFullStackArtifact(options = {}) {
@@ -40,9 +45,9 @@ export async function verifySitesFullStackArtifact(options = {}) {
   await requireFile(hostingPath, "Sites hosting manifest");
 
   const hosting = JSON.parse(await readFile(hostingPath, "utf8"));
-  const hostingMode = validateHostingManifest(hosting);
+  const hostingMode = validateSitesHostingManifest(hosting);
 
-  const migrationFiles = (await listFiles(migrationsDirectory))
+  const migrationFiles = (await listSitesArtifactFiles(migrationsDirectory))
     .filter((path) => path.endsWith(".sql"));
   if (migrationFiles.length !== 2) {
     throw new Error(
@@ -50,9 +55,13 @@ export async function verifySitesFullStackArtifact(options = {}) {
     );
   }
 
-  const clientFiles = await listFiles(clientDirectory);
+  const clientFiles = await listSitesArtifactFiles(clientDirectory);
   const clientText = await readTextFiles(clientFiles);
-  assertPatternsAbsent(clientText, FORBIDDEN_CLIENT_PATTERNS, "client artifact");
+  assertSitesArtifactPatternsAbsent(
+    clientText,
+    FORBIDDEN_CLIENT_PATTERNS,
+    "client artifact"
+  );
 
   const serverDirectory = resolve(outputDirectory, "server");
   const workerConfigPath = resolve(serverDirectory, "wrangler.json");
@@ -75,11 +84,15 @@ export async function verifySitesFullStackArtifact(options = {}) {
     throw new Error("Sites Worker config main must resolve to server/index.js");
   }
   await requireFile(workerMainPath, "Sites Worker ESM entry");
-  const allWorkerFiles = await listFiles(serverDirectory);
+  const allWorkerFiles = await listSitesArtifactFiles(serverDirectory);
   const workerFiles = allWorkerFiles
     .filter((path) => /\.(?:js|mjs)$/.test(path));
   const workerText = await readTextFiles(workerFiles);
-  assertPatternsAbsent(workerText, FORBIDDEN_WORKER_PATTERNS, "Worker artifact");
+  assertSitesArtifactPatternsAbsent(
+    workerText,
+    FORBIDDEN_WORKER_PATTERNS,
+    "Worker artifact"
+  );
 
   if (!/\bexport\s*\{[^}]*\bdefault\b[^}]*\}/s.test(workerText) &&
       !/\bexport\s+default\b/.test(workerText)) {
@@ -125,7 +138,7 @@ export async function verifySitesFullStackArtifact(options = {}) {
   });
 }
 
-async function listFiles(directory) {
+export async function listSitesArtifactFiles(directory) {
   const files = [];
 
   async function visit(currentDirectory) {
@@ -167,7 +180,7 @@ async function sumGzipBytes(files) {
   return contents.reduce((total, body) => total + body.byteLength, 0);
 }
 
-function assertPatternsAbsent(text, patterns, label) {
+export function assertSitesArtifactPatternsAbsent(text, patterns, label) {
   for (const pattern of patterns) {
     if (pattern.test(text)) {
       throw new Error(`${label} contains forbidden pattern ${pattern}`);
@@ -183,7 +196,7 @@ async function requireFile(path, label) {
   }
 }
 
-function validateHostingManifest(hosting) {
+export function validateSitesHostingManifest(hosting) {
   const keys = Object.keys(hosting).sort();
   if (
     keys.length === 2 &&

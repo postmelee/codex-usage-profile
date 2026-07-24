@@ -49,7 +49,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     bindings: {
       GITHUB_CLIENT_ID: "local-smoke-client",
       LOCAL_FULL_STACK_TEST: "1",
-      PROFILE_MAINTENANCE_MODE: "enabled",
+      PROFILE_MAINTENANCE_MODE: "disabled",
       PROFILE_MAINTENANCE_TOKEN: "local-maintenance-secret"
     },
     compatibilityDate: "2026-05-15",
@@ -97,9 +97,36 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(migrated.response.status, 200);
     assert.deepEqual(migrated.body.result.appliedVersions, [1, 2]);
 
+    const health = await requestJson(origin, "GET", "/healthz");
+    assert.equal(health.response.status, 200);
+    assert.deepEqual(health.body, {
+      status: "ok",
+      worker: "ok",
+      bindings: "ok"
+    });
+
+    const landing = await fetch(new URL("/", origin));
+    assert.equal(landing.status, 200);
+    assert.match(await landing.text(), /<div id="root"><\/div>/);
+
     const spa = await fetch(new URL("/settings", origin));
     assert.equal(spa.status, 200);
     assert.match(await spa.text(), /<div id="root"><\/div>/);
+
+    const maintenanceDisabled = await requestMaintenance(origin, {
+      operation: "retention",
+      retentionDays: 90,
+      recentRevisions: 5
+    });
+    assert.equal(maintenanceDisabled.response.status, 404);
+    const maintenanceEnabled = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: true }
+    );
+    assert.equal(maintenanceEnabled.response.status, 200);
+    assert.equal(maintenanceEnabled.body.maintenanceEnabled, true);
 
     let sessionCookie = null;
     const serviceClient = createServiceClient({
@@ -143,6 +170,20 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
         assert.equal(callback.status, 200);
         sessionCookie = readCookie(callback);
         assert.ok(sessionCookie);
+
+        const csrfRejected = await requestJson(
+          origin,
+          "POST",
+          "/api/auth/logout",
+          undefined,
+          {
+            cookie: sessionCookie,
+            origin: "https://attacker.invalid",
+            "sec-fetch-site": "cross-site"
+          }
+        );
+        assert.equal(csrfRejected.response.status, 403);
+        assert.equal(csrfRejected.body.error.code, "forbidden");
 
         const approved = await requestJson(
           origin,
@@ -431,7 +472,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 30,
+      routesVerified: 35,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {

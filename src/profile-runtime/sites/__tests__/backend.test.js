@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   PROFILE_SITES_BACKEND_UNAVAILABLE_CODE,
+  PROFILE_SITES_MAINTENANCE_CODE,
+  PROFILE_SITES_QUOTA_STOP_CODE,
   createProfileSitesBackendDependencies,
-  createProfileSitesBackendHandler
+  createProfileSitesBackendHandler,
+  createProfileSitesOperationalStopResponse
 } from "../backend.js";
 
 test("Sites backend injects one D1 store and shared rate limiter into the API seam", async () => {
@@ -77,4 +80,52 @@ test("Sites backend remains fail-closed without complete D1/R2 composition", asy
 
   assert.equal(response.status, 503);
   assert.equal(body.error.code, PROFILE_SITES_BACKEND_UNAVAILABLE_CODE);
+  assert.equal(response.headers.get("retry-after"), "5");
+});
+
+test("Sites backend fixes maintenance, owner-only, and quota stop semantics", async () => {
+  const maintenance = createProfileSitesOperationalStopResponse(
+    new Request("https://profile.test/api/auth/me"),
+    {
+      serviceMode: "maintenance",
+      stopRetryAfterSeconds: 600
+    }
+  );
+  assert.equal(maintenance.status, 503);
+  assert.equal(maintenance.headers.get("retry-after"), "600");
+  assert.equal(
+    (await maintenance.json()).error.code,
+    PROFILE_SITES_MAINTENANCE_CODE
+  );
+
+  const ownerOnly = createProfileSitesOperationalStopResponse(
+    new Request("https://profile.test/u/private-owner/card.png"),
+    {
+      serviceMode: "owner-only",
+      stopRetryAfterSeconds: 600
+    }
+  );
+  assert.equal(ownerOnly.status, 404);
+  assert.equal((await ownerOnly.json()).error.code, "not_found");
+
+  const quota = createProfileSitesOperationalStopResponse(
+    new Request("https://profile.test/api/account-usage/submit", {
+      method: "POST"
+    }),
+    {
+      serviceMode: "quota-stop",
+      stopRetryAfterSeconds: 900
+    }
+  );
+  assert.equal(quota.status, 429);
+  assert.equal(quota.headers.get("retry-after"), "900");
+  assert.equal((await quota.json()).error.code, PROFILE_SITES_QUOTA_STOP_CODE);
+
+  assert.equal(
+    createProfileSitesOperationalStopResponse(
+      new Request("https://profile.test/api/profile"),
+      { serviceMode: "owner-only" }
+    ),
+    null
+  );
 });

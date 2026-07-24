@@ -7,6 +7,28 @@ export const PROFILE_SITES_BINDINGS = Object.freeze({
 export const PROFILE_SITES_GITHUB_CALLBACK_PATH =
   "/api/auth/github/callback";
 export const PROFILE_SITES_MAINTENANCE_MODE_ENABLED = "enabled";
+export const PROFILE_SITES_SERVICE_MODES = Object.freeze({
+  MAINTENANCE: "maintenance",
+  NORMAL: "normal",
+  OWNER_ONLY: "owner-only",
+  QUOTA_STOP: "quota-stop"
+});
+export const PROFILE_SITES_DEFAULT_STOP_RETRY_AFTER_SECONDS = 300;
+export const PROFILE_SITES_DEFAULT_RATE_LIMIT = Object.freeze({
+  burstLimit: 5,
+  burstWindowMs: 10_000,
+  sustainedLimit: 30,
+  sustainedWindowMs: 60_000
+});
+
+const RATE_LIMIT_BOUNDS = Object.freeze({
+  limit: Object.freeze({ minimum: 1, maximum: 1_000 }),
+  windowMs: Object.freeze({ minimum: 1_000, maximum: 3_600_000 })
+});
+const STOP_RETRY_AFTER_BOUNDS = Object.freeze({
+  minimum: 1,
+  maximum: 86_400
+});
 
 export function loadProfileSitesConfig(options = {}) {
   const environment = options.environment ?? {};
@@ -26,6 +48,13 @@ export function loadProfileSitesConfig(options = {}) {
   const maintenanceToken = normalizeOptionalString(
     environment.PROFILE_MAINTENANCE_TOKEN
   );
+  const serviceMode = normalizeServiceMode(environment.PROFILE_SERVICE_MODE);
+  const stopRetryAfterSeconds = normalizeBoundedInteger(
+    environment.PROFILE_STOP_RETRY_AFTER_SECONDS,
+    PROFILE_SITES_DEFAULT_STOP_RETRY_AFTER_SECONDS,
+    STOP_RETRY_AFTER_BOUNDS
+  );
+  const accountUsageRateLimit = normalizeAccountUsageRateLimit(environment);
   const requireGitHubOAuth = options.requireGitHubOAuth === true;
   const requireDatabase = options.requireDatabase === true;
   const requireDataBindings = options.requireDataBindings === true;
@@ -58,7 +87,10 @@ export function loadProfileSitesConfig(options = {}) {
     maintenanceToken,
     media: environment.PROFILE_MEDIA ?? null,
     publicBaseUrl,
-    secureCookies: publicBaseUrl.startsWith("https://")
+    secureCookies: publicBaseUrl.startsWith("https://"),
+    serviceMode,
+    stopRetryAfterSeconds,
+    accountUsageRateLimit
   });
 }
 
@@ -122,4 +154,62 @@ function requireValue(value, name) {
 function normalizeOptionalString(value) {
   if (typeof value !== "string") return null;
   return value.trim() || null;
+}
+
+function normalizeServiceMode(value) {
+  const normalized = normalizeOptionalString(value);
+  if (normalized === null) return PROFILE_SITES_SERVICE_MODES.NORMAL;
+  if (Object.values(PROFILE_SITES_SERVICE_MODES).includes(normalized)) {
+    return normalized;
+  }
+  return PROFILE_SITES_SERVICE_MODES.MAINTENANCE;
+}
+
+function normalizeAccountUsageRateLimit(environment) {
+  const candidate = {
+    burstLimit: normalizeBoundedInteger(
+      environment.PROFILE_ACCOUNT_USAGE_BURST_LIMIT,
+      PROFILE_SITES_DEFAULT_RATE_LIMIT.burstLimit,
+      RATE_LIMIT_BOUNDS.limit
+    ),
+    burstWindowMs: normalizeBoundedInteger(
+      environment.PROFILE_ACCOUNT_USAGE_BURST_WINDOW_MS,
+      PROFILE_SITES_DEFAULT_RATE_LIMIT.burstWindowMs,
+      RATE_LIMIT_BOUNDS.windowMs
+    ),
+    sustainedLimit: normalizeBoundedInteger(
+      environment.PROFILE_ACCOUNT_USAGE_SUSTAINED_LIMIT,
+      PROFILE_SITES_DEFAULT_RATE_LIMIT.sustainedLimit,
+      RATE_LIMIT_BOUNDS.limit
+    ),
+    sustainedWindowMs: normalizeBoundedInteger(
+      environment.PROFILE_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS,
+      PROFILE_SITES_DEFAULT_RATE_LIMIT.sustainedWindowMs,
+      RATE_LIMIT_BOUNDS.windowMs
+    )
+  };
+
+  if (
+    candidate.sustainedLimit < candidate.burstLimit ||
+    candidate.sustainedWindowMs < candidate.burstWindowMs
+  ) {
+    return PROFILE_SITES_DEFAULT_RATE_LIMIT;
+  }
+  return Object.freeze(candidate);
+}
+
+function normalizeBoundedInteger(value, fallback, bounds) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value !== "string" || !/^[1-9][0-9]*$/.test(value.trim())) {
+    return fallback;
+  }
+  const parsed = Number(value.trim());
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < bounds.minimum ||
+    parsed > bounds.maximum
+  ) {
+    return fallback;
+  }
+  return parsed;
 }

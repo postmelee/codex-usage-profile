@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   PROFILE_SITES_BINDINGS,
+  PROFILE_SITES_DEFAULT_RATE_LIMIT,
+  PROFILE_SITES_DEFAULT_STOP_RETRY_AFTER_SECONDS,
   PROFILE_SITES_GITHUB_CALLBACK_PATH,
   PROFILE_SITES_MAINTENANCE_MODE_ENABLED,
+  PROFILE_SITES_SERVICE_MODES,
   hasProfileSitesGitHubOAuthCredentials,
   loadProfileSitesConfig,
   normalizeRequestOrigin
@@ -67,6 +70,56 @@ test("Sites config enables maintenance only for the exact mode value", () => {
   assert.equal(enabled.maintenanceEnabled, true);
   assert.equal(enabled.maintenanceToken, "secret-value");
   assert.equal(disabled.maintenanceEnabled, false);
+});
+
+test("Sites config exposes bounded D1 rate and operational stop values", () => {
+  const configured = loadProfileSitesConfig({
+    environment: {
+      PROFILE_ACCOUNT_USAGE_BURST_LIMIT: "8",
+      PROFILE_ACCOUNT_USAGE_BURST_WINDOW_MS: "12000",
+      PROFILE_ACCOUNT_USAGE_SUSTAINED_LIMIT: "40",
+      PROFILE_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS: "120000",
+      PROFILE_SERVICE_MODE: PROFILE_SITES_SERVICE_MODES.QUOTA_STOP,
+      PROFILE_STOP_RETRY_AFTER_SECONDS: "900"
+    },
+    requestUrl: "https://profile.example/"
+  });
+
+  assert.deepEqual(configured.accountUsageRateLimit, {
+    burstLimit: 8,
+    burstWindowMs: 12_000,
+    sustainedLimit: 40,
+    sustainedWindowMs: 120_000
+  });
+  assert.equal(configured.serviceMode, PROFILE_SITES_SERVICE_MODES.QUOTA_STOP);
+  assert.equal(configured.stopRetryAfterSeconds, 900);
+});
+
+test("Sites config fails closed to approved defaults for invalid production values", () => {
+  const invalid = loadProfileSitesConfig({
+    environment: {
+      PROFILE_ACCOUNT_USAGE_BURST_LIMIT: "1001",
+      PROFILE_ACCOUNT_USAGE_BURST_WINDOW_MS: "999",
+      PROFILE_ACCOUNT_USAGE_SUSTAINED_LIMIT: "2",
+      PROFILE_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS: "1000",
+      PROFILE_SERVICE_MODE: "typo-opens-public",
+      PROFILE_STOP_RETRY_AFTER_SECONDS: "0"
+    },
+    requestUrl: "https://profile.example/"
+  });
+  const missing = loadProfileSitesConfig({
+    environment: {},
+    requestUrl: "https://profile.example/"
+  });
+
+  assert.deepEqual(invalid.accountUsageRateLimit, PROFILE_SITES_DEFAULT_RATE_LIMIT);
+  assert.equal(invalid.serviceMode, PROFILE_SITES_SERVICE_MODES.MAINTENANCE);
+  assert.equal(
+    invalid.stopRetryAfterSeconds,
+    PROFILE_SITES_DEFAULT_STOP_RETRY_AFTER_SECONDS
+  );
+  assert.deepEqual(missing.accountUsageRateLimit, PROFILE_SITES_DEFAULT_RATE_LIMIT);
+  assert.equal(missing.serviceMode, PROFILE_SITES_SERVICE_MODES.NORMAL);
 });
 
 test("Sites config rejects a request origin outside the configured public origin", () => {

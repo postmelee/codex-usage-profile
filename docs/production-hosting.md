@@ -130,10 +130,41 @@ native `@napi-rs/canvas` renderer와 Node runtime은 Cloud Run fallback에서 �
 | `PROFILE_MEDIA` | R2 binding | immutable card revision, stable publication과 tombstone |
 | `GITHUB_CLIENT_ID` | public identifier | app-owned GitHub OAuth application identifier |
 | `GITHUB_CLIENT_SECRET` | secret | OAuth code exchange 전용 server secret |
+| `PROFILE_MAINTENANCE_MODE` / `PROFILE_MAINTENANCE_TOKEN` | operator gate/secret | exact enable과 secret을 모두 요구하는 숨겨진 lifecycle route |
+| `PROFILE_SERVICE_MODE` | bounded server config | `normal`, `maintenance`, `owner-only`, `quota-stop`; invalid 값은 maintenance로 fail closed |
+| `PROFILE_STOP_RETRY_AFTER_SECONDS` | bounded server config | stop response의 1~86400초 재시도 지연, 기본 300 |
+| `PROFILE_ACCOUNT_USAGE_*` | bounded server config | D1 shared burst/sustained limit·window, invalid 조합은 승인된 기본값 |
 | request origin | derived public config | canonical origin과 OAuth callback/public card URL 기준 |
 | `ASSETS` | Sites binding | built frontend asset과 SPA fallback |
 
 Sites hosted runtime은 S3 access key, `NEON_DATABASE_URL`, `R2_*`, `PORT`, `HOST`와 filesystem path를 요구하지 않는다. D1/R2 migration과 logical binding은 saved version package와 Sites linkage로 관리한다.
+
+### 관찰과 운영 중단 계약
+
+Worker는 request마다 correlation id, route class, method, status, duration
+bucket, error code와 retryability만 structured event로 기록한다. URL query,
+cookie, Authorization, OAuth code/state, session/token/device code, owner
+identity, usage/card bytes와 exception 원문은 event schema에 들어갈 수 없다.
+응답의 `x-request-id`로 같은 event를 찾는다.
+
+`GET|HEAD /healthz`는 `worker`와 required `bindings`를 generic
+`ok|unavailable`로만 구분한다. binding 이름, metadata와 payload를 노출하지
+않으며 준비되지 않으면 `503`, `Retry-After: 5`다.
+
+- D1 shared rate limit은 기본 burst 5/10초, sustained 30/60초이며 환경값은
+  limit 1~1000, window 1000~3600000ms로 제한한다. process memory fallback과
+  bypass는 없다.
+- `quota-stop`은 Account Usage submit을 `429 sites_quota_stop`과 bounded
+  `Retry-After`로 중단한다.
+- runtime `owner-only` stop은 public profile/card를 동일한 `404`로 숨긴다.
+  Site 전체 anonymous 차단은 별도 owner-only access policy가 담당한다.
+- `maintenance`는 operator route와 health 외 backend를
+  `503 sites_maintenance`로 닫는다. provider/binding unavailable도 내부
+  정보를 숨긴 `503`과 bounded `Retry-After`다.
+
+배포·environment rotation, export/restore, retention/account deletion,
+public smoke/원복, log 확인, quota stop과 fallback 절차는
+[`sites-operations.md`](sites-operations.md)를 따른다.
 
 ### Cloud Run fallback runtime 값
 
@@ -179,7 +210,7 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
-3. `/healthz`는 binding existence만 숨김없이 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
+3. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
 4. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
 5. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
 6. application rollback은 이전 saved version deployment로 수행한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
@@ -259,7 +290,7 @@ structured store의 기본 정책이다. 세부 보존 기간, D1 export/backup�
 - Stage 5 test resource와 분리된 production data/resource 정책 또는 승인된 test data cleanup
 - production OAuth app/custom domain과 최종 public access
 - D1/R2 export, backup/restore와 account deletion/retention job
-- structured log/metric, alerting, abuse protection와 quota/비용 stop signal
+- hosted event 조회와 quota/비용 stop 값·alert 운용 검증
 - managed remote provider fault injection을 대신하는 운영 관찰·repair procedure
 
 Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수용이다. 정상 hosted contract와 local failure/concurrency test가 깨지면 PASS 근거도 무효가 된다.
@@ -272,7 +303,8 @@ Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수
 2. production OAuth app, custom domain, public access와 CLI 기본 service origin을 exact 값으로 승인받는다.
 3. Stage 5 test D1/R2를 재사용할지 production resource를 분리할지 결정하고, test owner/usage/media cleanup 또는 migration을 수행한다.
 4. D1/R2 export, backup/restore, retention/account deletion과 repair procedure를 구현·검증한다.
-5. log/metric, alerting, abuse/rate-limit 운영 값과 비용·quota stop/fallback runbook을 구성한다.
+5. 구현된 structured event와 abuse/rate-limit·비용 stop 값을 owner-only
+   candidate에서 확인하고 alert 기준을 확정한다.
 6. owner-only candidate → 제한 public smoke → production cutover를 별도 Gate로 진행한다.
 
 GitHub Issue #43과 #46은 Task #49에서 close하거나 수정하지 않았다. migration task를 등록할 때 #43은 Cloud Run fallback deployment로 유지·재범위화하고, #46의 marketing-only 원격 게시 범위는 Sites canonical full-stack 전환과 중복되지 않도록 별도 결정한다.

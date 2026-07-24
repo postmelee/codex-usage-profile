@@ -24,6 +24,7 @@ const migrations = Object.freeze([
     sql: migrationTwo
   })
 ]);
+let localMaintenanceEnabled = false;
 
 const worker = createProfileSitesWorker({
   fetchImpl: async (input) => {
@@ -58,7 +59,8 @@ const worker = createProfileSitesWorker({
   profileCardRenderPng: createWorkerProfileCardRenderer(
     PROFILE_CARD_WORKER_RENDERER_ASSETS
   ),
-  profileCardRendererVersion: WORKER_CARD_RENDERER_VERSION
+  profileCardRendererVersion: WORKER_CARD_RENDERER_VERSION,
+  writeEvent: null
 });
 
 export default {
@@ -79,6 +81,34 @@ export default {
       return Response.json({ ok: true, result });
     }
 
-    return worker.fetch(request, environment, executionContext);
+    if (url.pathname === "/__local/maintenance-mode") {
+      if (
+        environment.LOCAL_FULL_STACK_TEST !== "1" ||
+        request.method !== "POST"
+      ) {
+        return new Response("Not found", { status: 404 });
+      }
+      const body = await request.json();
+      if (
+        !body ||
+        typeof body.enabled !== "boolean" ||
+        Object.keys(body).length !== 1
+      ) {
+        return Response.json({
+          ok: false,
+          error: { code: "invalid_request" }
+        }, { status: 400 });
+      }
+      localMaintenanceEnabled = body.enabled;
+      return Response.json({
+        ok: true,
+        maintenanceEnabled: localMaintenanceEnabled
+      });
+    }
+
+    const runtimeEnvironment = Object.create(environment);
+    runtimeEnvironment.PROFILE_MAINTENANCE_MODE =
+      localMaintenanceEnabled ? "enabled" : "disabled";
+    return worker.fetch(request, runtimeEnvironment, executionContext);
   }
 };

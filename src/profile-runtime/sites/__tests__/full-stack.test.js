@@ -8,7 +8,7 @@ import {
 test("runs browser session, real CLI, D1, R2, renderer and publication in one local Worker", async () => {
   const result = await runSitesFullStackLocalSmoke();
 
-  assert.equal(result.routesVerified, 30);
+  assert.equal(result.routesVerified, 35);
   assert.ok(result.publicPngBytes > 10_000);
   assert.ok(result.coldRenderMs > 0);
   assert.ok(result.warmRenderMs > 0);

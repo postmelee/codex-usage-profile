@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  createD1AccountUsageRateLimiter
+} from "../d1/rate-limiter.js";
 import { createD1TestFixture } from "./_d1-test-fixture.js";
 
 test("D1 rate limiter shares burst counters and returns retry-after", async (t) => {
@@ -89,4 +92,26 @@ test("D1 rate limiter never stores the raw CLI token", async (t) => {
   const serialized = JSON.stringify(await fixture.inspect("rateLimits"));
   assert.equal(serialized.includes("cup_raw_secret_token"), false);
   assert.equal(serialized.includes("cli_token_record_id"), true);
+});
+
+test("D1 rate limiter rejects unbounded direct overrides", () => {
+  const database = {
+    batch() {},
+    prepare() {}
+  };
+
+  assert.throws(
+    () => createD1AccountUsageRateLimiter({
+      database,
+      burstLimit: 1_001
+    }),
+    /burst limit must be between/
+  );
+  assert.throws(
+    () => createD1AccountUsageRateLimiter({
+      database,
+      sustainedWindowMs: 3_600_001
+    }),
+    /sustained window must be between/
+  );
 });

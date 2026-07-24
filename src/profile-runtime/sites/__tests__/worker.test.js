@@ -164,10 +164,98 @@ test("Sites Worker keeps the maintenance route hidden before explicit enablement
   assert.equal(assetRequests, 0);
 });
 
+test("Sites Worker health reports only generic Worker and binding readiness", async () => {
+  const worker = createProfileSitesWorker({ writeEvent: null });
+  const healthy = await worker.fetch(
+    new Request("https://profile.example/healthz"),
+    createRequiredBindingEnvironment()
+  );
+  assert.equal(healthy.status, 200);
+  assert.deepEqual(await healthy.json(), {
+    status: "ok",
+    worker: "ok",
+    bindings: "ok"
+  });
+
+  const unavailable = await worker.fetch(
+    new Request("https://profile.example/healthz"),
+    { ASSETS: createAssetBinding(), privateMetadata: "must-not-leak" }
+  );
+  assert.equal(unavailable.status, 503);
+  assert.equal(unavailable.headers.get("retry-after"), "5");
+  const serialized = JSON.stringify(await unavailable.json());
+  assert.equal(serialized, JSON.stringify({
+    status: "unavailable",
+    worker: "ok",
+    bindings: "unavailable"
+  }));
+  assert.doesNotMatch(serialized, /DB|PROFILE_MEDIA|privateMetadata|must-not-leak/);
+
+  const rejectedMethod = await worker.fetch(
+    new Request("https://profile.example/healthz", { method: "POST" }),
+    createRequiredBindingEnvironment()
+  );
+  assert.equal(rejectedMethod.status, 405);
+  assert.equal(rejectedMethod.headers.get("allow"), "GET, HEAD");
+});
+
+test("Sites Worker applies operational stops before backend execution", async () => {
+  let backendCalls = 0;
+  const worker = createProfileSitesWorker({
+    writeEvent: null,
+    createBackendHandler() {
+      backendCalls += 1;
+      return () => new Response("backend");
+    }
+  });
+  const environment = createRequiredBindingEnvironment({
+    PROFILE_STOP_RETRY_AFTER_SECONDS: "720"
+  });
+
+  const maintenance = await worker.fetch(
+    new Request("https://profile.example/api/profile"),
+    { ...environment, PROFILE_SERVICE_MODE: "maintenance" }
+  );
+  assert.equal(maintenance.status, 503);
+  assert.equal(maintenance.headers.get("retry-after"), "720");
+
+  const ownerOnly = await worker.fetch(
+    new Request("https://profile.example/u/private-owner/card.png"),
+    { ...environment, PROFILE_SERVICE_MODE: "owner-only" }
+  );
+  assert.equal(ownerOnly.status, 404);
+
+  const quota = await worker.fetch(
+    new Request("https://profile.example/api/account-usage/submit", {
+      method: "POST"
+    }),
+    { ...environment, PROFILE_SERVICE_MODE: "quota-stop" }
+  );
+  assert.equal(quota.status, 429);
+  assert.equal(quota.headers.get("retry-after"), "720");
+  assert.equal(backendCalls, 0);
+});
+
 function createAssetBinding(handler = () => new Response("missing", { status: 404 })) {
   return {
     fetch(request) {
       return handler(request);
     }
+  };
+}
+
+function createRequiredBindingEnvironment(extra = {}) {
+  return {
+    ASSETS: createAssetBinding(),
+    DB: {
+      batch() {},
+      prepare() {}
+    },
+    PROFILE_MEDIA: {
+      get() {},
+      head() {},
+      put() {}
+    },
+    ...extra
   };
 }
