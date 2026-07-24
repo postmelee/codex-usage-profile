@@ -8,6 +8,16 @@ export const APP_ROUTE_TYPES = Object.freeze({
 
 export function resolveAppRoute(location) {
   const pathname = normalizeAppPathname(location?.pathname);
+  const rootView = pathname === "/"
+    ? new URLSearchParams(location?.search ?? "").get("view")
+    : null;
+
+  if (rootView === "settings") {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.SETTINGS
+    };
+  }
 
   if (pathname === "/device") {
     return {

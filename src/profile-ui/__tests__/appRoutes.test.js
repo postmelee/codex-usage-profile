@@ -17,6 +17,10 @@ test("resolves reserved app routes before profile routes", () => {
     pathname: "/settings",
     type: APP_ROUTE_TYPES.SETTINGS
   });
+  assert.deepEqual(resolveAppRoute(new URL("http://localhost/?view=settings")), {
+    pathname: "/",
+    type: APP_ROUTE_TYPES.SETTINGS
+  });
   assert.deepEqual(resolveAppRoute(new URL("http://localhost/u/postmelee")), {
     pathname: "/u/postmelee",
     type: APP_ROUTE_TYPES.PUBLIC_PROFILE
@@ -35,5 +39,6 @@ test("checks route predicates", () => {
   assert.equal(isDeviceApprovalRoute(new URL("http://localhost/device")), true);
   assert.equal(isDeviceApprovalRoute(new URL("http://localhost/settings")), false);
   assert.equal(isSettingsRoute(new URL("http://localhost/settings")), true);
+  assert.equal(isSettingsRoute(new URL("http://localhost/?view=settings")), true);
   assert.equal(isSettingsRoute(new URL("http://localhost/u/postmelee")), false);
 });

@@ -11,7 +11,7 @@ export function AccountMenu({
   client,
   location = globalThis.window?.location,
   onAuthStateChange,
-  settingsHref = "/settings"
+  settingsHref = "/?view=settings"
 }) {
   const menuRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
