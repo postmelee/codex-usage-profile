@@ -393,7 +393,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveCount(0);
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/settings"
+      "/?view=settings"
     );
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
