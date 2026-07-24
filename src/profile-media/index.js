@@ -31,5 +31,18 @@ export {
 
 export { createS3ProfileMediaStore } from "./s3/store.js";
 export { createR2BindingProfileMediaStore } from "./r2-binding/store.js";
+export {
+  createR2BindingProfileMediaMaintenance
+} from "./r2-binding/maintenance.js";
+
+export {
+  DEFAULT_PROFILE_MEDIA_RECENT_REVISIONS,
+  DEFAULT_PROFILE_MEDIA_RETENTION_DAYS,
+  PROFILE_MEDIA_REVISION_PREFIX,
+  PROFILE_MEDIA_STABLE_PREFIX,
+  isProfileMediaStableKey,
+  parseProfileMediaRevisionObject,
+  selectProfileMediaCleanupCandidates
+} from "./maintenance-contract.js";
 
 export { createProfilePublicationService } from "./publication-service.js";

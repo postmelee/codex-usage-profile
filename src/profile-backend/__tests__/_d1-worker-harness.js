@@ -8,6 +8,9 @@ import {
   createD1AccountUsageRateLimiter
 } from "../d1/rate-limiter.js";
 import {
+  createD1ProfileMaintenance
+} from "../d1/maintenance.js";
+import {
   migrateD1Database
 } from "../d1/migration-runner.js";
 
@@ -34,6 +37,15 @@ export default {
       }
       if (pathname === "/atomic") {
         return json(await store.atomic[payload.operation](payload.command));
+      }
+      if (pathname === "/maintenance") {
+        const maintenance = createD1ProfileMaintenance({
+          database: environment.DB,
+          now: () => new Date(
+            payload.options?.now ?? "2026-07-23T00:00:00.000Z"
+          )
+        });
+        return json(await maintenance[payload.method](payload.options));
       }
       if (pathname === "/contract") {
         assertProfileBackendStoreContract(store);

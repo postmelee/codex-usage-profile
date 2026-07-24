@@ -24,6 +24,7 @@
     "smoke:cloud-run": "node scripts/smoke-cloud-run-container.mjs codex-usage-profile:task37",
     "smoke:hosting-matrix": "node scripts/smoke-hosting-matrix.mjs",
     "smoke:sites-fullstack:local": "node scripts/smoke-sites-fullstack-local.mjs",
+    "sites:profile-maintenance": "node scripts/sites-profile-maintenance.mjs",
     "test": "node --test",
     "test:e2e": "playwright test",
     "verify:sites-fullstack": "node scripts/verify-sites-fullstack-artifact.mjs"

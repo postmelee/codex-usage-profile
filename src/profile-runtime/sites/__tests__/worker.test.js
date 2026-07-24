@@ -138,6 +138,32 @@ test("Sites Worker hides canonical-origin configuration failures", async () => {
   );
 });
 
+test("Sites Worker keeps the maintenance route hidden before explicit enablement", async () => {
+  let assetRequests = 0;
+  const worker = createProfileSitesWorker();
+  const response = await worker.fetch(
+    new Request("https://profile.example/__ops/profile-maintenance", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer guessed",
+        "content-type": "application/json",
+        origin: "https://profile.example"
+      },
+      body: JSON.stringify({ operation: "plan" })
+    }),
+    {
+      ASSETS: createAssetBinding(() => {
+        assetRequests += 1;
+        return new Response("asset");
+      })
+    }
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, "not_found");
+  assert.equal(assetRequests, 0);
+});
+
 function createAssetBinding(handler = () => new Response("missing", { status: 404 })) {
   return {
     fetch(request) {

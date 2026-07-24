@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PROFILE_SITES_BINDINGS,
   PROFILE_SITES_GITHUB_CALLBACK_PATH,
+  PROFILE_SITES_MAINTENANCE_MODE_ENABLED,
   hasProfileSitesGitHubOAuthCredentials,
   loadProfileSitesConfig,
   normalizeRequestOrigin
@@ -41,8 +42,31 @@ test("Sites config keeps D1 and R2 optional until their implementation stages", 
 
   assert.equal(config.database, null);
   assert.equal(config.media, null);
+  assert.equal(config.maintenanceEnabled, false);
+  assert.equal(config.maintenanceToken, null);
   assert.equal(config.secureCookies, false);
   assert.equal(hasProfileSitesGitHubOAuthCredentials(config), false);
+});
+
+test("Sites config enables maintenance only for the exact mode value", () => {
+  const enabled = loadProfileSitesConfig({
+    environment: {
+      PROFILE_MAINTENANCE_MODE: PROFILE_SITES_MAINTENANCE_MODE_ENABLED,
+      PROFILE_MAINTENANCE_TOKEN: "secret-value"
+    },
+    requestUrl: "https://profile.example/"
+  });
+  const disabled = loadProfileSitesConfig({
+    environment: {
+      PROFILE_MAINTENANCE_MODE: "disabled",
+      PROFILE_MAINTENANCE_TOKEN: "secret-value"
+    },
+    requestUrl: "https://profile.example/"
+  });
+
+  assert.equal(enabled.maintenanceEnabled, true);
+  assert.equal(enabled.maintenanceToken, "secret-value");
+  assert.equal(disabled.maintenanceEnabled, false);
 });
 
 test("Sites config rejects a request origin outside the configured public origin", () => {

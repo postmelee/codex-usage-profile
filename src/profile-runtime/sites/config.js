@@ -6,6 +6,7 @@ export const PROFILE_SITES_BINDINGS = Object.freeze({
 
 export const PROFILE_SITES_GITHUB_CALLBACK_PATH =
   "/api/auth/github/callback";
+export const PROFILE_SITES_MAINTENANCE_MODE_ENABLED = "enabled";
 
 export function loadProfileSitesConfig(options = {}) {
   const environment = options.environment ?? {};
@@ -18,6 +19,12 @@ export function loadProfileSitesConfig(options = {}) {
   const githubClientId = normalizeOptionalString(environment.GITHUB_CLIENT_ID);
   const githubClientSecret = normalizeOptionalString(
     environment.GITHUB_CLIENT_SECRET
+  );
+  const maintenanceEnabled =
+    normalizeOptionalString(environment.PROFILE_MAINTENANCE_MODE) ===
+    PROFILE_SITES_MAINTENANCE_MODE_ENABLED;
+  const maintenanceToken = normalizeOptionalString(
+    environment.PROFILE_MAINTENANCE_TOKEN
   );
   const requireGitHubOAuth = options.requireGitHubOAuth === true;
   const requireDatabase = options.requireDatabase === true;
@@ -47,6 +54,8 @@ export function loadProfileSitesConfig(options = {}) {
     githubCallbackUrl: callbackUrl,
     githubClientId,
     githubClientSecret,
+    maintenanceEnabled,
+    maintenanceToken,
     media: environment.PROFILE_MEDIA ?? null,
     publicBaseUrl,
     secureCookies: publicBaseUrl.startsWith("https://")

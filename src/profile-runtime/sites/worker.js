@@ -4,6 +4,10 @@ import {
 } from "../host-adapter.js";
 import { createProfileSitesBackendHandler } from "./backend.js";
 import { loadProfileSitesConfig } from "./config.js";
+import {
+  PROFILE_SITES_MAINTENANCE_PATH,
+  createProfileSitesMaintenanceHandler
+} from "./maintenance.js";
 
 const INDEX_PATH = "/index.html";
 
@@ -18,6 +22,17 @@ export function createProfileSitesWorker(options = {}) {
         });
       } catch {
         return textResponse("Sites runtime configuration is invalid", 503);
+      }
+
+      if (new URL(request.url).pathname === PROFILE_SITES_MAINTENANCE_PATH) {
+        return createProfileSitesMaintenanceHandler({
+          config,
+          database: config.database,
+          fetchImpl: options.fetchImpl ?? globalThis.fetch,
+          media: config.media,
+          profileCardRenderPng: options.profileCardRenderPng,
+          profileCardRendererVersion: options.profileCardRendererVersion
+        })(request);
       }
 
       const backendHandler = createProfileSitesBackendHandler({

@@ -209,6 +209,7 @@ export function createR2BindingProfileMediaStore(options = {}) {
           customMetadata: {
             [METADATA_KIND]: PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED,
             [METADATA_HANDLE]: handle,
+            [METADATA_OWNER_ID]: current.publication.ownerId,
             [METADATA_TOMBSTONE_ID]: tombstoneId,
             [METADATA_UNPUBLISHED_AT]: unpublishedAt
           },

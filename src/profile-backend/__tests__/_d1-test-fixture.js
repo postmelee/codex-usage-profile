@@ -67,6 +67,10 @@ export async function createD1TestFixture(options = {}) {
       return fixture.call("/atomic", { operation, command });
     },
 
+    maintenance(method, options = {}) {
+      return fixture.call("/maintenance", { method, options });
+    },
+
     inspect(name) {
       return fixture.call("/inspect", { name });
     },

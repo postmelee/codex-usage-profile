@@ -2,8 +2,10 @@ export function createFakeR2Bucket() {
   const objects = new Map();
   const failures = [];
   const hooks = {
+    delete: [],
     get: [],
     head: [],
+    list: [],
     put: []
   };
   let sequence = 0;
@@ -25,6 +27,8 @@ export function createFakeR2Bucket() {
     },
 
     async delete(key) {
+      await beforeOperation("delete", { key });
+      throwFailure("delete");
       deleteCalls += 1;
       objects.delete(key);
     },
@@ -45,6 +49,23 @@ export function createFakeR2Bucket() {
       throwFailure("head");
       const object = objects.get(key);
       return object ? cloneObject(object, false) : null;
+    },
+
+    async list(options = {}) {
+      await beforeOperation("list", { options });
+      throwFailure("list");
+      const matching = [...objects.values()]
+        .filter((object) => object.key.startsWith(options.prefix ?? ""))
+        .sort((left, right) => left.key.localeCompare(right.key));
+      const start = options.cursor ? Number(options.cursor) : 0;
+      const limit = options.limit ?? 1_000;
+      const page = matching.slice(start, start + limit);
+      const next = start + page.length;
+      return {
+        cursor: next < matching.length ? String(next) : undefined,
+        objects: page.map((object) => cloneObject(object, false)),
+        truncated: next < matching.length
+      };
     },
 
     async put(key, value, options = {}) {

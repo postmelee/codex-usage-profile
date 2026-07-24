@@ -6,16 +6,21 @@ import {
 import { fileURLToPath } from "node:url";
 
 import {
+  DEFAULT_PROFILE_MEDIA_RECENT_REVISIONS,
+  DEFAULT_PROFILE_MEDIA_RETENTION_DAYS,
+  PROFILE_MEDIA_REVISION_PREFIX,
+  PROFILE_MEDIA_STABLE_PREFIX,
   createProfileMediaS3Client,
-  resolveR2ProfileMediaStoreOptions
+  resolveR2ProfileMediaStoreOptions,
+  selectProfileMediaCleanupCandidates
 } from "../src/profile-media/index.js";
 
-export const DEFAULT_CARD_MEDIA_RETENTION_DAYS = 90;
-export const DEFAULT_CARD_MEDIA_RECENT_REVISIONS = 5;
-export const PROFILE_MEDIA_REVISION_PREFIX = "cards/v2/owners/";
-export const PROFILE_MEDIA_STABLE_PREFIX = "cards/v2/public/";
+export const DEFAULT_CARD_MEDIA_RETENTION_DAYS =
+  DEFAULT_PROFILE_MEDIA_RETENTION_DAYS;
+export const DEFAULT_CARD_MEDIA_RECENT_REVISIONS =
+  DEFAULT_PROFILE_MEDIA_RECENT_REVISIONS;
+export { PROFILE_MEDIA_REVISION_PREFIX, PROFILE_MEDIA_STABLE_PREFIX };
 
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000;
 const REVISION_KEY_PATTERN =
   /^cards\/v2\/owners\/([^/]+)\/revisions\/(en|ko)\/([A-Za-z0-9_-]{43})\.png$/;
 
@@ -86,53 +91,7 @@ export async function cleanupOrphanCardMedia(options = {}) {
 }
 
 export function selectCleanupCandidates(revisions, options = {}) {
-  const now = normalizeDate(options.now ?? new Date());
-  const protectedKeys = options.protectedKeys ?? new Set();
-  const recentRevisions = requirePositiveInteger(
-    options.recentRevisions ?? DEFAULT_CARD_MEDIA_RECENT_REVISIONS,
-    "recentRevisions"
-  );
-  const retentionDays = requirePositiveInteger(
-    options.retentionDays ?? DEFAULT_CARD_MEDIA_RETENTION_DAYS,
-    "retentionDays"
-  );
-  const groups = new Map();
-
-  for (const object of revisions) {
-    const parsed = parseRevisionObject(object);
-    if (!parsed) continue;
-    const groupKey = `${parsed.ownerId}\u0000${parsed.locale}`;
-    const group = groups.get(groupKey) ?? [];
-    group.push(parsed);
-    groups.set(groupKey, group);
-  }
-
-  const candidates = [];
-  for (const group of groups.values()) {
-    group.sort((left, right) =>
-      right.lastModified.getTime() - left.lastModified.getTime() ||
-      left.key.localeCompare(right.key)
-    );
-    group.forEach((object, index) => {
-      const ageDays = Math.floor(
-        (now.getTime() - object.lastModified.getTime()) / MILLISECONDS_PER_DAY
-      );
-      if (
-        protectedKeys.has(object.key) ||
-        index < recentRevisions ||
-        ageDays <= retentionDays
-      ) {
-        return;
-      }
-      candidates.push(Object.freeze({
-        ageDays,
-        key: object.key,
-        reason: `older_than_${retentionDays}_days_and_beyond_latest_${recentRevisions}`
-      }));
-    });
-  }
-
-  return candidates.sort((left, right) => left.key.localeCompare(right.key));
+  return selectProfileMediaCleanupCandidates(revisions, options);
 }
 
 export function parseCleanupArgs(args = []) {
@@ -236,19 +195,6 @@ async function listObjects(options) {
   return objects;
 }
 
-function parseRevisionObject(object) {
-  const match = object.Key.match(REVISION_KEY_PATTERN);
-  if (!match) return null;
-  const lastModified = normalizeOptionalDate(object.LastModified);
-  if (!lastModified) return null;
-  return {
-    key: object.Key,
-    lastModified,
-    locale: match[2],
-    ownerId: match[1]
-  };
-}
-
 function isStableKey(key) {
   return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/card\.png$/.test(key);
 }
@@ -279,12 +225,6 @@ function normalizeDate(value) {
   const date = value instanceof Date ? new Date(value) : new Date(value);
   if (Number.isNaN(date.getTime())) throw new TypeError("now must be a valid date");
   return date;
-}
-
-function normalizeOptionalDate(value) {
-  if (value === undefined || value === null) return null;
-  const date = value instanceof Date ? new Date(value) : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function requireClient(client) {
