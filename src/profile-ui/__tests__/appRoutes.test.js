@@ -28,6 +28,10 @@ test("resolves reserved app routes before profile routes", () => {
     pathname: "/",
     type: APP_ROUTE_TYPES.SETTINGS
   });
+  assert.deepEqual(resolveAppRoute(new URL("http://localhost/?profile=postmelee")), {
+    pathname: "/",
+    type: APP_ROUTE_TYPES.PUBLIC_PROFILE
+  });
   assert.deepEqual(resolveAppRoute(new URL("http://localhost/u/postmelee")), {
     pathname: "/u/postmelee",
     type: APP_ROUTE_TYPES.PUBLIC_PROFILE

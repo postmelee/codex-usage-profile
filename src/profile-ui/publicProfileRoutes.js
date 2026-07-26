@@ -1,12 +1,17 @@
 export function resolvePublicProfileRoute(location) {
   const pathname = normalizePathname(location?.pathname);
+  const rootHandle = pathname === "/"
+    ? new URLSearchParams(location?.search ?? "").get("profile")
+    : null;
   const match = pathname.match(/^\/u\/([^/]+)$/);
 
-  if (!match) {
+  if (rootHandle === null && !match) {
     return createState("unavailable", null, null);
   }
 
-  const handle = decodeHandle(match[1]);
+  const handle = rootHandle === null
+    ? decodeHandle(match[1])
+    : normalizeHandle(rootHandle);
   if (!handle) {
     return createState("unavailable", null, null);
   }
@@ -47,11 +52,15 @@ function createState(status, handle, profile) {
 
 function decodeHandle(value) {
   try {
-    const handle = decodeURIComponent(value).trim();
-    return handle || null;
+    return normalizeHandle(decodeURIComponent(value));
   } catch {
     return null;
   }
+}
+
+function normalizeHandle(value) {
+  const handle = typeof value === "string" ? value.trim() : "";
+  return handle || null;
 }
 
 function isPublicProfile(profile) {

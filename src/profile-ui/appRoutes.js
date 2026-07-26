@@ -8,9 +8,10 @@ export const APP_ROUTE_TYPES = Object.freeze({
 
 export function resolveAppRoute(location) {
   const pathname = normalizeAppPathname(location?.pathname);
-  const rootView = pathname === "/"
-    ? new URLSearchParams(location?.search ?? "").get("view")
+  const rootSearchParams = pathname === "/"
+    ? new URLSearchParams(location?.search ?? "")
     : null;
+  const rootView = rootSearchParams?.get("view") ?? null;
 
   if (rootView === "device") {
     return {
@@ -23,6 +24,13 @@ export function resolveAppRoute(location) {
     return {
       pathname,
       type: APP_ROUTE_TYPES.SETTINGS
+    };
+  }
+
+  if (rootSearchParams?.has("profile")) {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.PUBLIC_PROFILE
     };
   }
 

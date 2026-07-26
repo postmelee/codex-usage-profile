@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/postmelee";
+const SITES_PROFILE_ROUTE = "/?profile=postmelee";
 const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
@@ -605,7 +606,7 @@ test.describe("Public profile", () => {
     await mockPublicProfile(page);
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto(PROFILE_ROUTE);
+    await page.goto(SITES_PROFILE_ROUTE);
 
     await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
       .toBeVisible();

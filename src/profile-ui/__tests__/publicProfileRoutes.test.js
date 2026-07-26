@@ -33,6 +33,15 @@ const PUBLIC_PROFILE = Object.freeze({
 
 test("starts every public profile handle in an API-backed loading state", () => {
   assert.deepEqual(
+    resolvePublicProfileRoute(new URL("http://localhost/?profile=postmelee")),
+    {
+      handle: "postmelee",
+      profile: null,
+      source: "api",
+      status: "loading"
+    }
+  );
+  assert.deepEqual(
     resolvePublicProfileRoute(new URL("http://localhost/u/meleeisdeveloping")),
     {
       handle: "meleeisdeveloping",
@@ -55,6 +64,7 @@ test("starts every public profile handle in an API-backed loading state", () => 
 test("rejects unsupported and malformed public profile paths", () => {
   for (const url of [
     "http://localhost/unknown",
+    "http://localhost/?profile=",
     "http://localhost/u/one/more",
     "http://localhost/u/%ZZ"
   ]) {
