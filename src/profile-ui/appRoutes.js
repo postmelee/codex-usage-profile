@@ -12,6 +12,13 @@ export function resolveAppRoute(location) {
     ? new URLSearchParams(location?.search ?? "").get("view")
     : null;
 
+  if (rootView === "device") {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.DEVICE
+    };
+  }
+
   if (rootView === "settings") {
     return {
       pathname,

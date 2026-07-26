@@ -461,6 +461,25 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("public-profile-short-viewport.png") });
   });
 
+  test("Sites root-query route keeps device approval usable", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        challenge: {
+          status: "approved"
+        }
+      },
+      ok: true
+    }));
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+
+    await expect(page.getByRole("heading", { name: "Authorize device" })).toBeVisible();
+    await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
+    await page.getByRole("button", { name: "Approve device" }).click();
+    await expect(page.getByText("Device approved.", { exact: true })).toBeVisible();
+  });
+
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     let visibility = "private";

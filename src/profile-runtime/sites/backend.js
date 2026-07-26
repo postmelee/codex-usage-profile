@@ -42,6 +42,7 @@ export function createProfileSitesBackendHandler(options = {}) {
     const dependencies = createProfileSitesBackendDependencies(options);
     return createProfileBackendHttpHandler({
       accountUsageRateLimiter: dependencies.rateLimiter,
+      deviceVerificationUri: options.config.deviceVerificationUri,
       fetchImpl: options.fetchImpl,
       githubCallbackPath: options.config.githubCallbackPath,
       githubClient: options.githubClient ?? createSitesGitHubClient(

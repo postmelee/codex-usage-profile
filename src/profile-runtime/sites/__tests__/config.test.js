@@ -5,6 +5,7 @@ import {
   PROFILE_SITES_BINDINGS,
   PROFILE_SITES_DEFAULT_RATE_LIMIT,
   PROFILE_SITES_DEFAULT_STOP_RETRY_AFTER_SECONDS,
+  PROFILE_SITES_DEVICE_VERIFICATION_URI,
   PROFILE_SITES_GITHUB_CALLBACK_PATH,
   PROFILE_SITES_MAINTENANCE_MODE_ENABLED,
   PROFILE_SITES_SERVICE_MODES,
@@ -23,6 +24,11 @@ test("Sites config derives the canonical origin and GitHub callback from the req
   });
 
   assert.equal(config.publicBaseUrl, "https://profile.example");
+  assert.equal(
+    config.deviceVerificationUri,
+    PROFILE_SITES_DEVICE_VERIFICATION_URI
+  );
+  assert.equal(config.deviceVerificationUri, "/?view=device");
   assert.equal(config.githubCallbackPath, PROFILE_SITES_GITHUB_CALLBACK_PATH);
   assert.equal(
     config.githubCallbackUrl,

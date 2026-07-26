@@ -6,6 +6,8 @@ export const PROFILE_SITES_BINDINGS = Object.freeze({
 
 export const PROFILE_SITES_GITHUB_CALLBACK_PATH =
   "/api/auth/github/callback";
+export const PROFILE_SITES_DEVICE_VERIFICATION_URI =
+  "/?view=device";
 export const PROFILE_SITES_MAINTENANCE_MODE_ENABLED = "enabled";
 export const PROFILE_SITES_SERVICE_MODES = Object.freeze({
   MAINTENANCE: "maintenance",
@@ -79,6 +81,7 @@ export function loadProfileSitesConfig(options = {}) {
   return Object.freeze({
     assets: environment.ASSETS ?? null,
     database: environment.DB ?? null,
+    deviceVerificationUri: PROFILE_SITES_DEVICE_VERIFICATION_URI,
     githubCallbackPath: PROFILE_SITES_GITHUB_CALLBACK_PATH,
     githubCallbackUrl: callbackUrl,
     githubClientId,
