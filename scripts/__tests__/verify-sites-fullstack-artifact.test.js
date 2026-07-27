@@ -8,7 +8,7 @@ import {
   verifySitesFullStackArtifact
 } from "../verify-sites-fullstack-artifact.mjs";
 
-test("full-stack artifact verifier accepts the Stage 4 Sites shape", async () => {
+test("full-stack artifact verifier accepts the production Sites shape", async () => {
   const outputDirectory = await createArtifact();
   const result = await verifySitesFullStackArtifact({ outputDirectory });
 
@@ -75,7 +75,7 @@ async function createArtifact(options = {}) {
     join(tmpdir(), "codex-usage-profile-sites-artifact-")
   );
   const clientDirectory = join(outputDirectory, "client");
-  const workerDirectory = join(outputDirectory, "profile-sites");
+  const workerDirectory = join(outputDirectory, "server");
   const metadataDirectory = join(outputDirectory, ".openai");
   const migrationsDirectory = join(metadataDirectory, "drizzle");
 

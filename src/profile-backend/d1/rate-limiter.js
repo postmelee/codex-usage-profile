@@ -3,10 +3,12 @@ import {
   ProfileBackendError
 } from "../errors.js";
 
-const DEFAULT_ACCOUNT_USAGE_BURST_LIMIT = 5;
-const DEFAULT_ACCOUNT_USAGE_BURST_WINDOW_MS = 10_000;
-const DEFAULT_ACCOUNT_USAGE_SUSTAINED_LIMIT = 30;
-const DEFAULT_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS = 60_000;
+export const DEFAULT_ACCOUNT_USAGE_BURST_LIMIT = 5;
+export const DEFAULT_ACCOUNT_USAGE_BURST_WINDOW_MS = 10_000;
+export const DEFAULT_ACCOUNT_USAGE_SUSTAINED_LIMIT = 30;
+export const DEFAULT_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS = 60_000;
+export const MAX_ACCOUNT_USAGE_RATE_LIMIT = 1_000;
+export const MAX_ACCOUNT_USAGE_RATE_WINDOW_MS = 3_600_000;
 
 export function createD1AccountUsageRateLimiter(options = {}) {
   const database = requireD1Database(options.database ?? options.db);
@@ -95,11 +97,24 @@ export function createD1AccountUsageRateLimiter(options = {}) {
 }
 
 function normalizeWindow(kind, limit, windowMs) {
-  if (!Number.isSafeInteger(limit) || limit <= 0) {
-    throw new TypeError(`${kind} limit must be a positive safe integer`);
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit <= 0 ||
+    limit > MAX_ACCOUNT_USAGE_RATE_LIMIT
+  ) {
+    throw new TypeError(
+      `${kind} limit must be between 1 and ${MAX_ACCOUNT_USAGE_RATE_LIMIT}`
+    );
   }
-  if (!Number.isSafeInteger(windowMs) || windowMs <= 0) {
-    throw new TypeError(`${kind} window must be a positive safe integer`);
+  if (
+    !Number.isSafeInteger(windowMs) ||
+    windowMs <= 0 ||
+    windowMs > MAX_ACCOUNT_USAGE_RATE_WINDOW_MS
+  ) {
+    throw new TypeError(
+      `${kind} window must be between 1 and ` +
+      `${MAX_ACCOUNT_USAGE_RATE_WINDOW_MS}`
+    );
   }
   return { kind, limit, windowMs };
 }

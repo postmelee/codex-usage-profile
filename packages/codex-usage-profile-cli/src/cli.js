@@ -8,6 +8,7 @@ import {
   resolveCredentialSource
 } from "./credentials.js";
 import {
+  DEFAULT_SERVICE_ORIGIN,
   normalizeRequestTimeout,
   resolveServiceOrigin
 } from "./config.js";
@@ -29,11 +30,13 @@ Commands:
   submit                Analyze and submit Codex usage
 
 Options:
-  --server <origin>      Service origin (or CODEX_USAGE_PROFILE_URL)
+  --server <origin>      Override service origin (or CODEX_USAGE_PROFILE_URL)
   --timeout <ms>        Request timeout in milliseconds
   --json                 Machine-readable status or submit output
   -h, --help             Show help
-  -v, --version          Show version`;
+  -v, --version          Show version
+
+Default service: ${DEFAULT_SERVICE_ORIGIN}`;
 
 const COMMANDS = new Set(["login", "status", "logout", "submit"]);
 
@@ -71,7 +74,7 @@ export async function runCli(argv, options = {}) {
       storedOrigin: credentialSource?.source === "file"
         ? credentialSource.serviceOrigin
         : null,
-      defaultOrigin: options.defaultServiceOrigin
+      defaultOrigin: options.defaultServiceOrigin ?? DEFAULT_SERVICE_ORIGIN
     });
     const timeoutMs = normalizeRequestTimeout(parsed.timeout);
     const activeCredential = bindCredentialToService({

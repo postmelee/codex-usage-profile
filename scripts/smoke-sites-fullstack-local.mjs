@@ -31,7 +31,7 @@ const OUTPUT_ROOT = resolve(
 );
 const WORKER_ROOT = resolve(
   OUTPUT_ROOT,
-  "codex_usage_profile_sites_fullstack"
+  "server"
 );
 const CLIENT_ROOT = resolve(OUTPUT_ROOT, "client");
 
@@ -48,7 +48,9 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   const miniflare = new Miniflare({
     bindings: {
       GITHUB_CLIENT_ID: "local-smoke-client",
-      LOCAL_FULL_STACK_TEST: "1"
+      LOCAL_FULL_STACK_TEST: "1",
+      PROFILE_MAINTENANCE_MODE: "disabled",
+      PROFILE_MAINTENANCE_TOKEN: "local-maintenance-secret"
     },
     compatibilityDate: "2026-05-15",
     compatibilityFlags: ["nodejs_compat"],
@@ -95,9 +97,36 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(migrated.response.status, 200);
     assert.deepEqual(migrated.body.result.appliedVersions, [1, 2]);
 
+    const health = await requestJson(origin, "GET", "/healthz");
+    assert.equal(health.response.status, 200);
+    assert.deepEqual(health.body, {
+      status: "ok",
+      worker: "ok",
+      bindings: "ok"
+    });
+
+    const landing = await fetch(new URL("/", origin));
+    assert.equal(landing.status, 200);
+    assert.match(await landing.text(), /<div id="root"><\/div>/);
+
     const spa = await fetch(new URL("/settings", origin));
     assert.equal(spa.status, 200);
     assert.match(await spa.text(), /<div id="root"><\/div>/);
+
+    const maintenanceDisabled = await requestMaintenance(origin, {
+      operation: "retention",
+      retentionDays: 90,
+      recentRevisions: 5
+    });
+    assert.equal(maintenanceDisabled.response.status, 404);
+    const maintenanceEnabled = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: true }
+    );
+    assert.equal(maintenanceEnabled.response.status, 200);
+    assert.equal(maintenanceEnabled.body.maintenanceEnabled, true);
 
     let sessionCookie = null;
     const serviceClient = createServiceClient({
@@ -141,6 +170,20 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
         assert.equal(callback.status, 200);
         sessionCookie = readCookie(callback);
         assert.ok(sessionCookie);
+
+        const csrfRejected = await requestJson(
+          origin,
+          "POST",
+          "/api/auth/logout",
+          undefined,
+          {
+            cookie: sessionCookie,
+            origin: "https://attacker.invalid",
+            "sec-fetch-site": "cross-site"
+          }
+        );
+        assert.equal(csrfRejected.response.status, 403);
+        assert.equal(csrfRejected.body.error.code, "forbidden");
 
         const approved = await requestJson(
           origin,
@@ -289,11 +332,147 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     ));
     assert.equal(privatePublicProfile.status, 404);
 
+    const database = await miniflare.getD1Database("DB");
+    const localOwner = await database.prepare(
+      "SELECT id FROM owners WHERE handle = ?"
+    ).bind("local-owner").first();
+    assert.match(localOwner?.id ?? "", /^owner_/);
+    const localOwnerId = localOwner.id;
+
+    const restoredEnCard = await fetch(new URL(
+      "/api/profile/card.png?locale=en",
+      origin
+    ), {
+      headers: { cookie: sessionCookie }
+    });
+    const restoredKoCard = await fetch(new URL(
+      "/api/profile/card.png?locale=ko",
+      origin
+    ), {
+      headers: { cookie: sessionCookie }
+    });
+    assert.equal(restoredEnCard.status, 200);
+    assert.equal(restoredKoCard.status, 200);
+    const privateApplicationEtags = {
+      en: restoredEnCard.headers.get("etag"),
+      ko: restoredKoCard.headers.get("etag")
+    };
+
+    const exported = await requestMaintenance(origin, {
+      operation: "export",
+      ownerId: localOwnerId,
+      handle: "local-owner"
+    });
+    assert.equal(exported.response.status, 200);
+    const backupText = JSON.stringify(exported.body.backup);
+    assert.doesNotMatch(
+      backupText,
+      /oauthStates|sessions|cliLoginChallenges|cliTokens|tokenDigest|deviceCodeDigest/
+    );
+    assert.doesNotMatch(backupText, /local-github-access-token/);
+
+    const deletionPlan = await requestMaintenance(origin, {
+      operation: "plan",
+      ownerId: localOwnerId,
+      handle: "local-owner"
+    });
+    assert.equal(deletionPlan.response.status, 200);
+    const deleted = await requestMaintenance(origin, {
+      operation: "delete-account",
+      ownerId: localOwnerId,
+      handle: "local-owner",
+      apply: true,
+      confirmOwner: {
+        ownerId: localOwnerId,
+        handle: "local-owner"
+      },
+      expectedContentDigest: deletionPlan.body.summary.contentDigest,
+      expectedObjectCount: deletionPlan.body.summary.objectCount
+    });
+    assert.equal(deleted.response.status, 200);
+    assert.equal(
+      (await fetch(new URL("/u/local-owner/card.png", origin))).status,
+      404
+    );
+    assert.equal(
+      (await fetch(new URL(
+        "/api/profiles/public/local-owner",
+        origin
+      ))).status,
+      404
+    );
+    assert.equal(
+      (await fetch(new URL("/api/auth/me", origin), {
+        headers: { cookie: sessionCookie }
+      })).status,
+      401
+    );
+
+    const restored = await requestMaintenance(origin, {
+      operation: "restore",
+      ownerId: localOwnerId,
+      handle: "local-owner",
+      apply: true,
+      backup: exported.body.backup,
+      confirmOwner: {
+        ownerId: localOwnerId,
+        handle: "local-owner"
+      },
+      expectedContentDigest: exported.body.summary.contentDigest,
+      expectedObjectCount: exported.body.summary.objectCount
+    });
+    assert.equal(restored.response.status, 200);
+    assert.equal(
+      (await fetch(new URL("/u/local-owner/card.png", origin))).status,
+      404
+    );
+
+    const restoredExport = await requestMaintenance(origin, {
+      operation: "export",
+      ownerId: localOwnerId,
+      handle: "local-owner"
+    });
+    const repairPlan = await requestMaintenance(origin, {
+      operation: "plan",
+      ownerId: localOwnerId,
+      handle: "local-owner"
+    });
+    const stableAfterRestore =
+      restoredExport.body.backup.profiles[0].publication;
+    assert.equal(stableAfterRestore.kind, "unpublished");
+    const repaired = await requestMaintenance(origin, {
+      operation: "repair-publication",
+      ownerId: localOwnerId,
+      handle: "local-owner",
+      apply: true,
+      confirmOwner: {
+        ownerId: localOwnerId,
+        handle: "local-owner"
+      },
+      expectedApplicationEtags: privateApplicationEtags,
+      expectedContentDigest: repairPlan.body.summary.contentDigest,
+      expectedObjectCount: repairPlan.body.summary.objectCount,
+      expectedStorageEtag: stableAfterRestore.storageEtag
+    });
+    assert.equal(repaired.response.status, 200);
+    assert.equal(
+      (await fetch(new URL("/u/local-owner/card.png", origin))).status,
+      200
+    );
+
+    const retention = await requestMaintenance(origin, {
+      operation: "retention",
+      retentionDays: 90,
+      recentRevisions: 5
+    });
+    assert.equal(retention.response.status, 200);
+    assert.equal(retention.body.summary.operation, "retention");
+
     return Object.freeze({
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 15,
+      routesVerified: 35,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {
@@ -389,6 +568,19 @@ async function requestJson(origin, method, pathname, body, headers = {}) {
     body: await response.json(),
     response
   };
+}
+
+function requestMaintenance(origin, body) {
+  return requestJson(
+    origin,
+    "POST",
+    "/__ops/profile-maintenance",
+    body,
+    {
+      authorization: "Bearer local-maintenance-secret",
+      origin
+    }
+  );
 }
 
 function sessionHeaders(origin, cookie) {

@@ -2,7 +2,10 @@
 
 `codex-usage-profile` CLI는 로컬 Codex account usage를 읽어 GitHub 계정에 연결된 Codex Usage Profile로 제출한다. GitHub identity는 웹 로그인으로만 결정하며 CLI usage document에는 이름, 사용자명, 아바타 또는 account id가 없다.
 
-> 현재 MVP 개발 단계에서는 기본 production service URL과 npm publish가 확정되지 않았다. 아래 `profiles.example.com`은 형식을 보여주기 위한 placeholder이며 실제 배포 origin으로 교체해야 한다.
+> production service URL은
+> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`로
+> 확정됐고 CLI 기본값에도 반영돼 있다. npm package 공개는 #44에서 진행하므로
+> 그 전에는 source checkout 또는 검토한 local tarball을 사용한다.
 
 ## 요구사항
 
@@ -15,23 +18,21 @@ API key-only와 Bedrock 인증은 이 account usage method를 제공하지 않�
 
 ## Quickstart
 
-package와 서비스가 배포된 뒤에는 `submit` 한 번으로 credential이 없을 때 browser login을 시작하고 승인 후 같은 명령에서 제출을 계속한다.
+package가 npm에 공개된 뒤에는 `submit` 한 번으로 credential이 없을 때 browser login을 시작하고 승인 후 같은 명령에서 제출을 계속한다.
 
 ```bash
-npx codex-usage-profile@latest submit \
-  --server https://profiles.example.com
+npx codex-usage-profile@latest submit
 ```
 
 명시적으로 단계를 나눌 수도 있다.
 
 ```bash
-npx codex-usage-profile@latest login \
-  --server https://profiles.example.com
+npx codex-usage-profile@latest login
 npx codex-usage-profile@latest submit
 npx codex-usage-profile@latest status
 ```
 
-첫 로그인에서 service origin이 credential과 함께 저장되므로 이후 명령은 `--server`를 생략할 수 있다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
+CLI는 production Sites origin을 기본값으로 사용하고 첫 로그인에서 credential과 함께 저장한다. `--server`는 local development 또는 명시적으로 검토한 대체 deployment에만 사용한다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
 
 raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
 
@@ -45,7 +46,7 @@ raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제�
 - CLI package를 `@latest`가 아닌 정확한 version으로 고정함
 
 ```bash
-export CODEX_USAGE_PROFILE_URL=https://profiles.example.com
+export CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
 export CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>'
 npx --yes codex-usage-profile@0.1.0 submit --json
 ```
@@ -167,9 +168,9 @@ token 또는 machine을 더 이상 신뢰하지 않으면 웹 Settings의 API To
 ```text
 Usage submitted successfully.
 Captured: 2026-07-11T00:00:00.000Z
-Profile: https://profiles.example.com/profile
-Card: https://profiles.example.com/u/octocat/card.png
-README: ![Codex usage profile](https://profiles.example.com/u/octocat/card.png)
+Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/profile
+Card: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
+README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
 같은 document의 network ambiguity retry는 server idempotency를 이용해 한 번만 수행한다. 두 요청이 모두 실패하면 결과가 불명임을 표시하며 같은 document를 다시 제출해도 안전하다.
@@ -199,4 +200,5 @@ CLI는 raw upstream stderr, RPC message, local path와 service error body를 그
 - submit token은 한 GitHub owner의 usage update에만 사용한다.
 - usage document의 identity/device/wrapper/unknown field는 거부된다.
 - public card visibility는 CLI가 아니라 웹 profile 설정에서만 변경한다.
-- production 배포에서는 TLS, shared rate limiter, durable database, backup·retention·deletion 정책이 추가로 필요하다.
+- production Sites는 TLS, D1 shared rate limiter, durable D1/R2,
+  backup/restore, operator deletion과 manual retention 정책을 사용한다.

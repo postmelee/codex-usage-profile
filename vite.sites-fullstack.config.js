@@ -18,7 +18,7 @@ export default defineConfig(async () => {
     rootDirectory,
     isLocalSmokeBuild
       ? "dist-sites-fullstack-local-smoke"
-      : "dist-sites-fullstack"
+      : "dist"
   );
   const workerEntry = isLocalSmokeBuild
     ? "./src/profile-runtime/sites/__tests__/_full-stack-worker-harness.js"
@@ -58,7 +58,7 @@ export default defineConfig(async () => {
           },
           compatibility_flags: ["nodejs_compat"],
           main: workerEntry,
-          name: "codex-usage-profile-sites-fullstack"
+          name: "server"
         },
         inspectorPort: false,
         persistState: {

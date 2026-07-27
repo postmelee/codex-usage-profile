@@ -97,13 +97,13 @@ export function readDeviceUserCode(location) {
 
 export function buildDeviceRedirectPath(userCode) {
   const normalizedUserCode = normalizeUserCodeInput(userCode);
-  const params = new URLSearchParams();
+  const params = new URLSearchParams({ view: "device" });
 
   if (normalizedUserCode) {
     params.set("user_code", normalizedUserCode);
   }
 
-  return `/device${params.size ? `?${params.toString()}` : ""}`;
+  return `/?${params.toString()}`;
 }
 
 function normalizeUserCodeInput(value) {

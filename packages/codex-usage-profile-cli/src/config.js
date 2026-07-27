@@ -1,6 +1,8 @@
 import { CliError } from "./errors.js";
 
 export const SERVICE_URL_ENV = "CODEX_USAGE_PROFILE_URL";
+export const DEFAULT_SERVICE_ORIGIN =
+  "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 export const MAX_REQUEST_TIMEOUT_MS = 120_000;
 

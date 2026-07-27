@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/postmelee";
+const SITES_PROFILE_ROUTE = "/?profile=postmelee";
 const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
@@ -393,7 +394,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveCount(0);
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/settings"
+      "/?view=settings"
     );
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
@@ -459,6 +460,25 @@ test.describe("Home and share card flow", () => {
     });
     expect(internalScrollTop).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath("public-profile-short-viewport.png") });
+  });
+
+  test("Sites root-query route keeps device approval usable", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        challenge: {
+          status: "approved"
+        }
+      },
+      ok: true
+    }));
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+
+    await expect(page.getByRole("heading", { name: "Authorize device" })).toBeVisible();
+    await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
+    await page.getByRole("button", { name: "Approve device" }).click();
+    await expect(page.getByText("Device approved.", { exact: true })).toBeVisible();
   });
 
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
@@ -586,7 +606,7 @@ test.describe("Public profile", () => {
     await mockPublicProfile(page);
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto(PROFILE_ROUTE);
+    await page.goto(SITES_PROFILE_ROUTE);
 
     await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
       .toBeVisible();

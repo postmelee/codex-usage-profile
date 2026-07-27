@@ -19,8 +19,26 @@ export {
 } from "./d1/store.js";
 
 export {
+  DEFAULT_PROFILE_RETENTION_DAYS,
+  MAX_PROFILE_RETENTION_ROWS_PER_TABLE,
+  createD1ProfileMaintenance
+} from "./d1/maintenance.js";
+
+export {
   createD1AccountUsageRateLimiter
 } from "./d1/rate-limiter.js";
+
+export {
+  PROFILE_MAINTENANCE_CONTRACT_VERSION,
+  PROFILE_MAINTENANCE_OPERATIONS,
+  PROFILE_MAINTENANCE_SCHEMA_VERSION,
+  assertProfileMaintenanceBackup,
+  createProfileMaintenanceBackup,
+  createProfileMaintenanceDigest,
+  createProfileMaintenanceSummary,
+  safeEqualText,
+  stableStringify
+} from "./maintenance-contract.js";
 
 export {
   PROFILE_BACKEND_ERROR_CODES,

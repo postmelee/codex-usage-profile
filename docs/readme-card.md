@@ -12,21 +12,20 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 6. Markdown을 GitHub profile 또는 repository README에 삽입한다.
 
 ```md
-![Codex usage profile](https://profiles.example.com/u/octocat/card.png)
+![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
 Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
 
 ## CLI 연결
 
-package와 service가 배포된 뒤의 사용자 명령은 다음과 같다. example origin은 실제 배포 origin으로 교체한다.
+CLI package가 #44에서 npm에 공개된 뒤의 사용자 명령은 다음과 같다.
 
 ```bash
-npx codex-usage-profile@latest submit \
-  --server https://profiles.example.com
+npx codex-usage-profile@latest submit
 ```
 
-첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장된다. 이후에는 같은 stable device id로 명령을 실행할 수 있다.
+CLI는 production Sites origin을 기본값으로 사용한다. 첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장되며, 이후에는 같은 stable device id로 명령을 실행할 수 있다.
 
 ```bash
 npx codex-usage-profile@latest status
@@ -70,7 +69,7 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 
 | Surface | URL | 역할 |
 |---|---|---|
-| 공개 프로필 | `/u/{handle}` | 공개 카드와 사용량 요약을 표시한다. |
+| 공개 프로필 | `/?profile={handle}` | Sites에서 공개 카드와 사용량 요약을 표시하는 canonical HTML URL이다. |
 | 공개 JSON | `/api/profiles/public/{handle}` | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
 | 공개 PNG | `/u/{handle}/card.png` | README에 삽입하는 안정적인 이미지 endpoint다. |
 
@@ -83,13 +82,13 @@ profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 �
 기본 영문 카드는 query가 없는 고정 URL을 사용한다.
 
 ```text
-https://profiles.example.com/u/{handle}/card.png
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
 ```
 
 한국어 카드는 `locale=ko`를 추가한다.
 
 ```text
-https://profiles.example.com/u/{handle}/card.png?locale=ko
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
 ```
 
 현재 지원 언어는 `en`, `ko`다. 지원하지 않는 locale은 영문으로 렌더링된다. README에 삽입한 URL은 계정 visibility 또는 언어를 바꿀 때만 수정하면 된다.

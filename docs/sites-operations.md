@@ -1,0 +1,218 @@
+# Sites 운영 가이드
+
+이 문서는 Codex Usage Profile의 canonical ChatGPT Sites 배포를 owner-only
+후보에서 공개 MVP까지 운영하는 절차다. Sites Worker, D1 `DB`, native R2
+`PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatible R2는
+fallback이다. remote 변경은 Task #51의 Gate A/B/C 승인을 각각 받은 범위에서만
+수행한다. production origin은
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
+public HTML profile은 `/?profile={handle}`, stable README card는
+`/u/{handle}/card.png`를 사용한다.
+
+## 현재 production baseline
+
+| 항목 | 값 |
+|---|---|
+| Site | `Codex Usage Profile` |
+| saved version/source | 7 / `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
+| access | public revision 14 |
+| environment | revision 9 |
+| service | `normal` |
+| maintenance | `disabled` |
+
+원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
+user, workspace group과 tenant group은 0개로 둔다. application rollback은
+version 7 이전의 saved version을 명시적으로 선택하되, data/schema rollback은
+별도 digest/count 승인 없이 수행하지 않는다.
+
+## 운영 불변식
+
+- 검증된 commit을 source로 push하고 같은 commit에서 만든 `dist/`만 saved
+  version으로 저장한다. production deployment는 saved version만 사용한다.
+- `.openai/hosting.json`의 기존 project와 `DB`/`PROFILE_MEDIA` linkage를
+  재사용한다. 새 Site나 storage를 임의로 만들지 않는다.
+- GitHub client secret과 maintenance token은 Sites environment secret으로만
+  보관한다. source, archive, URL, 로그와 보고서에 값을 복제하지 않는다.
+- access policy 변경은 deployment와 별도다. staging/candidate 검증은
+  owner-only를 사용한다. production public access를 닫을 때는 직전 owner-only
+  custom policy의 owner 1명, 추가 user/group 0개를 그대로 복원한다.
+- 추가 plan, 결제수단 또는 자동 초과 과금이 필요하면 공개와 신규 submit을
+  중단한다. 자동 유료 전환은 허용하지 않는다.
+
+## Runtime 설정
+
+| Key | 기본값·범위 | 의미 |
+|---|---|---|
+| `GITHUB_CLIENT_ID` | production OAuth app identifier | 공개 식별자 |
+| `GITHUB_CLIENT_SECRET` | secret | server-side OAuth exchange |
+| `PROFILE_MAINTENANCE_MODE` | disabled, exact `enabled`만 활성 | 숨겨진 operator route gate |
+| `PROFILE_MAINTENANCE_TOKEN` | secret | operator route 인증 |
+| `PROFILE_SERVICE_MODE` | `normal` | `normal`, `maintenance`, `owner-only`, `quota-stop`; 알 수 없는 값은 `maintenance` |
+| `PROFILE_STOP_RETRY_AFTER_SECONDS` | 300, 1~86400 | maintenance/quota stop 재시도 지연 |
+| `PROFILE_ACCOUNT_USAGE_BURST_LIMIT` | 5, 1~1000 | D1 shared burst count |
+| `PROFILE_ACCOUNT_USAGE_BURST_WINDOW_MS` | 10000, 1000~3600000 | burst window |
+| `PROFILE_ACCOUNT_USAGE_SUSTAINED_LIMIT` | 30, 1~1000 | D1 shared sustained count |
+| `PROFILE_ACCOUNT_USAGE_SUSTAINED_WINDOW_MS` | 60000, 1000~3600000 | sustained window |
+
+rate-limit 값이 없거나 정수·범위를 벗어나면 승인된 기본값을 사용한다. sustained
+limit/window가 burst보다 작아지는 조합도 전체 기본값으로 닫힌다. counter는
+D1 row의 atomic window update만 사용하며 process memory fallback이나 bypass는
+없다.
+
+## Health, 응답과 관찰
+
+`GET|HEAD /healthz`는 Worker와 required binding 준비 상태만
+`ok|unavailable`로 반환한다. binding 이름·metadata·payload는 반환하지 않는다.
+binding 또는 설정이 준비되지 않으면 `503`과 `Retry-After: 5`다.
+
+| 상태 | 영향 범위 | 공개 응답 |
+|---|---|---|
+| normal rate limit | Account Usage submit | `429 rate_limited`, window 종료까지 `Retry-After` |
+| `quota-stop` | Account Usage submit | `429 sites_quota_stop`, 설정된 `Retry-After` |
+| `owner-only` runtime stop | public profile/card read | 존재 여부를 숨기는 `404` |
+| owner-only access policy | Site 전체 anonymous 접근 | platform auth gate |
+| `maintenance` | maintenance route 외 backend | `503 sites_maintenance`, 설정된 `Retry-After` |
+| D1/R2/asset provider unavailable | 해당 backend/asset | generic `503`, 기본 `Retry-After: 5` |
+| operator route disabled/인증 실패 | maintenance route | generic `404` |
+
+Worker request event는 `requestId`, `routeClass`, `method`, `status`,
+`durationBucket`, `errorCode`, `retryable` 일곱 필드만 기록한다. URL/query,
+cookie, Authorization, OAuth code/state, session/token/device code, owner,
+usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-request-id`로
+사용자 오류와 같은 event를 연결한다.
+
+## Owner-only candidate 배포
+
+1. Site project, URL/slug, title, access, saved version/deployment와 environment
+   key 존재 여부를 read-only로 확인한다. secret plaintext는 읽거나 출력하지
+   않는다.
+2. `npm run build:production`, `npm run verify:sites-fullstack`,
+   `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
+3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
+   archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
+4. saved version을 한 번 만들고 private deployment operation으로 배포한다.
+   non-terminal 상태는 같은 version/deployment id를 끝까지 조회한다.
+5. owner-only custom access와 `/healthz`, OAuth/session/logout, packed CLI,
+   private preview, publish/unpublish/ETag/404를 검증한다.
+6. error event를 확인한 뒤 maintenance는 disabled, profile은 private, test
+   token/session은 revoked 상태로 남긴다.
+
+배포 실패 시 새 public access를 열지 않는다. 이전 saved version과 owner-only
+policy를 유지하고 environment 변경을 이전 key set으로 되돌린 뒤 같은 health를
+확인한다.
+
+## Environment와 OAuth rotation
+
+1. exact production callback은 canonical origin의
+   `/api/auth/github/callback`으로 고정한다.
+2. production OAuth app의 homepage/callback을 먼저 준비하되 secret 값은
+   repository 밖에서만 전달한다.
+3. Sites environment에서 client id와 secret을 같은 승인 범위로 교체한다.
+   maintenance token은 별도 secret으로 회전한다.
+4. environment revision이 적용된 같은 saved version을 owner-only로
+   재배포한다.
+5. 새 browser login/callback/session/logout을 통과한 뒤 이전 OAuth secret과
+   maintenance token을 폐기한다. 실패하면 이전 app/key set으로 원복한다.
+
+## Export, restore와 account deletion
+
+항상 `plan -> export -> exact digest/count 확인 -> apply -> 재검증` 순서다.
+backup은 repository 밖의 사용자 지정 위치에 `0600`으로 저장하고, 보고에는
+contract/schema version, digest와 count만 남긴다.
+
+- export는 owner identity, latest usage/snapshot, visibility와 publication
+  metadata만 포함한다. OAuth state, session, challenge, token digest와
+  rate-limit row는 포함하지 않는다.
+- restore는 disposable target에서 먼저 수행하고 export와 같은 digest/count를
+  확인한다. 인증 상태는 복구하지 않으므로 다시 로그인해야 한다.
+- account deletion은 stable publication을 먼저 tombstone으로 확인한 뒤 R2
+  revision plan과 D1 owner-dependent plan이 일치할 때만 apply한다.
+- partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
+  같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
+  조건으로 수행한다.
+
+operator CLI는 `npm run sites:profile-maintenance -- <command>`를 사용하며
+mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두
+필요하다. token은 `PROFILE_MAINTENANCE_TOKEN` environment에서만 읽는다.
+
+## Retention
+
+expired OAuth state, CLI challenge, session과 revoked/expired token은 plan에서
+count를 확인한 뒤 정리한다. public stable object와 tombstone은 retention
+cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 key,
+owner+locale별 최근 5개와 90일 이내 key를 보호한다.
+
+개인 MVP에서는 매월 90일 dry-run을 수행하고 자동 schedule은 두지 않는다.
+
+```bash
+npm run sites:profile-maintenance -- retention \
+  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+  --retention-days 90
+```
+
+apply는 repository 밖 backup, latest digest/count와 삭제 후보 승인을 확인한
+뒤에만 실행한다. 원본 durable backup은 Gate C 공개 전환 후 30일과 #45 완료
+중 더 늦은 시점까지 `0600`으로 유지하고, 별도 영구 삭제 승인 뒤 폐기한다.
+backup path와 payload는 command 기록, 문서 또는 log에 남기지 않는다.
+
+`npm run cleanup:card-media`는 기본 dry-run이다. apply 전에 R2 export/restore
+가능성과 최신 stable 참조를 다시 확인한다. 삭제된 R2 object는 이 도구로
+복구할 수 없으므로 backup 없이 apply하지 않는다.
+
+## Public smoke, production cutover와 원복
+
+Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public access를
+연다.
+
+1. owner-only health, saved version, OAuth callback, quota/추가 과금 표시와
+   원복할 exact custom access policy를 다시 확인한다.
+2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
+3. public access로 전환하고 anonymous landing, private API 401/403, private
+   profile/card 404, OAuth/CLI/submit, publish `GET|HEAD|304`, unpublish 404를
+   순서대로 확인한다.
+4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
+   owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
+   Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가
+   하나라도 있으면 같은 원복 절차를 먼저 수행한다.
+5. recent error event를 확인해 query/credential/identity/usage bytes가 없음을
+   검증한다.
+
+중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
+계속하지 않는다. canonical public HTML 확인은
+`/?profile={handle}`을 사용하며 extension 없는 `/u/{handle}` deep link를
+production link로 배포하지 않는다.
+
+## 로그와 quota stop
+
+로그 조회는 smoke 시간대와 `x-request-id`로 좁힌다. route class별 429/503,
+retryable 비율과 duration bucket만 집계한다. raw request/response나 provider
+exception을 추가로 출력하지 않는다.
+
+다음 조건이면 `PROFILE_SERVICE_MODE=quota-stop`으로 신규 submit을 먼저
+중단하고, 필요하면 `owner-only` access 또는 `maintenance`로 전환한다.
+
+- Sites/D1/R2 plan upgrade, 결제수단 또는 자동 초과 과금이 요구된다.
+- quota 부족으로 OAuth, submit, preview 또는 stable card 계약을 유지하지
+  못한다.
+- 반복 provider failure에서 generic 404/429/503과 export/restore를 보장하지
+  못한다.
+- 예상하지 못한 anonymous traffic 또는 abuse로 개인 프로젝트 운영 한도를
+  넘는다.
+
+## Rollback과 Cloud Run fallback 평가
+
+application rollback은 이전 saved version을 재배포한다. schema/data rollback은
+먼저 승인된 D1/R2 backup 복구 가능성을 검증하고, backward-compatible migration
+구간을 벗어나면 자동으로 진행하지 않는다.
+
+Cloud Run fallback은 다음 순서로 평가하며 별도 승인 전에는 provider resource를
+만들지 않는다.
+
+1. owner-only/maintenance 상태에서 Sites 장애와 quota/가격 조건을 기록한다.
+2. `npm run build:cloud-run`, Postgres migration test, S3-compatible media test와
+   `npm run smoke:hosting-matrix`로 기존 artifact 회귀를 확인한다.
+3. 필요한 Cloud Run, Postgres/Neon, R2/S3 plan과 증분 비용을 다시 산정한다.
+4. exact origin/OAuth callback, data export/import, cookie/CORS, rollback과 비용
+   stop을 별도 수행계획서와 승인 Gate로 정한다.
+5. fallback이 검증되기 전까지 Sites data를 삭제하거나 public origin을
+   전환하지 않는다.
