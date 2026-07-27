@@ -9,9 +9,31 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 - native R2 binding은 immutable card revision과 stable public card publication만 저장한다. private preview는 session 인증 뒤 on-demand render하며 R2에 저장하지 않는다.
 - Worker-compatible JS/Wasm renderer가 Sites의 hosted card renderer다.
 
-이 결정은 Task #49 Stage 5의 실제 hosted OAuth, CLI, D1, R2와 renderer 검증에 따른 **architecture 적합성 PASS**다. 현재 Stage 5 Site, D1/R2와 test OAuth app은 owner-only 검증 자원이며 production cutover가 아니다. canonical build 전환, production OAuth app/custom domain, production data 경계, monitoring/backup과 공개 access는 별도 migration task에서 승인받는다.
+이 결정은 Task #49의 architecture 적합성 검증과 Task #51의 production
+migration 결과에 따른 **MVP production PASS**다. canonical origin은
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이며,
+production GitHub OAuth app, D1/R2, Worker renderer와 운영 guardrail을 같은
+Sites project에서 사용한다. `stage5`가 포함된 기존 slug는 project를 새로
+만들지 않고 검증된 linkage와 rollback history를 보존하기 위해 유지한 opaque
+배포 식별자이며 제품의 test 상태를 뜻하지 않는다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
+
+### 현재 production 상태
+
+| 항목 | 값 |
+|---|---|
+| canonical origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
+| Site title | `Codex Usage Profile` |
+| saved version | 7 |
+| deployed source | `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
+| access | public, revision 14 |
+| environment | revision 9, maintenance disabled, service normal |
+| owner-only rollback | owner 1명, 추가 user/group 0개의 직전 custom policy |
+
+Task #51 Stage 6의 repository HEAD 차이는 README와 운영 문서·보고서뿐이다.
+deployable source가 바뀌지 않았으므로 새 saved version을 만들지 않고 검증된
+version 7을 유지했다.
 
 ## 요청과 신뢰 경계
 
@@ -43,7 +65,7 @@ CLI Bearer 요청은 browser cookie에 의존하지 않는다. CLI는 `Origin` �
 
 ## 판정 근거와 위험 수용
 
-| 기준 | Stage 5 근거 | 판정 |
+| 기준 | #49/#51 근거 | 판정 |
 |---|---|---|
 | 현재 계정의 증분 인프라 비용 | Sites/D1/R2 생성·migration·배포·공개 smoke 과정에서 결제나 plan upgrade 없이 동작 | PASS — 현재 계정/현재 beta 관찰로 한정 |
 | GitHub OAuth와 browser session | 실제 code exchange, GitHub identity, secure session과 logout | PASS |
@@ -235,7 +257,9 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ## Data Retention, Backup, PII 최소화
 
-structured store의 기본 정책이다. 세부 보존 기간, D1 export/backup과 자동화는 Sites MVP migration task에서 운영 값과 함께 확정한다.
+아래 값은 개인·비상업 MVP의 production 기본 정책이다. 자동 schedule을
+추가해 별도 비용이나 권한을 늘리지 않고 operator가 매월 dry-run 결과를
+검토한다.
 
 ### 저장 데이터와 PII 최소화
 
@@ -245,34 +269,61 @@ structured store의 기본 정책이다. 세부 보존 기간, D1 export/backup�
 
 ### Retention 기본 정책
 
-- expired/consumed OAuth state, expired CLI challenge, expired/revoked session과 token 행은 만료 시점 이후 인증에 사용될 수 없으나 행 자체는 남는다. 타임스탬프는 ISO-8601 UTC text로 사전순 비교가 시간순과 일치하므로, D1 운영 정리는 `DELETE ... WHERE expires_at < ?` 형태의 명시적 작업으로 수행한다. 자동 정리 주기는 migration task에서 확정한다.
-- 계정 삭제(owner 및 종속 레코드 일괄 제거)는 아직 제품 기능이 아니다. README 보안 절의 미해결 항목과 동일하게 후속 task로 관리한다.
+- expired/consumed OAuth state, expired CLI challenge, expired/revoked session과
+  token 행은 만료 뒤 인증에 사용할 수 없다. 매월
+  `sites:profile-maintenance retention` 90일 dry-run으로 count를 확인하고,
+  backup과 exact count 승인을 거친 경우에만 `--apply`한다.
+- self-service 계정 삭제 UI는 아직 제품 기능이 아니다. owner 요청은
+  operator가 export와 exact owner/handle/digest/count를 확인한 뒤
+  `delete-account --apply`로 처리한다.
 - public stable object와 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 모든 key, owner+locale별 최근 5개, 생성 후 90일 이내를 보호한다. 나머지만 orphan candidate다.
 - `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
 - 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.
-- 자동 cleanup schedule과 90일/최근 5개 운영 값의 조정은 migration task에서 비용·복구 목표와 함께 결정한다.
+- 자동 cleanup schedule은 MVP 범위에서 두지 않는다. 90일/최근 5개 운영 값을
+  줄이거나 자동화하려면 비용·복구 목표를 다시 승인받는다.
 
 ### Backup과 복구
 
-- D1 migration은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다. production data를 넣기 전에 export/restore smoke와 보존 위치를 확정한다.
+- D1 migration은 최소 한 saved-version rollback 구간 동안 backward
+  compatible해야 한다. production data lifecycle 전에 실제 export,
+  disposable restore/repair와 exact digest/count 일치를 검증했다.
 - R2는 stable/tombstone과 immutable revision을 함께 export할 수 있어야 한다. cleanup apply 전에 export/복구 가능성을 확인한다.
 - fallback Postgres의 `npm run migrate:postgres -- down`, Neon backup/PITR와 seeding rollback은 계속 보존하지만 Sites D1 backup을 대신하지 않는다.
-- Stage 5 test owner/집계 usage와 immutable media는 owner-only/private 상태로 유지 중이다. production cutover 전 별도 production resource를 만들거나 승인된 cleanup으로 test data를 제거한다.
+- Task #49/#51의 test owner, usage, session, token과 media는 승인된 cleanup 뒤
+  0건이다. Gate C final smoke에서 생성한 owner와 연관 object 12건도
+  unpublish와 exact guarded deletion 뒤 0건으로 정리했다. owner에 귀속되지
+  않은 만료 device challenge 2건은 usage,
+  profile 또는 교환 token이 없으며 90일 retention apply 대상이다.
+- Task #49 이전 데이터를 담은 repository 밖 원본 backup은 mode `0600`으로
+  유지한다. Gate C 공개 전환 후 30일과 #45 production QA 완료 중 더 늦은
+  시점까지 보존하고, 두 조건을 모두 충족한 뒤 작업지시자의 별도 영구 삭제
+  승인을 받는다. 실제 path와 payload는 문서·로그·repository에 기록하지 않는다.
 
 ## 검증 상태
 
 ### 실제 Sites에서 검증됨
 
-- saved version 2와 production deployment `succeeded`
+- saved version 7, source
+  `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0`와 production deployment
+  `succeeded`
 - logical D1 `DB`, native R2 `PROFILE_MEDIA`, migration 2개와 Worker renderer composition
-- app-owned GitHub OAuth code exchange, GitHub identity, secure browser session과 logout
+- production GitHub OAuth code exchange, GitHub identity, secure browser session과 logout
 - packed CLI device login/approve/exchange, Contract v1 submit과 token revoke
 - authenticated private preview 200/no-store와 private/public/missing 404
 - publish/unpublish, stable GET/HEAD/If-None-Match 304와 application ETag
 - duplicate usage submit의 accepted/idempotent 결과와 one-token device exchange
 - cross-origin session mutation 거부
 - client asset/response/header secret·private-data 비노출
-- public smoke 종료 뒤 owner-only access, private visibility와 revoked token/session 원복
+- Gate B public smoke 종료 뒤 owner-only access, private visibility,
+  revoked token/session과 owner data 0건 원복
+- Gate C final public access revision 14, anonymous landing과 health 200
+- clean packed CLI의 device approve, Contract v1 submit, status 거부와 logout
+- private default, publish/unpublish, canonical HTML/JSON, stable
+  GET/HEAD/locale/304/404와 application ETag
+- Gate C smoke owner와 연관 object 12건 guarded cleanup, 90일 retention
+  candidate 0건, browser session/CLI credential 제거
+- final environment revision 9의 maintenance disabled, service mode normal
+- final recent error log event 0건과 response/header/client allowlist 재확인
 
 ### local real runtime/contract에서 검증됨
 
@@ -285,26 +336,23 @@ structured store의 기본 정책이다. 세부 보존 기간, D1 export/backup�
 - 기존 Node/Cloud Run/Postgres/S3-compatible fallback build와 contract 회귀
 - orphan cleanup dry-run/apply guard와 stable tombstone 보존
 
-### production cutover 전에 남음
+### 공개 뒤 후속 운영 항목
 
-- Stage 5 test resource와 분리된 production data/resource 정책 또는 승인된 test data cleanup
-- production OAuth app/custom domain과 최종 public access
-- D1/R2 export, backup/restore와 account deletion/retention job
-- hosted event 조회와 quota/비용 stop 값·alert 운용 검증
+- #44 npm package 공개와 production 기본 origin 사용자 설치 검증
+- #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
+- 월별 90일 retention dry-run과 owner 요청 기반 account deletion
+- traffic/quota 증가 시 비용 0원 조건, error event와 stop trigger 재평가
 - managed remote provider fault injection을 대신하는 운영 관찰·repair procedure
 
 Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수용이다. 정상 hosted contract와 local failure/concurrency test가 깨지면 PASS 근거도 무효가 된다.
 
 ## 후속 작업
 
-별도 Sites MVP migration task에서 다음을 순서대로 수행한다.
-
-1. canonical product build를 Sites full-stack surface로 정리하되 Cloud Run/Neon/S3 fallback artifact와 tests를 삭제하지 않는다.
-2. production OAuth app, custom domain, public access와 CLI 기본 service origin을 exact 값으로 승인받는다.
-3. Stage 5 test D1/R2를 재사용할지 production resource를 분리할지 결정하고, test owner/usage/media cleanup 또는 migration을 수행한다.
-4. D1/R2 export, backup/restore, retention/account deletion과 repair procedure를 구현·검증한다.
-5. 구현된 structured event와 abuse/rate-limit·비용 stop 값을 owner-only
-   candidate에서 확인하고 alert 기준을 확정한다.
-6. owner-only candidate → 제한 public smoke → production cutover를 별도 Gate로 진행한다.
-
-GitHub Issue #43과 #46은 Task #49에서 close하거나 수정하지 않았다. migration task를 등록할 때 #43은 Cloud Run fallback deployment로 유지·재범위화하고, #46의 marketing-only 원격 게시 범위는 Sites canonical full-stack 전환과 중복되지 않도록 별도 결정한다.
+1. #44에서 npm package를 공개하고 Sites production origin을 package 사용자
+   흐름에서 확인한다.
+2. #45에서 fresh account 기준 OAuth/CLI/D1/R2/card 전체 흐름과 보안·운영
+   경계를 release QA한다.
+3. Sites의 가격·quota·정책 또는 장기 장애 trigger가 실제로 발생할 때만 #43의
+   Cloud Run/Neon/S3-compatible R2 fallback을 평가한다.
+4. marketing-only Sites mirror였던 #46은 canonical full-stack Site와
+   중복되므로 별도 구현하지 않는다.

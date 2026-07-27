@@ -2,7 +2,10 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-> This package is under MVP development. It has no default production service URL yet, and this repository does not claim that npm publishing or production deployment is complete.
+> The production MVP service runs at
+> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`, which is
+> also the CLI default. npm package publication is tracked in #44; use the
+> source checkout or a reviewed local tarball until that release is complete.
 
 ## Requirements
 
@@ -15,13 +18,16 @@ API-key-only and Bedrock Codex authentication do not provide the account usage m
 
 ## Quick Start
 
-After the package and service are published, one command can start browser login when needed and continue with submission:
+After the package is published in #44, one command can start browser login when needed and continue with submission:
 
 ```bash
-npx codex-usage-profile@latest submit --server https://profiles.example.com
+npx codex-usage-profile@latest submit
 ```
 
-The example origin is a placeholder. Use the origin operated by the deployed service. Once login succeeds, the service origin and a narrow submit credential are stored locally, so later commands can omit `--server`.
+The CLI defaults to the production Sites origin. Once login succeeds, the
+service origin and a narrow submit credential are stored locally. Use
+`--server` only for local development or an explicitly reviewed alternative
+deployment.
 
 During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
 
@@ -40,7 +46,7 @@ Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROF
 On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-issued service token and pin the CLI to an exact version. `--yes` intentionally skips npm's installation confirmation and should not be combined with `@latest` in unattended execution.
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://profiles.example.com \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
 npx --yes codex-usage-profile@0.1.0 submit --json
 ```

@@ -4,25 +4,29 @@ Codex Usage Profile combines GitHub identity with the account usage reported by 
 
 A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
 
-> The project is still in MVP development. The CLI package has no default production service URL yet, npm publishing is not claimed as complete, and the example origins below are placeholders.
+> The public MVP service runs on ChatGPT Sites at
+> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
+> The CLI already uses this origin by default. npm package publication remains
+> tracked in #44, so use the source checkout or a reviewed local tarball until
+> that release is complete.
 
 ## MVP Flow
 
 1. Open the website and sign in with GitHub.
 2. Run the product CLI. If no credential exists, it opens the browser approval flow and continues after approval.
 3. The CLI reads `account/usage/read` through `codex-usage-analyzer` and submits Account Usage Contract v1.
-4. Open `/profile`, verify the updated private preview, then select **Publish card**.
+4. Open the owner profile, verify the updated private preview, then select **Publish card**.
 5. Copy the stable image URL or README Markdown from **Share**.
 6. Future submits update the same image URL.
 
-After package and service deployment, the intended command is:
+After the npm package is published in #44, the intended command is:
 
 ```bash
-npx codex-usage-profile@latest submit \
-  --server https://profiles.example.com
+npx codex-usage-profile@latest submit
 ```
 
-The first approved login stores the service origin, so later commands can omit `--server`.
+The CLI defaults to the production Sites origin. `--server` remains available
+for local development and an explicitly reviewed alternative deployment.
 
 ```bash
 npx codex-usage-profile@latest status
@@ -39,7 +43,7 @@ See [CLI login and submit](docs/cli-submit.md) for source/tarball commands, cred
 On a trusted machine that already has a ChatGPT-backed Codex sign-in, automation can use a pre-issued service token and an exact CLI version. `--yes` intentionally skips npm's installation confirmation, so do not combine it with `@latest` in unattended execution.
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://profiles.example.com \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
 npx --yes codex-usage-profile@0.1.0 submit --json
 ```
@@ -47,7 +51,7 @@ npx --yes codex-usage-profile@0.1.0 submit --json
 ## README Card
 
 ```md
-![Codex usage profile](https://profiles.example.com/u/octocat/card.png)
+![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
 The default URL renders English. Add `?locale=ko` for Korean. Making the profile private causes the public image endpoint to return `404`.
@@ -98,7 +102,11 @@ npm test
 npm run build
 ```
 
-The Home, owner card, and public card-profile routes are `/`, `/profile`, and `/u/{handle}`. The public route loads the allowlisted Account Usage response from `GET /api/profiles/public/{handle}` and displays the stable `/u/{handle}/card.png` image.
+The Home and owner card routes are `/` and `/profile`. The hosted Sites public
+profile URL is `/?profile={handle}`; local development also accepts
+`/u/{handle}`. The public profile loads the allowlisted Account Usage response
+from `GET /api/profiles/public/{handle}` and displays the stable
+`/u/{handle}/card.png` image.
 
 `npm run dev` starts the Vite frontend preview only. `npm run dev:runtime` starts a same-origin local runtime that routes `/api/*` to `createProfileBackendHttpHandler()` and delegates frontend routes to Vite middleware.
 
@@ -187,7 +195,10 @@ File credentials are bound to the issuing service origin and are never sent to a
 - New profiles default to private; public card access follows the web profile visibility setting.
 - Exact retries are idempotent, stale/conflicting revisions are rejected, request bodies are size-limited, and submit is rate-limited.
 - Public PNG requests read only the stable media object. Private previews remain authenticated on-demand renders and are never persisted to public media.
-- Production deployment still needs TLS, a shared rate limiter, backup values, account deletion, cleanup scheduling and secret management. Durable database/media adapters and concurrency/failure contracts are implemented locally; remote Neon/R2 validation remains #43 work.
+- The Sites production service provides TLS, D1 shared rate limiting, external
+  backup/restore, operator account deletion, manual retention cleanup, and
+  server-side secret management. Cloud Run/Neon/S3-compatible R2 remains the
+  tested fallback in #43 rather than an MVP release prerequisite.
 
 Revoke a CLI token immediately from web Settings when it is exposed or a machine is no longer trusted.
 
@@ -197,6 +208,7 @@ Revoke a CLI token immediately from web Settings when it is exposed or a machine
 - [README image endpoint and cache](docs/readme-card.md)
 - [Standalone analyzer integration](docs/codex-usage-analyzer.md)
 - [Production hosting architecture](docs/production-hosting.md)
+- [Sites operations and rollback](docs/sites-operations.md)
 - [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
 
 ## Trademark Notice

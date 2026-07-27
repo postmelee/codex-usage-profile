@@ -4,7 +4,26 @@
 후보에서 공개 MVP까지 운영하는 절차다. Sites Worker, D1 `DB`, native R2
 `PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatible R2는
 fallback이다. remote 변경은 Task #51의 Gate A/B/C 승인을 각각 받은 범위에서만
-수행한다.
+수행한다. production origin은
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
+public HTML profile은 `/?profile={handle}`, stable README card는
+`/u/{handle}/card.png`를 사용한다.
+
+## 현재 production baseline
+
+| 항목 | 값 |
+|---|---|
+| Site | `Codex Usage Profile` |
+| saved version/source | 7 / `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
+| access | public revision 14 |
+| environment | revision 9 |
+| service | `normal` |
+| maintenance | `disabled` |
+
+원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
+user, workspace group과 tenant group은 0개로 둔다. application rollback은
+version 7 이전의 saved version을 명시적으로 선택하되, data/schema rollback은
+별도 digest/count 승인 없이 수행하지 않는다.
 
 ## 운영 불변식
 
@@ -14,9 +33,9 @@ fallback이다. remote 변경은 Task #51의 Gate A/B/C 승인을 각각 받은 
   재사용한다. 새 Site나 storage를 임의로 만들지 않는다.
 - GitHub client secret과 maintenance token은 Sites environment secret으로만
   보관한다. source, archive, URL, 로그와 보고서에 값을 복제하지 않는다.
-- access policy 변경은 deployment와 별도다. Gate B 전에는 owner-only를
-  유지하고, Gate B public smoke가 끝나면 즉시 같은 owner-only policy로
-  원복한다.
+- access policy 변경은 deployment와 별도다. staging/candidate 검증은
+  owner-only를 사용한다. production public access를 닫을 때는 직전 owner-only
+  custom policy의 owner 1명, 추가 user/group 0개를 그대로 복원한다.
 - 추가 plan, 결제수단 또는 자동 초과 과금이 필요하면 공개와 신규 submit을
   중단한다. 자동 유료 전환은 허용하지 않는다.
 
@@ -123,13 +142,27 @@ count를 확인한 뒤 정리한다. public stable object와 tombstone은 retent
 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 key,
 owner+locale별 최근 5개와 90일 이내 key를 보호한다.
 
+개인 MVP에서는 매월 90일 dry-run을 수행하고 자동 schedule은 두지 않는다.
+
+```bash
+npm run sites:profile-maintenance -- retention \
+  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+  --retention-days 90
+```
+
+apply는 repository 밖 backup, latest digest/count와 삭제 후보 승인을 확인한
+뒤에만 실행한다. 원본 durable backup은 Gate C 공개 전환 후 30일과 #45 완료
+중 더 늦은 시점까지 `0600`으로 유지하고, 별도 영구 삭제 승인 뒤 폐기한다.
+backup path와 payload는 command 기록, 문서 또는 log에 남기지 않는다.
+
 `npm run cleanup:card-media`는 기본 dry-run이다. apply 전에 R2 export/restore
 가능성과 최신 stable 참조를 다시 확인한다. 삭제된 R2 object는 이 도구로
 복구할 수 없으므로 backup 없이 apply하지 않는다.
 
-## Public smoke와 즉시 원복
+## Public smoke, production cutover와 원복
 
-Gate B에서 승인한 시간과 범위에서만 public access를 연다.
+Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public access를
+연다.
 
 1. owner-only health, saved version, OAuth callback, quota/추가 과금 표시와
    원복할 exact custom access policy를 다시 확인한다.
@@ -137,13 +170,17 @@ Gate B에서 승인한 시간과 범위에서만 public access를 연다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card 404, OAuth/CLI/submit, publish `GET|HEAD|304`, unpublish 404를
    순서대로 확인한다.
-4. 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
+4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
    owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
+   Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가
+   하나라도 있으면 같은 원복 절차를 먼저 수행한다.
 5. recent error event를 확인해 query/credential/identity/usage bytes가 없음을
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다.
+계속하지 않는다. canonical public HTML 확인은
+`/?profile={handle}`을 사용하며 extension 없는 `/u/{handle}` deep link를
+production link로 배포하지 않는다.
 
 ## 로그와 quota stop
 
