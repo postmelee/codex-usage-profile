@@ -6,9 +6,9 @@ A successful CLI submit updates stored usage and changes the card ETag while pre
 
 > The public MVP service runs on ChatGPT Sites at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
-> The CLI already uses this origin by default. npm package publication remains
-> tracked in #44, so use the source checkout or a reviewed local tarball until
-> that release is complete.
+> The CLI uses this origin by default. For reproducible automation, pin
+> `0.1.0`; for an interactive first run, review the version npm displays before
+> accepting `@latest`.
 
 ## MVP Flow
 
@@ -19,7 +19,7 @@ A successful CLI submit updates stored usage and changes the card ETag while pre
 5. Copy the stable image URL or README Markdown from **Share**.
 6. Future submits update the same image URL.
 
-After the npm package is published in #44, the intended command is:
+The interactive command is:
 
 ```bash
 npx codex-usage-profile@latest submit
@@ -121,8 +121,16 @@ node packages/codex-usage-profile-cli/bin/codex-usage-profile.js login \
 Package preflight:
 
 ```bash
-npm pack --dry-run --workspace packages/codex-usage-profile-cli --json
+npm run scan:public-release
+npm run verify:npm-release
+npm run smoke:npm-package:local
 ```
+
+The public release scanner reads every local branch, remote-tracking branch,
+and tag in the local Git object database. It reports only ref, abbreviated
+blob, path, category, and counts; it never prints a detected credential value.
+See [npm release operations](docs/npm-release.md) for the publication gates and
+recovery procedure.
 
 ### Cloud Run Container POC
 

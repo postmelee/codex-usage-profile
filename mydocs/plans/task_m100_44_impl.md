@@ -280,7 +280,7 @@ node --test scripts/__tests__/scan-public-release-surface.test.js
 npm run scan:public-release
 npm run verify:npm-release
 npm run smoke:npm-package:local
-node --test packages/codex-usage-profile-cli/test
+npm test --workspace packages/codex-usage-profile-cli
 npm test
 git diff --check
 ```

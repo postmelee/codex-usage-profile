@@ -49,6 +49,13 @@ test("release metadata and lock reject analyzer dependency drift", async () => {
     /package dependencies/
   );
 
+  const manifestWithoutProvenance = structuredClone(manifest);
+  delete manifestWithoutProvenance.publishConfig.provenance;
+  assert.throws(
+    () => verifyPackageMetadata(manifestWithoutProvenance),
+    /package publish provenance/
+  );
+
   const lockWithDifferentIntegrity = structuredClone(lockfile);
   lockWithDifferentIntegrity.packages[
     `node_modules/${EXPECTED_ANALYZER_PACKAGE.name}`

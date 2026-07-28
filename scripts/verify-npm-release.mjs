@@ -244,18 +244,17 @@ export function verifyPackageMetadata(manifest) {
     EXPECTED_NPM_PACKAGE.registry,
     "package publish registry"
   );
+  assertEqual(
+    manifest.publishConfig.provenance,
+    true,
+    "package publish provenance"
+  );
   const publishKeys = Object.keys(manifest.publishConfig);
   const unexpectedPublishKeys = publishKeys.filter(
     (key) => !["access", "provenance", "registry"].includes(key)
   );
   if (unexpectedPublishKeys.length > 0) {
     throw new Error("package publishConfig contains unsupported fields");
-  }
-  if (
-    Object.hasOwn(manifest.publishConfig, "provenance") &&
-    manifest.publishConfig.provenance !== true
-  ) {
-    throw new Error("package provenance must be true when configured");
   }
 }
 

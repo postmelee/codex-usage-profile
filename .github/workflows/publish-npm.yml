@@ -1,0 +1,86 @@
+name: Verify and publish npm package
+
+on:
+  push:
+    branches: [devel]
+    tags: [codex-usage-profile-v0.1.0]
+  pull_request:
+    branches: [devel]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify package on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - name: Check out the immutable source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org/
+      - name: Install the locked dependency graph without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Reject install lifecycle scripts
+        run: >-
+          node -e "for (const path of ['./package.json',
+          './packages/codex-usage-profile-cli/package.json']) {
+          const scripts = require(path).scripts || {};
+          for (const key of ['preinstall','install','postinstall']) {
+          if (scripts[key]) throw new Error(path + ' defines ' + key); }}"
+      - name: Run CLI package tests
+        run: npm test --workspace packages/codex-usage-profile-cli
+      - name: Verify the exact package candidate
+        run: npm run verify:npm-release
+      - name: Install and exercise the local tarball
+        run: npm run smoke:npm-package:local
+
+  publish:
+    name: Publish codex-usage-profile@0.1.0
+    if: github.event_name == 'push' && github.ref == 'refs/tags/codex-usage-profile-v0.1.0'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org/
+      - name: Install the locked dependency graph without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Pin the reviewed npm CLI
+        run: npm install --global npm@12.0.1 --ignore-scripts
+      - name: Verify the exact release tag and package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          node -e "const manifest =
+          require('./packages/codex-usage-profile-cli/package.json');
+          const expected = 'codex-usage-profile-v' + manifest.version;
+          if (manifest.version !== '0.1.0' || process.env.RELEASE_TAG !== expected)
+          throw new Error('release tag and package version do not match');"
+      - name: Recreate the reviewed package candidate
+        run: npm run verify:npm-release
+      - name: Publish the first release with provenance
+        run: npm publish --workspace packages/codex-usage-profile-cli --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
