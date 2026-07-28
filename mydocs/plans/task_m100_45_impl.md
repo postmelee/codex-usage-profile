@@ -10,8 +10,8 @@ GitHub Issue: [#45](https://github.com/postmelee/codex-usage-profile/issues/45)
 |---|---|---|---|
 | 1 | immutable release와 production baseline | registry·provenance·source·Sites read-only evidence, Gate A 입력 | 전체 회귀, clean install, public/anonymous route와 비용 stop baseline |
 | 2 | Gate A: fresh OAuth, device login과 private-by-default | disposable owner/session/device/token, private Contract v1 snapshot | OAuth/session/logout, published CLI, private preview no-store와 anonymous 404 |
-| 3 | submit idempotency와 보안 경계 | retry/conflict, token/origin/CSRF/log evidence | unchanged/409/401, cross-origin/CORS, allowlist와 local concurrency/failure |
-| 4 | public profile, stable R2 card와 cache | temporary public publication, locale/card digest와 ETag evidence | HTML/JSON/PNG GET·HEAD·304, changed submit, unpublish 404 |
+| 3 | submit idempotency와 보안 경계 | retry/conflict, token/origin/CSRF/log evidence | unchanged/409/410, cross-origin/CORS, allowlist와 local concurrency/failure |
+| 4 | public profile, stable R2 card와 cache | temporary public publication, locale/card digest와 ETag evidence | HTML/JSON/PNG GET·HEAD·304, accepted submit·ETag invariant, unpublish 404 |
 | 5 | Gate B/C: 운영 rollback, backup/restore와 cleanup | access/environment rollback, export/restore, retention, exact final cleanup | revision/version 고정, digest/count, public/normal 복구와 owner/card 404 |
 | 6 | release decision, 문서 drift와 handoff | 전체 재검증, 필요한 공식 문서 보정, release QA 판정 | final remote/local state, 비용 stop, blocker와 M100 홍보 PASS/BLOCKED |
 
@@ -318,7 +318,7 @@ Task #45 Stage 2: fresh OAuth와 private-by-default 흐름
 3. `status`와 private preview의 latest digest/count가 exact retry와 rejected
    probe 전후 동일한지 확인한다.
 4. Settings에서 secondary narrow token을 하나 만들고 한 번 사용한 뒤
-   revoke해 다음 request `401`을 확인한다. primary CLI token은 Stage 4까지
+   revoke해 다음 request `410 gone`을 확인한다. primary CLI token은 Stage 4까지
    유지한다.
 5. primary credential의 issuing origin과 다른 HTTPS/loopback origin으로
    `status`를 요청해 network 전 token 전달 전에 local 거부되는지 확인한다.
@@ -352,7 +352,7 @@ git diff --check
 Production evidence:
 
 - exact retry `200 unchanged`; same timestamp conflict/stale `409`
-- secondary revoked token `401`
+- secondary revoked token `410 gone`
 - issuing-origin mismatch가 request 전 local fail
 - cross-origin mutation/CORS deny와 same-origin UI success
 - generic 4xx/429 boundary와 structured-log allowlist
@@ -395,11 +395,15 @@ Task #45 Stage 3: submit idempotency와 보안 경계
 5. `locale=en`, `locale=ko`, unsupported locale을 요청한다. `ko`는 한국어
    revision, unsupported는 `en` body/ETag fallback이어야 한다.
 6. matching `If-None-Match`가 body 없는 `304`를 반환하는지 확인한다.
-7. ongoing Codex 사용으로 Account Usage digest가 실제로 달라졌는지
-   analyzer에서 확인한 뒤 CLI submit을 다시 실행한다. 값이 바뀌지 않았다면
-   synthetic usage를 만들지 않고 실제 변경을 기다려 재시도한다.
-8. changed submit 뒤 URL은 같고 PNG digest/application ETag는 달라지며,
-   public JSON latest digest가 같은 revision을 나타내는지 확인한다.
+7. ongoing Codex 사용으로 Account Usage document digest와 card render input인
+   `summary`/`dailyUsageBuckets`가 각각 달라졌는지 analyzer에서 확인한 뒤 CLI
+   submit을 다시 실행한다. synthetic usage는 만들지 않는다.
+8. accepted submit 뒤 stable URL은 같고 public JSON latest digest가 같은
+   revision을 나타내야 한다. render input이 달라졌다면 PNG
+   digest/application ETag도 달라져야 한다. `capturedAt`만 달라지고 render
+   input과 PNG bytes가 같다면 content-addressed ETag가 유지되는 것을 정상으로
+   판정하며, render input 변경 시 ETag 변경 계약은 executable regression으로
+   교차 검증한다.
 9. changed document exact retry는 `200 unchanged`, stable digest/ETag를
    유지해야 한다.
 10. same-origin UI에서 unpublish하고 public JSON/card `404`, canonical HTML
@@ -431,7 +435,10 @@ Public route matrix:
 - public PNG가 R2 stable object 대신 on-demand/no-store 또는 private data
   route를 사용한다.
 - HEAD/GET/304의 ETag, content length/cache 의미가 일치하지 않는다.
-- changed submit이 stable URL을 바꾸거나 새 ETag를 materialize하지 못한다.
+- accepted submit이 stable URL을 바꾸거나 public JSON latest revision을
+  갱신하지 못한다.
+- render input이 달라졌는데 새 ETag를 materialize하지 못하거나, PNG bytes가
+  같은데 content-addressed ETag가 달라진다.
 - unpublish가 즉시 public JSON/card를 404로 닫지 못한다.
 
 ### 커밋
