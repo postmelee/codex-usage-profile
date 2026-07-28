@@ -143,7 +143,7 @@ export function verifyPublishWorkflowContract(workflow) {
   const requiredFragments = [
     "pull_request:",
     "push:",
-    "branches: [devel]",
+    "branches: [devel, publish/task44]",
     "tags: [codex-usage-profile-v0.1.0]",
     "matrix:",
     "node: [20, 22, 24]",

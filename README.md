@@ -219,6 +219,11 @@ Revoke a CLI token immediately from web Settings when it is exposed or a machine
 - [Sites operations and rollback](docs/sites-operations.md)
 - [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
 
+## License
+
+The repository and the published CLI package are licensed under the
+[MIT License](LICENSE). Copyright (c) 2026 postmelee.
+
 ## Trademark Notice
 
 This is an unofficial community project and is not affiliated with, endorsed by, or sponsored by OpenAI. The generated card uses the `Codex` product name only as descriptive text and does not reproduce or reconstruct an OpenAI or Codex logo.

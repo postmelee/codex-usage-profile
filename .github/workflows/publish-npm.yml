@@ -2,7 +2,7 @@ name: Verify and publish npm package
 
 on:
   push:
-    branches: [devel]
+    branches: [devel, publish/task44]
     tags: [codex-usage-profile-v0.1.0]
   pull_request:
     branches: [devel]
