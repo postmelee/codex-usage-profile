@@ -4,8 +4,9 @@
 
 > production service URL은
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`로
-> 확정됐고 CLI 기본값에도 반영돼 있다. npm package 공개는 #44에서 진행하므로
-> 그 전에는 source checkout 또는 검토한 local tarball을 사용한다.
+> 확정됐고 CLI 기본값에도 반영돼 있다. public npm release는
+> `codex-usage-profile@0.1.0`이며 provenance와 production end-to-end
+> smoke가 검증됐다. 자동화에서는 exact version을 고정한다.
 
 ## 요구사항
 
@@ -18,7 +19,8 @@ API key-only와 Bedrock 인증은 이 account usage method를 제공하지 않�
 
 ## Quickstart
 
-package가 npm에 공개된 뒤에는 `submit` 한 번으로 credential이 없을 때 browser login을 시작하고 승인 후 같은 명령에서 제출을 계속한다.
+공개 package에서는 `submit` 한 번으로 credential이 없을 때 browser
+login을 시작하고 승인 후 같은 명령에서 제출을 계속한다.
 
 ```bash
 npx codex-usage-profile@latest submit

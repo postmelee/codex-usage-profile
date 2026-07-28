@@ -12,7 +12,7 @@
   "homepage": "https://github.com/postmelee/codex-usage-profile#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/postmelee/codex-usage-profile.git",
+    "url": "https://github.com/postmelee/codex-usage-profile",
     "directory": "packages/codex-usage-profile-cli"
   },
   "bugs": {
@@ -32,7 +32,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "codex-usage-analyzer": "^0.2.0"
+    "codex-usage-analyzer": "0.2.0"
   },
   "scripts": {
     "test": "node --test"
@@ -41,7 +41,9 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   },
   "license": "MIT"
 }

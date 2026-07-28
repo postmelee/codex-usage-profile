@@ -19,7 +19,7 @@ Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한�
 
 ## CLI 연결
 
-CLI package가 #44에서 npm에 공개된 뒤의 사용자 명령은 다음과 같다.
+현재 공개된 CLI package의 사용자 명령은 다음과 같다.
 
 ```bash
 npx codex-usage-profile@latest submit

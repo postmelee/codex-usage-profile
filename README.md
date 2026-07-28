@@ -4,11 +4,14 @@ Codex Usage Profile combines GitHub identity with the account usage reported by 
 
 A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
 
+`codex-usage-profile@0.1.0` is publicly available on npm with provenance and
+has been verified end to end against the production Sites origin.
+
 > The public MVP service runs on ChatGPT Sites at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
-> The CLI already uses this origin by default. npm package publication remains
-> tracked in #44, so use the source checkout or a reviewed local tarball until
-> that release is complete.
+> The CLI uses this origin by default. For reproducible automation, pin
+> `0.1.0`; for an interactive first run, review the version npm displays before
+> accepting `@latest`.
 
 ## MVP Flow
 
@@ -19,7 +22,7 @@ A successful CLI submit updates stored usage and changes the card ETag while pre
 5. Copy the stable image URL or README Markdown from **Share**.
 6. Future submits update the same image URL.
 
-After the npm package is published in #44, the intended command is:
+The interactive command is:
 
 ```bash
 npx codex-usage-profile@latest submit
@@ -36,7 +39,9 @@ npx codex-usage-profile@latest logout
 
 On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
 
-See [CLI login and submit](docs/cli-submit.md) for source/tarball commands, credential locations, transmitted fields, privacy, error mapping, and troubleshooting.
+See [CLI login and submit](docs/cli-submit.md) for published-package commands,
+source/tarball validation, credential locations, transmitted fields, privacy,
+error mapping, and troubleshooting.
 
 ### Non-interactive Automation
 
@@ -121,8 +126,16 @@ node packages/codex-usage-profile-cli/bin/codex-usage-profile.js login \
 Package preflight:
 
 ```bash
-npm pack --dry-run --workspace packages/codex-usage-profile-cli --json
+npm run scan:public-release
+npm run verify:npm-release
+npm run smoke:npm-package:local
 ```
+
+The public release scanner reads every local branch, remote-tracking branch,
+and tag in the local Git object database. It reports only ref, abbreviated
+blob, path, category, and counts; it never prints a detected credential value.
+See [npm release operations](docs/npm-release.md) for the publication gates and
+recovery procedure.
 
 ### Cloud Run Container POC
 
@@ -210,6 +223,11 @@ Revoke a CLI token immediately from web Settings when it is exposed or a machine
 - [Production hosting architecture](docs/production-hosting.md)
 - [Sites operations and rollback](docs/sites-operations.md)
 - [Legacy UsageSnapshot v2 compatibility contract](docs/usage-snapshot-v2.md)
+
+## License
+
+The repository and the published CLI package are licensed under the
+[MIT License](LICENSE). Copyright (c) 2026 postmelee.
 
 ## Trademark Notice
 
