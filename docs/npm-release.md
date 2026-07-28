@@ -7,7 +7,7 @@
 | 구분 | 최초 `0.1.0` | 이후 릴리스 |
 |---|---|---|
 | 실행 파일 | `.github/workflows/publish-npm.yml` | 같은 파일 |
-| 인증 | 만료가 짧은 임시 `NPM_TOKEN` | npm trusted publisher의 GitHub OIDC |
+| 인증 | 만료가 짧은 임시 `NPM_TOKEN`(폐기 완료) | npm trusted publisher의 GitHub OIDC |
 | 명령 | `npm publish --provenance --access public` | `npm stage publish` |
 | 승인 | 정확한 태그와 GitHub environment gate | stage 생성 뒤 npm에서 2FA 승인 |
 | 토큰 보관 | 최초 게시 직후 폐기 | 장기 npm 토큰 없음 |
@@ -29,6 +29,8 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   고정되며 `npm stage publish`만 허용한다.
 - package publishing access는 2FA를 요구하고 traditional token publish를
   허용하지 않는다.
+- 최초 게시용 npm granular token은 폐기됐고 GitHub `npm-publish`
+  environment의 `NPM_TOKEN` secret도 삭제됐다.
 - 현재 workflow는 manifest version과 정확히 일치하는
   `codex-usage-profile-v${version}` tag에서만 tokenless stage를 만든다.
   npm 웹에서 staged package와 provenance를 검토하고 2FA로 승인해야 실제
@@ -40,7 +42,7 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 - registry: `https://registry.npmjs.org/`
 - 최초 태그: `codex-usage-profile-v0.1.0`
 - GitHub environment: `npm-publish`
-- 최초 게시 secret 이름: `NPM_TOKEN`
+- 최초 게시 secret 이름: `NPM_TOKEN`(삭제 완료)
 - publish runner: Node.js 24
 - publish npm CLI: `12.0.1`
 - 검증 runner: Node.js 20, 22, 24
@@ -53,8 +55,9 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 Actions cache는 사용하지 않는다. 설치는 `npm ci --ignore-scripts`로
 수행하고 root와 CLI package에 `preinstall`, `install`, `postinstall`
-script가 없는지 별도로 확인한다. publish job의 write 권한은
-`id-token: write` 하나뿐이며 `NPM_TOKEN`은 publish step에만 주입한다.
+script가 없는지 별도로 확인한다. 현재 publish job의 write 권한은
+`id-token: write` 하나뿐이며 token을 주입하지 않는다. `NPM_TOKEN`은 최초
+bootstrap의 승인된 publish step에서만 사용됐고 게시 확인 직후 제거됐다.
 
 ## Gate A 전 preflight
 

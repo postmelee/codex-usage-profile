@@ -531,8 +531,11 @@ tag를 가리킨다. 기존 canonical tag는 최초 승인 source commit을 계�
   제거한다. future `codex-usage-profile-v*` trigger는 manifest version과
   exact tag를 대조한 뒤 CLI package directory에서
   `npm stage publish --access public`만 실행한다.
-- source 전환의 branch preflight 뒤 GitHub `NPM_TOKEN` secret 삭제와 npm
-  temporary token revoke를 확인하고 Stage 4 보고를 작성한다.
+- source 전환 branch preflight run `30354405611`에서 Node 20·22·24 검증이
+  성공하고 branch의 staged publish job은 의도대로 skip됐다.
+- GitHub `npm-publish` environment의 `NPM_TOKEN` secret은 삭제 후 목록
+  `0`건, npm temporary granular token은 revoke 후 목록 `0`건으로
+  확인됐으며 raw credential은 조회하지 않았다.
 
 ### 중단 조건
 
