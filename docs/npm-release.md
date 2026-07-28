@@ -40,6 +40,55 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   npm 웹에서 staged package와 provenance를 검토하고 2FA로 승인해야 실제
   version이 생성된다.
 
+## Stage 6 최종 release 판정
+
+Task #44의 npm `0.1.0` release 판정은 **PASS**다.
+
+- 인증 없는 격리 환경에서 package access는 `public`, 공개 version은
+  `0.1.0` 하나이고 `latest`도 `0.1.0`을 가리켰다.
+- exact `0.1.0`과 `@latest`의 clean install은 같은 version, executable과
+  production 기본 origin을 제공했다. 두 install tree 모두 exact
+  `codex-usage-analyzer@0.2.0`을 사용했다.
+- registry artifact는 13 files, SHA-1
+  `a1d30872a6677e9b781e64e14f7ad9040ee92e0d`, SHA-512
+  `sha512-jvMb8nnIUpMEep8+qq7Y99MfEQsq3H8QEv5x1EL6TIeJ3kDKfC2kSNbOAQW8FnY6Gdj+KZ13khESbFgrzk2wEw==`
+  로 최초 publish 검증 결과와 일치했다.
+- npm registry signature와 attestation은 package와 analyzer 모두
+  검증됐다. CLI provenance는 recovery tag
+  `codex-usage-profile-v0.1.0-recovery.1`, commit
+  `f10ad2cb1a38568371c5467dc3a25ce29df7ae8f`,
+  `.github/workflows/publish-npm.yml`과 publish run
+  [`30352705791`](https://github.com/postmelee/codex-usage-profile/actions/runs/30352705791)
+  을 가리킨다.
+- package homepage, source, issue/support와 package README의 공식 문서
+  링크는 public GitHub repository의 `devel`에 연결된다. npm package는
+  tarball의 MIT `LICENSE`와 `license: MIT` metadata를 함께 제공한다.
+- repository-wide MIT를 선언하는 root `LICENSE`와 최종 release 문서는
+  `publish/task44`에 있다. GitHub API의 default-branch `licenseInfo`는
+  Task #44 PR merge 전까지 `null`이므로 repository 전체 license 표시는
+  이 PR merge를 완료 조건으로 유지한다.
+- first-publish token은 폐기됐고 GitHub `npm-publish` environment에
+  `NPM_TOKEN` secret이 없다. future release는 trusted publisher의
+  tokenless stage와 maintainer 2FA 승인만 사용한다.
+- public release scanner는 blocker 0을 유지했다. Gate A에서 공개를
+  승인한 review 12건 외에 새 credential, private usage, session 또는
+  local path blocker가 발견되지 않았다.
+- production Site는 saved version 7, maintenance disabled, service normal
+  상태다. landing과 `/healthz`는 `200`, Stage 5에서 삭제한 smoke owner의
+  public JSON과 card는 `404`다.
+
+`0.1.0`은 immutable이다. 문서 또는 기능 수정은 같은 version을 덮어쓰지
+않고 patch version으로 게시한다. 보안 또는 기능 결함이 발견되면 affected
+version을 deprecate하고 수정 patch를 별도 provenance와 승인으로
+게시한다. unpublish는 기본 복구 수단으로 사용하지 않는다.
+
+fresh-user production whole-flow의 독립 release decision은
+[GitHub Issue #45](https://github.com/postmelee/codex-usage-profile/issues/45)에
+넘겼다. Task #44의 maintainer-owned smoke는 선행 증거이지만 #45의 fresh
+GitHub OAuth, published CLI, D1/R2, backup/restore와 비용 경계 검증을
+대신하지 않는다. Cloud Run fallback [#43](https://github.com/postmelee/codex-usage-profile/issues/43)은
+trigger가 없는 동안 open 대기 상태를 유지한다.
+
 ## 고정된 릴리스 계약
 
 - package: `codex-usage-profile@0.1.0`
