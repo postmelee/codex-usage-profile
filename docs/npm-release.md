@@ -19,6 +19,10 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 ## 현재 운영 상태
 
 - `codex-usage-profile@0.1.0`은 public이며 `latest`가 이 버전을 가리킨다.
+- exact `0.1.0` install의 production device login, status, Account Usage
+  Contract v1 submit, private preview, publish/unpublish, revoke/logout
+  smoke가 통과했고 disposable owner D1/R2 데이터는 승인된 digest/count로
+  cleanup됐다.
 - 최초 canonical tag
   `codex-usage-profile-v0.1.0`은 승인 commit을 그대로 보존한다.
 - npm 12 pack metadata 호환 복구는 immutable

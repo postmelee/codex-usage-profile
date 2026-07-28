@@ -4,6 +4,9 @@ Codex Usage Profile combines GitHub identity with the account usage reported by 
 
 A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
 
+`codex-usage-profile@0.1.0` is publicly available on npm with provenance and
+has been verified end to end against the production Sites origin.
+
 > The public MVP service runs on ChatGPT Sites at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
 > The CLI uses this origin by default. For reproducible automation, pin
@@ -36,7 +39,9 @@ npx codex-usage-profile@latest logout
 
 On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
 
-See [CLI login and submit](docs/cli-submit.md) for source/tarball commands, credential locations, transmitted fields, privacy, error mapping, and troubleshooting.
+See [CLI login and submit](docs/cli-submit.md) for published-package commands,
+source/tarball validation, credential locations, transmitted fields, privacy,
+error mapping, and troubleshooting.
 
 ### Non-interactive Automation
 

@@ -2,6 +2,9 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
+The public npm release is `codex-usage-profile@0.1.0`, published with
+provenance and verified against the production Sites service.
+
 > The production MVP service runs at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`, which is
 > also the CLI default. For reproducible automation, pin `0.1.0`; for an
