@@ -513,6 +513,27 @@ recovery provenance는 package file이 동일한 recovery commit과 exact recove
 tag를 가리킨다. 기존 canonical tag는 최초 승인 source commit을 계속
 가리키며 두 tag 모두 이동하거나 삭제하지 않는다.
 
+### Gate B-R 실행 결과와 future release 전환
+
+- exact recovery tag run `30352705791`에서 Node 20·22·24 검증과
+  `codex-usage-profile@0.1.0` provenance publish가 성공했다.
+- registry의 SHA-1, SHA-512, 13개 file manifest, `latest`, dependency와
+  clean install 결과가 Stage 3 candidate와 일치한다.
+- SLSA provenance는
+  `codex-usage-profile-v0.1.0-recovery.1`,
+  commit `f10ad2cb1a38568371c5467dc3a25ce29df7ae8f`,
+  `.github/workflows/publish-npm.yml`과 run `30352705791`을 가리킨다.
+- npm trusted publisher는
+  `postmelee/codex-usage-profile`, `publish-npm.yml`, `npm-publish`로
+  설정됐고 `npm stage publish`만 허용한다. package publishing access는
+  2FA required, token disallowed로 전환됐다.
+- source workflow는 one-time direct/recovery publish와 `NPM_TOKEN` 참조를
+  제거한다. future `codex-usage-profile-v*` trigger는 manifest version과
+  exact tag를 대조한 뒤 CLI package directory에서
+  `npm stage publish --access public`만 실행한다.
+- source 전환의 branch preflight 뒤 GitHub `NPM_TOKEN` secret 삭제와 npm
+  temporary token revoke를 확인하고 Stage 4 보고를 작성한다.
+
 ### 중단 조건
 
 - version/tag/account/artifact가 Gate B 값과 다르다.

@@ -144,7 +144,7 @@ export function verifyPublishWorkflowContract(workflow) {
     "pull_request:",
     "push:",
     "branches: [devel, publish/task44]",
-    "tags: [codex-usage-profile-v0.1.0, codex-usage-profile-v0.1.0-recovery.1]",
+    "tags: ['codex-usage-profile-v*']",
     "matrix:",
     "node: [20, 22, 24]",
     "package-manager-cache: false",
@@ -153,13 +153,13 @@ export function verifyPublishWorkflowContract(workflow) {
     "npm test --workspace packages/codex-usage-profile-cli",
     "npm run verify:npm-release",
     "npm run smoke:npm-package:local",
-    "github.ref == 'refs/tags/codex-usage-profile-v0.1.0'",
-    "github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.1'",
+    "startsWith(github.ref, 'refs/tags/codex-usage-profile-v')",
+    "const expected = 'codex-usage-profile-v' + manifest.version",
     "environment: npm-publish",
     "id-token: write",
     "npm install --global npm@12.0.1 --ignore-scripts",
-    "npm publish --workspace packages/codex-usage-profile-cli --access public --provenance",
-    "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}",
+    "working-directory: packages/codex-usage-profile-cli",
+    "npm stage publish --access public",
     "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "249970729cb0ef3589644e2896645e5dc5ba9c38"
   ];
@@ -173,13 +173,12 @@ export function verifyPublishWorkflowContract(workflow) {
   }
   if (
     workflow.includes("workflow_dispatch:") ||
-    workflow.includes("npm stage publish")
+    workflow.includes("codex-usage-profile-v0.1.0-recovery.1") ||
+    workflow.includes("npm publish --workspace") ||
+    workflow.includes("secrets.NPM_TOKEN") ||
+    workflow.includes("NODE_AUTH_TOKEN")
   ) {
     throw new Error("npm publish workflow enables an unapproved release path");
-  }
-  const tokenUses = workflow.match(/\$\{\{\s*secrets\.NPM_TOKEN\s*\}\}/g) ?? [];
-  if (tokenUses.length !== 1) {
-    throw new Error("NPM_TOKEN must be scoped to exactly one publish step");
   }
   const idTokenWrites = workflow.match(/\bid-token:\s*write\b/g) ?? [];
   if (idTokenWrites.length !== 1) {

@@ -16,6 +16,24 @@
 `repository.url`, `id-token: write` 권한을 provenance 전제로 사용한다.
 secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않는다.
 
+## 현재 운영 상태
+
+- `codex-usage-profile@0.1.0`은 public이며 `latest`가 이 버전을 가리킨다.
+- 최초 canonical tag
+  `codex-usage-profile-v0.1.0`은 승인 commit을 그대로 보존한다.
+- npm 12 pack metadata 호환 복구는 immutable
+  `codex-usage-profile-v0.1.0-recovery.1` tag와 별도 승인을 거쳐 한 번
+  실행됐다.
+- package의 GitHub Actions trusted publisher는
+  `postmelee/codex-usage-profile`, `publish-npm.yml`, `npm-publish`로
+  고정되며 `npm stage publish`만 허용한다.
+- package publishing access는 2FA를 요구하고 traditional token publish를
+  허용하지 않는다.
+- 현재 workflow는 manifest version과 정확히 일치하는
+  `codex-usage-profile-v${version}` tag에서만 tokenless stage를 만든다.
+  npm 웹에서 staged package와 provenance를 검토하고 2FA로 승인해야 실제
+  version이 생성된다.
+
 ## 고정된 릴리스 계약
 
 - package: `codex-usage-profile@0.1.0`
@@ -101,6 +119,10 @@ Gate A에서 package-only MIT 또는 repository-wide MIT를 명시적으로
 태그는 다른 commit으로 이동하거나 다시 만들지 않는다. 실패가 package
 upload 전에 발생했다면 원인을 수정한 새 승인 절차를 거친다. registry가
 `0.1.0`을 이미 받았다면 같은 version을 다시 게시하지 않는다.
+실제 `0.1.0` bootstrap에서 npm 12의 `npm pack --json` object-map 형식을
+verifier가 처리하지 못해 canonical tag run은 upload 전에 중단됐다.
+canonical tag는 이동하지 않았고, exact recovery tag와 재승인을 사용한
+run만 registry version을 생성했다.
 
 ## trusted publisher와 staged publishing 전환
 

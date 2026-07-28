@@ -3,7 +3,7 @@ name: Verify and publish npm package
 on:
   push:
     branches: [devel, publish/task44]
-    tags: [codex-usage-profile-v0.1.0, codex-usage-profile-v0.1.0-recovery.1]
+    tags: ['codex-usage-profile-v*']
   pull_request:
     branches: [devel]
 
@@ -46,11 +46,10 @@ jobs:
         run: npm run smoke:npm-package:local
 
   publish:
-    name: Publish codex-usage-profile@0.1.0
+    name: Stage npm package for approval
     if: >-
       github.event_name == 'push' &&
-      (github.ref == 'refs/tags/codex-usage-profile-v0.1.0' ||
-      github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.1')
+      startsWith(github.ref, 'refs/tags/codex-usage-profile-v')
     needs: verify
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -78,14 +77,11 @@ jobs:
         run: >-
           node -e "const manifest =
           require('./packages/codex-usage-profile-cli/package.json');
-          const allowed = new Set(['codex-usage-profile-v0.1.0',
-          'codex-usage-profile-v0.1.0-recovery.1']);
-          if (manifest.version !== '0.1.0' ||
-          !allowed.has(process.env.RELEASE_TAG))
+          const expected = 'codex-usage-profile-v' + manifest.version;
+          if (process.env.RELEASE_TAG !== expected)
           throw new Error('release tag and package version do not match');"
       - name: Recreate the reviewed package candidate
         run: npm run verify:npm-release
-      - name: Publish the first release with provenance
-        run: npm publish --workspace packages/codex-usage-profile-cli --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Stage the release for npm 2FA approval
+        working-directory: packages/codex-usage-profile-cli
+        run: npm stage publish --access public

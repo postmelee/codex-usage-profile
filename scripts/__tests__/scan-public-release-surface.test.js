@@ -115,8 +115,8 @@ test("publish workflow is pinned and fail-closed", async () => {
   assert.throws(
     () => verifyPublishWorkflowContract(
       workflow.replace(
-        "github.ref == 'refs/tags/codex-usage-profile-v0.1.0'",
-        "startsWith(github.ref, 'refs/tags/')"
+        "const expected = 'codex-usage-profile-v' + manifest.version",
+        "const expected = process.env.RELEASE_TAG"
       )
     ),
     /missing/
@@ -124,14 +124,26 @@ test("publish workflow is pinned and fail-closed", async () => {
   assert.throws(
     () => verifyPublishWorkflowContract(
       workflow.replace(
-        "github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.1'",
-        "github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.2'"
+        "npm stage publish --access public",
+        "npm publish --access public"
       )
     ),
     /missing/
   );
   assert.throws(
     () => verifyPublishWorkflowContract(`${workflow}\nworkflow_dispatch:\n`),
+    /unapproved/
+  );
+  assert.throws(
+    () => verifyPublishWorkflowContract(
+      `${workflow}\nNODE_AUTH_TOKEN: \${{ secrets.NPM_TOKEN }}\n`
+    ),
+    /unapproved/
+  );
+  assert.throws(
+    () => verifyPublishWorkflowContract(
+      `${workflow}\ncodex-usage-profile-v0.1.0-recovery.1\n`
+    ),
     /unapproved/
   );
 });
