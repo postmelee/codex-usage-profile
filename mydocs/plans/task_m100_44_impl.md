@@ -478,6 +478,41 @@ public metadata/digest만 report에 남긴다.
   - `0.1.0` unpublish나 overwrite를 수행하지 않고 exact 영향과 `0.1.1`
     remediation을 별도 승인받는다.
 
+### Gate B 실패 복구 A — npm 12 pack JSON 호환
+
+2026-07-28 최초 tag run `30351424886`은 Node 20·22·24 verify를 통과한 뒤
+publish job의 `npm run verify:npm-release`에서 중단됐다. npm `12.0.1`의
+`npm pack --json`이 npm 11의 단일 원소 배열 대신 package ID를 key로 한
+단일 원소 object map을 반환했지만 verifier가 배열만 허용한 것이 원인이다.
+실제 `npm publish` step은
+`skipped`였고 registry의 `codex-usage-profile@0.1.0`은 `E404`다.
+
+작업지시자가 승인한 복구안 A는 다음 경계를 따른다.
+
+1. 기존 annotated `codex-usage-profile-v0.1.0` tag와 대상 commit은 이동,
+   삭제, 재생성하지 않는다.
+2. verifier는 npm 11의 단일 원소 배열과 npm 12의 단일 원소 object map을
+   같은 한 candidate로 정규화한다. 빈 배열·object, 복수 원소, direct
+   candidate object, null과 primitive는 계속 fail-closed한다.
+3. package source, manifest version, file allowlist와 expected digest는
+   바꾸지 않는다. 수정 뒤 exact candidate가 Stage 3 SHA-1/SHA-512와 같은지
+   다시 확인한다.
+4. workflow는 일회성 exact
+   `codex-usage-profile-v0.1.0-recovery.1` tag만 추가 허용한다.
+   `workflow_dispatch`, broad tag pattern과 branch publish는 허용하지 않는다.
+5. 수정 commit을 원격 `publish/task44`에 fast-forward하고 Node 20·22·24
+   branch preflight를 통과시킨다.
+6. recovery commit SHA, tag, 동일 candidate digest, workflow와 registry
+   empty 상태를 Gate B-R로 제시한다. 별도 Gate B-R 승인 전에는 recovery
+   tag를 생성하거나 push하지 않는다.
+7. 승인 뒤 recovery tag를 한 번 생성·push하고 같은 `npm-publish`
+   environment reviewer gate를 거친다. 성공 뒤 one-time recovery path는
+   trusted publisher stage-only workflow 전환에서 제거한다.
+
+recovery provenance는 package file이 동일한 recovery commit과 exact recovery
+tag를 가리킨다. 기존 canonical tag는 최초 승인 source commit을 계속
+가리키며 두 tag 모두 이동하거나 삭제하지 않는다.
+
 ### 중단 조건
 
 - version/tag/account/artifact가 Gate B 값과 다르다.

@@ -7,11 +7,41 @@ import {
   EXPECTED_ANALYZER_PACKAGE,
   EXPECTED_NPM_PACKAGE_FILES,
   assertPackageContentSafe,
+  normalizeNpmPackResult,
   verifyLockfileContract,
   verifyNpmRelease,
   verifyPackageMetadata,
   verifyPackedEntries
 } from "../verify-npm-release.mjs";
+
+test("normalizes one npm 11 array or npm 12 object candidate", () => {
+  const candidate = {
+    id: "codex-usage-profile@0.1.0"
+  };
+
+  assert.equal(normalizeNpmPackResult([candidate]), candidate);
+  assert.equal(normalizeNpmPackResult({
+    [candidate.id]: candidate
+  }), candidate);
+
+  for (const invalid of [
+    [],
+    [candidate, candidate],
+    {},
+    {
+      first: candidate,
+      second: candidate
+    },
+    candidate,
+    null,
+    "codex-usage-profile@0.1.0"
+  ]) {
+    assert.throws(
+      () => normalizeNpmPackResult(invalid),
+      /exactly one package candidate/
+    );
+  }
+});
 
 test("npm release verifier accepts the exact local package candidate", async () => {
   const result = await verifyNpmRelease();

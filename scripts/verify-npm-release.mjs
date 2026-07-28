@@ -522,10 +522,24 @@ async function runNpmPack(options) {
   } catch {
     throw new Error("npm pack returned invalid JSON metadata");
   }
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
+  return normalizeNpmPackResult(parsed);
+}
+
+export function normalizeNpmPackResult(parsed) {
+  const candidates = Array.isArray(parsed)
+    ? parsed
+    : parsed !== null && typeof parsed === "object"
+      ? Object.values(parsed)
+      : [];
+  if (
+    candidates.length !== 1 ||
+    candidates[0] === null ||
+    Array.isArray(candidates[0]) ||
+    typeof candidates[0] !== "object"
+  ) {
     throw new Error("npm pack must produce exactly one package candidate");
   }
-  return parsed[0];
+  return candidates[0];
 }
 
 function verifyPackResult(packResult, tarball) {

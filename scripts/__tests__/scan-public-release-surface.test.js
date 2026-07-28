@@ -122,6 +122,15 @@ test("publish workflow is pinned and fail-closed", async () => {
     /missing/
   );
   assert.throws(
+    () => verifyPublishWorkflowContract(
+      workflow.replace(
+        "github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.1'",
+        "github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.2'"
+      )
+    ),
+    /missing/
+  );
+  assert.throws(
     () => verifyPublishWorkflowContract(`${workflow}\nworkflow_dispatch:\n`),
     /unapproved/
   );

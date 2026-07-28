@@ -3,7 +3,7 @@ name: Verify and publish npm package
 on:
   push:
     branches: [devel, publish/task44]
-    tags: [codex-usage-profile-v0.1.0]
+    tags: [codex-usage-profile-v0.1.0, codex-usage-profile-v0.1.0-recovery.1]
   pull_request:
     branches: [devel]
 
@@ -47,7 +47,10 @@ jobs:
 
   publish:
     name: Publish codex-usage-profile@0.1.0
-    if: github.event_name == 'push' && github.ref == 'refs/tags/codex-usage-profile-v0.1.0'
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/tags/codex-usage-profile-v0.1.0' ||
+      github.ref == 'refs/tags/codex-usage-profile-v0.1.0-recovery.1')
     needs: verify
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -75,8 +78,10 @@ jobs:
         run: >-
           node -e "const manifest =
           require('./packages/codex-usage-profile-cli/package.json');
-          const expected = 'codex-usage-profile-v' + manifest.version;
-          if (manifest.version !== '0.1.0' || process.env.RELEASE_TAG !== expected)
+          const allowed = new Set(['codex-usage-profile-v0.1.0',
+          'codex-usage-profile-v0.1.0-recovery.1']);
+          if (manifest.version !== '0.1.0' ||
+          !allowed.has(process.env.RELEASE_TAG))
           throw new Error('release tag and package version do not match');"
       - name: Recreate the reviewed package candidate
         run: npm run verify:npm-release
