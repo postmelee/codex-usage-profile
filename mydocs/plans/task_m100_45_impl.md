@@ -27,9 +27,11 @@ GitHub Issue: [#45](https://github.com/postmelee/codex-usage-profile/issues/45)
   - Gate C: export→delete→restore/repair→final cleanup
 - 새 Site, 새 D1/R2, 새 saved version, custom domain, 유료 resource와
   Cloud Run fallback은 만들지 않는다.
-- source/runtime/schema/package 수정은 예상하지 않는다. QA blocker가 이를
-  요구하면 production을 safe state로 복구하고 수행·구현 계획 변경 또는
-  별도 issue 승인을 먼저 받는다.
+- production server/runtime/schema/package 수정은 예상하지 않는다. Stage 5
+  Gate B-R3에서 확인된 operator CLI 무기한 대기 blocker는 작업지시자가
+  승인한 계획 변경에 따라 기본 15초 request timeout과 회귀 테스트만
+  보정한다. 그 밖의 QA blocker가 source 변경을 요구하면 production을 safe
+  state로 복구하고 수행·구현 계획 변경 또는 별도 issue 승인을 먼저 받는다.
 - fresh 환경은 기존 owner record가 없는 production에서 새 product
   OAuth/session/device/token을 만들고, 기존 product cookie·credential·npm
   cache를 재사용하지 않는다는 의미다. 별도 제3자 GitHub 계정을 요구하지
@@ -466,7 +468,10 @@ Task #45 Stage 4: public profile과 stable R2 cache 검증
 
 수정:
 
-- 없음
+- `mydocs/plans/task_m100_45.md`
+- `mydocs/plans/task_m100_45_impl.md`
+- `scripts/sites-profile-maintenance.mjs`
+- `scripts/__tests__/sites-profile-maintenance.test.js`
 
 ### Gate B 승인 입력
 
@@ -477,17 +482,489 @@ Task #45 Stage 4: public profile과 stable R2 cache 검증
 - transition:
   1. public→custom owner-only, anonymous platform gate와 owner health 확인
   2. custom→public, landing/health와 private JSON/card 404 확인
-  3. fresh operator secret + maintenance route enabled + service normal,
+  3. maintenance disabled + service normal에서 fresh operator secret key를
+     materialize하고 saved version 7 public deployment
+  4. 기존 key를 같은 fresh secret으로 교체하면서 maintenance enabled +
+     service normal로 전환하고 bounded operator plan 수렴 확인
+  5. 검증된 operator secret을 유지하고 service mode만 maintenance로 전환,
+     saved version 7 public deployment과 generic 503 확인
+  6. 같은 검증된 operator secret을 유지하고 service mode만 normal로 전환,
      saved version 7 public deployment
-  4. fresh operator secret + service maintenance, saved version 7 public
-     deployment, generic 503 확인
-  5. fresh operator secret + service normal, saved version 7 public deployment
-  6. maintenance disabled + operator secret 제거, saved version 7 public
-     deployment
+  7. maintenance disabled + service normal로 닫되 operator secret key는
+     Gate C까지 유지하고 saved version 7 public deployment
 - 모든 deployment는 saved version 7만 사용하고 non-terminal status를 같은
   deployment id로 끝까지 조회한다.
+- operator CLI 한 요청은 기본 15초 안에 종료되어야 하며, edge 수렴은
+  timeout으로 종료된 요청을 포함해 bounded retry와 3회 연속 exact
+  plan/backend 일치로 판정한다.
+- operator secret key는 Gate C final cleanup에서만 제거한다. Gate B와
+  Gate C 사이에는 maintenance disabled의 generic `404`를 재확인한다.
 - 실패 시 public access, service normal, maintenance disabled와 secret 제거를
   먼저 복구한다.
+
+### Gate B-R5 실행 기록
+
+- revision 24 public/disabled/normal/secret-absent baseline과 saved version 7
+  source를 재확인했다.
+- revision 25에서 fresh operator secret key를 disabled/normal 상태로
+  materialize하고 saved version 7 배포를 완료했다.
+- revision 26에서 같은 key를 교체하면서 enabled/normal로 전환하고 saved
+  version 7 배포를 완료했다.
+- 첫 bounded exact plan은 owner count가 일치했지만 D1 owner-dependent
+  행과 R2 객체를 합친 object count가 승인 기준 13에서 15로 달라졌고
+  digest도 불일치했다.
+- 중단 조건에 따라 후속 service maintenance 전환과 export/delete/cleanup을
+  수행하지 않았다.
+- revision 27에서 secret을 제거하고 disabled/normal로 원복한 뒤 saved
+  version 7 배포를 완료했다. public access, landing와 `/healthz`, unauthenticated
+  auth/operator route, private public JSON/card 상태를 다시 확인했다.
+- object count 증가 원인과 새 exact digest/count 승인 없이는 Gate B/C를
+  재개하지 않는다.
+
+### Gate B-R6 원인 조사
+
+- `createProfileSitesMaintenanceService()`의 owner plan은 D1
+  `planOwnerDeletion()`과 R2 `planOwnerDeletion()`을 병렬 조회한 뒤 두
+  `objectCount`를 더한다.
+- D1 count에는 owner뿐 아니라 consumed OAuth state, active/revoked session,
+  CLI challenge/token, latest snapshot/usage, submitted device와 rate-limit
+  행이 포함된다. OAuth callback 1회는 owner에 연결된 OAuth state와 session
+  각 1행을 남길 수 있고, 이 transient 행은 retention 시점 전까지 owner
+  plan에 계속 포함된다.
+- R2 count는 owner immutable revision 수에 stable publication 또는
+  tombstone 1개를 더한다. 새 card content를 publish/refresh/repair하면
+  `en`/`ko` revision 한 쌍이 늘 수 있다.
+- saved version 7의 외부 plan response는 component summary를 합친
+  digest/count만 제공한다. 따라서 현재 production contract만으로 `+2`가
+  D1인지 R2인지 식별할 수 없다.
+- Task #45는 release 검증 task이므로 component 진단용 endpoint나 새 saved
+  version을 즉석 추가하지 않는다. owner/handle과 public `404` 경계를
+  유지한 채, 짧은 사용자 활동 동결 창에서 fresh plan을 연속 조회해 안정된
+  snapshot을 확보한다.
+
+### Gate B-R6 승인 입력
+
+- current:
+  - public access revision 16
+  - environment revision 27
+  - service normal, maintenance disabled, operator secret absent
+  - saved version 7과 승인된 source commit 유지
+- transition:
+  1. revision 28에서 fresh operator secret을 maintenance disabled +
+     service normal 상태로 materialize하고 saved version 7 배포
+  2. revision 29에서 같은 key를 같은 secret으로 교체하면서 maintenance
+     enabled + service normal로 전환하고 saved version 7 배포
+  3. Site GitHub login, CLI submit, publish/unpublish와 private preview
+     요청을 중단한 최대 60초 진단 창에서 bounded owner plan을 실행
+  4. 첫 성공 plan의 owner count, combined object count와 digest를 R6
+     anchor로 잡고 뒤의 두 plan이 모두 동일한지 확인
+  5. 세 plan 중 하나라도 timeout/error/drift이면 data mutation 없이 즉시
+     public access, maintenance disabled, service normal, secret absent로
+     원복
+  6. 3회 수렴 뒤 revision 30에서 같은 secret을 유지하고 service
+     maintenance로 전환해 generic `503`과 `Retry-After: 300` 확인
+  7. revision 31에서 service normal로 복구해 auth `401`, health `200`과
+     같은 plan 3회 수렴 재확인
+  8. revision 32에서 maintenance disabled + service normal로 닫고
+     operator secret key는 Gate C까지 유지
+- R6는 plan/HTTP smoke만 수행한다. export, delete, restore, retention apply,
+  owner/session/token cleanup은 포함하지 않는다.
+- R6 anchor는 Gate B 수렴 증거일 뿐 Gate C mutation 승인이 아니다. Gate C는
+  fresh plan/export의 exact digest/count를 다시 제시해 별도 승인받는다.
+
+### Gate B-R6 실행 기록
+
+- revision 28 disabled/normal에서 fresh operator secret을 materialize하고
+  saved version 7 배포를 완료했다.
+- revision 29 enabled/normal 배포 뒤 첫 fresh owner plan을 anchor로 잡았다.
+  combined object count 15와 digest가 3회 연속 일치했다.
+- revision 30 service maintenance 배포 뒤 landing과 health `200`, auth
+  `503`, `Retry-After: 300`, unauthenticated operator route `404`를
+  확인했다.
+- revision 31 service normal 배포 뒤 owner plan 3회가 같은 anchor에
+  일치했다. 그러나 배포 직후 병렬 실행한 단일 unauthenticated auth probe는
+  기대 `401`과 달랐다.
+- 승인된 stop/rollback 조건을 적용해 revision 32에서 operator secret을
+  제거하고 maintenance disabled + service normal로 원복한 뒤 saved version
+  7을 배포했다.
+- 원복 뒤 public access, landing와 `/healthz` `200`, auth `401`, private
+  public JSON/card와 unauthenticated operator route `404`를 재확인했다.
+- D1/R2 export, delete, restore, retention apply와 cleanup은 수행하지
+  않았다.
+- 다음 재시도는 env deployment status 성공과 실제 edge HTTP 수렴을
+  구분해야 한다. 최대 60초 bounded window에서 목표 HTTP contract가
+  연속 3회 일치할 때 성공으로 판정하고, window 종료 전 단일 stale 응답만으로
+  실패 처리하지 않는 계획 변경 승인이 필요하다.
+
+### Gate B-R7 승인 입력
+
+- current:
+  - public access revision 16
+  - environment revision 32
+  - service normal, maintenance disabled, operator secret absent
+  - saved version 7과 승인된 source commit 유지
+  - R6 owner plan anchor는 combined object count 15와 내부 보관 digest
+- transition:
+  1. revision 33에서 fresh operator secret을 maintenance disabled +
+     service normal 상태로 materialize하고 saved version 7 배포
+  2. revision 34에서 같은 key를 같은 secret으로 교체하면서 maintenance
+     enabled + service normal로 전환하고 saved version 7 배포
+  3. 사용자 login/submit/publish/private preview 활동을 중단한 상태에서
+     owner plan을 3회 실행해 R6 anchor count/digest와 모두 일치하는지 확인
+  4. revision 35에서 같은 secret을 유지하고 service maintenance로 전환해
+     saved version 7 배포
+  5. 최대 60초 bounded HTTP convergence window에서 landing/health `200`,
+     auth `503`, `Retry-After: 300`, unauthenticated operator `404`가
+     연속 3회 일치하는지 확인
+  6. revision 36에서 같은 secret을 유지하고 service normal로 전환해 saved
+     version 7 배포
+  7. 최대 60초 bounded HTTP convergence window에서 landing/health `200`,
+     auth `401`, unauthenticated operator `404`가 연속 3회 일치하고 owner
+     plan도 R6 anchor count/digest와 3회 일치하는지 확인
+  8. revision 37에서 maintenance disabled + service normal로 닫고 operator
+     secret key는 Gate C까지 유지한 채 saved version 7 배포
+  9. 최대 60초 bounded HTTP convergence window에서 public baseline과
+     operator `404`가 연속 3회 일치하는지 확인
+- 각 HTTP request는 15초 이내로 제한하고 한 round의 독립 probe는 병렬
+  실행한다. 목표 contract가 아닌 응답은 연속 성공 count만 초기화하며
+  60초 window가 끝날 때까지 즉시 실패로 판정하지 않는다.
+- window timeout, owner plan timeout/error/drift 또는 environment/version
+  불일치 시 secret을 제거하고 public access, maintenance disabled, service
+  normal로 즉시 원복한 뒤 saved version 7을 배포한다.
+- R7는 plan/HTTP smoke만 수행한다. export, delete, restore, retention apply,
+  owner/session/token cleanup은 포함하지 않는다.
+- R7 성공 뒤 Gate C는 fresh plan/export exact digest/count로 다시
+  승인받는다.
+
+### Gate B-R7 실행 기록과 blocker
+
+- revision 33 disabled/normal에서 fresh operator secret materialize와
+  saved version 7 배포를 완료했다.
+- revision 34 enabled/normal 배포를 완료했다.
+- owner plan 세 번은 모두 owner count 1과 combined object count 15로
+  유효했지만 digest가 R6 anchor와 달랐다.
+- 승인된 drift 조건대로 service maintenance 전환 전에 중단하고 revision
+  35에서 secret 제거, maintenance disabled, service normal로 원복해 saved
+  version 7을 배포했다.
+- 원복 environment와 public access, landing/health `200`, auth `401`,
+  public JSON과 unauthenticated operator route `404`는 일치했다.
+- public card만 최대 60초 bounded window에서 `404`로 수렴하지 않았고
+  후속 status/header probe에서도 `200 image/png`와 public cache policy를
+  반환했다. body는 수집·저장하지 않았다.
+- combined count가 15로 유지되면서 digest만 달라진 점은 stable object
+  count는 같지만 R2 stable state/content가 바뀐 경우와 일치한다. public
+  JSON `404`와 함께 보면 D1 private owner와 R2 stable publication이
+  불일치한 것으로 판정한다.
+- export/delete/restore/retention apply/cleanup은 수행하지 않았다.
+
+### Gate B-R7-E 긴급 차단 승인 입력
+
+- current:
+  - public access revision 16
+  - environment revision 35
+  - service normal, maintenance disabled, operator secret absent
+  - public JSON `404`, public card `200`
+- 권고안 A:
+  1. Site access만 custom owner-only로 변경한다.
+  2. environment, saved version, D1/R2와 OAuth 설정은 변경하지 않는다.
+  3. anonymous landing/card가 platform access gate로 차단되고 owner
+     landing/health가 유지되는지 확인한다.
+  4. access revision과 owner-only policy를 기록하고 R2 inconsistency
+     진단·복구 전까지 public으로 되돌리지 않는다.
+- 권고안 B는 service maintenance 재배포지만 stable card 차단 여부를 추가
+  검증해야 하고 Site platform 자체는 공개 상태로 남는다. 이미 검증된
+  owner-only access gate를 사용하는 권고안 A보다 containment 확실성이
+  낮다.
+- R7-E는 access policy만 바꾸며 R2 unpublish/delete/cleanup을 포함하지
+  않는다. R2 repair 또는 exact cleanup은 owner-only containment 뒤 새
+  계획과 별도 승인을 받는다.
+
+### Gate B-R7-E 실행 기록
+
+- 변경 전 public access revision 16, environment revision 35,
+  disabled/normal/secret-absent와 public card `200` blocker를 재확인했다.
+- current user role field는 provider가 반환하지 않았지만 custom/public
+  capability, 기존 allowed owner user 1명과 group 0명을 확인한 뒤에만
+  access update를 실행했다.
+- Site access를 custom owner-only revision 17로 변경했다. readback은 allowed
+  user 1명, workspace/tenant/other group 0명이다.
+- anonymous landing, `/healthz`, public JSON과 card는 모두 platform 4xx로
+  차단됐다.
+- owner browser에서는 signed-in account, private owner profile/card와
+  landing application이 정상 로드됐다.
+- environment revision 35, maintenance disabled, service normal, operator
+  secret absent와 saved version 7은 그대로다.
+- environment, OAuth, D1/R2와 source/version mutation은 수행하지 않았다.
+- R2 stable publication inconsistency 복구와 owner/public boundary 검증 전에는
+  access revision 17을 유지한다.
+
+### Gate B-R8 exact stable repair 승인 입력
+
+- current:
+  - custom owner-only access revision 17
+  - allowed owner user 1명, 추가 user/group 0명
+  - environment revision 35
+  - maintenance disabled, service normal, operator secret absent
+  - D1 public JSON은 private `404`, contained R2 stable card는 publication
+  - saved version 7과 승인된 source commit 유지
+- transition:
+  1. revision 36에서 fresh operator secret을 maintenance disabled +
+     service normal 상태로 materialize하고 saved version 7 배포
+  2. revision 37에서 같은 key를 같은 secret으로 교체하면서 maintenance
+     enabled + service normal로 전환하고 saved version 7 배포
+  3. 사용자 login/submit/publish/private preview 활동을 중단한 상태에서
+     fresh owner plan을 3회 실행해 owner count 1, combined count 15와
+     같은 digest 수렴을 확인
+  4. repository 밖 temporary path에 mode `0600` exact export를 저장한다.
+     raw path, owner internal id, usage와 publication metadata는 보고하지 않는다.
+  5. backup contract/digest/count, exact owner/handle, desired visibility
+     private와 stable state publication을 확인한다.
+  6. export 뒤 fresh owner plan이 pre-export anchor와 일치할 때만 같은 backup,
+     export digest/count와 exact owner confirmation으로 `restore --apply`한다.
+  7. D1 restore가 idempotent durable match를 통과한 뒤 R2 stable
+     publication을 current storage ETag 조건부 tombstone으로 바꾼다.
+  8. post-repair owner plan을 3회 실행해 count가 유지되고 새 digest가
+     수렴하는지 확인한다.
+  9. owner browser에서 private owner card와 public card `404`를 확인한다.
+     anonymous 경로는 owner-only platform 4xx를 유지한다.
+  10. revision 38에서 maintenance disabled + service normal로 닫고 검증된
+      operator secret은 Gate C까지 유지해 saved version 7을 배포한다.
+  11. repair와 post-check가 모두 통과하면 R8 temporary backup을 exact path
+      확인 뒤 제거한다. Gate C는 새 export를 별도 생성한다.
+- 어느 precondition이든 불일치하면 restore를 호출하지 않고 secret 제거,
+  disabled/normal로 원복하며 owner-only access를 유지한다.
+- restore가 시작된 뒤 오류가 발생하면 owner-only access를 유지하고 fresh
+  plan으로 stable state를 판정한 다음 별도 recovery 승인을 받는다.
+- R8 승인 범위는 idempotent D1 restore와 R2 stable tombstone repair,
+  temporary export 생성·삭제까지다. owner-dependent delete, immutable
+  revision delete, retention apply, session/token cleanup과 public access
+  복구는 포함하지 않는다.
+
+### Gate B-R8 실행 기록
+
+- revision 36 disabled/normal secret materialize와 revision 37
+  enabled/normal overwrite를 owner-only private deployment로 완료했다.
+- identity-less maintenance CLI의 첫 plan이 Sites platform owner-only
+  gate에서 차단돼 valid JSON summary를 받지 못했다.
+- export와 restore는 호출하지 않았고 D1/R2 mutation도 수행하지 않았다.
+- revision 38에서 secret을 제거하고 disabled/normal로 원복한 뒤 saved
+  version 7을 private deployment했다.
+- custom owner-only access revision 17, allowed owner user 1명, group 0명과
+  anonymous landing/card platform 차단을 재확인했다.
+- SIWC bypass bearer token은 생성/rotate tool만 있고 명시적 revoke tool이
+  없어 장기 bypass credential을 남기므로 사용하지 않는다.
+
+### Gate B-R8-R1 service-maintenance bridge 승인 입력
+
+- current:
+  - custom owner-only access revision 17
+  - environment revision 38
+  - maintenance disabled, service normal, operator secret absent
+  - saved version 7과 owner 1명/group 0명 유지
+- transition:
+  1. revision 39에서 fresh operator secret을 disabled/normal 상태로
+     materialize하고 saved version 7 private deployment
+  2. revision 40에서 같은 secret을 maintenance enabled + service
+     maintenance로 교체하고 saved version 7 private deployment
+  3. access를 public revision 18로 전환하되 service maintenance를 유지
+  4. anonymous landing/auth/public JSON/card `503`, health `200`,
+     unauthenticated operator `404`가 최대 60초 window에서 3회 연속
+     일치하는지 확인
+  5. exact maintenance token으로 owner plan을 3회 실행해 owner count 1,
+     combined count 15와 같은 digest 수렴을 확인
+  6. repository 밖 mode `0600` pre-repair export를 저장하고 exact
+     owner/handle, private desired visibility, stable publication과
+     contract/digest/count를 확인
+  7. export 뒤 fresh plan이 anchor와 일치할 때만 같은 backup,
+     export digest/count와 owner confirmation으로 `restore --apply`
+  8. D1 durable restore idempotency 뒤 R2 stable publication을 current
+     storage ETag 조건부 tombstone으로 변경
+  9. post-repair plan을 3회 실행해 combined count 15와 새 digest 수렴을
+     확인하고, 별도 mode `0600` post-export가 private desired visibility와
+     stable unpublished를 반환하는지 확인
+  10. temporary pre/post backup을 exact path 확인 뒤 제거
+  11. service maintenance를 유지한 채 access를 custom owner-only revision
+      19로 복구하고 anonymous platform 4xx를 확인
+  12. revision 41에서 maintenance disabled + service normal로 닫되 검증된
+      operator secret은 Gate C까지 유지하고 saved version 7 private
+      deployment
+  13. owner landing/private card 정상 로드와 environment/access readback을
+      확인
+- service maintenance는 `/healthz`와 exact maintenance route를 제외한 일반
+  요청에 generic `503`을 반환하므로 public bridge 동안 stable card body를
+  서빙하지 않는다.
+- restore 전 불일치 시 access를 owner-only로 먼저 닫고 secret 제거,
+  disabled/normal revision으로 private deployment한다.
+- restore 호출 뒤 오류가 발생하면 public+maintenance 상태에서 fresh
+  plan/export로 stable state만 판정하고, access를 owner-only로 닫은 뒤 별도
+  recovery 승인을 받는다.
+- R8-R1은 SIWC bypass token을 생성하지 않는다. owner-dependent delete,
+  immutable revision delete, retention apply, session/token cleanup과 최종
+  public access 복구는 포함하지 않는다.
+
+### Gate B-R8-R1 실행 기록과 재시도 보정
+
+- revision 39 disabled/normal secret materialize와 revision 40
+  enabled/service-maintenance를 saved version 7 owner-only private
+  deployment로 완료했다.
+- access를 public revision 18로 바꾸는 Sites connector 호출은 workspace
+  internet publishing policy로 거부됐다. access는 custom owner-only
+  revision 17, owner 1명/group 0명에서 바뀌지 않았다.
+- plan/export/restore는 호출하지 않았고 D1/R2 mutation도 수행하지 않았다.
+- 승인된 fail-closed 경로에 따라 revision 41에서 secret을 제거하고
+  disabled/normal로 원복한 뒤 saved version 7 private deployment와
+  environment readback을 완료했다.
+- connector 호출 주체와 달리 로그인된 Sites 설정 UI에서 public 전환이
+  가능한지 확인하려면 Chrome 창을 여는 별도 사용자 허가가 필요하다.
+- 재시도 transition의 environment revision은
+  42 materialize→43 enabled/service-maintenance→44 disabled/normal로
+  보정한다. access 계약은 17→18→19, HTTP/plan/export/restore 검증과
+  실패 처리 계약은 위 승인 입력과 동일하다.
+
+### Gate B-R8-R1 UI 재시도 기록과 R8-R2 제안
+
+- 로그인된 Chrome Sites 설정 UI로 access revision 17→public 18 전환을
+  완료했다.
+- revision 42 disabled/normal secret materialize와 revision 43
+  enabled/service-maintenance saved version 7 private deployment는
+  통과했다.
+- 익명 HTTP에서 auth, public JSON, card는 `503`, health는 `200`,
+  unauthenticated operator는 `404`였지만 exact landing `/`은 `200`으로
+  남아 승인 계약을 충족하지 못했다.
+- plan/export/restore는 호출하지 않았고 D1/R2 mutation도 수행하지 않았다.
+- access를 owner-only revision 19로 먼저 닫고 revision 44에서 secret을
+  제거한 disabled/normal saved version 7 private deployment로 원복했다.
+- saved version 7 Worker 소스는 operational stop을 asset handler보다 먼저
+  수행하므로 public access 전환이 기존 정적 edge 응답을 유지한 것으로
+  판정한다.
+- Gate B-R8-R2 보정 transition:
+  1. current owner-only revision 19, environment revision 44,
+     disabled/normal/secret absent와 saved version 7을 재확인
+  2. revision 45 fresh secret disabled/normal private deployment
+  3. revision 46 enabled/service-maintenance private deployment
+  4. Chrome Sites 설정 UI로 access public revision 20 전환
+  5. 같은 saved version 7을 env revision 46으로 public production
+     deployment하고 terminal success 확인
+  6. exact `/`까지 포함해 landing/auth/public JSON/card `503`, health
+     `200`, unauthenticated operator `404` 3회 수렴
+  7. 이후 plan/export/restore/post-export 절차는 R8-R1 승인 입력과 동일
+  8. 성공 시 service maintenance 상태에서 access owner-only revision
+     21로 닫고 revision 47 disabled/normal private deployment
+  9. public deployment 또는 HTTP 계약 실패 시 export/restore 없이 access
+     owner-only revision 21로 먼저 닫고 revision 47
+     disabled/normal/secret-absent private deployment
+- 새 saved version이나 resource는 만들지 않는다. public production
+  deployment와 revision 45→46→47, access 19→20→21은 별도 Gate B-R8-R2
+  승인을 요구한다.
+
+### Gate B-R8-R2 실행 기록과 R8-R3 제안
+
+- revision 45 disabled/normal secret materialize와 revision 46
+  enabled/service-maintenance owner-only private deployment를 완료했다.
+- Chrome Sites 설정 UI로 access revision 19→public 20을 전환하고, 같은
+  saved version 7을 env revision 46으로 public production 재배포했다.
+- no-cache exact `/`은 재배포 뒤에도 `200`이었고, auth/public JSON/card는
+  `503`, health는 `200`, unauthenticated operator는 `404`였다.
+- HTTP 계약 불일치로 plan/export/restore를 호출하지 않았고 D1/R2
+  mutation도 수행하지 않았다.
+- access를 owner-only revision 21로 먼저 닫고 revision 47
+  disabled/normal/secret-absent saved version 7 private deployment로
+  원복했다.
+- saved version 7 source `index.html`은 빈 client root와 public entry만
+  포함한다. `HomePage` 개인화는 auth와 owner API 성공 뒤에만 수행되므로
+  service-maintenance에서 `503`인 auth/public JSON/card와 분리된 generic
+  marketing shell은 owner durable data를 포함하지 않는다.
+- Gate B-R8-R3 보정 transition:
+  1. current owner-only revision 21, environment revision 47,
+     disabled/normal/secret absent와 saved version 7을 재확인
+  2. revision 48 fresh secret disabled/normal private deployment
+  3. revision 49 enabled/service-maintenance private deployment
+  4. Chrome Sites 설정 UI로 access public revision 22 전환
+  5. landing `200`의 HTML이 generic app shell이고 owner handle, account
+     usage payload, publication metadata를 포함하지 않는지 확인
+  6. auth/public JSON/card `503`, health `200`, unauthenticated operator
+     `404`가 3회 수렴하는지 확인
+  7. 이후 plan/export/restore/post-export 절차는 R8-R1 승인 입력과 동일
+  8. 성공 시 service maintenance 상태에서 access owner-only revision
+     23으로 닫고 revision 50 disabled/normal private deployment
+  9. landing payload 또는 endpoint 계약 실패 시 export/restore 없이
+     access owner-only revision 23으로 먼저 닫고 revision 50
+     disabled/normal/secret-absent private deployment
+- R8-R3은 새 saved version/public production deployment/resource를 만들지
+  않는다. generic marketing landing `200`을 허용하는 보안 precondition
+  변경과 revision 48→49→50, access 21→22→23은 별도 승인을 요구한다.
+
+### Gate B-R8-R3 실행 기록과 R8-R4 제안
+
+- revision 48 disabled/normal secret materialize와 revision 49
+  enabled/service-maintenance owner-only private deployment를 완료했다.
+- Chrome Sites 설정 UI로 access revision 21→public 22를 전환했다.
+- landing은 `200`, HTML, 128 KiB bound를 충족하고 auth/public JSON/card는
+  `503`, health는 `200`, unauthenticated operator는 `404`였다.
+- landing payload absence 검사가 실패해 plan/export/restore를 호출하지
+  않았고 D1/R2 mutation도 수행하지 않았다.
+- access를 owner-only revision 23으로 먼저 닫고 revision 50
+  disabled/normal/secret-absent saved version 7 private deployment로
+  원복했다.
+- local production artifact `index.html`은 402바이트이고 빈 client root,
+  external module script와 stylesheet만 포함한다. R8-R3의 non-empty inline
+  script 전면 금지는 Sites platform bootstrap도 owner payload로 오인할 수
+  있어 과도하다.
+- Gate B-R8-R4 보정 transition:
+  1. current owner-only revision 23, environment revision 50,
+     disabled/normal/secret absent와 saved version 7을 재확인
+  2. revision 51 fresh secret disabled/normal private deployment
+  3. revision 52 enabled/service-maintenance private deployment
+  4. Chrome Sites 설정 UI로 access public revision 24 전환
+  5. landing `200`, HTML, 128 KiB bound를 확인하고 executable inline
+     bootstrap은 허용
+  6. landing 전체에서 exact public handle과 owner card URL이 없고,
+     `application/json`/JSON bootstrap을 구조적으로 순회해 owner ID,
+     account usage, publication metadata payload가 없는지 확인
+  7. auth/public JSON/card `503`, health `200`, unauthenticated operator
+     `404`가 3회 수렴하는지 확인
+  8. 이후 plan/export/restore/post-export 절차는 R8-R1 승인 입력과 동일
+  9. 성공 시 service maintenance 상태에서 access owner-only revision
+     25로 닫고 revision 53 disabled/normal private deployment
+  10. landing payload 또는 endpoint 계약 실패 시 export/restore 없이
+      access owner-only revision 25로 먼저 닫고 revision 53
+      disabled/normal/secret-absent private deployment
+- R8-R4는 새 saved version/public production deployment/resource를 만들지
+  않는다. payload 검사의 bootstrap 보정과 revision 51→52→53, access
+  23→24→25는 별도 승인을 요구한다.
+
+### Gate B-R8-R4 실행 기록
+
+- owner-only revision 23, environment revision 50
+  disabled/normal/secret-absent와 saved version 7 preflight를 통과했다.
+- revision 51에서 fresh operator secret을 materialize하고 revision 52에서
+  enabled/service-maintenance로 전환했으며, 각 revision에 saved version 7
+  private deployment를 적용했다.
+- Chrome Sites 설정 UI로 access revision 23→public 24를 전환했다.
+- landing `200`, HTML, 128 KiB bound와 executable bootstrap 허용 조건에서
+  exact public handle/owner card URL이 없고 구조화된 JSON
+  owner/usage/publication payload도 없음을 3회 확인했다.
+- auth/public JSON/card `503`, health `200`, unauthenticated operator
+  `404`가 3회 수렴했다.
+- maintenance plan은 owner 1, object 15, 동일 digest로 3회 수렴했다.
+  pre-export는 contract/schema v1, owner 1, object 6,
+  `private/publication`, mode `0600`, 금지 필드 없음이었다.
+- pre-export 뒤 fresh plan이 승인 anchor와 다시 일치한 경우에만 exact
+  restore를 적용했다. restore summary는 contract/schema v1, owner 1,
+  object 6과 입력 digest가 일치했다.
+- post-plan은 owner 1, object 15의 변경된 digest로 3회 수렴했다.
+  post-export는 contract/schema v1, owner 1, object 4,
+  `private/unpublished`, mode `0600`, 금지 필드 없음이었다.
+- 검증용 pre/post backup 두 파일과 전용 임시 디렉터리는 exact 경로를
+  재검증한 뒤 삭제했으며 복구할 수 없다.
+- 데이터 작업 뒤 access를 public 24→owner-only 25로 먼저 닫고,
+  operator secret을 유지한 environment revision 53
+  disabled/normal saved version 7 private deployment를 완료했다.
+- 최종 connector/UI readback은 owner-only 사용자 1, group 0,
+  environment revision 53, disabled/normal, operator secret stored와
+  일치했다. 익명 root 요청은 `401`이었다.
+- owner/session/token 삭제, retention apply, owner revision 삭제와 operator
+  secret 제거는 수행하지 않았으며 Gate C 범위로 남긴다.
 
 ### Gate C 승인 입력
 
@@ -510,28 +987,84 @@ Task #45 Stage 4: public profile과 stable R2 cache 검증
 - 어느 시점이든 digest/count/owner/handle 불일치 시 apply 없이 safe state
   복구 후 중단한다.
 
+### Gate C 실행 기록
+
+- owner-only revision 25, environment revision 53 disabled/normal,
+  operator secret stored와 saved version 7 preflight를 통과했다.
+- revision 54에서 Gate C용 operator secret을 교체하고 revision 55에서
+  enabled/service-maintenance로 전환했으며 각 revision을 owner-only private
+  deployment로 적용했다.
+- Sites connector public 변경은 workspace의 internet publishing API
+  비활성화로 적용되지 않았고 access revision 25가 유지됨을 확인했다. 데이터
+  작업을 시작하지 않은 상태에서 Chrome Sites 설정 UI로 public revision
+  26을 전환하고 connector readback을 대조했다.
+- public bridge에서 landing `200`, HTML/bound, exact handle/owner card
+  URL과 구조화된 owner/usage/publication payload 부재, auth/public
+  JSON/card `503`, health `200`, unauthenticated operator `404`가 3회
+  수렴했다.
+- fresh owner plan은 owner 1, object 15, 동일 digest로 3회 수렴했고
+  retention 90일/recent revision 5 dry-run candidate는 0이었다.
+- pre-delete export는 contract/schema v1, owner 1, object 4,
+  `private/unpublished`, mode `0600`, 금지 필드 없음이었다. export 뒤 fresh
+  plan이 owner 1/object 15/digest까지 anchor와 다시 일치한 경우에만 first
+  exact delete를 적용했다.
+- first delete summary는 owner 1/object 15/digest confirmation과
+  일치했다. revision 56 enabled/normal saved version 7 public deployment
+  뒤 첫 bounded HTTP convergence가 완료되지 않아 추가 mutation을
+  중단했다. 단일 진단과 이어진 3회 검증에서 landing/health `200`, auth
+  `401`, public JSON/card/operator `404`가 수렴했고 owner plan도
+  `not_found`였다.
+- 같은 backup restore summary는 owner 1/object 4와 입력 digest가
+  일치했다. restore 뒤 public JSON/card `404`를 3회 확인했고 fresh final
+  plan은 owner 1/object 4와 동일 digest로 3회 수렴했다.
+- final exact delete summary는 owner 1/object 4/digest confirmation과
+  일치했다. 이후 owner plan `not_found`, landing/health `200`, auth
+  `401`, public JSON/card/operator `404`가 3회 수렴했고 final retention
+  dry-run candidate는 0이었다.
+- `0600` backup 파일과 전용 임시 디렉터리, task 전용 CLI
+  config/cache/credential state는 exact path/content를 재검증한 뒤
+  삭제했으며 복구할 수 없다. owner delete가 session/token record를
+  제거했고 최종 auth `401`로 서버 측 무효화를 확인했다. 일반
+  Codex/OpenAI/GitHub/ChatGPT credential과 브라우저 프로필은 변경하지
+  않았다.
+- revision 57에서 maintenance를 disabled, service를 normal로 복구하면서
+  operator secret key를 제거하고 saved version 7 public production
+  deployment를 완료했다.
+- 최종 connector state는 public access revision 26, environment revision
+  57, disabled/normal, operator secret absent, saved version 7이다. 익명
+  landing/health `200`, auth `401`, disposable public JSON/card와 operator
+  route `404`가 3회 수렴했다.
+- retention candidate가 0이므로 retention apply는 실행하지 않았다.
+
 ### 실행 순서
 
-1. Gate B 승인 범위에서 access owner-only/public 왕복을 수행한다.
-2. maintenance route와 service mode를 transition마다 fresh secret으로
-   교체하고 saved version 7을 재배포한다.
-3. maintenance route disabled/invalid token generic `404`,
+1. operator CLI에 기본 15초 request timeout을 적용하고 응답 없는
+   `fetchImpl`이 credential·URL·payload 비노출 `network_unavailable`로
+   종료되는 회귀 테스트를 통과시킨다.
+2. Gate B 승인 범위에서 access owner-only/public 왕복을 수행한다.
+3. service normal + maintenance disabled에서 fresh secret key를 먼저
+   materialize하고, 다음 revision에서 기존 key를 교체하면서 route를
+   활성화한다. 인증 수렴 뒤 같은 secret을 유지하고 service mode만
+   maintenance→normal로 전환한다.
+4. maintenance route disabled/invalid token generic `404`,
    service maintenance generic `503`/`Retry-After`, normal health `200`을
    확인한다.
-4. service normal + maintenance route enabled 상태에서 owner export plan과
+5. service normal + maintenance route enabled 상태에서 owner export plan과
    retention 90일 dry-run을 수행한다.
-5. retention은 public stable/tombstone, referenced revision, owner+locale 최근
+6. retention은 public stable/tombstone, referenced revision, owner+locale 최근
    5개와 90일 이내 revision을 candidate에서 제외해야 한다. apply하지 않는다.
-6. Gate C exact 승인 뒤 repository 밖 backup을 `0600`으로 저장한다.
-7. exact delete→public/owner 404→restore/repair→digest/count 비교→fresh final
+7. Gate C exact 승인 뒤 repository 밖 backup을 `0600`으로 저장한다.
+8. exact delete→public/owner 404→restore/repair→digest/count 비교→fresh final
    delete를 수행한다.
-8. secondary/primary token과 browser session을 revoke/logout하고 task CLI
+9. secondary/primary token과 browser session을 revoke/logout하고 task CLI
    credential file을 삭제한다.
-9. maintenance disabled, operator secret removed, service normal로 environment를
-   복구하고 saved version 7을 public deployment한다.
-10. Site access public, landing/health `200`, disposable public JSON/card `404`,
+10. maintenance disabled, service normal로 environment를 복구하되 operator
+    secret key는 유지하고 saved version 7을 public deployment한다.
+11. Site access public, landing/health `200`, disposable public JSON/card `404`,
     owner not-found와 D1/R2 final count를 확인한다.
-11. task 전용 config/cache directory는 exact path와 contents를 확인한 뒤만
+12. Gate C final cleanup에서 operator secret key를 제거하고 disabled/normal
+    saved version 7을 다시 public deployment한다.
+13. task 전용 config/cache directory는 exact path와 contents를 확인한 뒤만
     제거한다.
 
 ### 검증
@@ -560,6 +1093,8 @@ owner/handle/digest/count confirmation을 Gate C 승인값 그대로 사용한�
 - access allowlist가 owner 1명/추가 user·group 0명이 아니다.
 - Site version이 7이 아니거나 deployment가 failed/non-terminal로 남는다.
 - environment 전환이 승인하지 않은 key를 변경하거나 secret 값을 노출한다.
+- operator CLI 요청이 15초 timeout 뒤에도 종료되지 않거나 timeout error에
+  credential·origin·payload가 노출된다.
 - maintenance/normal/owner-only/public 응답이 계약과 다르다.
 - retention이 protected stable/tombstone/revision을 candidate로 잡는다.
 - plan/export/restore/final plan의 owner/handle/digest/count가 하나라도 다르다.

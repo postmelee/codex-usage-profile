@@ -46,6 +46,41 @@ test("operator CLI sends only a scoped plan and keeps the token in the header", 
   assert.doesNotMatch(output.join("\n"), new RegExp(SECRET));
 });
 
+test("operator CLI bounds an unresponsive request without leaking context", async () => {
+  const output = [];
+  let signal;
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli([
+      "plan",
+      "--origin", ORIGIN,
+      "--owner-id", OWNER_ID,
+      "--handle", HANDLE
+    ], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async (_url, init) => {
+        signal = init.signal;
+        return new Promise((resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            reject(new Error("request aborted"));
+          }, { once: true });
+        });
+      },
+      requestTimeoutMs: 10,
+      stdout: (line) => output.push(line)
+    }),
+    (error) => {
+      assert.equal(error.code, "network_unavailable");
+      assert.doesNotMatch(error.message, new RegExp(SECRET));
+      assert.doesNotMatch(error.message, /profile\.example|owner_1|postmelee/);
+      return true;
+    }
+  );
+
+  assert.equal(signal.aborted, true);
+  assert.deepEqual(output, []);
+});
+
 test("mutations require apply, digest, count, and exact owner options before fetch", async () => {
   let fetches = 0;
   const common = {

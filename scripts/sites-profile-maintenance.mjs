@@ -48,6 +48,8 @@ const COMMANDS = new Set([
   "repair-publication"
 ]);
 const MAX_BACKUP_FILE_BYTES = 512 * 1024;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+const MAX_REQUEST_TIMEOUT_MS = 60_000;
 
 export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   const parsed = parseSitesProfileMaintenanceArgs(args);
@@ -68,23 +70,39 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   if (typeof fetchImpl !== "function") {
     throw cliError("network_unavailable");
   }
+  const requestTimeoutMs = requireRequestTimeoutMs(
+    options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  );
 
   let response;
+  const controller = new AbortController();
+  let timeout;
   try {
-    response = await fetchImpl(
-      new URL(PROFILE_SITES_MAINTENANCE_PATH, `${origin}/`),
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          origin
-        },
-        body: JSON.stringify(payload)
-      }
-    );
+    response = await Promise.race([
+      fetchImpl(
+        new URL(PROFILE_SITES_MAINTENANCE_PATH, `${origin}/`),
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            origin
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        }
+      ),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(cliError("network_unavailable"));
+        }, requestTimeoutMs);
+      })
+    ]);
   } catch {
     throw cliError("network_unavailable");
+  } finally {
+    clearTimeout(timeout);
   }
   const result = await readSafeResponse(response);
   if (!response.ok || result?.ok !== true) {
@@ -401,6 +419,17 @@ function requireNonNegativeIntegerText(value, label) {
     throw new TypeError(`${label} must be a safe integer`);
   }
   return number;
+}
+
+function requireRequestTimeoutMs(value) {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_REQUEST_TIMEOUT_MS
+  ) {
+    throw new TypeError("requestTimeoutMs must be a bounded positive integer");
+  }
+  return value;
 }
 
 function requireNonEmptyString(value, label) {
