@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 3 (피드백 보정 3.2 포함)
+Stage: 3 (피드백 보정 3.3 포함)
 
 ## 단계 목적
 
@@ -25,8 +25,9 @@ provider link, stable Image URL/README action, PNG 저장과 close는 계속
 후속 피드백에서는 mobile 안내 panel의 시각적 요소가 desktop보다 커 보이는
 문제를 보정했다. 제목·단계 text는 13px, action의 보이는 box는 28px로
 축소하되 투명한 pseudo-element로 실제 button/link touch target은 44px를
-유지했다. 비클릭 3번 행과 padding·gap도 줄여 panel 높이를 180px 이하로
-고정했다.
+유지했다. 후속 피드백으로 세 행 높이를 모두 32px, 행 gap을 12px로 맞춰
+1→2와 2→3의 중심 간격을 동일한 44px로 고정하면서 panel 높이는 180px
+이하로 유지했다.
 
 ## 산출물
 
@@ -77,6 +78,8 @@ git diff --check
 - OK — mobile 안내 panel이 180px 이하, 제목과 action text가 13px,
   action visual box가 30px 이하로 렌더링되며 `::before` 상하 8px 확장으로
   44px touch target을 유지함을 확인했다.
+- OK — mobile 안내 1·2·3번 행이 모두 32px이고 중심 간격이
+  `[44px, 44px]`로 동일함을 geometry assertion과 screenshot으로 확인했다.
 - OK — 1280×620 resize 직후 motion origin이 `target`으로 settle하고 card
   width가 600px 미만으로 축소되며 action, secondary row와 close가 viewport
   안에 남는 것을 확인했다.

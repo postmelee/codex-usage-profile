@@ -2917,12 +2917,12 @@ button {
   }
 
   .share-studio-instructions ol {
-    gap: 4px;
+    gap: 12px;
     margin-top: 6px;
   }
 
   .share-studio-instructions li {
-    min-height: 44px;
+    min-height: 32px;
   }
 
   .share-studio-step-action {
@@ -2940,7 +2940,7 @@ button {
   .share-studio-instructions .share-studio-step-copy {
     font-size: 13px;
     line-height: 18px;
-    min-height: 28px;
+    min-height: 32px;
   }
 
   .share-studio-step-number {

@@ -953,8 +953,16 @@ test.describe("Home and share card flow", () => {
     const compactInstructions = await instructions.evaluate((element) => {
       const stepAction = element.querySelector(".share-studio-step-action");
       const touchExtension = getComputedStyle(stepAction, "::before");
+      const rowBounds = Array.from(element.querySelectorAll("li")).map(
+        (row) => row.getBoundingClientRect()
+      );
       return {
         panelHeight: element.getBoundingClientRect().height,
+        rowCenterGaps: rowBounds.slice(1).map((row, index) => (
+          (row.top + (row.height / 2))
+          - (rowBounds[index].top + (rowBounds[index].height / 2))
+        )),
+        rowHeights: rowBounds.map((row) => row.height),
         stepActionHeight: stepAction.getBoundingClientRect().height,
         stepFontSize: getComputedStyle(stepAction).fontSize,
         titleFontSize: getComputedStyle(element.querySelector("h3")).fontSize,
@@ -963,6 +971,8 @@ test.describe("Home and share card flow", () => {
       };
     });
     expect(compactInstructions.panelHeight).toBeLessThanOrEqual(180);
+    expect(compactInstructions.rowHeights).toEqual([32, 32, 32]);
+    expect(compactInstructions.rowCenterGaps).toEqual([44, 44]);
     expect(compactInstructions.stepActionHeight).toBeLessThanOrEqual(30);
     expect(compactInstructions.stepFontSize).toBe("13px");
     expect(compactInstructions.titleFontSize).toBe("13px");
