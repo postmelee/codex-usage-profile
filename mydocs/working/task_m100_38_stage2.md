@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 2 (피드백 보정 2.5 포함)
+Stage: 2 (피드백 보정 2.6 포함)
 
 ## 단계 목적
 
@@ -19,6 +19,8 @@ handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 
 따라 고정 높이 대신 콘텐츠 자동 높이 위에서 동작하는 clip-path reveal로
 160ms motion을 복원했다. 마지막으로 안내 panel close 시 DOM을 즉시
 제거하지 않고 120ms 역방향 motion을 완료한 뒤 unmount하도록 보정했다.
+후속 피드백으로 안내 panel의 실제 레이아웃 공간 확장과 중앙 column의 상향
+이동을 동일한 160ms/ease-out 진행률로 동기화했다.
 
 ## 산출물
 
@@ -30,10 +32,10 @@ handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 
 | `src/profile-ui/BrandLogo.jsx` | X, LinkedIn, Reddit의 단색 20×20 inline SVG 실루엣을 분리했다. |
 | `src/profile-ui/Icons.jsx` | 범용 share/social path를 제거하고 안내용 globe와 참조 Codex 앱의 20×21 check-circle SVG를 18×18 toast 아이콘으로 추가했다. |
 | `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가하고 한국어 3번 문구를 `게시물에 이미지를 붙여넣으세요`로 고정했다. |
-| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현하고 안내 panel close의 animation 완료·fallback timer 뒤 unmount lifecycle을 추가했다. |
+| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현하고 안내 panel의 자연 높이 측정, open/close phase와 animation 완료·fallback timer lifecycle을 추가했다. |
 | `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL과 한국어 3번 안내 문구 계약을 실제 안내 흐름에 맞게 고정했다. |
-| `src/styles.css` | source handoff, 공식형 로고 action, 상단 toast motion, 콘텐츠 자동 높이를 보존하는 160ms clip-path 안내 panel reveal과 120ms 역방향 close motion을 구현했다. |
-| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내의 실제 panel bounds, open/close motion 계약과 midpoint, PNG clipboard, Codex check-circle 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
+| `src/styles.css` | source handoff, 공식형 로고 action, 상단 toast motion, 측정 높이·margin·padding·clip-path를 함께 확장하는 160ms 안내 panel reveal과 120ms 역방향 close motion을 구현했다. |
+| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내의 실제 panel bounds, open/close motion 계약과 midpoint, panel 공간·상단 column 이동 진행률 동기화, PNG clipboard, 저장 toast와 desktop/mobile 구도를 검증했다. |
 | `mydocs/plans/task_m100_38_impl.md` | 작업지시자 피드백으로 변경된 소셜 disclosure와 close handoff 계약을 실제 구현에 맞게 정정했다. |
 | `mydocs/orders/20260729.md` | Stage 2 완료와 Stage 3 승인 대기 상태를 반영했다. |
 
@@ -89,6 +91,9 @@ git diff --check
 - OK — 안내 panel close가 `120ms`/`ease-in`으로 opacity와 `0 → -6px`,
   하단 reveal `0% → 100%`를 역재생하고 animation 완료 후 unmount되는 것을
   60ms midpoint screenshot과 Web Animations API로 확인했다.
+- OK — 1280×900에서 open animation의 0ms·80ms·159ms frame을 고정해
+  panel 레이아웃 공간 확장 진행률과 title/card/action column의 상향 이동
+  진행률 차이가 3% 이내임을 확인했다.
 - OK — close가 `closing → handoff → unmount` 순서로 진행되고 handoff 중
   source와 motion card가 동시에 연결되어 한 프레임 공백이 없음을 확인했다.
 - OK — 1280×900과 390×844 screenshot을 첨부 화면과 직접 비교해 action

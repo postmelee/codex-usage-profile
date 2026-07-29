@@ -512,33 +512,71 @@ function ShareDestination({ active, index, onSelect, target }) {
 function ShareInstructions({ copy, onCopy, onDismiss, target }) {
   const dismissTimerRef = useRef(null);
   const dismissedRef = useRef(false);
+  const instructionsRef = useRef(null);
+  const motionPhaseRef = useRef("measuring");
   const onDismissRef = useRef(onDismiss);
-  const [closing, setClosing] = useState(false);
+  const openingTimerRef = useRef(null);
+  const [expandedHeight, setExpandedHeight] = useState(null);
+  const [motionPhase, setMotionPhase] = useState("measuring");
 
   onDismissRef.current = onDismiss;
+  motionPhaseRef.current = motionPhase;
 
   useLayoutEffect(() => {
     globalThis.clearTimeout(dismissTimerRef.current);
+    globalThis.clearTimeout(openingTimerRef.current);
     dismissedRef.current = false;
-    setClosing(false);
+    motionPhaseRef.current = "measuring";
+    setMotionPhase("measuring");
+    setExpandedHeight(null);
+
+    const height = instructionsRef.current?.offsetHeight ?? 0;
+    if (height <= 0) {
+      motionPhaseRef.current = "open";
+      setMotionPhase("open");
+      return undefined;
+    }
+
+    setExpandedHeight(height);
+    motionPhaseRef.current = "opening";
+    setMotionPhase("opening");
+    openingTimerRef.current = globalThis.setTimeout(
+      finishOpening,
+      SHARE_INSTRUCTIONS_OPEN_DURATION + 80
+    );
 
     return () => {
       globalThis.clearTimeout(dismissTimerRef.current);
+      globalThis.clearTimeout(openingTimerRef.current);
     };
   }, [target?.id]);
 
   if (!target) return null;
 
+  function finishOpening() {
+    if (motionPhaseRef.current !== "opening") return;
+    globalThis.clearTimeout(openingTimerRef.current);
+    motionPhaseRef.current = "open";
+    setMotionPhase("open");
+    setExpandedHeight(null);
+  }
+
   function finishDismiss() {
     if (dismissedRef.current) return;
     dismissedRef.current = true;
     globalThis.clearTimeout(dismissTimerRef.current);
+    globalThis.clearTimeout(openingTimerRef.current);
     onDismissRef.current?.();
   }
 
   function requestDismiss() {
-    if (closing) return;
-    setClosing(true);
+    if (motionPhaseRef.current === "closing") return;
+    globalThis.clearTimeout(openingTimerRef.current);
+    setExpandedHeight(
+      Math.max(0, instructionsRef.current?.getBoundingClientRect().height ?? 0)
+    );
+    motionPhaseRef.current = "closing";
+    setMotionPhase("closing");
     dismissTimerRef.current = globalThis.setTimeout(
       finishDismiss,
       SHARE_INSTRUCTIONS_CLOSE_DURATION + 80
@@ -547,7 +585,16 @@ function ShareInstructions({ copy, onCopy, onDismiss, target }) {
 
   function handleAnimationEnd(event) {
     if (
-      closing
+      motionPhaseRef.current === "opening"
+      && event.currentTarget === event.target
+      && event.animationName === "share-studio-instructions-in"
+    ) {
+      finishOpening();
+      return;
+    }
+
+    if (
+      motionPhaseRef.current === "closing"
       && event.currentTarget === event.target
       && event.animationName === "share-studio-instructions-out"
     ) {
@@ -557,9 +604,13 @@ function ShareInstructions({ copy, onCopy, onDismiss, target }) {
 
   return (
     <div
-      className={`share-studio-instructions${closing ? " is-closing" : ""}`}
+      className={`share-studio-instructions is-${motionPhase}`}
       id={SHARE_INSTRUCTIONS_ID}
       onAnimationEnd={handleAnimationEnd}
+      ref={instructionsRef}
+      style={expandedHeight === null ? undefined : {
+        "--share-instructions-expanded-height": `${expandedHeight}px`
+      }}
     >
       <div className="share-studio-instructions-header">
         <h3>{formatCopy(copy.shareInstructionsTitle, target.label)}</h3>
@@ -664,6 +715,7 @@ function getFocusableElements(container) {
 const IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
 const SHARE_INSTRUCTIONS_CLOSE_DURATION = 120;
 const SHARE_INSTRUCTIONS_ID = "share-studio-social-instructions";
+const SHARE_INSTRUCTIONS_OPEN_DURATION = 160;
 const SOURCE_HANDOFF_DURATION = 120;
 const TOAST_DURATION = 3200;
 

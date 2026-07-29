@@ -1228,11 +1228,11 @@ button {
 }
 
 .share-studio-instructions {
-  animation: share-studio-instructions-in 160ms ease-out both;
   background: rgba(47, 47, 47, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 9px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  clip-path: inset(0 round 9px);
   color: #f1f1f1;
   margin-top: 18px;
   padding: 12px;
@@ -1240,8 +1240,19 @@ button {
   width: min(600px, calc(100vw - 48px));
 }
 
+.share-studio-instructions.is-measuring {
+  animation: none;
+  visibility: hidden;
+}
+
+.share-studio-instructions.is-opening {
+  animation: share-studio-instructions-in 160ms ease-out both;
+  overflow: hidden;
+}
+
 .share-studio-instructions.is-closing {
   animation: share-studio-instructions-out 120ms ease-in both;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -1491,28 +1502,52 @@ button {
 
 @keyframes share-studio-instructions-in {
   from {
+    border-bottom-width: 0;
+    border-top-width: 0;
     clip-path: inset(0 0 100% 0 round 9px);
+    height: 0;
+    margin-top: 0;
     opacity: 0;
+    padding-bottom: 0;
+    padding-top: 0;
     transform: translate3d(0, -6px, 0);
   }
 
   to {
+    border-bottom-width: 1px;
+    border-top-width: 1px;
     clip-path: inset(0 round 9px);
+    height: var(--share-instructions-expanded-height);
+    margin-top: 18px;
     opacity: 1;
+    padding-bottom: 12px;
+    padding-top: 12px;
     transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes share-studio-instructions-out {
   from {
+    border-bottom-width: 1px;
+    border-top-width: 1px;
     clip-path: inset(0 round 9px);
+    height: var(--share-instructions-expanded-height);
+    margin-top: 18px;
     opacity: 1;
+    padding-bottom: 12px;
+    padding-top: 12px;
     transform: translate3d(0, 0, 0);
   }
 
   to {
+    border-bottom-width: 0;
+    border-top-width: 0;
     clip-path: inset(0 0 100% 0 round 9px);
+    height: 0;
+    margin-top: 0;
     opacity: 0;
+    padding-bottom: 0;
+    padding-top: 0;
     transform: translate3d(0, -6px, 0);
   }
 }

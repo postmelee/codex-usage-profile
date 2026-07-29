@@ -559,7 +559,7 @@ test.describe("Home and share card flow", () => {
       );
       await expect(page.locator(".share-studio-instructions")).toHaveCSS(
         "clip-path",
-        "inset(0px 0px 0% round 9px)"
+        "inset(0px round 9px)"
       );
       const link = page.getByRole("link", { name: `Open ${platform} composer` });
       const href = new URL(await link.getAttribute("href"));
@@ -698,11 +698,14 @@ test.describe("Home and share card flow", () => {
     }));
     await mockCardImages(page);
 
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
     await page.getByRole("button", { name: "Share", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "활동 공유하기" })).toBeVisible();
-    await page.getByRole("button", { name: "Reddit에 공유" }).click();
+    const redditButton = page.getByRole("button", { name: "Reddit에 공유" });
+    await expect(redditButton).toHaveCSS("opacity", "1");
+    await redditButton.click();
     await expect(
       page.getByText("게시물에 이미지를 붙여넣으세요", { exact: true })
     ).toBeVisible();
@@ -713,10 +716,26 @@ test.describe("Home and share card flow", () => {
       );
       const timing = animation?.effect?.getTiming();
       const keyframes = animation?.effect?.getKeyframes() ?? [];
+      const title = document.querySelector(".share-studio-title");
+      const sampleLayout = (time) => {
+        if (animation) animation.currentTime = time;
+        const panelStyle = getComputedStyle(element);
+        return {
+          panelSpace: element.getBoundingClientRect().height
+            + Number.parseFloat(panelStyle.marginTop),
+          titleY: title?.getBoundingClientRect().y ?? Number.NaN
+        };
+      };
+      animation?.pause();
+      const layoutSamples = animation
+        ? [sampleLayout(0), sampleLayout(80), sampleLayout(159)]
+        : [];
+      if (animation) animation.currentTime = 80;
       return {
         clipPaths: keyframes.map((keyframe) => keyframe.clipPath),
         duration: timing?.duration,
         easings: keyframes.map((keyframe) => keyframe.easing),
+        layoutSamples,
         transforms: keyframes.map((keyframe) => keyframe.transform)
       };
     });
@@ -725,12 +744,35 @@ test.describe("Home and share card flow", () => {
     expect(instructionMotion.clipPaths[0]).toContain("100%");
     expect(instructionMotion.clipPaths.at(-1)).toBe("inset(0px round 9px)");
     expect(instructionMotion.transforms[0]).toContain("-6px");
+    expect(instructionMotion.layoutSamples).toHaveLength(3);
+    const [openingStart, openingMiddle, openingEnd] = instructionMotion.layoutSamples;
+    expect(openingStart.panelSpace).toBeLessThan(openingMiddle.panelSpace);
+    expect(openingMiddle.panelSpace).toBeLessThan(openingEnd.panelSpace);
+    expect(openingStart.titleY).toBeGreaterThan(openingMiddle.titleY);
+    expect(openingMiddle.titleY).toBeGreaterThan(openingEnd.titleY);
+    const panelProgress = (
+      (openingMiddle.panelSpace - openingStart.panelSpace)
+      / (openingEnd.panelSpace - openingStart.panelSpace)
+    );
+    const titleProgress = (
+      (openingStart.titleY - openingMiddle.titleY)
+      / (openingStart.titleY - openingEnd.titleY)
+    );
+    expect(Math.abs(panelProgress - titleProgress)).toBeLessThanOrEqual(0.03);
+    await page.screenshot({
+      path: testInfo.outputPath("share-korean-instructions-opening-synced.png")
+    });
+    await instructions.evaluate((element) => {
+      element.getAnimations().find(
+        (candidate) => candidate.animationName === "share-studio-instructions-in"
+      )?.play();
+    });
     await expect(instructions).toHaveCSS("max-height", "none");
     await expect(instructions).toHaveCSS("overflow", "visible");
     await expect(instructions).toHaveCSS("opacity", "1");
     await expect(instructions).toHaveCSS(
       "clip-path",
-      "inset(0px 0px 0% round 9px)"
+      "inset(0px round 9px)"
     );
     const instructionBounds = await instructions.evaluate((element) => {
       const panel = element.getBoundingClientRect();
@@ -792,9 +834,7 @@ test.describe("Home and share card flow", () => {
       )?.play();
     });
     await expect(instructions).toBeHidden();
-    await expect(
-      page.getByRole("button", { name: "Reddit에 공유" })
-    ).toHaveAttribute("aria-expanded", "false");
+    await expect(redditButton).toHaveAttribute("aria-expanded", "false");
   });
 
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
@@ -863,7 +903,7 @@ test.describe("Home and share card flow", () => {
     await expect(instructions).toHaveCSS("overflow", "visible");
     await expect(instructions).toHaveCSS(
       "clip-path",
-      "inset(0px 0px 0% round 9px)"
+      "inset(0px round 9px)"
     );
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
