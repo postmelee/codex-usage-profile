@@ -9,6 +9,10 @@ import {
 
 test("resolves Korean and English Share Studio copy", () => {
   assert.equal(getShareStudioCopy("ko-KR").title, "활동 공유하기");
+  assert.equal(
+    getShareStudioCopy("ko-KR").pasteImage,
+    "게시물에 이미지를 붙여넣으세요"
+  );
   assert.equal(getShareStudioCopy("en-US").title, "Share activity");
   assert.equal(getShareStudioCopy("ja-JP").title, "Share activity");
 });

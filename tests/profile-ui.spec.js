@@ -551,6 +551,8 @@ test.describe("Home and share card flow", () => {
       await expect(button).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByRole("heading", { name: `Share to ${platform}` }))
         .toBeVisible();
+      await expect(page.getByText("Paste image into the post", { exact: true }))
+        .toBeVisible();
       const link = page.getByRole("link", { name: `Open ${platform} composer` });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
@@ -597,6 +599,11 @@ test.describe("Home and share card flow", () => {
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
     await expect(page.getByText("Image saved", { exact: true })).toBeVisible();
+    const successIcon = page.locator("[data-codex-check-circle]");
+    await expect(successIcon).toHaveAttribute("viewBox", "0 0 20 21");
+    await expect(successIcon).toHaveAttribute("width", "18");
+    await expect(successIcon.locator("path")).toHaveCount(2);
+    await page.screenshot({ path: testInfo.outputPath("share-save-toast.png") });
 
     await page.getByRole("button", { name: "Close Share Studio" }).click();
     await page.keyboard.press("Escape");
@@ -667,6 +674,30 @@ test.describe("Home and share card flow", () => {
     expect(closeBox.y).toBeLessThan(50);
 
     await page.screenshot({ path: testInfo.outputPath("share-wide-desktop.png") });
+  });
+
+  test("Share Studio renders the Korean third instruction step", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "language", {
+        configurable: true,
+        get: () => "ko-KR"
+      });
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+
+    await expect(page.getByRole("dialog", { name: "활동 공유하기" })).toBeVisible();
+    await page.getByRole("button", { name: "Reddit에 공유" }).click();
+    await expect(
+      page.getByText("게시물에 이미지를 붙여넣으세요", { exact: true })
+    ).toBeVisible();
   });
 
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {

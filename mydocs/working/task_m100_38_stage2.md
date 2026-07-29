@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 2 (피드백 보정 2.1 포함)
+Stage: 2 (피드백 보정 2.2 포함)
 
 ## 단계 목적
 
@@ -12,7 +12,8 @@ Home의 실제 카드와 전체 화면 Share Studio의 중앙 카드를 하나�
 네 개 원형 primary action을 정렬하고, 기존 기능은 낮은 대비 secondary row로
 축약했다. 작업지시자 피드백에 따라 소셜 action을 이미지 복사 안내
 disclosure로 바꾸고, 공식 형태의 단색 로고, 저장 toast와 close source
-handoff를 추가했다.
+handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 문구를 고정하고,
+참조 Codex 앱과 동일한 check-circle SVG를 저장 성공 toast에 적용했다.
 
 ## 산출물
 
@@ -22,12 +23,12 @@ handoff를 추가했다.
 | `src/profile-ui/HomePage.jsx` | Share click 직전 source card rect를 snapshot하고 source ref/rect를 Studio에 전달하며, close 뒤 상태를 정리한다. |
 | `src/profile-ui/ProfileShell.jsx` | topbar Share trigger에서 장식 아이콘을 제거하고 text-only action으로 통일했다. |
 | `src/profile-ui/BrandLogo.jsx` | X, LinkedIn, Reddit의 단색 20×20 inline SVG 실루엣을 분리했다. |
-| `src/profile-ui/Icons.jsx` | 범용 share/social path를 제거하고 안내·toast용 globe/success 아이콘만 유지했다. |
-| `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가했다. |
+| `src/profile-ui/Icons.jsx` | 범용 share/social path를 제거하고 안내용 globe와 참조 Codex 앱의 20×21 check-circle SVG를 18×18 toast 아이콘으로 추가했다. |
+| `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가하고 한국어 3번 문구를 `게시물에 이미지를 붙여넣으세요`로 고정했다. |
 | `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현했다. |
-| `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL 계약을 실제 안내 흐름에 맞게 고정했다. |
+| `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL과 한국어 3번 안내 문구 계약을 실제 안내 흐름에 맞게 고정했다. |
 | `src/styles.css` | source handoff, 공식형 로고 action, 160ms 안내 패널과 상단 toast의 motion·layout을 추가했다. |
-| `tests/profile-ui.spec.js` | text-only Share, logo, 안내 panel, PNG clipboard, 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
+| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내, PNG clipboard, Codex check-circle 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
 | `mydocs/plans/task_m100_38_impl.md` | 작업지시자 피드백으로 변경된 소셜 disclosure와 close handoff 계약을 실제 구현에 맞게 정정했다. |
 | `mydocs/orders/20260729.md` | Stage 2 완료와 Stage 3 승인 대기 상태를 반영했다. |
 
@@ -57,7 +58,7 @@ git diff --check
 결과:
 
 - OK — Vite production build 성공, 40 modules transformed.
-- OK — profile UI Playwright E2E 17개 통과, 실패 0개.
+- OK — profile UI Playwright E2E 18개 통과, 실패 0개.
 - OK — card/share Node unit test 7개 통과, 실패 0개.
 - OK — `git diff --check` 출력 없음.
 - OK — 1280×900에서 source card rect가 공유 중에도 0.75px 허용 범위 안에서
@@ -71,6 +72,9 @@ git diff --check
   다시 활성화됨을 확인했다.
 - OK — X/LinkedIn/Reddit action마다 선택 상태와 3단계 안내가 표시되고,
   `image/png` ClipboardItem 복사, 작성 창 allowlist, 저장 완료 toast를
+  확인했다.
+- OK — `ko-KR` 실제 UI에서 `게시물에 이미지를 붙여넣으세요`가 3번 안내로
+  표시되고, 성공 toast가 20×21 viewBox의 두 fill path를 18×18로 렌더링함을
   확인했다.
 - OK — close가 `closing → handoff → unmount` 순서로 진행되고 handoff 중
   source와 motion card가 동시에 연결되어 한 프레임 공백이 없음을 확인했다.

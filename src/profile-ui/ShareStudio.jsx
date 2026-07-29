@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { BrandLogo } from "./BrandLogo.jsx";
-import { Icon } from "./Icons.jsx";
+import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
   buildLocalizedCardUrl,
   buildReadmeCardSnippet
@@ -572,7 +572,11 @@ function ShareToast({ copy, kind, message, onDismiss }) {
       className={`share-studio-toast is-${kind}`}
       role="status"
     >
-      <Icon name={kind === "success" ? "success" : "close"} size={16} />
+      {kind === "success" ? (
+        <CodexCheckCircleIcon />
+      ) : (
+        <Icon name="close" size={16} />
+      )}
       <span>{message}</span>
       <button
         aria-label={copy.dismissToast}
