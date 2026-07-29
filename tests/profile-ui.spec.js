@@ -919,6 +919,21 @@ test.describe("Home and share card flow", () => {
       expect(target.left).toBeGreaterThanOrEqual(0);
       expect(target.right).toBeLessThanOrEqual(390);
     }
+    const compactActionLayout = await page.evaluate(() => {
+      const actions = document.querySelector(".share-studio-primary-actions")
+        .getBoundingClientRect();
+      const card = document.querySelector(".share-studio-card-motion")
+        .getBoundingClientRect();
+      return {
+        actionCenter: actions.left + (actions.width / 2),
+        actionWidth: actions.width,
+        cardCenter: card.left + (card.width / 2)
+      };
+    });
+    expect(compactActionLayout.actionWidth).toBeLessThanOrEqual(280);
+    expect(
+      Math.abs(compactActionLayout.actionCenter - compactActionLayout.cardCenter)
+    ).toBeLessThanOrEqual(1);
     const secondaryTargetHeights = await page
       .locator(".share-studio-secondary-action, .share-studio-privacy-action")
       .evaluateAll((elements) => elements.map(
