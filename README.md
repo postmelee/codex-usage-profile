@@ -5,13 +5,17 @@ Codex Usage Profile combines GitHub identity with the account usage reported by 
 A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
 
 `codex-usage-profile@0.1.0` is publicly available on npm with provenance and
-has been verified end to end against the production Sites origin.
+has been verified end to end against the production Sites origin. The
+immutable `0.1.1` patch candidate adds standard macOS ChatGPT/Codex app-bundle
+discovery; it is not public until the staged release and maintainer 2FA gate
+complete.
 
 > The public MVP service runs on ChatGPT Sites at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
 > The CLI uses this origin by default. For reproducible automation, pin
-> `0.1.0`; for an interactive first run, review the version npm displays before
-> accepting `@latest`.
+> `0.1.1` after that exact version is visible in the registry; for an
+> interactive first run, review the version npm displays before accepting
+> `@latest`.
 
 ## MVP Flow
 
@@ -39,6 +43,11 @@ npx codex-usage-profile@latest logout
 
 On first use, npm may ask for confirmation before installing the displayed package and version. Review both before approving the installation.
 
+The analyzer first uses an executable `codex` on `PATH`. On macOS, when no
+PATH candidate exists, it also checks the standard system and user
+`Applications` locations for `ChatGPT.app` and `Codex.app`. A standard ChatGPT
+desktop installation therefore does not need a one-off PATH prefix.
+
 See [CLI login and submit](docs/cli-submit.md) for published-package commands,
 source/tarball validation, credential locations, transmitted fields, privacy,
 error mapping, and troubleshooting.
@@ -50,7 +59,7 @@ On a trusted machine that already has a ChatGPT-backed Codex sign-in, automation
 ```bash
 CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.0 submit --json
+npx --yes codex-usage-profile@0.1.1 submit --json
 ```
 
 ## README Card

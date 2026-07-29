@@ -39,6 +39,39 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   `codex-usage-profile-v${version}` tag에서만 tokenless stage를 만든다.
   npm 웹에서 staged package와 provenance를 검토하고 2FA로 승인해야 실제
   version이 생성된다.
+- Task #57의 `0.1.1`은 macOS 표준 ChatGPT/Codex app bundle 자동 탐색을
+  담은 immutable patch candidate다. Stage 3에서는 tag를 만들거나 npm
+  stage를 생성하지 않으며, exact candidate와 registry/tag 부재를
+  재검증한 Gate B 승인 뒤에만 외부 변경을 수행한다.
+
+## `0.1.1` patch candidate와 게시 Gate
+
+| 항목 | 고정 값 |
+|---|---|
+| package | `codex-usage-profile@0.1.1` |
+| dependency | exact `codex-usage-analyzer@0.4.1` |
+| planned tag | `codex-usage-profile-v0.1.1` |
+| workflow | `.github/workflows/publish-npm.yml` |
+| trusted publisher | `postmelee/codex-usage-profile`, workflow `publish-npm.yml`, environment `npm-publish` |
+| publish command | `npm stage publish --access public` |
+| maintainer action | staged package와 provenance 검토 후 npm 2FA 승인 |
+
+Stage 3 보고서는 candidate commit, tarball filename/file count/size,
+SHA-1/SHA-512, scanner 결과, 전체 local verification과 current
+registry/tag 부재를 exact 값으로 고정한다. 이 값을 승인하는 Gate B
+전에는 tag push와 npm stage 생성 모두 금지한다.
+
+Gate B 뒤에도 Actions verify matrix와 environment gate가 통과한 경우에만
+stage를 만든다. maintainer는 stage의 package/version, dependency,
+tarball integrity와 provenance subject가 승인값과 일치하는지 확인한 뒤
+2FA로 승인한다. 공개 후에는 exact `0.1.1`과 `@latest` metadata,
+provenance/registry signature, clean install 및 PATH prefix 없는 macOS
+`submit --json`/`status`를 검증한다.
+
+검증 실패 시 tag를 이동하거나 `0.1.1`을 덮어쓰지 않는다. public version
+생성 전에는 stage를 거부하고 새 candidate 승인을 준비한다. public version
+생성 뒤 결함은 별도 patch와 provenance로 수정하고 필요하면 `0.1.1`을
+deprecate한다.
 
 ## Stage 6 최종 release 판정
 

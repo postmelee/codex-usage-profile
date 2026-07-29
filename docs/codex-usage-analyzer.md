@@ -6,17 +6,22 @@ The installed package starts the Codex app-server, calls the documented `account
 
 ## Current Dependency
 
-The profile CLI declares a normal npm semver dependency:
+The profile CLI pins the reviewed analyzer release exactly:
 
 ```json
 {
   "dependencies": {
-    "codex-usage-analyzer": "^0.2.0"
+    "codex-usage-analyzer": "0.4.1"
   }
 }
 ```
 
 The repository no longer contains a workspace compatibility copy. `package-lock.json` must resolve the dependency to the npm registry with version, tarball URL, and integrity rather than to `packages/codex-usage-analyzer`.
+
+Executable resolution is analyzer-owned. The profile CLI consumes
+`readAccountUsage()` and does not duplicate or override the upstream resolver.
+This keeps lookup changes, filesystem error handling, and app-server startup
+inside one exact dependency boundary.
 
 ## SDK Contract
 
@@ -102,10 +107,18 @@ The downstream binds a valid write to the owner encoded in its own Bearer token.
 The analyzer requires:
 
 - Node.js 20 or newer
-- a recent Codex CLI available as `codex` on `PATH`
+- a recent Codex CLI available as `codex` on `PATH`, or on macOS a standard
+  ChatGPT/Codex app bundle
 - a ChatGPT-backed Codex sign-in supporting `account/usage/read`
 
 API-key-only and Bedrock authentication do not provide this account usage method. The analyzer delegates authentication to Codex and never asks the profile service to receive a Codex credential.
+
+`0.4.1` prefers an executable `codex` on `PATH`. If none exists on macOS, it
+checks the system `Applications` directory for `ChatGPT.app` and `Codex.app`,
+then the same two names under the current user's `Applications` directory.
+Non-macOS and nonstandard installations must expose the official CLI on
+`PATH`. Candidate inspection failures are treated as unavailable and never
+surface a local path or raw filesystem error.
 
 ## Error Mapping
 
@@ -114,7 +127,7 @@ The profile CLI maps every analyzer code to a fixed safe message:
 | Code | User action |
 |---|---|
 | `INVALID_TIMEOUT` | Use a timeout from 1 to 120000ms |
-| `CODEX_NOT_FOUND` | Install/update Codex and verify `PATH` |
+| `CODEX_NOT_FOUND` | Check the standard macOS app locations or install/update the official Codex CLI on `PATH` |
 | `APP_SERVER_START_FAILED` | Check that Codex can start app-server |
 | `APP_SERVER_EXITED` | Retry after checking the local Codex installation |
 | `APP_SERVER_TIMEOUT` | Check connectivity and retry |
