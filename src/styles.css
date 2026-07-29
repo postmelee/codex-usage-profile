@@ -1235,7 +1235,6 @@ button {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
   color: #f1f1f1;
   margin-top: 18px;
-  overflow: hidden;
   padding: 12px;
   text-align: left;
   width: min(600px, calc(100vw - 48px));
@@ -1487,13 +1486,11 @@ button {
 
 @keyframes share-studio-instructions-in {
   from {
-    max-height: 0;
     opacity: 0;
     transform: translate3d(0, -6px, 0);
   }
 
   to {
-    max-height: 190px;
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }

@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 2 (피드백 보정 2.2 포함)
+Stage: 2 (피드백 보정 2.3 포함)
 
 ## 단계 목적
 
@@ -14,6 +14,8 @@ Home의 실제 카드와 전체 화면 Share Studio의 중앙 카드를 하나�
 disclosure로 바꾸고, 공식 형태의 단색 로고, 저장 toast와 close source
 handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 문구를 고정하고,
 참조 Codex 앱과 동일한 check-circle SVG를 저장 성공 toast에 적용했다.
+후속 피드백에서는 안내 패널의 높이 animation이 3번 항목을 일시적으로
+자르는 문제를 제거했다.
 
 ## 산출물
 
@@ -27,8 +29,8 @@ handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 
 | `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가하고 한국어 3번 문구를 `게시물에 이미지를 붙여넣으세요`로 고정했다. |
 | `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현했다. |
 | `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL과 한국어 3번 안내 문구 계약을 실제 안내 흐름에 맞게 고정했다. |
-| `src/styles.css` | source handoff, 공식형 로고 action, 160ms 안내 패널과 상단 toast의 motion·layout을 추가했다. |
-| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내, PNG clipboard, Codex check-circle 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
+| `src/styles.css` | source handoff, 공식형 로고 action, 160ms 안내 패널과 상단 toast의 motion·layout을 추가하고 안내 패널 높이·overflow clipping을 제거했다. |
+| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내의 실제 panel bounds, PNG clipboard, Codex check-circle 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
 | `mydocs/plans/task_m100_38_impl.md` | 작업지시자 피드백으로 변경된 소셜 disclosure와 close handoff 계약을 실제 구현에 맞게 정정했다. |
 | `mydocs/orders/20260729.md` | Stage 2 완료와 Stage 3 승인 대기 상태를 반영했다. |
 
@@ -76,6 +78,9 @@ git diff --check
 - OK — `ko-KR` 실제 UI에서 `게시물에 이미지를 붙여넣으세요`가 3번 안내로
   표시되고, 성공 toast가 20×21 viewBox의 두 fill path를 18×18로 렌더링함을
   확인했다.
+- OK — 안내 패널의 `max-height` 제한과 `overflow` clipping이 없으며 3번
+  항목의 하단 좌표가 패널 하단 안에 포함되는 것을 한국어 실제 UI와 mobile
+  viewport에서 확인했다.
 - OK — close가 `closing → handoff → unmount` 순서로 진행되고 handoff 중
   source와 motion card가 동시에 연결되어 한 프레임 공백이 없음을 확인했다.
 - OK — 1280×900과 390×844 screenshot을 첨부 화면과 직접 비교해 action

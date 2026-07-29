@@ -553,6 +553,10 @@ test.describe("Home and share card flow", () => {
         .toBeVisible();
       await expect(page.getByText("Paste image into the post", { exact: true }))
         .toBeVisible();
+      await expect(page.locator(".share-studio-instructions")).toHaveCSS(
+        "max-height",
+        "none"
+      );
       const link = page.getByRole("link", { name: `Open ${platform} composer` });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
@@ -676,7 +680,7 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("share-wide-desktop.png") });
   });
 
-  test("Share Studio renders the Korean third instruction step", async ({ page }) => {
+  test("Share Studio renders the Korean third instruction step", async ({ page }, testInfo) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "language", {
         configurable: true,
@@ -698,6 +702,25 @@ test.describe("Home and share card flow", () => {
     await expect(
       page.getByText("게시물에 이미지를 붙여넣으세요", { exact: true })
     ).toBeVisible();
+    const instructions = page.locator(".share-studio-instructions");
+    await expect(instructions).toHaveCSS("max-height", "none");
+    await expect(instructions).toHaveCSS("overflow", "visible");
+    await expect(instructions).toHaveCSS("opacity", "1");
+    const instructionBounds = await instructions.evaluate((element) => {
+      const panel = element.getBoundingClientRect();
+      const thirdStep = element.querySelector(".share-studio-step-copy")
+        ?.getBoundingClientRect();
+      return {
+        panelBottom: panel.bottom,
+        thirdStepBottom: thirdStep?.bottom ?? Number.POSITIVE_INFINITY
+      };
+    });
+    expect(instructionBounds.thirdStepBottom).toBeLessThanOrEqual(
+      instructionBounds.panelBottom
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("share-korean-third-step.png")
+    });
   });
 
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
@@ -761,8 +784,9 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Share on Reddit" }).click();
     await expect(page.getByRole("heading", { name: "Share to Reddit" })).toBeVisible();
     const instructions = page.locator(".share-studio-instructions");
-    await expect(instructions).toHaveCSS("max-height", "190px");
+    await expect(instructions).toHaveCSS("max-height", "none");
     await expect(instructions).toHaveCSS("opacity", "1");
+    await expect(instructions).toHaveCSS("overflow", "visible");
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
