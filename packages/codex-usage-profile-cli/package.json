@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-profile",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Connect local Codex usage to a Codex Usage Profile.",
   "keywords": [
     "codex",
@@ -32,7 +32,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "codex-usage-analyzer": "0.2.0"
+    "codex-usage-analyzer": "0.4.1"
   },
   "scripts": {
     "test": "node --test"

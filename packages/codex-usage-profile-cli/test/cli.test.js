@@ -13,6 +13,7 @@ test("prints help and version without loading credentials", async () => {
   const help = createIo();
   const version = createIo();
 
+  assert.equal(CLI_VERSION, "0.1.1");
   assert.equal(await runCli([], help), 0);
   assert.equal(await runCli(["--version"], version), 0);
   assert.match(help.stdout.value, /login/);

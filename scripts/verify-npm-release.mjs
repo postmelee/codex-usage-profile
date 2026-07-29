@@ -25,21 +25,21 @@ const DEFAULT_REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, "..");
 
 export const EXPECTED_NPM_PACKAGE = Object.freeze({
   name: "codex-usage-profile",
-  version: "0.1.0",
-  id: "codex-usage-profile@0.1.0",
+  version: "0.1.1",
+  id: "codex-usage-profile@0.1.1",
   license: "MIT",
   registry: "https://registry.npmjs.org/"
 });
 
 export const EXPECTED_ANALYZER_PACKAGE = Object.freeze({
   name: "codex-usage-analyzer",
-  version: "0.2.0",
+  version: "0.4.1",
   resolved:
     "https://registry.npmjs.org/codex-usage-analyzer/-/" +
-    "codex-usage-analyzer-0.2.0.tgz",
+    "codex-usage-analyzer-0.4.1.tgz",
   integrity:
-    "sha512-11GLQahAfOXPfq6xpHmb7FnOvVFC/neZ8KpzI7QRSlS8w/" +
-    "4+12Wa7lnZlgwnv45tzFCcdCHlVLb2wn25i57FQA==",
+    "sha512-0UJFechEYosMyXzlNqlDxyrjM2B1muzrec9CqBgVZW6CYG9VZ8eXteeuNfX" +
+    "IeBVQMx2jxO2XMu9UpCQrsQSQmw==",
   license: "MIT",
   node: ">=20"
 });
