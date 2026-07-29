@@ -8,14 +8,17 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 2. 로그인 후 `/profile`에서 GitHub 이름, 사용자명, 아바타가 반영된 private preview를 확인한다.
 3. CLI `submit`으로 Codex 사용량을 전송한다. credential이 없으면 browser 승인을 먼저 진행하고 같은 명령에서 제출을 계속한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
 4. **Publish card**를 선택해 프로필을 public으로 전환한다.
-5. 상단 **Share**에서 이미지 URL 또는 README Markdown을 복사한다.
-6. Markdown을 GitHub profile 또는 repository README에 삽입한다.
+5. 상단 **Share**에서 Share Studio를 열고 stable 이미지 URL 또는 README Markdown을 복사하거나 **저장**으로 PNG를 내려받는다.
+6. X, LinkedIn 또는 Reddit을 선택하면 Share Studio가 PNG 이미지 복사와 browser 작성 창 열기를 안내한다. 복사한 이미지는 열린 게시물 작성 창에 직접 붙여넣는다.
+7. Markdown을 GitHub profile 또는 repository README에 삽입한다.
 
 ```md
 ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
 Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
+
+소셜 공유 action은 provider API나 OAuth를 호출해 이미지를 자동 업로드 또는 게시하지 않는다. 브라우저 Clipboard API와 각 서비스의 작성 화면만 사용하며 private preview URL이나 credential을 외부 provider query에 전달하지 않는다.
 
 ## CLI 연결
 
