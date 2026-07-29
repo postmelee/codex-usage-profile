@@ -950,6 +950,24 @@ test.describe("Home and share card flow", () => {
       "clip-path",
       "inset(0px round 9px)"
     );
+    const compactInstructions = await instructions.evaluate((element) => {
+      const stepAction = element.querySelector(".share-studio-step-action");
+      const touchExtension = getComputedStyle(stepAction, "::before");
+      return {
+        panelHeight: element.getBoundingClientRect().height,
+        stepActionHeight: stepAction.getBoundingClientRect().height,
+        stepFontSize: getComputedStyle(stepAction).fontSize,
+        titleFontSize: getComputedStyle(element.querySelector("h3")).fontSize,
+        touchBottom: touchExtension.bottom,
+        touchTop: touchExtension.top
+      };
+    });
+    expect(compactInstructions.panelHeight).toBeLessThanOrEqual(180);
+    expect(compactInstructions.stepActionHeight).toBeLessThanOrEqual(30);
+    expect(compactInstructions.stepFontSize).toBe("13px");
+    expect(compactInstructions.titleFontSize).toBe("13px");
+    expect(compactInstructions.touchTop).toBe("-8px");
+    expect(compactInstructions.touchBottom).toBe("-8px");
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);

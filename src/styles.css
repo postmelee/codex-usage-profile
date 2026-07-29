@@ -2907,12 +2907,46 @@ button {
   }
 
   .share-studio-instructions {
+    padding: 10px;
     width: 100%;
   }
 
-  .share-studio-instructions li,
-  .share-studio-step-action {
+  .share-studio-instructions h3 {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .share-studio-instructions ol {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .share-studio-instructions li {
     min-height: 44px;
+  }
+
+  .share-studio-step-action {
+    font-size: 13px;
+    min-height: 28px;
+    position: relative;
+  }
+
+  .share-studio-step-action::before {
+    content: "";
+    inset: -8px -4px;
+    position: absolute;
+  }
+
+  .share-studio-instructions .share-studio-step-copy {
+    font-size: 13px;
+    line-height: 18px;
+    min-height: 28px;
+  }
+
+  .share-studio-step-number {
+    font-size: 10px;
+    height: 20px;
+    width: 20px;
   }
 
   .share-studio-toast {

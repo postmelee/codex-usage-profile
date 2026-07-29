@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 3 (피드백 보정 3.1 포함)
+Stage: 3 (피드백 보정 3.2 포함)
 
 ## 단계 목적
 
@@ -22,6 +22,11 @@ provider link, stable Image URL/README action, PNG 저장과 close는 계속
 작업지시자 피드백에 따라 390px mobile의 primary action을 화면 폭 전체에
 균등 분산하지 않고 60px column 4개와 12px gap으로 구성한 276px 그룹으로
 중앙 정렬했다. 360px 이하에서는 같은 밀도의 2×2 fallback을 유지한다.
+후속 피드백에서는 mobile 안내 panel의 시각적 요소가 desktop보다 커 보이는
+문제를 보정했다. 제목·단계 text는 13px, action의 보이는 box는 28px로
+축소하되 투명한 pseudo-element로 실제 button/link touch target은 44px를
+유지했다. 비클릭 3번 행과 padding·gap도 줄여 panel 높이를 180px 이하로
+고정했다.
 
 ## 산출물
 
@@ -30,8 +35,8 @@ provider link, stable Image URL/README action, PNG 저장과 close는 계속
 | `src/profile-ui/ShareStudio.jsx` | reduced-motion opacity-only frame, resize/orientation target settle, invalid/detached source fallback과 preview error placeholder를 추가했다. |
 | `src/profile-ui/shareStudio.js` | 영어·한국어 preview unavailable 안내 문구를 추가했다. |
 | `src/profile-ui/__tests__/shareStudio.test.js` | preview unavailable copy의 영어 fallback 계약을 고정했다. |
-| `src/styles.css` | mobile 44px touch target과 중앙 정렬 compact grid, short viewport card sizing/safe spacing, preview placeholder 및 opacity-only reduced-motion을 구현했다. 390px에서는 276px 폭의 4열 그룹, 360px 이하에서는 2×2 그룹을 사용한다. |
-| `tests/profile-ui.spec.js` | mobile compact action 폭·card 중심축, short/reduced geometry, resize·source detach·preview/clipboard failure, download, making-private guard와 focus/inert 복원을 검증했다. |
+| `src/styles.css` | mobile 44px touch target과 중앙 정렬 compact grid, short viewport card sizing/safe spacing, preview placeholder 및 opacity-only reduced-motion을 구현했다. 390px에서는 276px 폭의 4열 그룹을 사용하고, mobile 안내 panel의 13px text·28px visual action과 44px 확장 touch target을 분리했다. |
+| `tests/profile-ui.spec.js` | mobile compact action 폭·card 중심축과 안내 panel 높이·font·visual/touch box, short/reduced geometry, resize·source detach·preview/clipboard failure, download, making-private guard와 focus/inert 복원을 검증했다. |
 | `mydocs/plans/task_m100_38_impl.md` | 승인된 backdrop click 무시와 X/Escape 전용 close 계약을 공통·Stage 검증 항목에 반영했다. |
 | `mydocs/orders/20260729.md` | Stage 3 완료와 Stage 4 승인 대기 상태를 반영했다. |
 
@@ -69,6 +74,9 @@ git diff --check
 - OK — 390×844 primary action group이 280px 이하의 compact 폭으로 card
   중심축과 1px 이내 정렬되며, 네 label과 원형 icon이 잘리지 않음을
   screenshot으로 확인했다.
+- OK — mobile 안내 panel이 180px 이하, 제목과 action text가 13px,
+  action visual box가 30px 이하로 렌더링되며 `::before` 상하 8px 확장으로
+  44px touch target을 유지함을 확인했다.
 - OK — 1280×620 resize 직후 motion origin이 `target`으로 settle하고 card
   width가 600px 미만으로 축소되며 action, secondary row와 close가 viewport
   안에 남는 것을 확인했다.
