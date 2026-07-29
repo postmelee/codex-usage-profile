@@ -39,23 +39,25 @@ test("builds allowlisted external share composition URLs", () => {
   const [x, linkedIn, reddit] = targets.map((target) => new URL(target.href));
   assert.equal(x.origin, "https://x.com");
   assert.equal(x.pathname, "/intent/post");
-  assert.equal(x.searchParams.get("url"), profileUrl);
   assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
-  assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
+  assert.deepEqual([...x.searchParams.keys()], ["text"]);
 
   assert.equal(linkedIn.origin, "https://www.linkedin.com");
-  assert.equal(linkedIn.pathname, "/sharing/share-offsite/");
-  assert.equal(linkedIn.searchParams.get("url"), profileUrl);
-  assert.deepEqual([...linkedIn.searchParams.keys()], ["url"]);
+  assert.equal(linkedIn.pathname, "/feed/");
+  assert.equal(linkedIn.searchParams.get("shareActive"), "true");
+  assert.equal(
+    linkedIn.searchParams.get("text"),
+    "나의 Codex 사용량 활동을 확인해 보세요."
+  );
+  assert.deepEqual([...linkedIn.searchParams.keys()].sort(), ["shareActive", "text"]);
 
   assert.equal(reddit.origin, "https://www.reddit.com");
   assert.equal(reddit.pathname, "/submit");
-  assert.equal(reddit.searchParams.get("url"), profileUrl);
   assert.equal(
     reddit.searchParams.get("title"),
     "나의 Codex 사용량 활동을 확인해 보세요."
   );
-  assert.deepEqual([...reddit.searchParams.keys()].sort(), ["title", "url"]);
+  assert.deepEqual([...reddit.searchParams.keys()], ["title"]);
 });
 
 test("rejects non-http and missing public profile targets", () => {

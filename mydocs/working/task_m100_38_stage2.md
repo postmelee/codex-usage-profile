@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 2
+Stage: 2 (피드백 보정 2.1 포함)
 
 ## 단계 목적
 
@@ -10,7 +10,9 @@ Home의 실제 카드와 전체 화면 Share Studio의 중앙 카드를 하나�
 대상처럼 보이게 하는 shared-card motion을 구현했다. 첨부 이미지의 desktop
 구도를 기준으로 강한 dim/blur, 중앙 title/card/action column, 우측 상단 close와
 네 개 원형 primary action을 정렬하고, 기존 기능은 낮은 대비 secondary row로
-축약했다.
+축약했다. 작업지시자 피드백에 따라 소셜 action을 이미지 복사 안내
+disclosure로 바꾸고, 공식 형태의 단색 로고, 저장 toast와 close source
+handoff를 추가했다.
 
 ## 산출물
 
@@ -18,9 +20,15 @@ Home의 실제 카드와 전체 화면 Share Studio의 중앙 카드를 하나�
 |---|---|
 | `src/profile-marketing/MarketingLanding.jsx` | 선택형 source card ref와 transition suspension 경계를 추가하고, 공유 중 tilt와 Border Beam의 동작을 정지했다. 기본 marketing caller는 새 prop 없이 기존 동작을 유지한다. |
 | `src/profile-ui/HomePage.jsx` | Share click 직전 source card rect를 snapshot하고 source ref/rect를 Studio에 전달하며, close 뒤 상태를 정리한다. |
-| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, invalid source target-fade fallback, 중복 close 방어와 completion fallback timer를 구현했다. |
-| `src/styles.css` | source decoration crossfade, staged scrim/title/action reveal, compact secondary row, close transition과 reduced-motion fade를 추가했다. |
-| `tests/profile-ui.spec.js` | source layout 무손실, FLIP origin, transform/opacity 전용 keyframe, 중복 Escape, tilt 복구와 1280×900·1512×982 구도를 검증했다. |
+| `src/profile-ui/ProfileShell.jsx` | topbar Share trigger에서 장식 아이콘을 제거하고 text-only action으로 통일했다. |
+| `src/profile-ui/BrandLogo.jsx` | X, LinkedIn, Reddit의 단색 20×20 inline SVG 실루엣을 분리했다. |
+| `src/profile-ui/Icons.jsx` | 범용 share/social path를 제거하고 안내·toast용 globe/success 아이콘만 유지했다. |
+| `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가했다. |
+| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현했다. |
+| `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL 계약을 실제 안내 흐름에 맞게 고정했다. |
+| `src/styles.css` | source handoff, 공식형 로고 action, 160ms 안내 패널과 상단 toast의 motion·layout을 추가했다. |
+| `tests/profile-ui.spec.js` | text-only Share, logo, 안내 panel, PNG clipboard, 저장 toast, close handoff와 desktop/mobile 구도를 검증했다. |
+| `mydocs/plans/task_m100_38_impl.md` | 작업지시자 피드백으로 변경된 소셜 disclosure와 close handoff 계약을 실제 구현에 맞게 정정했다. |
 | `mydocs/orders/20260729.md` | Stage 2 완료와 Stage 3 승인 대기 상태를 반영했다. |
 
 ## 본문 변경 정도 / 본문 무손실 여부
@@ -29,7 +37,9 @@ Home의 실제 카드와 전체 화면 Share Studio의 중앙 카드를 하나�
 `MarketingLanding`/Sites caller는 신규 prop을 전달하지 않아 기존 카드 tilt와
 Border Beam 동작이 유지된다. Home의 source card는 공유 중에도 layout 자리를
 보존하며 opacity만 교차 전환한다. 기존 provider 공유, Image URL/README 복사,
-PNG 저장, 비공개 전환과 modal focus lifecycle은 유지했다.
+PNG 저장, 비공개 전환과 modal focus lifecycle은 유지했다. 외부 provider에
+이미지를 자동 업로드하지 않고 브라우저 Clipboard API로 PNG를 복사한 뒤
+사용자가 작성 창에 붙여넣는 경계를 명확히 했다.
 
 ## 검증 결과
 
@@ -37,14 +47,18 @@ PNG 저장, 비공개 전환과 modal focus lifecycle은 유지했다.
 
 ```bash
 npm run build
-npm run test:e2e -- --grep "Share"
+npx playwright test tests/profile-ui.spec.js
+node --test \
+  src/profile-ui/__tests__/cardShare.test.js \
+  src/profile-ui/__tests__/shareStudio.test.js
 git diff --check
 ```
 
 결과:
 
-- OK — Vite production build 성공, 39 modules transformed.
-- OK — Share 관련 Playwright E2E 12개 통과, 실패 0개.
+- OK — Vite production build 성공, 40 modules transformed.
+- OK — profile UI Playwright E2E 17개 통과, 실패 0개.
+- OK — card/share Node unit test 7개 통과, 실패 0개.
 - OK — `git diff --check` 출력 없음.
 - OK — 1280×900에서 source card rect가 공유 중에도 0.75px 허용 범위 안에서
   유지되고, motion origin이 `source`이며 keyframe property가
@@ -55,6 +69,13 @@ git diff --check
   dim/blur, 중앙 column, 원형 action과 compact secondary row 구도를 확인했다.
 - OK — 중복 Escape 중 close/focus 복구가 한 번만 완료되고, source tilt가
   다시 활성화됨을 확인했다.
+- OK — X/LinkedIn/Reddit action마다 선택 상태와 3단계 안내가 표시되고,
+  `image/png` ClipboardItem 복사, 작성 창 allowlist, 저장 완료 toast를
+  확인했다.
+- OK — close가 `closing → handoff → unmount` 순서로 진행되고 handoff 중
+  source와 motion card가 동시에 연결되어 한 프레임 공백이 없음을 확인했다.
+- OK — 1280×900과 390×844 screenshot을 첨부 화면과 직접 비교해 action
+  logo, 안내 panel, 선택 상태와 가로 overflow 부재를 확인했다.
 
 ## 잔여 위험
 
@@ -62,6 +83,8 @@ git diff --check
   image failure 시나리오는 Stage 3에서 전용 검증을 추가해야 한다.
 - source와 target 이미지가 네트워크 지연으로 서로 다른 시점에 decode되는
   경우의 placeholder 품질은 Stage 3 failure 검증에서 확인해야 한다.
+- 브라우저가 PNG ClipboardItem을 지원하지 않거나 권한을 거부하는 경우의
+  전용 실패 회귀는 Stage 3에서 보강해야 한다.
 
 ## 다음 단계 영향
 
@@ -70,6 +93,8 @@ git diff --check
   고정해야 한다.
 - 현재 FLIP 구현은 invalid rect 또는 detached source를 자동으로 target fade로
   낮추므로 Stage 3는 해당 fallback을 E2E로 증명하는 데 집중할 수 있다.
+- Stage 3는 desktop 안내 panel의 구도를 유지한 채 short viewport,
+  reduced-motion, clipboard rejection과 preview failure를 검증해야 한다.
 
 ## 승인 요청
 

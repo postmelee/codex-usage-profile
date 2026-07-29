@@ -8,6 +8,9 @@ const SHARE_STUDIO_COPY = Object.freeze({
     imageUrl: "Image URL",
     imageUrlCopied: "Image URL copied",
     imageUrlCopyFailed: "Could not copy image URL",
+    imageCopied: "Copied image",
+    imageCopyFailed: "Failed to copy image",
+    imageSaved: "Image saved",
     linkedin: "LinkedIn",
     makePrivate: "Make private",
     makingPrivate: "Making private",
@@ -18,6 +21,12 @@ const SHARE_STUDIO_COPY = Object.freeze({
     readmeCopyFailed: "Could not copy README Markdown",
     save: "Save",
     saveAriaLabel: "Save PNG",
+    copyImage: "Copy image",
+    dismissInstructions: "Dismiss share instructions",
+    dismissToast: "Dismiss notification",
+    openComposer: "Open {platform} composer",
+    pasteImage: "Paste image into the post",
+    shareInstructionsTitle: "Share to {platform}",
     shareLinkedIn: "Share on LinkedIn",
     shareReddit: "Share on Reddit",
     shareX: "Share on X",
@@ -32,6 +41,9 @@ const SHARE_STUDIO_COPY = Object.freeze({
     imageUrl: "이미지 URL",
     imageUrlCopied: "이미지 URL을 복사했습니다",
     imageUrlCopyFailed: "이미지 URL을 복사하지 못했습니다",
+    imageCopied: "이미지를 복사했습니다",
+    imageCopyFailed: "이미지를 복사하지 못했습니다",
+    imageSaved: "이미지가 저장되었습니다",
     linkedin: "LinkedIn",
     makePrivate: "비공개로 전환",
     makingPrivate: "비공개로 전환 중",
@@ -42,6 +54,12 @@ const SHARE_STUDIO_COPY = Object.freeze({
     readmeCopyFailed: "README Markdown을 복사하지 못했습니다",
     save: "저장",
     saveAriaLabel: "PNG 저장",
+    copyImage: "이미지 복사",
+    dismissInstructions: "공유 안내 닫기",
+    dismissToast: "알림 닫기",
+    openComposer: "{platform} 작성 창 열기",
+    pasteImage: "게시물에 이미지를 붙여넣으세요",
+    shareInstructionsTitle: "{platform}에 공유",
     shareLinkedIn: "LinkedIn에 공유",
     shareReddit: "Reddit에 공유",
     shareX: "X에 공유",
@@ -81,17 +99,17 @@ export function buildShareTargets(options = {}) {
       label: copy.x,
       accessibleLabel: copy.shareX,
       params: {
-        text: copy.socialText,
-        url: profileUrl
+        text: copy.socialText
       }
     }),
     createTarget({
-      baseUrl: "https://www.linkedin.com/sharing/share-offsite/",
+      baseUrl: "https://www.linkedin.com/feed/",
       id: "linkedin",
       label: copy.linkedin,
       accessibleLabel: copy.shareLinkedIn,
       params: {
-        url: profileUrl
+        shareActive: "true",
+        text: copy.socialText
       }
     }),
     createTarget({
@@ -100,8 +118,7 @@ export function buildShareTargets(options = {}) {
       label: copy.reddit,
       accessibleLabel: copy.shareReddit,
       params: {
-        title: copy.socialText,
-        url: profileUrl
+        title: copy.socialText
       }
     })
   ];

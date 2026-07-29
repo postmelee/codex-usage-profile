@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { BrandLogo } from "./BrandLogo.jsx";
 import { Icon } from "./Icons.jsx";
 import {
   buildLocalizedCardUrl,
@@ -28,13 +29,18 @@ export function ShareStudio({
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const closingRef = useRef(false);
+  const handoffTimerRef = useRef(null);
   const motionAnimationRef = useRef(null);
   const motionCardRef = useRef(null);
   const motionTimerRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
+  const revealedSourceRef = useRef(null);
+  const revealedSourceStyleRef = useRef(null);
   const requestCloseRef = useRef(null);
-  const [copyStatus, setCopyStatus] = useState("");
+  const toastTimerRef = useRef(null);
+  const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
+  const [toast, setToast] = useState(null);
   const [transitionPhase, setTransitionPhase] = useState("preparing");
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
@@ -66,7 +72,8 @@ export function ShareStudio({
 
     closingRef.current = false;
     previousFocusRef.current = document.activeElement;
-    setCopyStatus("");
+    setSelectedSocialPlatform(null);
+    setToast(null);
 
     const body = document.body;
     const appFrame = document.querySelector(".app-frame");
@@ -109,6 +116,8 @@ export function ShareStudio({
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      globalThis.clearTimeout(handoffTimerRef.current);
+      globalThis.clearTimeout(toastTimerRef.current);
       body.style.overflow = previousBodyOverflow;
       if (scrollContainer) scrollContainer.style.overflow = previousScrollOverflow;
       if (appFrame) {
@@ -122,6 +131,18 @@ export function ShareStudio({
       if (previousFocusRef.current?.isConnected) {
         previousFocusRef.current.focus?.();
       }
+      if (revealedSourceRef.current?.isConnected) {
+        if (revealedSourceStyleRef.current === null) {
+          revealedSourceRef.current.removeAttribute("style");
+        } else {
+          revealedSourceRef.current.setAttribute(
+            "style",
+            revealedSourceStyleRef.current
+          );
+        }
+      }
+      revealedSourceRef.current = null;
+      revealedSourceStyleRef.current = null;
     };
   }, [canRender]);
 
@@ -191,16 +212,59 @@ export function ShareStudio({
     };
   }, [canRender, previewUrl, sourceCardRef, sourceRect]);
 
+  useLayoutEffect(() => {
+    if (!canRender || transitionPhase !== "handoff") return undefined;
+
+    const duration = prefersReducedMotion() ? 80 : SOURCE_HANDOFF_DURATION;
+    handoffTimerRef.current = globalThis.setTimeout(
+      () => onCloseRef.current?.(),
+      duration + 40
+    );
+
+    return () => {
+      globalThis.clearTimeout(handoffTimerRef.current);
+    };
+  }, [canRender, transitionPhase]);
+
   if (!canRender) return null;
 
   async function copyValue(value, status) {
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(value);
-      setCopyStatus(status.success);
+      showToast(status.success);
     } catch {
-      setCopyStatus(status.error);
+      showToast(status.error, "error");
     }
+  }
+
+  async function copyImage() {
+    try {
+      if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
+        throw new Error("Image clipboard unavailable");
+      }
+      const response = await fetch(previewUrl, { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load image");
+      const blob = await response.blob();
+      const png = blob.type === "image/png"
+        ? blob
+        : new Blob([await blob.arrayBuffer()], { type: "image/png" });
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": png })
+      ]);
+      showToast(copy.imageCopied);
+    } catch {
+      showToast(copy.imageCopyFailed, "error");
+    }
+  }
+
+  function showToast(message, kind = "success") {
+    globalThis.clearTimeout(toastTimerRef.current);
+    setToast({ kind, message });
+    toastTimerRef.current = globalThis.setTimeout(
+      () => setToast(null),
+      TOAST_DURATION
+    );
   }
 
   function handleBackdropPointerDown(event) {
@@ -210,16 +274,18 @@ export function ShareStudio({
   function requestClose() {
     if (closingRef.current) return;
     closingRef.current = true;
+    setToast(null);
     setTransitionPhase("closing");
+    globalThis.clearTimeout(handoffTimerRef.current);
     globalThis.clearTimeout(motionTimerRef.current);
 
     const card = motionCardRef.current;
+    const reduceMotion = prefersReducedMotion();
     if (!card || typeof card.animate !== "function") {
-      onCloseRef.current?.();
+      beginSourceHandoff(card, reduceMotion);
       return;
     }
 
-    const reduceMotion = prefersReducedMotion();
     const currentStyle = getComputedStyle(card);
     const currentTransform = currentStyle.transform === "none"
       ? IDENTITY_TRANSFORM
@@ -251,7 +317,7 @@ export function ShareStudio({
     const finishClosing = () => {
       if (finished) return;
       finished = true;
-      onCloseRef.current?.();
+      beginSourceHandoff(card, reduceMotion);
     };
     animation.finished.then(finishClosing).catch(() => {});
     motionTimerRef.current = globalThis.setTimeout(
@@ -260,12 +326,63 @@ export function ShareStudio({
     );
   }
 
+  function beginSourceHandoff(card, reduceMotion) {
+    globalThis.clearTimeout(motionTimerRef.current);
+
+    const source = sourceCardRef?.current;
+    if (
+      !source?.isConnected
+      || source.dataset.shareTransitionActive !== "true"
+    ) {
+      onCloseRef.current?.();
+      return;
+    }
+
+    setTransitionPhase("handoff");
+    revealedSourceRef.current = source;
+    revealedSourceStyleRef.current = source.getAttribute("style");
+    const previousStyle = revealedSourceStyleRef.current?.trim();
+    source.setAttribute(
+      "style",
+      `${previousStyle ? `${previousStyle};` : ""}opacity: 1;`
+    );
+
+    const duration = reduceMotion ? 80 : SOURCE_HANDOFF_DURATION;
+    if (!card || typeof card.animate !== "function") {
+      return;
+    }
+
+    const currentStyle = getComputedStyle(card);
+    const currentTransform = currentStyle.transform === "none"
+      ? IDENTITY_TRANSFORM
+      : currentStyle.transform;
+    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+    const animation = card.animate([
+      { opacity: currentOpacity, transform: currentTransform },
+      { opacity: 0, transform: currentTransform }
+    ], {
+      duration,
+      easing: "cubic-bezier(0.3, 0, 1, 1)",
+      fill: "both"
+    });
+    motionAnimationRef.current = animation;
+  }
+
   return createPortal(
     <div
       className={`share-studio-backdrop is-${transitionPhase}`}
       data-testid="share-studio-backdrop"
       onPointerDown={handleBackdropPointerDown}
     >
+      {toast ? (
+        <ShareToast
+          copy={copy}
+          kind={toast.kind}
+          message={toast.message}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
+
       <section
         aria-labelledby="share-studio-title"
         aria-modal="true"
@@ -301,13 +418,20 @@ export function ShareStudio({
 
         <div aria-label="Share destinations" className="share-studio-primary-actions">
           {shareTargets.map((target, index) => (
-            <ShareDestination index={index} key={target.id} target={target} />
+            <ShareDestination
+              active={selectedSocialPlatform === target.id}
+              index={index}
+              key={target.id}
+              onSelect={() => setSelectedSocialPlatform(target.id)}
+              target={target}
+            />
           ))}
           <a
             aria-label={copy.saveAriaLabel}
             className="share-studio-primary-action"
             download="codex-usage-profile.png"
             href={imageUrl}
+            onClick={() => showToast(copy.imageSaved)}
             style={{ "--share-action-index": shareTargets.length }}
           >
             <span className="share-studio-action-icon">
@@ -316,6 +440,17 @@ export function ShareStudio({
             <span>{copy.save}</span>
           </a>
         </div>
+
+        {selectedSocialPlatform ? (
+          <ShareInstructions
+            copy={copy}
+            onCopy={copyImage}
+            onDismiss={() => setSelectedSocialPlatform(null)}
+            target={shareTargets.find(
+              (target) => target.id === selectedSocialPlatform
+            )}
+          />
+        ) : null}
 
         <div className="share-studio-secondary">
           <ShareValue
@@ -348,35 +483,111 @@ export function ShareStudio({
           ) : null}
         </div>
 
-        <p
-          aria-live="polite"
-          className="share-copy-status"
-          role="status"
-        >
-          {copyStatus}
-        </p>
       </section>
     </div>,
     document.body
   );
 }
 
-function ShareDestination({ index, target }) {
+function ShareDestination({ active, index, onSelect, target }) {
   return (
-    <a
+    <button
+      aria-controls={active ? SHARE_INSTRUCTIONS_ID : undefined}
+      aria-expanded={active}
       aria-label={target.accessibleLabel}
-      className="share-studio-primary-action"
-      href={target.href}
-      rel="noopener noreferrer"
+      aria-pressed={active}
+      className={`share-studio-primary-action${active ? " is-active" : ""}`}
+      onClick={onSelect}
       style={{ "--share-action-index": index }}
-      target="_blank"
+      type="button"
     >
       <span className="share-studio-action-icon">
-        <Icon name={target.id} size={24} />
+        <BrandLogo name={target.id} />
       </span>
       <span>{target.label}</span>
-    </a>
+    </button>
   );
+}
+
+function ShareInstructions({ copy, onCopy, onDismiss, target }) {
+  if (!target) return null;
+
+  return (
+    <div
+      className="share-studio-instructions"
+      id={SHARE_INSTRUCTIONS_ID}
+    >
+      <div className="share-studio-instructions-header">
+        <h3>{formatCopy(copy.shareInstructionsTitle, target.label)}</h3>
+        <button
+          aria-label={copy.dismissInstructions}
+          className="icon-command share-studio-instructions-close"
+          onClick={onDismiss}
+          type="button"
+        >
+          <Icon name="close" size={14} />
+        </button>
+      </div>
+      <ol>
+        <li>
+          <ShareStepNumber value="1" />
+          <button
+            className="share-studio-step-action"
+            onClick={onCopy}
+            type="button"
+          >
+            <Icon name="copy" size={14} />
+            <span>{copy.copyImage}</span>
+          </button>
+        </li>
+        <li>
+          <ShareStepNumber value="2" />
+          <a
+            className="share-studio-step-action"
+            href={target.href}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon name="globe" size={14} />
+            <span>{formatCopy(copy.openComposer, target.label)}</span>
+          </a>
+        </li>
+        <li className="share-studio-step-copy">
+          <ShareStepNumber value="3" />
+          <span>{copy.pasteImage}</span>
+        </li>
+      </ol>
+    </div>
+  );
+}
+
+function ShareStepNumber({ value }) {
+  return <span aria-hidden="true" className="share-studio-step-number">{value}</span>;
+}
+
+function ShareToast({ copy, kind, message, onDismiss }) {
+  return (
+    <div
+      aria-live="polite"
+      className={`share-studio-toast is-${kind}`}
+      role="status"
+    >
+      <Icon name={kind === "success" ? "success" : "close"} size={16} />
+      <span>{message}</span>
+      <button
+        aria-label={copy.dismissToast}
+        className="share-studio-toast-close"
+        onClick={onDismiss}
+        type="button"
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+  );
+}
+
+function formatCopy(template, platform) {
+  return template.replace("{platform}", platform);
 }
 
 function ShareValue({ copyLabel, label, onCopy, value }) {
@@ -403,6 +614,9 @@ function getFocusableElements(container) {
 }
 
 const IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
+const SHARE_INSTRUCTIONS_ID = "share-studio-social-instructions";
+const SOURCE_HANDOFF_DURATION = 120;
+const TOAST_DURATION = 3200;
 
 function buildRectTransform(source, target) {
   if (!isValidRect(source) || !isValidRect(target)) return null;

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketingLanding } from "../profile-marketing/MarketingLanding.jsx";
 import { createMarketingConfig } from "../profile-marketing/marketing-config.js";
-import { Icon } from "./Icons.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
@@ -291,8 +290,7 @@ function HomeCardAction({
   if (isPublic) {
     return (
       <button className="primary-command" disabled={isSubmitting} onClick={onShare} type="button">
-        <Icon name="share" />
-        <span>Share</span>
+        Share
       </button>
     );
   }

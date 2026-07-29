@@ -502,6 +502,7 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Publish card" }).click();
     const shareButton = page.getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
+    await expect(shareButton.locator("svg")).toHaveCount(0);
     const sourceCard = page.locator('[data-card-source="true"]');
     const sourceBox = await sourceCard.boundingBox();
 
@@ -539,21 +540,45 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Close Share Studio" })).toBeFocused();
 
-    const expectedProfileUrl = "http://127.0.0.1:5173/?profile=postmelee";
     const socialTargets = [
-      ["Share on X", "https://x.com", "/intent/post"],
-      ["Share on LinkedIn", "https://www.linkedin.com", "/sharing/share-offsite/"],
-      ["Share on Reddit", "https://www.reddit.com", "/submit"]
+      ["Share on X", "X", "https://x.com", "/intent/post"],
+      ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
+      ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
     ];
-    for (const [name, origin, pathname] of socialTargets) {
-      const link = page.getByRole("link", { name });
+    for (const [name, platform, origin, pathname] of socialTargets) {
+      const button = page.getByRole("button", { name });
+      await button.click();
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("heading", { name: `Share to ${platform}` }))
+        .toBeVisible();
+      const link = page.getByRole("link", { name: `Open ${platform} composer` });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
       expect(href.pathname).toBe(pathname);
-      expect(href.searchParams.get("url")).toBe(expectedProfileUrl);
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+    await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
+      "viewBox",
+      "0 0 20 20"
+    );
+    await expect(page.locator('[data-brand-logo="linkedin"]')).toHaveAttribute(
+      "viewBox",
+      "0 0 20 20"
+    );
+    await expect(page.locator('[data-brand-logo="reddit"]')).toHaveAttribute(
+      "viewBox",
+      "0 0 20 20"
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("share-social-instructions.png")
+    });
+    await page.getByRole("button", { name: "Copy image", exact: true }).click();
+    await expect(page.getByText("Copied image", { exact: true })).toBeVisible();
+    expect(await page.evaluate(async () => {
+      const [item] = await navigator.clipboard.read();
+      return item.types;
+    })).toContain("image/png");
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
@@ -571,9 +596,26 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("link", { name: "Save PNG" }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
+    await expect(page.getByText("Image saved", { exact: true })).toBeVisible();
 
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
+    await expect.poll(
+      () => page.evaluate(() => {
+        const backdrop = document.querySelector('[data-testid="share-studio-backdrop"]');
+        const motionCard = document.querySelector('[data-testid="share-studio-card-motion"]');
+        return {
+          backdropFilter: backdrop ? getComputedStyle(backdrop).backdropFilter : null,
+          motionConnected: motionCard?.isConnected ?? false,
+          phase: backdrop?.className ?? null
+        };
+      })
+    ).toEqual({
+      backdropFilter: "none",
+      motionConnected: true,
+      phase: "share-studio-backdrop is-handoff"
+    });
     await expect(dialog).toBeHidden();
     await expect(shareButton).toBeFocused();
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
@@ -680,10 +722,23 @@ test.describe("Home and share card flow", () => {
       "aspect-ratio",
       "499 / 306"
     );
+    await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+    await expect(page.locator(".share-studio-primary-action").first()).toHaveCSS(
+      "opacity",
+      "1"
+    );
+    await page.getByRole("button", { name: "Share on Reddit" }).click();
+    await expect(page.getByRole("heading", { name: "Share to Reddit" })).toBeVisible();
+    const instructions = page.locator(".share-studio-instructions");
+    await expect(instructions).toHaveCSS("max-height", "190px");
+    await expect(instructions).toHaveCSS("opacity", "1");
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
-    await page.screenshot({ path: testInfo.outputPath("share-mobile.png") });
+    await instructions.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath("share-mobile-with-instructions.png")
+    });
   });
 });
 

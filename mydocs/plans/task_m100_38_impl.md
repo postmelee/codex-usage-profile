@@ -10,9 +10,9 @@ GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 - 참조 화면의 Codex 설정 sidebar/window chrome는 복제하지 않는다. 현재
   Home landing을 강하게 dim·blur하고 title, card, action row와 close의
   상대 구도를 재현한다.
-- X, LinkedIn, Reddit은 stable public profile URL을 브라우저 share
-  composition 화면에 전달하는 일반 HTTPS link다. provider API, OAuth,
-  credential, binary upload와 자동 게시를 사용하지 않는다.
+- X, LinkedIn, Reddit은 선택 시 이미지 복사와 브라우저 작성 창 진입을
+  안내하는 disclosure button이다. provider API, OAuth, credential, 자동
+  게시를 사용하지 않으며 PNG는 로컬 Clipboard API로만 복사한다.
 - 참조 화면과 같은 네 개의 원형 primary action은 X, LinkedIn, Reddit,
   Save다. issue 수용 기준인 Image URL/README Markdown copy와 Make private는
   같은 화면의 compact secondary action으로 유지한다.
@@ -82,20 +82,20 @@ Stage 4 전에 계획 변경 승인을 받는다.
   - `buildShareTargets({ profileUrl, locale })`
   - 필요 시 filename/title normalization
 - public profile URL은 canonical Sites 계약인
-  `/?profile={encodeURIComponent(handle)}`를 사용한다. private preview
-  `/api/profile/card.png`는 social target에 사용하지 않는다.
+  `/?profile={encodeURIComponent(handle)}`를 사용하고 공개 상태의 share
+  eligibility를 검증한다. public/private preview URL은 provider query에
+  자동 첨부하지 않는다.
 - provider target은 다음 browser composition endpoint로 제한한다.
   - X: `https://x.com/intent/post`
-  - LinkedIn: `https://www.linkedin.com/sharing/share-offsite/`
+  - LinkedIn: `https://www.linkedin.com/feed/`
   - Reddit: `https://www.reddit.com/submit`
-- 각 target은 `URL`/`URLSearchParams`로 구성하고 provider별 허용 query만
-  넣는다.
-  - X: localized short text와 public profile `url`
-  - LinkedIn: public profile `url`
-  - Reddit: localized title과 public profile `url`
-- social anchor는 `target="_blank"`와 `rel="noopener noreferrer"`를
-  사용한다. provider page가 열리지 않아도 Studio와 copy/save 기능은
-  그대로 남는다.
+- 각 target은 `URL`/`URLSearchParams`로 구성하고 provider별 허용
+  text/title query만 넣는다. private preview URL은 query에 전달하지 않는다.
+- social disclosure button을 누르면 하단 안내 패널을 열고, 패널 안의 작성
+  창 link만 `target="_blank"`와 `rel="noopener noreferrer"`를 사용한다.
+  provider page가 열리지 않아도 Studio와 copy/save 기능은 그대로 남는다.
+- 안내 패널의 이미지 복사는 preview PNG를 `ClipboardItem`의 `image/png`로
+  기록한다. clipboard가 거부되면 다른 share action과 close는 유지한다.
 - stable Image URL과 README Markdown은 기존 `buildLocalizedCardUrl()`과
   `buildReadmeCardSnippet()`을 재사용한다.
 - clipboard 성공·실패는 focus를 이동시키지 않는 `aria-live` status로
@@ -111,8 +111,10 @@ Stage 4 전에 계획 변경 승인을 받는다.
   1. localized title
   2. 499:306 card preview
   3. X/LinkedIn/Reddit/Save 원형 action row와 label
-  4. URL/README copy 및 Make private compact secondary action
-  5. `aria-live` status
+  4. 선택한 소셜 서비스의 3단계 안내 패널
+  5. URL/README copy 및 Make private compact secondary action
+- success/failure와 저장 완료 알림은 focus를 이동하지 않는 상단
+  `aria-live` toast로 표시한다.
 - close는 viewport safe-area를 반영한 우측 상단에 고정한다.
 - desktop card target width는 `min(600px, calc(100vw - 48px))`를 기준으로
   하고 available height가 작으면 title/action의 최소 간격과 499:306 비율을
@@ -262,7 +264,8 @@ git diff --check
 검증 관점:
 
 - `ko`/`en` copy와 unsupported fallback이 안정적이다.
-- provider link는 public profile URL과 allowlisted query만 포함한다.
+- provider link는 allowlisted text/title query만 포함하고 public/private
+  preview URL을 포함하지 않는다.
 - Studio는 keyboard focus를 가두고 Escape/backdrop/close에서 같은 방식으로
   닫힌다.
 - close 뒤 Share trigger focus와 기존 scroll position이 복구된다.
@@ -316,6 +319,17 @@ Task #38 Stage 1: Share contract와 accessible Studio 골격
    - 낮은 대비 compact secondary action
 6. 1280×900과 1512×982 E2E에서 geometry와 screenshot을 기록하고
    reference image와 직접 비교한다.
+
+### 작업지시자 피드백 보정 (Stage 2.1)
+
+1. Share trigger는 아이콘 없이 `Share` text만 표시한다.
+2. X, LinkedIn, Reddit 원형 action은 각 서비스의 단색 inline SVG
+   실루엣을 직접 사용하고 선택 상태를 표시한다.
+3. 소셜 action 선택 시 card 아래에 이미지 복사, 작성 창 열기, 게시물에
+   붙여넣기의 3단계 안내 패널을 160ms entrance animation으로 표시한다.
+4. Save는 다운로드를 유지하고 화면 상단 완료 toast를 표시한다.
+5. close 시 source card를 먼저 복원하고 motion card를 120ms
+   crossfade한 뒤 dialog를 unmount해 한 프레임 반짝임을 제거한다.
 
 ### 검증
 
@@ -431,8 +445,8 @@ Task #38 Stage 3: responsive와 reduced-motion 회귀
 1. `docs/readme-card.md` 사용자 흐름을 실제 Share Studio와 일치시킨다.
    - Publish 뒤 Share Studio에서 stable Image URL, README Markdown과 PNG
      저장을 사용한다는 최소 설명
-   - X/LinkedIn/Reddit은 URL-only browser share이고 이미지 자동 업로드나
-     게시를 보장하지 않는다는 경계
+   - X/LinkedIn/Reddit은 이미지 복사와 browser 작성 창 열기를 안내하며
+     이미지 자동 업로드나 게시를 보장하지 않는다는 경계
    - private 전환과 stable public endpoint `404` 계약 유지
 2. desktop/wide/mobile/short/reduced screenshot을 reference composition과
    직접 비교한다.
@@ -549,11 +563,11 @@ Task #38 Stage 4: 통합 시각 QA와 Share 문서
 - 4개 Stage의 분할, Stage별 산출물·검증 명령과 커밋 메시지
 - Stage 1에서 share contract와 accessible Studio를 먼저 완성하고 Stage 2에서
   shared-card motion을 별도 구현하는 순서
-- public profile URL을 social share target으로 사용하고 stable image URL은
+- public profile URL로 공개 share eligibility를 검증하고 stable image URL은
   copy/download에 사용하는 데이터 경계
-- X `x.com/intent/post`, LinkedIn `linkedin.com/sharing/share-offsite`,
-  Reddit `reddit.com/submit` browser composition link를 provider API 없이
-  사용하는 contract
+- X `x.com/intent/post`, LinkedIn `linkedin.com/feed`, Reddit
+  `reddit.com/submit` browser composition link와 로컬 PNG clipboard를
+  provider API 없이 사용하는 contract
 - reference layout과 motion token, portal + FLIP, reduced-motion fallback
 - Stage 4에서 `docs/readme-card.md`만 최소 수정하고 production 배포는 하지
   않는 문서·운영 경계
