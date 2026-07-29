@@ -267,10 +267,6 @@ export function ShareStudio({
     );
   }
 
-  function handleBackdropPointerDown(event) {
-    if (event.target === event.currentTarget) requestClose();
-  }
-
   function requestClose() {
     if (closingRef.current) return;
     closingRef.current = true;
@@ -372,7 +368,6 @@ export function ShareStudio({
     <div
       className={`share-studio-backdrop is-${transitionPhase}`}
       data-testid="share-studio-backdrop"
-      onPointerDown={handleBackdropPointerDown}
     >
       {toast ? (
         <ShareToast

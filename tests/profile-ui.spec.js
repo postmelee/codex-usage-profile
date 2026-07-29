@@ -539,6 +539,9 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Make private" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Close Share Studio" })).toBeFocused();
+    await backdrop.click({ position: { x: 12, y: 450 } });
+    await expect(dialog).toBeVisible();
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
 
     const socialTargets = [
       ["Share on X", "X", "https://x.com", "/intent/post"],
@@ -636,6 +639,11 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
     await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
     await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+
+    await shareButton.click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
 
     await shareButton.click();
     await page.getByRole("button", { name: "Make private" }).click();

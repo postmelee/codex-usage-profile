@@ -2,7 +2,7 @@
 
 GitHub Issue: [#38](https://github.com/postmelee/codex-usage-profile/issues/38)
 구현계획서: [`task_m100_38_impl.md`](../plans/task_m100_38_impl.md)
-Stage: 2 (피드백 보정 2.6 포함)
+Stage: 2 (피드백 보정 2.7 포함)
 
 ## 단계 목적
 
@@ -21,6 +21,9 @@ handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 
 제거하지 않고 120ms 역방향 motion을 완료한 뒤 unmount하도록 보정했다.
 후속 피드백으로 안내 panel의 실제 레이아웃 공간 확장과 중앙 column의 상향
 이동을 동일한 160ms/ease-out 진행률로 동기화했다.
+마지막 피드백으로 전체 화면 backdrop의 경계가 불명확해 생길 수 있는
+의도하지 않은 닫기를 제거하고, 우측 상단 X 또는 접근성 Escape 입력으로만
+Share Studio를 닫도록 상호작용 계약을 명확히 했다.
 
 ## 산출물
 
@@ -32,10 +35,10 @@ handoff를 추가했다. 추가 피드백으로 한국어 공유 안내의 3번 
 | `src/profile-ui/BrandLogo.jsx` | X, LinkedIn, Reddit의 단색 20×20 inline SVG 실루엣을 분리했다. |
 | `src/profile-ui/Icons.jsx` | 범용 share/social path를 제거하고 안내용 globe와 참조 Codex 앱의 20×21 check-circle SVG를 18×18 toast 아이콘으로 추가했다. |
 | `src/profile-ui/shareStudio.js` | 소셜 작성 창 URL, 3단계 안내와 이미지 복사·저장 toast의 `ko`/`en` copy를 추가하고 한국어 3번 문구를 `게시물에 이미지를 붙여넣으세요`로 고정했다. |
-| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현하고 안내 panel의 자연 높이 측정, open/close phase와 animation 완료·fallback timer lifecycle을 추가했다. |
+| `src/profile-ui/ShareStudio.jsx` | source/target rect 기반 FLIP open·close, source handoff, 소셜 안내 disclosure, PNG ClipboardItem 복사와 상단 toast를 구현하고 안내 panel의 자연 높이 측정, open/close phase와 animation 완료·fallback timer lifecycle을 추가했다. backdrop pointer 닫기 handler를 제거해 우측 상단 X와 Escape만 닫기 입력으로 유지했다. |
 | `src/profile-ui/__tests__/shareStudio.test.js` | X·LinkedIn·Reddit 작성 창 URL과 한국어 3번 안내 문구 계약을 실제 안내 흐름에 맞게 고정했다. |
 | `src/styles.css` | source handoff, 공식형 로고 action, 상단 toast motion, 측정 높이·margin·padding·clip-path를 함께 확장하는 160ms 안내 panel reveal과 120ms 역방향 close motion을 구현했다. |
-| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내의 실제 panel bounds, open/close motion 계약과 midpoint, panel 공간·상단 column 이동 진행률 동기화, PNG clipboard, 저장 toast와 desktop/mobile 구도를 검증했다. |
+| `tests/profile-ui.spec.js` | text-only Share, logo, 한국어 3번 안내의 실제 panel bounds, open/close motion 계약과 midpoint, panel 공간·상단 column 이동 진행률 동기화, PNG clipboard, 저장 toast와 desktop/mobile 구도를 검증했다. 실제 backdrop 클릭 시 열린 상태 유지와 X·Escape 닫기를 추가 검증했다. |
 | `mydocs/plans/task_m100_38_impl.md` | 작업지시자 피드백으로 변경된 소셜 disclosure와 close handoff 계약을 실제 구현에 맞게 정정했다. |
 | `mydocs/orders/20260729.md` | Stage 2 완료와 Stage 3 승인 대기 상태를 반영했다. |
 
@@ -96,6 +99,9 @@ git diff --check
   진행률 차이가 3% 이내임을 확인했다.
 - OK — close가 `closing → handoff → unmount` 순서로 진행되고 handoff 중
   source와 motion card가 동시에 연결되어 한 프레임 공백이 없음을 확인했다.
+- OK — 실제 backdrop 영역을 클릭해도 dialog와 overlay가 열린 상태로
+  유지되고, 우측 상단 X는 기존 `closing → handoff → unmount`를 완료하며
+  Escape도 dialog를 닫고 원래 Share trigger로 focus를 복원함을 확인했다.
 - OK — 1280×900과 390×844 screenshot을 첨부 화면과 직접 비교해 action
   logo, 안내 panel, 선택 상태와 가로 overflow 부재를 확인했다.
 
