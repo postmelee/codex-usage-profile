@@ -1159,6 +1159,28 @@ button {
   width: 100%;
 }
 
+.share-studio-preview-fallback {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(49, 141, 222, 0.12), transparent 52%),
+    #171717;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+  color: #a9a9ab;
+  display: grid;
+  font-size: 14px;
+  height: 100%;
+  justify-items: center;
+  line-height: 20px;
+  padding: 28px;
+  text-align: center;
+  width: 100%;
+}
+
+.share-studio-preview-fallback span {
+  max-width: 320px;
+}
+
 .share-studio-primary-actions {
   display: grid;
   gap: 20px;
@@ -1571,6 +1593,26 @@ button {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes share-studio-reduced-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes share-studio-reduced-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
   }
 }
 
@@ -2529,17 +2571,67 @@ button {
     animation: none;
   }
 
-  .share-studio-backdrop::before,
-  .share-studio-card,
+  .share-studio-backdrop {
+    backdrop-filter: none;
+  }
+
+  .share-studio-backdrop::before {
+    animation: share-studio-reduced-fade-in 140ms ease-out both;
+  }
+
+  .share-studio-backdrop.is-closing::before,
+  .share-studio-backdrop.is-handoff::before {
+    animation: share-studio-reduced-fade-out 110ms ease-in both;
+  }
+
   .share-studio-close,
-  .share-studio-instructions,
   .share-studio-primary-action,
   .share-studio-secondary,
   .share-studio-title,
   .share-studio-toast {
-    animation-delay: 0ms;
-    animation-duration: 120ms;
+    animation: share-studio-reduced-fade-in 140ms ease-out both;
     transform: none;
+  }
+
+  .share-studio-card {
+    animation: none;
+  }
+
+  .share-studio-instructions.is-opening {
+    animation: share-studio-reduced-fade-in 120ms ease-out both;
+    clip-path: inset(0 round 9px);
+    overflow: visible;
+    transform: none;
+  }
+
+  .share-studio-instructions.is-closing {
+    animation: share-studio-reduced-fade-out 110ms ease-in both;
+    clip-path: inset(0 round 9px);
+    overflow: visible;
+    transform: none;
+  }
+
+  .share-studio-backdrop.is-closing .share-studio-title,
+  .share-studio-backdrop.is-closing .share-studio-close,
+  .share-studio-backdrop.is-closing .share-studio-primary-action,
+  .share-studio-backdrop.is-closing .share-studio-instructions,
+  .share-studio-backdrop.is-closing .share-studio-secondary,
+  .share-studio-backdrop.is-closing .share-studio-toast,
+  .share-studio-backdrop.is-handoff .share-studio-title,
+  .share-studio-backdrop.is-handoff .share-studio-close,
+  .share-studio-backdrop.is-handoff .share-studio-primary-action,
+  .share-studio-backdrop.is-handoff .share-studio-instructions,
+  .share-studio-backdrop.is-handoff .share-studio-secondary,
+  .share-studio-backdrop.is-handoff .share-studio-toast {
+    transform: none;
+    transition: opacity 110ms ease-in;
+  }
+
+  .share-studio-action-icon,
+  .share-studio-primary-action:hover .share-studio-action-icon,
+  .share-studio-primary-action:focus-visible .share-studio-action-icon {
+    transform: none;
+    transition: none;
   }
 }
 
@@ -2568,6 +2660,64 @@ button {
 
   .home-quickstart-inner {
     padding-top: 30px;
+  }
+
+}
+
+@media (max-height: 760px) and (min-width: 761px) {
+  .share-studio-backdrop {
+    padding:
+      max(64px, env(safe-area-inset-top))
+      max(24px, env(safe-area-inset-right))
+      max(20px, env(safe-area-inset-bottom))
+      max(24px, env(safe-area-inset-left));
+  }
+
+  .share-studio {
+    align-content: start;
+  }
+
+  .share-studio h2 {
+    font-size: 22px;
+    line-height: 28px;
+  }
+
+  .share-studio-close {
+    right: max(16px, env(safe-area-inset-right));
+    top: max(16px, env(safe-area-inset-top));
+  }
+
+  .share-studio-card-motion {
+    height: min(306px, calc(100dvh - 286px));
+    margin-top: 14px;
+    max-width: calc(100vw - 48px);
+    width: auto;
+  }
+
+  .share-studio-primary-actions {
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .share-studio-primary-action {
+    gap: 6px;
+  }
+
+  .share-studio-action-icon {
+    height: 52px;
+    width: 52px;
+  }
+
+  .share-studio-instructions {
+    margin-top: 10px;
+  }
+
+  .share-studio-secondary {
+    margin-top: 10px;
+  }
+
+  .share-studio-toast {
+    top: max(8px, env(safe-area-inset-top));
   }
 }
 
@@ -2702,7 +2852,7 @@ button {
 
   .share-studio-backdrop {
     padding:
-      max(56px, env(safe-area-inset-top))
+      max(64px, env(safe-area-inset-top))
       max(16px, env(safe-area-inset-right))
       max(28px, env(safe-area-inset-bottom))
       max(16px, env(safe-area-inset-left));
@@ -2728,7 +2878,9 @@ button {
   }
 
   .share-studio-primary-actions {
-    gap: 10px;
+    gap: 8px;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     margin-top: 24px;
     width: 100%;
   }
@@ -2745,6 +2897,24 @@ button {
 
   .share-studio-secondary {
     margin-top: 24px;
+  }
+
+  .share-studio-secondary-action,
+  .share-studio-privacy-action {
+    min-height: 44px;
+  }
+
+  .share-studio-instructions {
+    width: 100%;
+  }
+
+  .share-studio-instructions li,
+  .share-studio-step-action {
+    min-height: 44px;
+  }
+
+  .share-studio-toast {
+    top: max(8px, env(safe-area-inset-top));
   }
 
   .account-login-link span,
@@ -2811,5 +2981,11 @@ button {
     gap: 34px;
     grid-template-columns: 1fr;
     margin-top: 38px;
+  }
+}
+
+@media (max-width: 360px) {
+  .share-studio-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

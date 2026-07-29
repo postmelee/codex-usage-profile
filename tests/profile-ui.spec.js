@@ -903,6 +903,28 @@ test.describe("Home and share card flow", () => {
       "opacity",
       "1"
     );
+    const mobileTargets = await page.locator(".share-studio-primary-action")
+      .evaluateAll((elements) => elements.map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          bottom: bounds.bottom,
+          height: bounds.height,
+          left: bounds.left,
+          right: bounds.right
+        };
+      }));
+    expect(mobileTargets).toHaveLength(4);
+    for (const target of mobileTargets) {
+      expect(target.height).toBeGreaterThanOrEqual(44);
+      expect(target.left).toBeGreaterThanOrEqual(0);
+      expect(target.right).toBeLessThanOrEqual(390);
+    }
+    const secondaryTargetHeights = await page
+      .locator(".share-studio-secondary-action, .share-studio-privacy-action")
+      .evaluateAll((elements) => elements.map(
+        (element) => element.getBoundingClientRect().height
+      ));
+    expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
     await page.getByRole("button", { name: "Share on Reddit" }).click();
     await expect(page.getByRole("heading", { name: "Share to Reddit" })).toBeVisible();
     const instructions = page.locator(".share-studio-instructions");
@@ -920,6 +942,291 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({
       path: testInfo.outputPath("share-mobile-with-instructions.png")
     });
+  });
+
+  test("Share Studio settles after resize and fits a short desktop", async ({ page }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await shareButton.click();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+
+    await page.setViewportSize({ width: 1280, height: 620 });
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    await expect(motionCard).toHaveAttribute("data-motion-fallback", "viewport-change");
+    await expect(motionCard).toHaveAttribute("data-motion-origin", "target");
+    await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+    const shortLayout = await page.evaluate(() => {
+      const bounds = (selector) => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return {
+          bottom: rect.bottom,
+          height: rect.height,
+          top: rect.top,
+          width: rect.width
+        };
+      };
+      return {
+        actions: bounds(".share-studio-primary-actions"),
+        card: bounds(".share-studio-card-motion"),
+        close: bounds(".share-studio-close"),
+        horizontalOverflow:
+          document.body.scrollWidth > document.documentElement.clientWidth,
+        secondary: bounds(".share-studio-secondary")
+      };
+    });
+    expect(shortLayout.card.width).toBeLessThan(600);
+    expect(shortLayout.card.height).toBeLessThanOrEqual(306);
+    expect(shortLayout.actions.bottom).toBeLessThanOrEqual(620);
+    expect(shortLayout.secondary.bottom).toBeLessThanOrEqual(620);
+    expect(shortLayout.close.top).toBeGreaterThanOrEqual(0);
+    expect(shortLayout.close.bottom).toBeLessThanOrEqual(620);
+    expect(shortLayout.horizontalOverflow).toBe(false);
+    await expect(page.locator(".share-studio-primary-action").first())
+      .toHaveCSS("opacity", "1");
+    await expect(page.locator(".share-studio-secondary")).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: testInfo.outputPath("share-studio-short.png") });
+
+    await page.getByRole("button", { name: "Share on Reddit" }).click();
+    const thirdStep = page.getByText("Paste image into the post", { exact: true });
+    await thirdStep.scrollIntoViewIfNeeded();
+    await expect(thirdStep).toBeVisible();
+
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await page.setViewportSize({ width: 1180, height: 620 });
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+    await expect(shareButton).toBeFocused();
+    await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
+    await expect(page.locator('[data-card-source="true"]')).toHaveCSS("opacity", "1");
+  });
+
+  test("Share Studio removes spatial motion when reduced motion is requested", async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await shareButton.click();
+
+    const backdrop = page.getByTestId("share-studio-backdrop");
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
+    await expect(motionCard).toHaveAttribute("data-motion-origin", "target");
+    await expect(backdrop).toHaveCSS("backdrop-filter", "none");
+    const reducedMotion = await backdrop.evaluate((element) => ({
+      actionIconTransition: getComputedStyle(
+        element.querySelector(".share-studio-action-icon")
+      ).transitionDuration,
+      spatialKeyframes: element.getAnimations({ subtree: true }).flatMap(
+        (animation) => (animation.effect?.getKeyframes?.() ?? []).flatMap(
+          (keyframe) => keyframe.transform && keyframe.transform !== "none"
+            ? [keyframe.transform]
+            : []
+        )
+      )
+    }));
+    expect(reducedMotion.actionIconTransition).toBe("0s");
+    expect(reducedMotion.spatialKeyframes).toEqual([]);
+
+    await page.getByRole("button", { name: "Share on Reddit" }).click();
+    const instructions = page.locator(".share-studio-instructions");
+    await expect(instructions).toBeVisible();
+    await expect(instructions).toHaveCSS("opacity", "1");
+    const instructionKeyframes = await instructions.evaluate((element) => (
+      element.getAnimations().flatMap(
+        (animation) => animation.effect?.getKeyframes?.() ?? []
+      )
+    ));
+    expect(instructionKeyframes.every(
+      (keyframe) => !keyframe.transform || keyframe.transform === "none"
+    )).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("share-studio-reduced-motion.png")
+    });
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+    await expect(shareButton).toBeFocused();
+  });
+
+  test("Share Studio keeps actions usable when preview and clipboard fail", async ({ page }, testInfo) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          write: async () => {
+            throw new Error("Clipboard denied");
+          },
+          writeText: async () => {
+            throw new Error("Clipboard denied");
+          }
+        }
+      });
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.has("v")) {
+        await route.fulfill({
+          body: JSON.stringify({
+            error: { code: "unavailable", message: "Preview unavailable" },
+            ok: false
+          }),
+          contentType: "application/json",
+          status: 503
+        });
+        return;
+      }
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.goto("/");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByText(
+      "Card preview is unavailable. Sharing options are still available.",
+      { exact: true }
+    )).toBeVisible();
+    const fallbackTitleBox = await page
+      .getByRole("heading", { name: "Share activity" })
+      .boundingBox();
+    expect(fallbackTitleBox.top ?? fallbackTitleBox.y).toBeGreaterThanOrEqual(0);
+    await expect(page.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-motion-fallback", "preview-error");
+    await expect(page.locator(".share-studio-primary-action")).toHaveCount(4);
+
+    await page.getByRole("button", { name: "Share on Reddit" }).click();
+    const composer = page.getByRole("link", { name: "Open Reddit composer" });
+    await expect(composer).toHaveAttribute("target", "_blank");
+    await page.getByRole("button", { name: "Copy image", exact: true }).click();
+    await expect(page.getByText("Failed to copy image", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Copy Image URL" }).click();
+    await expect(page.getByText("Could not copy image URL", { exact: true }))
+      .toBeVisible();
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Save PNG" }).click();
+    expect((await downloadPromise).suggestedFilename()).toBe(
+      "codex-usage-profile.png"
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("share-studio-preview-failure.png")
+    });
+
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(shareButton).toBeFocused();
+  });
+
+  test("Share Studio exposes and guards the making-private state", async ({ page }) => {
+    let patchRequests = 0;
+    let releasePatch;
+    let signalPatchStarted;
+    const patchRelease = new Promise((resolve) => {
+      releasePatch = resolve;
+    });
+    const patchStarted = new Promise((resolve) => {
+      signalPatchStarted = resolve;
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", async (route) => {
+      if (route.request().method() === "PATCH") {
+        patchRequests += 1;
+        signalPatchStarted();
+        await patchRelease;
+        await fulfillJson(route, {
+          data: ownerProfile("private"),
+          ok: true
+        });
+        return;
+      }
+      await fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await page.getByRole("button", { name: "Make private" }).click();
+    await patchStarted;
+
+    const pendingButton = page.getByRole("button", { name: "Making private" });
+    await expect(pendingButton).toBeDisabled();
+    await pendingButton.click({ force: true });
+    expect(patchRequests).toBe(1);
+    releasePatch();
+
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+  });
+
+  test("Share Studio falls back cleanly for invalid and detached source cards", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    const sourceCard = page.locator('[data-card-source="true"]');
+    await sourceCard.evaluate((element) => {
+      element.getBoundingClientRect = () => ({
+        bottom: 0,
+        height: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0
+      });
+    });
+
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-motion-origin", "target");
+
+    await sourceCard.evaluate((element) => element.remove());
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(shareButton).toBeFocused();
+    await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
+    await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
   });
 });
 

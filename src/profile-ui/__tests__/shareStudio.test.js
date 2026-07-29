@@ -14,6 +14,10 @@ test("resolves Korean and English Share Studio copy", () => {
     "게시물에 이미지를 붙여넣으세요"
   );
   assert.equal(getShareStudioCopy("en-US").title, "Share activity");
+  assert.equal(
+    getShareStudioCopy("en-US").previewUnavailable,
+    "Card preview is unavailable. Sharing options are still available."
+  );
   assert.equal(getShareStudioCopy("ja-JP").title, "Share activity");
 });
 

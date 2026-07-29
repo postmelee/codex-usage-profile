@@ -170,8 +170,8 @@ CSS token:
   남아 있을 때만 focus를 복원한다.
 - 초기 focus는 참조 화면의 우측 상단 close button이다.
 - Tab/Shift+Tab은 Studio 안의 enabled button/link만 순환한다.
-- Escape, close button과 backdrop pointer down은 같은 guarded close path를
-  사용한다. 내부 card/action click은 backdrop close를 발생시키지 않는다.
+- Escape와 우측 상단 close button은 같은 guarded close path를 사용한다.
+  전체 화면 backdrop pointer 입력은 닫기를 발생시키지 않는다.
 - app frame은 open 동안 기존 `inert`/`aria-hidden` 값을 보존한 채 modal
   뒤 탐색 대상에서 제외하고 close 시 정확히 원복한다.
 - `document.body`와 app 내부 scroll container의 기존 overflow/scroll
@@ -266,8 +266,8 @@ git diff --check
 - `ko`/`en` copy와 unsupported fallback이 안정적이다.
 - provider link는 allowlisted text/title query만 포함하고 public/private
   preview URL을 포함하지 않는다.
-- Studio는 keyboard focus를 가두고 Escape/backdrop/close에서 같은 방식으로
-  닫힌다.
+- Studio는 keyboard focus를 가두고 Escape/close에서 같은 방식으로 닫히며,
+  backdrop pointer 입력은 열린 상태를 유지한다.
 - close 뒤 Share trigger focus와 기존 scroll position이 복구된다.
 - copy/download/Make private 기능이 기존보다 줄지 않는다.
 - Stage 1은 source card geometry animation을 시작하지 않는다.
@@ -371,6 +371,7 @@ Task #38 Stage 2: shared-card motion과 desktop 참조 구도
 - `src/profile-ui/__tests__/shareStudio.test.js`
 - `src/styles.css`
 - `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_38_impl.md` — 승인된 X/Escape 전용 close 계약 반영
 - `mydocs/orders/20260729.md` 또는 실제 진행 날짜 orders 파일
 
 ### 변경 내용
@@ -394,8 +395,8 @@ Task #38 Stage 2: shared-card motion과 desktop 참조 구도
      남기고 blank dialog가 되지 않게 한다.
 5. clipboard unavailable/rejected, popup/link navigation, download와
    `makingPrivate` 상태를 검증한다.
-6. keyboard tab/shift-tab, repeated Escape/backdrop, focus restore와 inert
-   원복을 mobile/reduced 환경까지 확장한다.
+6. keyboard tab/shift-tab, repeated Escape/close, backdrop click 무시,
+   focus restore와 inert 원복을 mobile/reduced 환경까지 확장한다.
 
 ### 검증
 

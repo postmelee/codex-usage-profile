@@ -35,10 +35,13 @@ export function ShareStudio({
   const motionTimerRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
+  const previewImageRef = useRef(null);
   const revealedSourceRef = useRef(null);
   const revealedSourceStyleRef = useRef(null);
   const requestCloseRef = useRef(null);
+  const resizeFrameRef = useRef(null);
   const toastTimerRef = useRef(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
   const [toast, setToast] = useState(null);
   const [transitionPhase, setTransitionPhase] = useState("preparing");
@@ -72,6 +75,7 @@ export function ShareStudio({
 
     closingRef.current = false;
     previousFocusRef.current = document.activeElement;
+    setPreviewFailed(false);
     setSelectedSocialPlatform(null);
     setToast(null);
 
@@ -118,6 +122,7 @@ export function ShareStudio({
       document.removeEventListener("keydown", handleKeyDown);
       globalThis.clearTimeout(handoffTimerRef.current);
       globalThis.clearTimeout(toastTimerRef.current);
+      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
       body.style.overflow = previousBodyOverflow;
       if (scrollContainer) scrollContainer.style.overflow = previousScrollOverflow;
       if (appFrame) {
@@ -159,7 +164,12 @@ export function ShareStudio({
       ? buildRectTransform(resolvedSourceRect, targetRect)
       : null;
     const duration = sourceTransform ? getOpenDuration(sourceTransform.distance) : 280;
-    const frames = sourceTransform
+    const frames = reduceMotion
+      ? [
+        { opacity: 0 },
+        { opacity: 1 }
+      ]
+      : sourceTransform
       ? [
         { opacity: 1, transform: sourceTransform.value },
         { opacity: 1, transform: IDENTITY_TRANSFORM }
@@ -167,15 +177,14 @@ export function ShareStudio({
       : [
         {
           opacity: 0,
-          transform: reduceMotion
-            ? IDENTITY_TRANSFORM
-            : "translate3d(0, 12px, 0) scale(0.985)"
+          transform: "translate3d(0, 12px, 0) scale(0.985)"
         },
         { opacity: 1, transform: IDENTITY_TRANSFORM }
       ];
 
     setTransitionPhase("opening");
     card.dataset.motionOrigin = sourceTransform ? "source" : "target";
+    delete card.dataset.motionFallback;
 
     if (typeof card.animate !== "function") {
       setTransitionPhase("open");
@@ -211,6 +220,26 @@ export function ShareStudio({
       }
     };
   }, [canRender, previewUrl, sourceCardRef, sourceRect]);
+
+  useLayoutEffect(() => {
+    if (!canRender) return undefined;
+
+    function handleViewportChange() {
+      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
+      resizeFrameRef.current = globalThis.requestAnimationFrame?.(
+        () => settleMotionAtTarget("viewport-change")
+      );
+    }
+
+    globalThis.addEventListener?.("resize", handleViewportChange);
+    globalThis.addEventListener?.("orientationchange", handleViewportChange);
+
+    return () => {
+      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
+      globalThis.removeEventListener?.("resize", handleViewportChange);
+      globalThis.removeEventListener?.("orientationchange", handleViewportChange);
+    };
+  }, [canRender]);
 
   useLayoutEffect(() => {
     if (!canRender || transitionPhase !== "handoff") return undefined;
@@ -296,13 +325,19 @@ export function ShareStudio({
       ? buildRectTransform(resolvedSourceRect, targetRect)
       : null;
     const duration = sourceTransform ? 280 : 180;
-    const animation = card.animate([
-      { opacity: currentOpacity, transform: currentTransform },
-      {
-        opacity: sourceTransform ? 1 : 0,
-        transform: sourceTransform?.value ?? IDENTITY_TRANSFORM
-      }
-    ], {
+    const frames = reduceMotion
+      ? [
+        { opacity: currentOpacity },
+        { opacity: 0 }
+      ]
+      : [
+        { opacity: currentOpacity, transform: currentTransform },
+        {
+          opacity: sourceTransform ? 1 : 0,
+          transform: sourceTransform?.value ?? IDENTITY_TRANSFORM
+        }
+      ];
+    const animation = card.animate(frames, {
       duration: reduceMotion ? 110 : duration,
       easing: "cubic-bezier(0.3, 0, 1, 1)",
       fill: "both"
@@ -353,15 +388,41 @@ export function ShareStudio({
       ? IDENTITY_TRANSFORM
       : currentStyle.transform;
     const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
-    const animation = card.animate([
-      { opacity: currentOpacity, transform: currentTransform },
-      { opacity: 0, transform: currentTransform }
-    ], {
+    const frames = reduceMotion
+      ? [
+        { opacity: currentOpacity },
+        { opacity: 0 }
+      ]
+      : [
+        { opacity: currentOpacity, transform: currentTransform },
+        { opacity: 0, transform: currentTransform }
+      ];
+    const animation = card.animate(frames, {
       duration,
       easing: "cubic-bezier(0.3, 0, 1, 1)",
       fill: "both"
     });
     motionAnimationRef.current = animation;
+  }
+
+  function settleMotionAtTarget(reason) {
+    if (closingRef.current) return;
+
+    globalThis.clearTimeout(motionTimerRef.current);
+    motionAnimationRef.current?.cancel();
+    motionAnimationRef.current = null;
+
+    const card = motionCardRef.current;
+    if (card) {
+      card.dataset.motionFallback = reason;
+      card.dataset.motionOrigin = "target";
+    }
+    setTransitionPhase("open");
+  }
+
+  function handlePreviewError() {
+    setPreviewFailed(true);
+    settleMotionAtTarget("preview-error");
   }
 
   return createPortal(
@@ -402,13 +463,25 @@ export function ShareStudio({
           data-testid="share-studio-card-motion"
           ref={motionCardRef}
         >
-          <img
-            alt={copy.previewAlt}
-            className="share-card-preview share-studio-card"
-            height="612"
-            src={previewUrl}
-            width="998"
-          />
+          {previewFailed ? (
+            <div
+              aria-label={copy.previewAlt}
+              className="share-studio-preview-fallback"
+              role="img"
+            >
+              <span>{copy.previewUnavailable}</span>
+            </div>
+          ) : (
+            <img
+              alt={copy.previewAlt}
+              className="share-card-preview share-studio-card"
+              height="612"
+              onError={handlePreviewError}
+              ref={previewImageRef}
+              src={previewUrl}
+              width="998"
+            />
+          )}
         </div>
 
         <div aria-label="Share destinations" className="share-studio-primary-actions">
@@ -763,7 +836,7 @@ function resolveSourceRect(sourceCardRef, snapshot, preferLive = false) {
   const source = sourceCardRef?.current;
   const liveRect = source?.isConnected ? source.getBoundingClientRect() : null;
 
-  if (preferLive && isValidRect(liveRect)) return liveRect;
-  if (isValidRect(snapshot)) return snapshot;
-  return isValidRect(liveRect) ? liveRect : null;
+  if (!isValidRect(liveRect)) return null;
+  if (preferLive) return liveRect;
+  return isValidRect(snapshot) ? snapshot : liveRect;
 }
