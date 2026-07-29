@@ -1240,6 +1240,11 @@ button {
   width: min(600px, calc(100vw - 48px));
 }
 
+.share-studio-instructions.is-closing {
+  animation: share-studio-instructions-out 120ms ease-in both;
+  pointer-events: none;
+}
+
 .share-studio-instructions-header {
   align-items: center;
   display: flex;
@@ -1495,6 +1500,20 @@ button {
     clip-path: inset(0 round 9px);
     opacity: 1;
     transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes share-studio-instructions-out {
+  from {
+    clip-path: inset(0 round 9px);
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    clip-path: inset(0 0 100% 0 round 9px);
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
   }
 }
 

@@ -747,6 +747,54 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({
       path: testInfo.outputPath("share-korean-third-step.png")
     });
+
+    await page.getByRole("button", { name: "공유 안내 닫기" }).click();
+    await expect(instructions).toHaveClass(/\bis-closing\b/);
+    const instructionExitMotion = await instructions.evaluate((element) => {
+      const animation = element.getAnimations().find(
+        (candidate) => candidate.animationName === "share-studio-instructions-out"
+      );
+      const timing = animation?.effect?.getTiming();
+      const keyframes = animation?.effect?.getKeyframes() ?? [];
+      return {
+        clipPaths: keyframes.map((keyframe) => keyframe.clipPath),
+        duration: timing?.duration,
+        easings: keyframes.map((keyframe) => keyframe.easing),
+        transforms: keyframes.map((keyframe) => keyframe.transform)
+      };
+    });
+    expect(instructionExitMotion.duration).toBe(120);
+    expect(instructionExitMotion.easings[0]).toBe("ease-in");
+    expect(instructionExitMotion.clipPaths[0]).toBe("inset(0px round 9px)");
+    expect(instructionExitMotion.clipPaths.at(-1)).toContain("100%");
+    expect(instructionExitMotion.transforms.at(-1)).toContain("-6px");
+    const instructionExitMidpoint = await instructions.evaluate((element) => {
+      const animation = element.getAnimations().find(
+        (candidate) => candidate.animationName === "share-studio-instructions-out"
+      );
+      animation?.pause();
+      if (animation) animation.currentTime = 60;
+      const style = getComputedStyle(element);
+      return {
+        clipPath: style.clipPath,
+        opacity: Number.parseFloat(style.opacity)
+      };
+    });
+    expect(instructionExitMidpoint.clipPath).not.toContain("100%");
+    expect(instructionExitMidpoint.opacity).toBeGreaterThan(0);
+    expect(instructionExitMidpoint.opacity).toBeLessThan(1);
+    await page.screenshot({
+      path: testInfo.outputPath("share-korean-instructions-closing.png")
+    });
+    await instructions.evaluate((element) => {
+      element.getAnimations().find(
+        (candidate) => candidate.animationName === "share-studio-instructions-out"
+      )?.play();
+    });
+    await expect(instructions).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Reddit에 공유" })
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {

@@ -510,19 +510,63 @@ function ShareDestination({ active, index, onSelect, target }) {
 }
 
 function ShareInstructions({ copy, onCopy, onDismiss, target }) {
+  const dismissTimerRef = useRef(null);
+  const dismissedRef = useRef(false);
+  const onDismissRef = useRef(onDismiss);
+  const [closing, setClosing] = useState(false);
+
+  onDismissRef.current = onDismiss;
+
+  useLayoutEffect(() => {
+    globalThis.clearTimeout(dismissTimerRef.current);
+    dismissedRef.current = false;
+    setClosing(false);
+
+    return () => {
+      globalThis.clearTimeout(dismissTimerRef.current);
+    };
+  }, [target?.id]);
+
   if (!target) return null;
+
+  function finishDismiss() {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    globalThis.clearTimeout(dismissTimerRef.current);
+    onDismissRef.current?.();
+  }
+
+  function requestDismiss() {
+    if (closing) return;
+    setClosing(true);
+    dismissTimerRef.current = globalThis.setTimeout(
+      finishDismiss,
+      SHARE_INSTRUCTIONS_CLOSE_DURATION + 80
+    );
+  }
+
+  function handleAnimationEnd(event) {
+    if (
+      closing
+      && event.currentTarget === event.target
+      && event.animationName === "share-studio-instructions-out"
+    ) {
+      finishDismiss();
+    }
+  }
 
   return (
     <div
-      className="share-studio-instructions"
+      className={`share-studio-instructions${closing ? " is-closing" : ""}`}
       id={SHARE_INSTRUCTIONS_ID}
+      onAnimationEnd={handleAnimationEnd}
     >
       <div className="share-studio-instructions-header">
         <h3>{formatCopy(copy.shareInstructionsTitle, target.label)}</h3>
         <button
           aria-label={copy.dismissInstructions}
           className="icon-command share-studio-instructions-close"
-          onClick={onDismiss}
+          onClick={requestDismiss}
           type="button"
         >
           <Icon name="close" size={14} />
@@ -618,6 +662,7 @@ function getFocusableElements(container) {
 }
 
 const IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
+const SHARE_INSTRUCTIONS_CLOSE_DURATION = 120;
 const SHARE_INSTRUCTIONS_ID = "share-studio-social-instructions";
 const SOURCE_HANDOFF_DURATION = 120;
 const TOAST_DURATION = 3200;
