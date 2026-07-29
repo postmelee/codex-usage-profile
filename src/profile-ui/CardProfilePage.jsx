@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
-import { ShareDialog } from "./ShareDialog.jsx";
+import { ShareStudio } from "./ShareStudio.jsx";
 import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
@@ -100,12 +100,14 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         />
       </section>
 
-      <ShareDialog
+      <ShareStudio
         locale={locale}
+        locationOrigin={globalThis.location?.origin}
         onClose={closeShare}
         open={shareOpen && canShare}
         previewUrl={previewUrl}
         publicCardUrl={profile?.publicCardUrl}
+        publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
       />
     </ProfileShell>
   );

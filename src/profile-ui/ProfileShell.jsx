@@ -1,5 +1,4 @@
 import { AccountMenu } from "./AccountMenu.jsx";
-import { Icon } from "./Icons.jsx";
 
 export function ProfileShell({
   authState,
@@ -44,8 +43,7 @@ export function ProfileShell({
                 onClick={onShare}
                 type="button"
               >
-                <Icon name="share" />
-                <span>Share</span>
+                Share
               </button>
             ) : null}
             <AccountMenu
