@@ -836,8 +836,8 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({
       path: testInfo.outputPath("share-korean-instructions-closing.png")
     });
-    await instructions.evaluate((element) => {
-      element.getAnimations().find(
+    await page.evaluate(() => {
+      document.querySelector(".share-studio-instructions")?.getAnimations().find(
         (candidate) => candidate.animationName === "share-studio-instructions-out"
       )?.play();
     });
