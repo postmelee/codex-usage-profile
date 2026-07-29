@@ -3,8 +3,8 @@
 이 문서는 Codex Usage Profile의 canonical ChatGPT Sites 배포를 owner-only
 후보에서 공개 MVP까지 운영하는 절차다. Sites Worker, D1 `DB`, native R2
 `PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatible R2는
-fallback이다. remote 변경은 Task #51의 Gate A/B/C 승인을 각각 받은 범위에서만
-수행한다. production origin은
+fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
+범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
 public HTML profile은 `/?profile={handle}`, stable README card는
 `/u/{handle}/card.png`를 사용한다.
@@ -15,15 +15,24 @@ public HTML profile은 `/?profile={handle}`, stable README card는
 |---|---|
 | Site | `Codex Usage Profile` |
 | saved version/source | 7 / `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
-| access | public revision 14 |
-| environment | revision 9 |
+| access | public revision 26 |
+| environment | revision 57 |
 | service | `normal` |
 | maintenance | `disabled` |
+| maintenance operator secret | absent |
+| disposable QA state | owner/session/token/D1/R2/local credential 없음 |
 
 원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
 user, workspace group과 tenant group은 0개로 둔다. application rollback은
 version 7 이전의 saved version을 명시적으로 선택하되, data/schema rollback은
 별도 digest/count 승인 없이 수행하지 않는다.
+
+Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
+limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
+Site 생성, storage 추가 또는 high-usage Site의 public 유지가 제한될 수 있다.
+고정 수치나 장기 가격은 보장하지 않으며, [Sites 문서](https://learn.chatgpt.com/docs/sites)와
+[가격 FAQ](https://learn.chatgpt.com/docs/pricing#how-much-does-sites-cost)를
+운영 시점마다 다시 확인한다.
 
 ## 운영 불변식
 
@@ -46,7 +55,7 @@ version 7 이전의 saved version을 명시적으로 선택하되, data/schema r
 | `GITHUB_CLIENT_ID` | production OAuth app identifier | 공개 식별자 |
 | `GITHUB_CLIENT_SECRET` | secret | server-side OAuth exchange |
 | `PROFILE_MAINTENANCE_MODE` | disabled, exact `enabled`만 활성 | 숨겨진 operator route gate |
-| `PROFILE_MAINTENANCE_TOKEN` | secret | operator route 인증 |
+| `PROFILE_MAINTENANCE_TOKEN` | 필요할 때만 임시 secret, safe baseline은 absent | operator route 인증 |
 | `PROFILE_SERVICE_MODE` | `normal` | `normal`, `maintenance`, `owner-only`, `quota-stop`; 알 수 없는 값은 `maintenance` |
 | `PROFILE_STOP_RETRY_AFTER_SECONDS` | 300, 1~86400 | maintenance/quota stop 재시도 지연 |
 | `PROFILE_ACCOUNT_USAGE_BURST_LIMIT` | 5, 1~1000 | D1 shared burst count |
@@ -151,9 +160,11 @@ npm run sites:profile-maintenance -- retention \
 ```
 
 apply는 repository 밖 backup, latest digest/count와 삭제 후보 승인을 확인한
-뒤에만 실행한다. 원본 durable backup은 Gate C 공개 전환 후 30일과 #45 완료
-중 더 늦은 시점까지 `0600`으로 유지하고, 별도 영구 삭제 승인 뒤 폐기한다.
-backup path와 payload는 command 기록, 문서 또는 log에 남기지 않는다.
+뒤에만 실행한다. 실제 사용자 데이터 backup의 보존·폐기는 해당 account
+deletion Gate에서 별도로 승인한다. disposable QA 데이터의 검증 backup은
+exact restore/delete와 final digest/count를 확인하고 영구 삭제가 승인된
+경우에만 즉시 폐기할 수 있다. backup path와 payload는 command 기록, 문서
+또는 log에 남기지 않는다.
 
 `npm run cleanup:card-media`는 기본 dry-run이다. apply 전에 R2 export/restore
 가능성과 최신 stable 참조를 다시 확인한다. 삭제된 R2 object는 이 도구로

@@ -290,14 +290,14 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - R2는 stable/tombstone과 immutable revision을 함께 export할 수 있어야 한다. cleanup apply 전에 export/복구 가능성을 확인한다.
 - fallback Postgres의 `npm run migrate:postgres -- down`, Neon backup/PITR와 seeding rollback은 계속 보존하지만 Sites D1 backup을 대신하지 않는다.
 - Task #49/#51의 test owner, usage, session, token과 media는 승인된 cleanup 뒤
-  0건이다. Gate C final smoke에서 생성한 owner와 연관 object 12건도
-  unpublish와 exact guarded deletion 뒤 0건으로 정리했다. owner에 귀속되지
-  않은 만료 device challenge 2건은 usage,
-  profile 또는 교환 token이 없으며 90일 retention apply 대상이다.
-- Task #49 이전 데이터를 담은 repository 밖 원본 backup은 mode `0600`으로
-  유지한다. Gate C 공개 전환 후 30일과 #45 production QA 완료 중 더 늦은
-  시점까지 보존하고, 두 조건을 모두 충족한 뒤 작업지시자의 별도 영구 삭제
-  승인을 받는다. 실제 path와 payload는 문서·로그·repository에 기록하지 않는다.
+  0건이다. Task #45 fresh-owner QA도 private submit, temporary publish/unpublish,
+  export/restore와 exact delete를 검증한 뒤 final owner plan `not_found`,
+  retention candidate 0으로 종료했다.
+- Task #45의 disposable owner/session/token/D1/R2, 검증 backup과 task 전용
+  CLI config/cache/credential은 별도 Gate C 승인에 따라 exact 삭제했고 복구할
+  수 없다. 일반 사용자 account deletion에서는 backup 보존 기간과 영구 삭제를
+  해당 Gate에서 별도로 승인하며 실제 path와 payload는 문서·로그·repository에
+  기록하지 않는다.
 
 ## 검증 상태
 
@@ -316,14 +316,16 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - client asset/response/header secret·private-data 비노출
 - Gate B public smoke 종료 뒤 owner-only access, private visibility,
   revoked token/session과 owner data 0건 원복
-- Gate C final public access revision 14, anonymous landing과 health 200
+- Task #45 final public access revision 26, anonymous landing과 health 200
 - clean packed CLI의 device approve, Contract v1 submit, status 거부와 logout
 - private default, publish/unpublish, canonical HTML/JSON, stable
   GET/HEAD/locale/304/404와 application ETag
-- Gate C smoke owner와 연관 object 12건 guarded cleanup, 90일 retention
-  candidate 0건, browser session/CLI credential 제거
-- final environment revision 9의 maintenance disabled, service mode normal
-- final recent error log event 0건과 response/header/client allowlist 재확인
+- Task #45 disposable owner/session/token/D1/R2 guarded cleanup, final owner plan
+  `not_found`, 90일 retention candidate 0건과 local CLI credential 제거
+- final environment revision 57의 maintenance disabled, service mode normal,
+  maintenance operator secret absent
+- final recent error-only log의 5xx/Worker failure 0건과
+  response/header/client allowlist 재확인
 
 ### local real runtime/contract에서 검증됨
 
@@ -338,21 +340,23 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- #44 npm package 공개와 production 기본 origin 사용자 설치 검증
-- #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
+- public npm `codex-usage-profile@0.1.0` provenance/integrity와 production 기본
+  origin 소비자 검증 유지
+- Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
+  완료 상태 유지
 - 월별 90일 retention dry-run과 owner 요청 기반 account deletion
-- traffic/quota 증가 시 비용 0원 조건, error event와 stop trigger 재평가
+- Sites public beta의 plan별 limit 알림, public 유지 제한, traffic/quota 증가
+  시 비용 stop과 error event 재평가
 - managed remote provider fault injection을 대신하는 운영 관찰·repair procedure
 
 Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수용이다. 정상 hosted contract와 local failure/concurrency test가 깨지면 PASS 근거도 무효가 된다.
 
 ## 후속 작업
 
-1. #44에서 npm package를 공개하고 Sites production origin을 package 사용자
-   흐름에서 확인한다.
-2. #45에서 fresh account 기준 OAuth/CLI/D1/R2/card 전체 흐름과 보안·운영
-   경계를 release QA한다.
-3. Sites의 가격·quota·정책 또는 장기 장애 trigger가 실제로 발생할 때만 #43의
+1. 월별 90일 retention dry-run과 owner 요청 기반 account deletion을 운영한다.
+2. Sites의 plan별 limit 알림, public 유지 제한과 가격·정책 변경을
+   주기적으로 확인한다.
+3. 가격·quota·정책 또는 장기 장애 trigger가 실제로 발생할 때만 #43의
    Cloud Run/Neon/S3-compatible R2 fallback을 평가한다.
 4. marketing-only Sites mirror였던 #46은 canonical full-stack Site와
    중복되므로 별도 구현하지 않는다.
