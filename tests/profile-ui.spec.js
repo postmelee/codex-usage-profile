@@ -557,6 +557,10 @@ test.describe("Home and share card flow", () => {
         "max-height",
         "none"
       );
+      await expect(page.locator(".share-studio-instructions")).toHaveCSS(
+        "clip-path",
+        "inset(0px 0px 0% round 9px)"
+      );
       const link = page.getByRole("link", { name: `Open ${platform} composer` });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
@@ -703,9 +707,31 @@ test.describe("Home and share card flow", () => {
       page.getByText("게시물에 이미지를 붙여넣으세요", { exact: true })
     ).toBeVisible();
     const instructions = page.locator(".share-studio-instructions");
+    const instructionMotion = await instructions.evaluate((element) => {
+      const animation = element.getAnimations().find(
+        (candidate) => candidate.animationName === "share-studio-instructions-in"
+      );
+      const timing = animation?.effect?.getTiming();
+      const keyframes = animation?.effect?.getKeyframes() ?? [];
+      return {
+        clipPaths: keyframes.map((keyframe) => keyframe.clipPath),
+        duration: timing?.duration,
+        easings: keyframes.map((keyframe) => keyframe.easing),
+        transforms: keyframes.map((keyframe) => keyframe.transform)
+      };
+    });
+    expect(instructionMotion.duration).toBe(160);
+    expect(instructionMotion.easings[0]).toBe("ease-out");
+    expect(instructionMotion.clipPaths[0]).toContain("100%");
+    expect(instructionMotion.clipPaths.at(-1)).toBe("inset(0px round 9px)");
+    expect(instructionMotion.transforms[0]).toContain("-6px");
     await expect(instructions).toHaveCSS("max-height", "none");
     await expect(instructions).toHaveCSS("overflow", "visible");
     await expect(instructions).toHaveCSS("opacity", "1");
+    await expect(instructions).toHaveCSS(
+      "clip-path",
+      "inset(0px 0px 0% round 9px)"
+    );
     const instructionBounds = await instructions.evaluate((element) => {
       const panel = element.getBoundingClientRect();
       const thirdStep = element.querySelector(".share-studio-step-copy")
@@ -787,6 +813,10 @@ test.describe("Home and share card flow", () => {
     await expect(instructions).toHaveCSS("max-height", "none");
     await expect(instructions).toHaveCSS("opacity", "1");
     await expect(instructions).toHaveCSS("overflow", "visible");
+    await expect(instructions).toHaveCSS(
+      "clip-path",
+      "inset(0px 0px 0% round 9px)"
+    );
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
