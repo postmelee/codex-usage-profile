@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  EXPECTED_ANALYZER_PACKAGE,
   EXPECTED_NPM_PACKAGE,
   createNpmReleaseCandidate,
   publicReleaseSummary
@@ -134,6 +135,33 @@ export async function runNpmPackageLocalSmoke(options = {}) {
       "installed package export"
     );
 
+    const analyzerProbe = [
+      "const { access, readFile } = await import('node:fs/promises');",
+      "const entry = import.meta.resolve('codex-usage-analyzer');",
+      "const manifest = JSON.parse(await readFile(new URL('../package.json', entry), 'utf8'));",
+      `if (manifest.version !== '${EXPECTED_ANALYZER_PACKAGE.version}') process.exit(2);`,
+      `if (manifest.license !== '${EXPECTED_ANALYZER_PACKAGE.license}') process.exit(3);`,
+      `if (manifest.engines?.node !== '${EXPECTED_ANALYZER_PACKAGE.node}') process.exit(4);`,
+      "if (Object.keys(manifest.dependencies ?? {}).length !== 0) process.exit(5);",
+      "const scripts = manifest.scripts ?? {};",
+      "if (['preinstall','install','postinstall'].some((key) => scripts[key])) process.exit(6);",
+      "const analyzer = await import('codex-usage-analyzer');",
+      "if (typeof analyzer.readAccountUsage !== 'function') process.exit(7);",
+      "await access(new URL('./codex-executable.js', entry));"
+    ].join("");
+    assertSucceeded(
+      await runCommand(process.execPath, [
+        "--input-type=module",
+        "--eval",
+        analyzerProbe
+      ], {
+        cwd: projectDirectory,
+        env: environment,
+        timeout: 30_000
+      }),
+      "installed analyzer contract"
+    );
+
     const help = await runCommand(binExecutable, ["--help"], {
       cwd: projectDirectory,
       env: environment,
@@ -194,7 +222,7 @@ export async function runNpmPackageLocalSmoke(options = {}) {
     );
 
     return Object.freeze({
-      checksVerified: 5,
+      checksVerified: 6,
       ...publicReleaseSummary(candidate)
     });
   } finally {

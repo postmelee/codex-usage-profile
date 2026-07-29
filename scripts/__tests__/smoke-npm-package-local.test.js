@@ -23,16 +23,19 @@ test("local npm smoke isolates install and verifies the installed CLI boundaries
     }
   });
 
-  assert.equal(result.packageId, "codex-usage-profile@0.1.0");
+  assert.equal(result.packageId, "codex-usage-profile@0.1.1");
   assert.equal(result.entryCount, 13);
-  assert.equal(result.checksVerified, 5);
-  assert.equal(commands.length, 6);
+  assert.equal(result.checksVerified, 6);
+  assert.equal(commands.length, 7);
   assert.equal(commands[0].args[0], "install");
   assert.ok(commands[0].args.includes("--ignore-scripts"));
   assert.ok(commands[0].args.includes("--package-lock=false"));
   assert.ok(commands[1].args.includes("--input-type=module"));
+  assert.ok(commands[2].args.includes("--input-type=module"));
+  assert.match(commands[2].args.at(-1), /codex-usage-analyzer/);
+  assert.match(commands[2].args.at(-1), /0\.4\.1/);
   assert.deepEqual(
-    commands.slice(2).map((command) => command.args[0]),
+    commands.slice(3).map((command) => command.args[0]),
     ["--help", "status", "status", "status"]
   );
 
@@ -68,15 +71,34 @@ test("local npm smoke fails closed when an unsafe service origin is accepted", a
   );
 });
 
+test("local npm smoke fails closed when the installed analyzer contract drifts", async () => {
+  await assert.rejects(
+    () => runNpmPackageLocalSmoke({
+      processEnvironment: { PATH: process.env.PATH },
+      createCandidate: createFakeCandidate,
+      async runCommand(executable, args) {
+        if (
+          executable === process.execPath &&
+          args.at(-1).includes("codex-usage-analyzer")
+        ) {
+          return { code: 2, stderr: "", stdout: "" };
+        }
+        return fakeSmokeResult(args);
+      }
+    }),
+    /installed analyzer contract failed/
+  );
+});
+
 function createFakeCandidate({ candidateDirectory }) {
   return {
     candidateDirectory,
     tarballPath: join(
       candidateDirectory,
       "artifact",
-      "codex-usage-profile-0.1.0.tgz"
+      "codex-usage-profile-0.1.1.tgz"
     ),
-    packageId: "codex-usage-profile@0.1.0",
+    packageId: "codex-usage-profile@0.1.1",
     entryCount: 13,
     packedBytes: 1000,
     unpackedBytes: 5000,
