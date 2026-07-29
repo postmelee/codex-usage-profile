@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "./Icons.jsx";
@@ -21,13 +21,21 @@ export function ShareStudio({
   open,
   previewUrl,
   publicCardUrl,
-  publicOwnerHandle
+  publicOwnerHandle,
+  sourceCardRef,
+  sourceRect
 }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const closingRef = useRef(false);
+  const motionAnimationRef = useRef(null);
+  const motionCardRef = useRef(null);
+  const motionTimerRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
+  const requestCloseRef = useRef(null);
   const [copyStatus, setCopyStatus] = useState("");
+  const [transitionPhase, setTransitionPhase] = useState("preparing");
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
     () => buildLocalizedCardUrl(publicCardUrl, locale),
@@ -51,10 +59,12 @@ export function ShareStudio({
   );
 
   onCloseRef.current = onClose;
+  requestCloseRef.current = requestClose;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!canRender) return undefined;
 
+    closingRef.current = false;
     previousFocusRef.current = document.activeElement;
     setCopyStatus("");
 
@@ -77,7 +87,7 @@ export function ShareStudio({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onCloseRef.current?.();
+        requestCloseRef.current?.();
         return;
       }
       if (event.key !== "Tab") return;
@@ -115,6 +125,72 @@ export function ShareStudio({
     };
   }, [canRender]);
 
+  useLayoutEffect(() => {
+    if (!canRender) return undefined;
+
+    const card = motionCardRef.current;
+    if (!card) return undefined;
+
+    const reduceMotion = prefersReducedMotion();
+    const targetRect = card.getBoundingClientRect();
+    const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect);
+    const sourceTransform = !reduceMotion
+      ? buildRectTransform(resolvedSourceRect, targetRect)
+      : null;
+    const duration = sourceTransform ? getOpenDuration(sourceTransform.distance) : 280;
+    const frames = sourceTransform
+      ? [
+        { opacity: 1, transform: sourceTransform.value },
+        { opacity: 1, transform: IDENTITY_TRANSFORM }
+      ]
+      : [
+        {
+          opacity: 0,
+          transform: reduceMotion
+            ? IDENTITY_TRANSFORM
+            : "translate3d(0, 12px, 0) scale(0.985)"
+        },
+        { opacity: 1, transform: IDENTITY_TRANSFORM }
+      ];
+
+    setTransitionPhase("opening");
+    card.dataset.motionOrigin = sourceTransform ? "source" : "target";
+
+    if (typeof card.animate !== "function") {
+      setTransitionPhase("open");
+      return undefined;
+    }
+
+    const animation = card.animate(frames, {
+      duration: reduceMotion ? 140 : duration,
+      easing: "cubic-bezier(0.2, 0, 0, 1)",
+      fill: "both"
+    });
+    motionAnimationRef.current = animation;
+    const finishOpening = () => {
+      if (
+        motionAnimationRef.current !== animation
+        || closingRef.current
+      ) {
+        return;
+      }
+      setTransitionPhase("open");
+    };
+    animation.finished.then(finishOpening).catch(() => {});
+    motionTimerRef.current = globalThis.setTimeout(
+      finishOpening,
+      (reduceMotion ? 140 : duration) + 80
+    );
+
+    return () => {
+      globalThis.clearTimeout(motionTimerRef.current);
+      if (motionAnimationRef.current === animation) {
+        animation.cancel();
+        motionAnimationRef.current = null;
+      }
+    };
+  }, [canRender, previewUrl, sourceCardRef, sourceRect]);
+
   if (!canRender) return null;
 
   async function copyValue(value, status) {
@@ -128,12 +204,65 @@ export function ShareStudio({
   }
 
   function handleBackdropPointerDown(event) {
-    if (event.target === event.currentTarget) onCloseRef.current?.();
+    if (event.target === event.currentTarget) requestClose();
+  }
+
+  function requestClose() {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setTransitionPhase("closing");
+    globalThis.clearTimeout(motionTimerRef.current);
+
+    const card = motionCardRef.current;
+    if (!card || typeof card.animate !== "function") {
+      onCloseRef.current?.();
+      return;
+    }
+
+    const reduceMotion = prefersReducedMotion();
+    const currentStyle = getComputedStyle(card);
+    const currentTransform = currentStyle.transform === "none"
+      ? IDENTITY_TRANSFORM
+      : currentStyle.transform;
+    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+
+    motionAnimationRef.current?.cancel();
+    motionAnimationRef.current = null;
+    const targetRect = card.getBoundingClientRect();
+    const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect, true);
+    const sourceTransform = !reduceMotion
+      ? buildRectTransform(resolvedSourceRect, targetRect)
+      : null;
+    const duration = sourceTransform ? 280 : 180;
+    const animation = card.animate([
+      { opacity: currentOpacity, transform: currentTransform },
+      {
+        opacity: sourceTransform ? 1 : 0,
+        transform: sourceTransform?.value ?? IDENTITY_TRANSFORM
+      }
+    ], {
+      duration: reduceMotion ? 110 : duration,
+      easing: "cubic-bezier(0.3, 0, 1, 1)",
+      fill: "both"
+    });
+    motionAnimationRef.current = animation;
+
+    let finished = false;
+    const finishClosing = () => {
+      if (finished) return;
+      finished = true;
+      onCloseRef.current?.();
+    };
+    animation.finished.then(finishClosing).catch(() => {});
+    motionTimerRef.current = globalThis.setTimeout(
+      finishClosing,
+      (reduceMotion ? 110 : duration) + 80
+    );
   }
 
   return createPortal(
     <div
-      className="share-studio-backdrop"
+      className={`share-studio-backdrop is-${transitionPhase}`}
       data-testid="share-studio-backdrop"
       onPointerDown={handleBackdropPointerDown}
     >
@@ -147,32 +276,39 @@ export function ShareStudio({
         <button
           aria-label={copy.close}
           className="icon-command share-studio-close"
-          onClick={() => onCloseRef.current?.()}
+          onClick={requestClose}
           ref={closeButtonRef}
           type="button"
         >
           <Icon name="close" size={20} />
         </button>
 
-        <h2 id="share-studio-title">{copy.title}</h2>
+        <h2 className="share-studio-title" id="share-studio-title">{copy.title}</h2>
 
-        <img
-          alt={copy.previewAlt}
-          className="share-card-preview share-studio-card"
-          height="612"
-          src={previewUrl}
-          width="998"
-        />
+        <div
+          className="share-studio-card-motion"
+          data-testid="share-studio-card-motion"
+          ref={motionCardRef}
+        >
+          <img
+            alt={copy.previewAlt}
+            className="share-card-preview share-studio-card"
+            height="612"
+            src={previewUrl}
+            width="998"
+          />
+        </div>
 
         <div aria-label="Share destinations" className="share-studio-primary-actions">
-          {shareTargets.map((target) => (
-            <ShareDestination key={target.id} target={target} />
+          {shareTargets.map((target, index) => (
+            <ShareDestination index={index} key={target.id} target={target} />
           ))}
           <a
             aria-label={copy.saveAriaLabel}
             className="share-studio-primary-action"
             download="codex-usage-profile.png"
             href={imageUrl}
+            style={{ "--share-action-index": shareTargets.length }}
           >
             <span className="share-studio-action-icon">
               <Icon name="download" size={24} />
@@ -225,13 +361,14 @@ export function ShareStudio({
   );
 }
 
-function ShareDestination({ target }) {
+function ShareDestination({ index, target }) {
   return (
     <a
       aria-label={target.accessibleLabel}
       className="share-studio-primary-action"
       href={target.href}
       rel="noopener noreferrer"
+      style={{ "--share-action-index": index }}
       target="_blank"
     >
       <span className="share-studio-action-icon">
@@ -244,20 +381,16 @@ function ShareDestination({ target }) {
 
 function ShareValue({ copyLabel, label, onCopy, value }) {
   return (
-    <div className="share-studio-copy-value">
+    <button
+      aria-label={copyLabel}
+      className="share-studio-secondary-action"
+      onClick={onCopy}
+      title={value}
+      type="button"
+    >
+      <Icon name="copy" size={14} />
       <span>{label}</span>
-      <div>
-        <code title={value}>{value}</code>
-        <button
-          aria-label={copyLabel}
-          className="icon-command"
-          onClick={onCopy}
-          type="button"
-        >
-          <Icon name="copy" />
-        </button>
-      </div>
-    </div>
+    </button>
   );
 }
 
@@ -267,4 +400,60 @@ function getFocusableElements(container) {
   return Array.from(container.querySelectorAll(
     "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])"
   ));
+}
+
+const IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
+
+function buildRectTransform(source, target) {
+  if (!isValidRect(source) || !isValidRect(target)) return null;
+
+  const translateX = source.left - target.left;
+  const translateY = source.top - target.top;
+  const scaleX = source.width / target.width;
+  const scaleY = source.height / target.height;
+
+  if (
+    !Number.isFinite(translateX)
+    || !Number.isFinite(translateY)
+    || !Number.isFinite(scaleX)
+    || !Number.isFinite(scaleY)
+    || scaleX <= 0
+    || scaleY <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    distance: Math.hypot(translateX, translateY),
+    value: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
+  };
+}
+
+function getOpenDuration(distance) {
+  return Math.round(Math.min(440, Math.max(320, 320 + (distance * 0.3))));
+}
+
+function isValidRect(rect) {
+  return Boolean(
+    rect
+    && Number.isFinite(rect.left)
+    && Number.isFinite(rect.top)
+    && Number.isFinite(rect.width)
+    && Number.isFinite(rect.height)
+    && rect.width > 0
+    && rect.height > 0
+  );
+}
+
+function prefersReducedMotion() {
+  return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
+
+function resolveSourceRect(sourceCardRef, snapshot, preferLive = false) {
+  const source = sourceCardRef?.current;
+  const liveRect = source?.isConnected ? source.getBoundingClientRect() : null;
+
+  if (preferLive && isValidRect(liveRect)) return liveRect;
+  if (isValidRect(snapshot)) return snapshot;
+  return isValidRect(liveRect) ? liveRect : null;
 }

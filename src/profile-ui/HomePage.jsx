@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketingLanding } from "../profile-marketing/MarketingLanding.jsx";
 import { createMarketingConfig } from "../profile-marketing/marketing-config.js";
@@ -45,6 +45,8 @@ export function HomePage({
   });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
+  const shareSourceCardRef = useRef(null);
+  const shareSourceRectRef = useRef(null);
   const cardPreviewUrl = ownerPreviewUrl && !ownerPreviewFailed
     ? ownerPreviewUrl
     : SAMPLE_CARD_URL;
@@ -90,6 +92,18 @@ export function HomePage({
     ? client.buildOwnerCardPreviewUrl({ locale, revision: previewRevision })
     : null;
 
+  function openShare() {
+    shareSourceRectRef.current = snapshotRect(
+      shareSourceCardRef.current?.getBoundingClientRect()
+    );
+    setShareOpen(true);
+  }
+
+  function closeShare() {
+    setShareOpen(false);
+    shareSourceRectRef.current = null;
+  }
+
   async function updateVisibility(visibility) {
     if (mutationState.status === "submitting") return;
     setMutationState({ error: null, status: "submitting" });
@@ -99,6 +113,7 @@ export function HomePage({
       setProfileState({ error: null, profile: nextProfile, status: "ready" });
       setPreviewRevision((value) => value + 1);
       setShareOpen(false);
+      shareSourceRectRef.current = null;
       setMutationState({ error: null, status: "idle" });
 
       if (authState?.account?.owner && nextProfile.owner) {
@@ -133,6 +148,8 @@ export function HomePage({
           <HomeSampleIdentity owner={owner} />
         ) : null}
         cardPreviewUrl={cardPreviewUrl}
+        cardRef={shareSourceCardRef}
+        cardTransitionSuspended={shareOpen}
         config={HOME_MARKETING_CONFIG}
         heroAction={isAuthenticated ? (
           <AuthenticatedHome
@@ -140,7 +157,7 @@ export function HomePage({
             isPublic={isPublic}
             mutationState={mutationState}
             onPublish={() => updateVisibility("public")}
-            onShare={() => setShareOpen(true)}
+            onShare={openShare}
             owner={owner}
             profileState={profileState}
           />
@@ -164,15 +181,28 @@ export function HomePage({
         locale={locale}
         locationOrigin={location?.origin}
         makingPrivate={mutationState.status === "submitting"}
-        onClose={() => setShareOpen(false)}
+        onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
         previewUrl={sharePreviewUrl}
         publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
+        sourceCardRef={shareSourceCardRef}
+        sourceRect={shareSourceRectRef.current}
       />
     </ProfileShell>
   );
+}
+
+function snapshotRect(rect) {
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+
+  return {
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width
+  };
 }
 
 function HomeSampleIdentity({ owner }) {

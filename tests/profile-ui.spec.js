@@ -502,15 +502,35 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Publish card" }).click();
     const shareButton = page.getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
+    const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceBox = await sourceCard.boundingBox();
 
     await shareButton.click();
     const dialog = page.getByRole("dialog", { name: "Share activity" });
+    const backdrop = page.getByTestId("share-studio-backdrop");
+    const motionCard = page.getByTestId("share-studio-card-motion");
     await expect(dialog).toBeVisible();
+    await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+    await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceCard).toHaveCSS("opacity", "0");
     await expect.poll(
       () => page
         .getByRole("img", { name: "Codex usage card preview" })
         .evaluate((image) => image.naturalWidth)
     ).toBe(1497);
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
+    await expect(sourceCard).toHaveCSS("opacity", "0");
+    const sourceBoxWhileOpen = await sourceCard.boundingBox();
+    expectRectNear(sourceBoxWhileOpen, sourceBox, 0.75);
+    const animatedProperties = await motionCard.evaluate((element) => {
+      const keyframes = element.getAnimations().flatMap(
+        (animation) => animation.effect?.getKeyframes?.() ?? []
+      );
+      return [...new Set(keyframes.flatMap(
+        (keyframe) => ["opacity", "transform"].filter((property) => property in keyframe)
+      ))].sort();
+    });
+    expect(animatedProperties).toEqual(["opacity", "transform"]);
     await expect(page.getByRole("button", { name: "Close Share Studio" })).toBeFocused();
     await expect(page.locator(".app-frame")).toHaveAttribute("inert", "");
     await page.screenshot({ path: testInfo.outputPath("share-desktop.png") });
@@ -553,14 +573,58 @@ test.describe("Home and share card flow", () => {
     expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
 
     await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(shareButton).toBeFocused();
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
+    await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
 
     await shareButton.click();
     await page.getByRole("button", { name: "Make private" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+  });
+
+  test("Share Studio keeps the reference composition at wide desktop", async ({ page }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 1512, height: 982 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+
+    const backdrop = page.getByTestId("share-studio-backdrop");
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
+
+    const titleBox = await page
+      .getByRole("heading", { name: "Share activity" })
+      .boundingBox();
+    const cardBox = await page
+      .getByTestId("share-studio-card-motion")
+      .boundingBox();
+    const actionsBox = await page
+      .getByLabel("Share destinations")
+      .boundingBox();
+    const closeBox = await page
+      .getByRole("button", { name: "Close Share Studio" })
+      .boundingBox();
+
+    expect(Math.abs(rectCenterX(cardBox) - 756)).toBeLessThanOrEqual(1);
+    expect(Math.abs(rectCenterX(titleBox) - rectCenterX(cardBox))).toBeLessThanOrEqual(1);
+    expect(Math.abs(rectCenterX(actionsBox) - rectCenterX(cardBox))).toBeLessThanOrEqual(1);
+    expect(cardBox.width).toBeCloseTo(600, 0);
+    expect(cardBox.height).toBeCloseTo((600 * 306) / 499, 0);
+    expect(titleBox.y + titleBox.height).toBeLessThan(cardBox.y);
+    expect(cardBox.y + cardBox.height).toBeLessThan(actionsBox.y);
+    expect(closeBox.x + closeBox.width).toBeGreaterThan(1450);
+    expect(closeBox.y).toBeLessThan(50);
+
+    await page.screenshot({ path: testInfo.outputPath("share-wide-desktop.png") });
   });
 
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
@@ -745,6 +809,19 @@ async function mockAuthenticatedAccount(page) {
     data: ownerProfile("private"),
     ok: true
   }));
+}
+
+function expectRectNear(actual, expected, tolerance) {
+  expect(actual).not.toBeNull();
+  expect(expected).not.toBeNull();
+  expect(Math.abs(actual.x - expected.x)).toBeLessThanOrEqual(tolerance);
+  expect(Math.abs(actual.y - expected.y)).toBeLessThanOrEqual(tolerance);
+  expect(Math.abs(actual.width - expected.width)).toBeLessThanOrEqual(tolerance);
+  expect(Math.abs(actual.height - expected.height)).toBeLessThanOrEqual(tolerance);
+}
+
+function rectCenterX(rect) {
+  return rect.x + (rect.width / 2);
 }
 
 async function getClippedHomeElements(page) {

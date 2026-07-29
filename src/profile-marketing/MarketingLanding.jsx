@@ -8,6 +8,8 @@ export function MarketingLanding({
   cardAlt,
   cardOverlay = null,
   cardPreviewUrl,
+  cardRef,
+  cardTransitionSuspended = false,
   config = createMarketingConfig(),
   heroAction = null,
   onCardError,
@@ -27,9 +29,11 @@ export function MarketingLanding({
 
           <MarketingCardPreview
             alt={resolvedCardAlt}
+            cardRef={cardRef}
             onError={onCardError}
             overlay={cardOverlay}
             src={resolvedCardUrl}
+            transitionSuspended={cardTransitionSuspended}
           />
 
           <div className="home-account-state">
@@ -43,16 +47,27 @@ export function MarketingLanding({
   );
 }
 
-export function MarketingCardPreview({ alt, onError, overlay, src }) {
+export function MarketingCardPreview({
+  alt,
+  cardRef,
+  onError,
+  overlay,
+  src,
+  transitionSuspended = false
+}) {
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const supportsCardTilt = useMediaQuery(
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
   );
 
   return (
-    <MarketingCardTilt enabled={supportsCardTilt && !prefersReducedMotion}>
+    <MarketingCardTilt
+      elementRef={cardRef}
+      enabled={supportsCardTilt && !prefersReducedMotion}
+      suspended={transitionSuspended}
+    >
       <BorderBeam
-        active={!prefersReducedMotion}
+        active={!prefersReducedMotion && !transitionSuspended}
         borderRadius={41}
         brightness={1.05}
         className="home-card-beam"
@@ -163,7 +178,7 @@ function MarketingAppAction({ config }) {
   );
 }
 
-function MarketingCardTilt({ children, enabled }) {
+function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
   const [ready, setReady] = useState(
     () => Boolean(globalThis.customElements?.get("hover-tilt"))
   );
@@ -184,7 +199,13 @@ function MarketingCardTilt({ children, enabled }) {
 
   if (!enabled || !ready) {
     return (
-      <div className="home-card-tilt" data-tilt-enabled="false">
+      <div
+        className="home-card-tilt"
+        data-card-source="true"
+        data-share-transition-active={suspended ? "true" : undefined}
+        data-tilt-enabled="false"
+        ref={elementRef}
+      >
         {children}
       </div>
     );
@@ -194,6 +215,8 @@ function MarketingCardTilt({ children, enabled }) {
     <hover-tilt
       blend-mode="screen"
       className="home-card-tilt"
+      data-card-source="true"
+      data-share-transition-active={suspended ? "true" : undefined}
       data-tilt-enabled="true"
       exit-delay="120"
       glare-hue="210"
@@ -201,6 +224,7 @@ function MarketingCardTilt({ children, enabled }) {
       scale-factor="1.018"
       tilt-factor="0.45"
       tilt-factor-y="0.35"
+      ref={elementRef}
     >
       {children}
     </hover-tilt>

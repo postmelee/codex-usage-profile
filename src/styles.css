@@ -508,6 +508,11 @@ button {
   position: relative;
 }
 
+.home-card-tilt[data-share-transition-active="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .home-card-glare {
   background: radial-gradient(
     circle at
@@ -599,6 +604,7 @@ button {
   display: block;
   margin-top: 24px;
   max-width: min(600px, calc(100% - 24px));
+  transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
   width: 100%;
 }
 
@@ -1025,7 +1031,7 @@ button {
   --share-motion-quick: 140ms;
   align-items: stretch;
   backdrop-filter: blur(16px);
-  background: rgba(7, 7, 7, 0.9);
+  background: transparent;
   display: flex;
   inset: 0;
   justify-content: center;
@@ -1040,6 +1046,19 @@ button {
   z-index: 100;
 }
 
+.share-studio-backdrop::before {
+  animation: share-studio-scrim-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
+  background: rgba(7, 7, 7, 0.9);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+}
+
+.share-studio-backdrop.is-closing::before {
+  animation: share-studio-scrim-out 220ms cubic-bezier(0.3, 0, 1, 1) both;
+}
+
 .share-studio {
   align-content: center;
   display: grid;
@@ -1048,6 +1067,7 @@ button {
   min-width: 0;
   position: relative;
   width: min(100%, 920px);
+  z-index: 1;
 }
 
 .share-studio h2 {
@@ -1056,7 +1076,12 @@ button {
   text-align: center;
 }
 
+.share-studio-title {
+  animation: share-studio-support-in 320ms cubic-bezier(0.2, 0, 0, 1) 120ms both;
+}
+
 .share-studio-close {
+  animation: share-studio-fade-in 180ms cubic-bezier(0.2, 0, 0, 1) 220ms both;
   color: #d9d9da;
   position: fixed;
   right: max(24px, env(safe-area-inset-right));
@@ -1066,7 +1091,22 @@ button {
 
 .share-studio-close:hover,
 .share-studio-close:focus-visible {
+  animation: none;
   color: #fff;
+  opacity: 1;
+}
+
+.share-studio-backdrop.is-closing .share-studio-title,
+.share-studio-backdrop.is-closing .share-studio-close,
+.share-studio-backdrop.is-closing .share-studio-primary-action,
+.share-studio-backdrop.is-closing .share-studio-secondary,
+.share-studio-backdrop.is-closing .share-copy-status {
+  animation: none;
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  transition:
+    opacity 150ms cubic-bezier(0.3, 0, 1, 1),
+    transform 180ms cubic-bezier(0.3, 0, 1, 1);
 }
 
 .icon-command {
@@ -1090,10 +1130,20 @@ button {
   color: var(--text);
 }
 
-.share-studio-card {
+.share-studio-card-motion {
+  aspect-ratio: 499 / 306;
   border-radius: clamp(22px, 3.2vw, 41px);
   margin-top: 28px;
+  position: relative;
+  transform-origin: top left;
+  will-change: transform, opacity;
   width: min(600px, calc(100vw - 48px));
+}
+
+.share-studio-card {
+  animation: share-studio-card-crossfade 120ms cubic-bezier(0.2, 0, 0, 1) both;
+  border-radius: inherit;
+  width: 100%;
 }
 
 .share-studio-primary-actions {
@@ -1104,6 +1154,8 @@ button {
 }
 
 .share-studio-primary-action {
+  animation: share-studio-action-in 260ms cubic-bezier(0.2, 0, 0, 1)
+    calc(220ms + (var(--share-action-index, 0) * 45ms)) both;
   align-items: center;
   color: #b5b5b6;
   display: grid;
@@ -1137,71 +1189,55 @@ button {
 }
 
 .share-studio-primary-action:focus-visible {
+  animation: none;
   border-radius: 8px;
+  opacity: 1;
   outline: 2px solid var(--blue);
   outline-offset: 4px;
+  transform: none;
 }
 
 .share-studio-secondary {
-  display: grid;
-  gap: 10px;
-  margin-top: 28px;
+  animation: share-studio-support-in 240ms cubic-bezier(0.2, 0, 0, 1) 390ms both;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 18px;
   width: min(100%, 620px);
 }
 
-.share-studio-copy-value {
-  display: grid;
-  gap: 7px;
-}
-
-.share-studio-copy-value > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.share-studio-copy-value > div {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  display: flex;
-  min-width: 0;
-  padding: 4px 4px 4px 11px;
-}
-
-.share-studio-copy-value code {
-  color: #d5d5d5;
-  flex: 1 1 auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: text;
-}
-
+.share-studio-secondary-action,
 .share-studio-privacy-action {
+  align-items: center;
   appearance: none;
   background: transparent;
   border: 0;
   border-radius: 6px;
-  color: var(--muted);
+  color: #777;
   cursor: pointer;
+  display: flex;
+  gap: 6px;
   font-size: 12px;
-  justify-self: end;
   line-height: 18px;
-  min-height: 32px;
-  padding: 7px 9px;
+  min-height: 30px;
+  padding: 6px 8px;
 }
 
+.share-studio-privacy-action {
+  margin-left: 4px;
+}
+
+.share-studio-secondary-action:hover,
+.share-studio-secondary-action:focus-visible,
 .share-studio-privacy-action:hover,
 .share-studio-privacy-action:focus-visible {
   background: rgba(255, 255, 255, 0.05);
   color: #f2f2f2;
 }
 
+.share-studio-secondary-action:focus-visible,
 .share-studio-privacy-action:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
@@ -1213,12 +1249,77 @@ button {
 }
 
 .share-copy-status {
+  animation: share-studio-fade-in 180ms cubic-bezier(0.2, 0, 0, 1) 430ms both;
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
   margin: 8px 0 0;
   min-height: 18px;
   text-align: center;
+}
+
+@keyframes share-studio-scrim-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes share-studio-scrim-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes share-studio-card-crossfade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes share-studio-support-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes share-studio-action-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes share-studio-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .profile-view {
@@ -2175,6 +2276,18 @@ button {
   .public-profile-state.is-loading .profile-state-indicator {
     animation: none;
   }
+
+  .share-studio-backdrop::before,
+  .share-studio-card,
+  .share-studio-close,
+  .share-studio-primary-action,
+  .share-studio-secondary,
+  .share-studio-title,
+  .share-copy-status {
+    animation-delay: 0ms;
+    animation-duration: 120ms;
+    transform: none;
+  }
 }
 
 @media (max-height: 700px) and (min-width: 761px) {
@@ -2356,7 +2469,7 @@ button {
     top: max(12px, env(safe-area-inset-top));
   }
 
-  .share-studio-card {
+  .share-studio-card-motion {
     margin-top: 22px;
     width: 100%;
   }
