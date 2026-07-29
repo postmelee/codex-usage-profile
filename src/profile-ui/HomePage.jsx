@@ -5,7 +5,7 @@ import { createMarketingConfig } from "../profile-marketing/marketing-config.js"
 import { Icon } from "./Icons.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
-import { ShareDialog } from "./ShareDialog.jsx";
+import { ShareStudio } from "./ShareStudio.jsx";
 import {
   buildAccountLoginHref,
   getAccountAvatar,
@@ -160,14 +160,16 @@ export function HomePage({
         />}
       />
 
-      <ShareDialog
+      <ShareStudio
         locale={locale}
+        locationOrigin={location?.origin}
         makingPrivate={mutationState.status === "submitting"}
         onClose={() => setShareOpen(false)}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
         previewUrl={sharePreviewUrl}
         publicCardUrl={profile?.publicCardUrl}
+        publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
       />
     </ProfileShell>
   );

@@ -504,14 +504,36 @@ test.describe("Home and share card flow", () => {
     await expect(shareButton).toBeEnabled();
 
     await shareButton.click();
-    const dialog = page.getByRole("dialog", { name: "Share card" });
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole("button", { name: "Close share dialog" })).toBeFocused();
+    await expect.poll(
+      () => page
+        .getByRole("img", { name: "Codex usage card preview" })
+        .evaluate((image) => image.naturalWidth)
+    ).toBe(1497);
+    await expect(page.getByRole("button", { name: "Close Share Studio" })).toBeFocused();
+    await expect(page.locator(".app-frame")).toHaveAttribute("inert", "");
     await page.screenshot({ path: testInfo.outputPath("share-desktop.png") });
     await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("link", { name: "Save PNG" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Make private" })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "Close share dialog" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Close Share Studio" })).toBeFocused();
+
+    const expectedProfileUrl = "http://127.0.0.1:5173/?profile=postmelee";
+    const socialTargets = [
+      ["Share on X", "https://x.com", "/intent/post"],
+      ["Share on LinkedIn", "https://www.linkedin.com", "/sharing/share-offsite/"],
+      ["Share on Reddit", "https://www.reddit.com", "/submit"]
+    ];
+    for (const [name, origin, pathname] of socialTargets) {
+      const link = page.getByRole("link", { name });
+      const href = new URL(await link.getAttribute("href"));
+      expect(href.origin).toBe(origin);
+      expect(href.pathname).toBe(pathname);
+      expect(href.searchParams.get("url")).toBe(expectedProfileUrl);
+      await expect(link).toHaveAttribute("target", "_blank");
+      await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
@@ -533,6 +555,7 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(shareButton).toBeFocused();
+    await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
 
     await shareButton.click();
     await page.getByRole("button", { name: "Make private" }).click();
@@ -587,7 +610,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Share", exact: true }).click();
 
-    await expect(page.getByRole("dialog", { name: "Share card" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
       "aspect-ratio",
