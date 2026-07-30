@@ -16,6 +16,12 @@ const HOME_CARD_SOURCE_KIND_VALUES = new Set(
 );
 const LOCAL_URL_BASE = "https://codex-usage-profile.invalid";
 
+export function areHomeCardSourcesEqual(left, right) {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.src === right.src;
+}
+
 export function createHomeCardSource(candidate) {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     throw new TypeError("card source must be an object");
@@ -122,6 +128,91 @@ export function resetHomeCardTransition(state, target) {
   });
 }
 
+export function loadHomeCardImage(source, options = {}) {
+  const normalizedSource = createHomeCardSource(source);
+  const signal = options.signal;
+  const createImage = options.createImage ?? createBrowserImage;
+
+  if (typeof createImage !== "function") {
+    throw new TypeError("createImage must be a function");
+  }
+  if (signal?.aborted) {
+    return Promise.reject(createHomeCardAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    let image;
+    let loadStarted = false;
+    let settled = false;
+
+    function finish(callback, value) {
+      if (settled) return;
+      settled = true;
+      if (image) {
+        image.onload = null;
+        image.onerror = null;
+      }
+      signal?.removeEventListener?.("abort", handleAbort);
+      callback(value);
+    }
+
+    function handleAbort() {
+      finish(reject, createHomeCardAbortError());
+    }
+
+    async function handleLoad() {
+      if (loadStarted || settled) return;
+      loadStarted = true;
+
+      try {
+        if (typeof image.decode === "function") {
+          await image.decode();
+          if (!Number.isFinite(image.naturalWidth) || image.naturalWidth <= 0) {
+            throw new Error("Card image decoded without pixels");
+          }
+        } else if (
+          image.complete !== true ||
+          !Number.isFinite(image.naturalWidth) ||
+          image.naturalWidth <= 0
+        ) {
+          throw new Error("Card image did not finish loading");
+        }
+
+        if (signal?.aborted) {
+          throw createHomeCardAbortError();
+        }
+        finish(resolve, normalizedSource);
+      } catch (error) {
+        finish(reject, normalizeHomeCardImageError(error));
+      }
+    }
+
+    try {
+      image = createImage();
+      if (!image || typeof image !== "object") {
+        throw new TypeError("createImage must return an image-like object");
+      }
+
+      image.onload = handleLoad;
+      image.onerror = () => {
+        finish(reject, new Error("Card image failed to load"));
+      };
+      signal?.addEventListener?.("abort", handleAbort, { once: true });
+      image.src = normalizedSource.src;
+
+      if (image.complete === true) {
+        queueMicrotask(handleLoad);
+      }
+    } catch (error) {
+      finish(reject, normalizeHomeCardImageError(error));
+    }
+  });
+}
+
+export function isHomeCardImageAbortError(error) {
+  return error?.name === "AbortError";
+}
+
 function freezeTransition(state) {
   return Object.freeze({
     fallbackSource: state.fallbackSource,
@@ -207,4 +298,24 @@ function hasUnsafePathSegment(candidate) {
 
     return decoded === "." || decoded === "..";
   });
+}
+
+function createBrowserImage() {
+  if (typeof globalThis.Image !== "function") {
+    throw new TypeError("Image constructor is unavailable");
+  }
+  return new globalThis.Image();
+}
+
+function createHomeCardAbortError() {
+  const error = new Error("Card image load was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function normalizeHomeCardImageError(error) {
+  if (isHomeCardImageAbortError(error)) return error;
+  return error instanceof Error
+    ? error
+    : new Error("Card image failed to load");
 }

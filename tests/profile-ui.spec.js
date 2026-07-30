@@ -315,6 +315,249 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
   });
 
+  test("Home card transition decodes the anonymous operator card before showing it", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.goto("/");
+
+    const media = page.locator(".home-card-media");
+    const operatorCard = page.getByRole("img", {
+      name: "Codex usage card for @postmelee"
+    });
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("aria-busy", "false");
+    await expect(operatorCard).toHaveAttribute(
+      "src",
+      "/u/postmelee/card.png?locale=en"
+    );
+    await expect.poll(() => operatorCard.evaluate((image) => image.naturalWidth))
+      .toBe(1497);
+  });
+
+  for (const failureStatus of [404, 503]) {
+    test(`Home card transition falls back safely when the operator card returns ${failureStatus}`, async ({ page }) => {
+      await mockAnonymousAccount(page);
+      await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+        body: "operator card unavailable",
+        contentType: "text/plain",
+        status: failureStatus
+      }));
+
+      await page.goto("/");
+
+      const media = page.locator(".home-card-media");
+      const sampleCard = page.getByRole("img", {
+        name: "Sample Codex usage card"
+      });
+      await expect(media).toHaveAttribute("data-card-status", "fallback");
+      await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+      await expect(media).toHaveAttribute("aria-busy", "false");
+      await expect(sampleCard).toHaveAttribute(
+        "src",
+        "/assets/codex-card-sample.png"
+      );
+    });
+  }
+
+  test("Home card transition keeps the operator card pending until the owner image decodes", async ({ page }) => {
+    let releaseProfile;
+    let releaseOwnerImage;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+    const ownerImageGate = new Promise((resolve) => {
+      releaseOwnerImage = resolve;
+    });
+    const ownerImageRequests = [];
+
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("private"),
+        ok: true
+      });
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/api/profile/card.png*", async (route) => {
+      ownerImageRequests.push(route.request().url());
+      await ownerImageGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Loading card" })).toBeDisabled();
+
+    releaseProfile();
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    await page.evaluate(() => {
+      const mediaElement = document.querySelector(".home-card-media");
+      let previousSource = mediaElement?.querySelector("img")?.getAttribute("src") ?? null;
+      globalThis.__ownerCardDomCommits = 0;
+      new MutationObserver(() => {
+        const nextSource = mediaElement?.querySelector("img")?.getAttribute("src") ?? null;
+        if (
+          nextSource !== previousSource &&
+          nextSource?.includes("/api/profile/card.png")
+        ) {
+          globalThis.__ownerCardDomCommits += 1;
+        }
+        previousSource = nextSource;
+      }).observe(mediaElement, {
+        attributeFilter: ["src"],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+    });
+
+    releaseOwnerImage();
+    const ownerCard = page.getByRole("img", {
+      name: "Your Codex usage card"
+    });
+    await expect(ownerCard).toHaveAttribute(
+      "src",
+      "/api/profile/card.png?locale=en"
+    );
+    await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+    await expect.poll(() => page.evaluate(
+      () => globalThis.__ownerCardDomCommits
+    )).toBe(1);
+    expect(ownerImageRequests.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("Home card transition ignores a stale owner image after logout", async ({ page }) => {
+    let releaseOwnerImage;
+    const ownerImageGate = new Promise((resolve) => {
+      releaseOwnerImage = resolve;
+    });
+
+    await mockAuthenticatedAccount(page);
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/api/profile/card.png*", async (route) => {
+      await ownerImageGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+    await page.route("**/api/auth/logout", (route) => fulfillJson(route, {
+      data: { session: null },
+      ok: true
+    }));
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "loading");
+    await page.getByRole("button", {
+      name: "Account menu for postmelee"
+    }).click();
+    await page.getByRole("menuitem", { name: "Log out" }).click();
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+
+    releaseOwnerImage();
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    const homeMarkup = await page.locator(".home-view").innerHTML();
+    expect(homeMarkup).not.toContain("owner_1");
+    expect(homeMarkup).not.toContain("/api/profile/card.png");
+  });
+
+  for (const failureStatus of [404, 503]) {
+    test(`Home card transition uses the personalized sample when the owner card returns ${failureStatus}`, async ({ page }) => {
+      await mockAuthenticatedAccount(page);
+      await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      }));
+      await page.route("**/api/profile/card.png*", (route) => route.fulfill({
+        body: "owner card unavailable",
+        contentType: "text/plain",
+        status: failureStatus
+      }));
+
+      await page.goto("/");
+
+      const media = page.locator(".home-card-media");
+      await expect(media).toHaveAttribute("data-card-status", "fallback");
+      await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+      await expect(page.getByRole("img", {
+        name: "Sample Codex usage card"
+      })).toHaveAttribute("src", "/assets/codex-card-sample.png");
+      await expect(page.locator(".home-card-sample-identity")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+      await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    });
+  }
+
+  test("Home card transition fails closed when owner image decode rejects", async ({ page }) => {
+    await page.addInitScript(() => {
+      const originalDecode = HTMLImageElement.prototype.decode;
+      HTMLImageElement.prototype.decode = function decode() {
+        if (this.src.includes("/api/profile/card.png")) {
+          return Promise.reject(new Error("synthetic decode failure"));
+        }
+        return originalDecode
+          ? originalDecode.call(this)
+          : Promise.resolve();
+      };
+    });
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto("/");
+
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-status", "fallback");
+    await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+    await expect(page.locator(".home-card-sample-identity")).toBeVisible();
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    const storedValues = await page.evaluate(() => [
+      ...Object.values(localStorage),
+      ...Object.values(sessionStorage)
+    ]);
+    expect(JSON.stringify(storedValues)).not.toMatch(
+      /owner_1|api\/profile\/card\.png|postmelee-avatar/
+    );
+  });
+
   test("Home preserves a manual command fallback when clipboard copy fails", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "clipboard", {

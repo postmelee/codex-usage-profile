@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketingLanding } from "../profile-marketing/MarketingLanding.jsx";
-import { createMarketingConfig } from "../profile-marketing/marketing-config.js";
+import {
+  buildMarketingOperatorCardUrl,
+  createMarketingConfig
+} from "../profile-marketing/marketing-config.js";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
@@ -13,8 +16,20 @@ import {
   getAccountOwner
 } from "./accountUi.js";
 import { resolveShareLocale } from "./cardShare.js";
+import {
+  HOME_CARD_SOURCE_KINDS,
+  HOME_CARD_TRANSITION_STATUSES,
+  areHomeCardSourcesEqual,
+  beginHomeCardTransition,
+  createHomeCardSource,
+  createHomeCardTransition,
+  isHomeCardImageAbortError,
+  loadHomeCardImage,
+  rejectHomeCardTransition,
+  resetHomeCardTransition,
+  resolveHomeCardTransition
+} from "./homeCardTransition.js";
 
-const SAMPLE_CARD_URL = "/assets/codex-card-sample.png";
 const HOME_MARKETING_CONFIG = createMarketingConfig();
 
 export function HomePage({
@@ -29,10 +44,20 @@ export function HomePage({
     () => resolveShareLocale(globalThis.navigator?.language),
     []
   );
-  const ownerPreviewUrl = status === "authenticated" && owner
-    ? client?.buildOwnerCardPreviewUrl?.({ locale }) ?? null
-    : null;
-  const [ownerPreviewFailed, setOwnerPreviewFailed] = useState(false);
+  const operatorCardSource = useMemo(() => createHomeCardSource({
+    kind: HOME_CARD_SOURCE_KINDS.OPERATOR,
+    src: buildMarketingOperatorCardUrl(HOME_MARKETING_CONFIG, locale)
+  }), [locale]);
+  const sampleCardSource = useMemo(() => createHomeCardSource({
+    kind: HOME_CARD_SOURCE_KINDS.SAMPLE,
+    src: HOME_MARKETING_CONFIG.sampleCardUrl
+  }), []);
+  const [cardTransition, setCardTransition] = useState(
+    () => createHomeCardTransition({
+      fallbackSrc: sampleCardSource.src,
+      target: operatorCardSource
+    })
+  );
   const [profileState, setProfileState] = useState({
     error: null,
     profile: null,
@@ -46,16 +71,9 @@ export function HomePage({
   const [shareOpen, setShareOpen] = useState(false);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
-  const cardPreviewUrl = ownerPreviewUrl && !ownerPreviewFailed
-    ? ownerPreviewUrl
-    : SAMPLE_CARD_URL;
   const isAuthenticated = status === "authenticated" && Boolean(owner);
-  const showPersonalizedSample = isAuthenticated && cardPreviewUrl === SAMPLE_CARD_URL;
+  const ownerKey = owner?.id ?? owner?.handle ?? null;
   const loginHref = buildAccountLoginHref(client, location);
-
-  useEffect(() => {
-    setOwnerPreviewFailed(false);
-  }, [ownerPreviewUrl]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -81,15 +99,132 @@ export function HomePage({
     });
 
     return () => { isCurrent = false; };
-  }, [client, isAuthenticated]);
+  }, [client, isAuthenticated, ownerKey]);
 
   const profile = profileState.profile;
   const hasUsage = Boolean(profile?.usage);
   const isPublic = profile?.visibility === "public";
-  const canShare = profileState.status === "ready" && hasUsage && isPublic;
+  const ownerPreviewUrl = isAuthenticated && hasUsage
+    ? client?.buildOwnerCardPreviewUrl?.({
+      locale,
+      ...(previewRevision > 0 ? { revision: previewRevision } : {})
+    }) ?? null
+    : null;
+  const desiredCardSource = useMemo(() => {
+    if (!isAuthenticated) return operatorCardSource;
+    if (
+      profileState.status === "ready" &&
+      hasUsage &&
+      ownerPreviewUrl
+    ) {
+      return createHomeCardSource({
+        kind: HOME_CARD_SOURCE_KINDS.OWNER,
+        src: ownerPreviewUrl
+      });
+    }
+    if (
+      profileState.status === "ready" ||
+      profileState.status === "error"
+    ) {
+      return sampleCardSource;
+    }
+    return operatorCardSource;
+  }, [
+    hasUsage,
+    isAuthenticated,
+    operatorCardSource,
+    ownerPreviewUrl,
+    profileState.status,
+    sampleCardSource
+  ]);
+
+  useEffect(() => {
+    setCardTransition((current) => {
+      const currentTarget = current.pending ?? current.visible;
+      if (areHomeCardSourcesEqual(currentTarget, desiredCardSource)) {
+        return current;
+      }
+
+      return isAuthenticated
+        ? beginHomeCardTransition(current, desiredCardSource)
+        : resetHomeCardTransition(current, desiredCardSource);
+    });
+  }, [desiredCardSource, isAuthenticated]);
+
+  useEffect(() => {
+    const pending = cardTransition.pending;
+    if (!pending) return undefined;
+
+    const controller = new AbortController();
+    const generation = cardTransition.generation;
+
+    loadHomeCardImage(pending, { signal: controller.signal }).then(() => {
+      setCardTransition((current) => (
+        resolveHomeCardTransition(current, generation)
+      ));
+    }).catch((error) => {
+      if (isHomeCardImageAbortError(error)) return;
+      setCardTransition((current) => (
+        rejectHomeCardTransition(current, generation)
+      ));
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    cardTransition.generation,
+    cardTransition.pending?.kind,
+    cardTransition.pending?.src
+  ]);
+
+  const visibleCardSource = (
+    !isAuthenticated &&
+    cardTransition.visible?.kind === HOME_CARD_SOURCE_KINDS.OWNER
+  )
+    ? null
+    : cardTransition.visible;
+  const profileIsResolving = isAuthenticated && (
+    profileState.status === "idle" ||
+    profileState.status === "loading"
+  );
+  const cardLoading = (
+    status === "loading" ||
+    profileIsResolving ||
+    cardTransition.status === HOME_CARD_TRANSITION_STATUSES.LOADING ||
+    !visibleCardSource
+  );
+  const cardReady = (
+    !cardLoading &&
+    cardTransition.status !== HOME_CARD_TRANSITION_STATUSES.UNAVAILABLE
+  );
+  const ownerCardReady = (
+    cardReady &&
+    visibleCardSource?.kind === HOME_CARD_SOURCE_KINDS.OWNER
+  );
+  const showPersonalizedSample = (
+    isAuthenticated &&
+    profileState.status === "ready" &&
+    visibleCardSource?.kind === HOME_CARD_SOURCE_KINDS.SAMPLE &&
+    cardReady
+  );
+  const canShare = (
+    profileState.status === "ready" &&
+    hasUsage &&
+    isPublic &&
+    ownerCardReady
+  );
   const sharePreviewUrl = hasUsage
     ? client.buildOwnerCardPreviewUrl({ locale, revision: previewRevision })
     : null;
+
+  function handleVisibleCardError() {
+    setCardTransition((current) => {
+      if (!current.visible || current.pending) return current;
+      const retry = beginHomeCardTransition(current, current.visible);
+      return rejectHomeCardTransition(retry, retry.generation);
+    });
+  }
 
   function openShare() {
     shareSourceRectRef.current = snapshotRect(
@@ -140,23 +275,28 @@ export function HomePage({
       title="Codex Usage"
     >
       <MarketingLanding
-        cardAlt={ownerPreviewUrl && !ownerPreviewFailed
-          ? "Your Codex usage card"
-          : HOME_MARKETING_CONFIG.copy.sampleCardAlt}
+        cardAlt={getHomeCardAlt(visibleCardSource)}
+        cardBusy={cardLoading}
         cardOverlay={showPersonalizedSample ? (
           <HomeSampleIdentity owner={owner} />
         ) : null}
-        cardPreviewUrl={cardPreviewUrl}
+        cardPreviewUrl={visibleCardSource?.src ?? null}
         cardRef={shareSourceCardRef}
+        cardSourceKind={visibleCardSource?.kind ?? null}
+        cardStatus={cardLoading
+          ? HOME_CARD_TRANSITION_STATUSES.LOADING
+          : cardTransition.status}
         cardTransitionSuspended={shareOpen}
         config={HOME_MARKETING_CONFIG}
         heroAction={isAuthenticated ? (
           <AuthenticatedHome
+            cardReady={cardReady}
             hasUsage={hasUsage}
             isPublic={isPublic}
             mutationState={mutationState}
             onPublish={() => updateVisibility("public")}
             onShare={openShare}
+            ownerCardReady={ownerCardReady}
             owner={owner}
             profileState={profileState}
           />
@@ -166,9 +306,7 @@ export function HomePage({
             status={status}
           />
         )}
-        onCardError={() => {
-          if (ownerPreviewUrl) setOwnerPreviewFailed(true);
-        }}
+        onCardError={handleVisibleCardError}
         quickstart={<HomeQuickstart
           authenticated={isAuthenticated}
           loginHref={loginHref}
@@ -225,11 +363,13 @@ function HomeSampleIdentity({ owner }) {
 }
 
 function AuthenticatedHome({
+  cardReady,
   hasUsage,
   isPublic,
   mutationState,
   onPublish,
   onShare,
+  ownerCardReady,
   owner,
   profileState
 }) {
@@ -252,11 +392,13 @@ function AuthenticatedHome({
       </div>
       <div className="home-account-actions">
         <HomeCardAction
+          cardReady={cardReady}
           hasUsage={hasUsage}
           isPublic={isPublic}
           mutationStatus={mutationState.status}
           onPublish={onPublish}
           onShare={onShare}
+          ownerCardReady={ownerCardReady}
           profileStatus={profileState.status}
         />
         {mutationState.error ? (
@@ -271,11 +413,13 @@ function AuthenticatedHome({
 }
 
 function HomeCardAction({
+  cardReady,
   hasUsage,
   isPublic,
   mutationStatus,
   onPublish,
   onShare,
+  ownerCardReady,
   profileStatus
 }) {
   if (profileStatus === "loading" || profileStatus === "idle") {
@@ -285,12 +429,20 @@ function HomeCardAction({
   if (!hasUsage) {
     return <button className="secondary-command" disabled type="button">Submit usage first</button>;
   }
+  if (!cardReady) {
+    return <button className="secondary-command" disabled type="button">Loading card</button>;
+  }
 
   const isSubmitting = mutationStatus === "submitting";
   if (isPublic) {
     return (
-      <button className="primary-command" disabled={isSubmitting} onClick={onShare} type="button">
-        Share
+      <button
+        className={ownerCardReady ? "primary-command" : "secondary-command"}
+        disabled={isSubmitting || !ownerCardReady}
+        onClick={onShare}
+        type="button"
+      >
+        {ownerCardReady ? "Share" : "Card unavailable"}
       </button>
     );
   }
@@ -300,6 +452,16 @@ function HomeCardAction({
       {isSubmitting ? "Publishing" : "Publish card"}
     </button>
   );
+}
+
+function getHomeCardAlt(source) {
+  if (source?.kind === HOME_CARD_SOURCE_KINDS.OWNER) {
+    return "Your Codex usage card";
+  }
+  if (source?.kind === HOME_CARD_SOURCE_KINDS.OPERATOR) {
+    return `Codex usage card for @${HOME_MARKETING_CONFIG.operatorCardHandle}`;
+  }
+  return HOME_MARKETING_CONFIG.copy.sampleCardAlt;
 }
 
 function AnonymousHome({ loginHref, status }) {

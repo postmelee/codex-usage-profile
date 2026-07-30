@@ -4,9 +4,12 @@ import test from "node:test";
 import {
   HOME_CARD_SOURCE_KINDS,
   HOME_CARD_TRANSITION_STATUSES,
+  areHomeCardSourcesEqual,
   beginHomeCardTransition,
   createHomeCardSource,
   createHomeCardTransition,
+  isHomeCardImageAbortError,
+  loadHomeCardImage,
   rejectHomeCardTransition,
   resetHomeCardTransition,
   resolveHomeCardTransition
@@ -182,11 +185,105 @@ test("pure transitions never consult browser storage", () => {
   }
 });
 
+test("compares normalized sources without relying on object identity", () => {
+  assert.equal(areHomeCardSourcesEqual(OPERATOR_SOURCE, { ...OPERATOR_SOURCE }), true);
+  assert.equal(areHomeCardSourcesEqual(OPERATOR_SOURCE, OWNER_SOURCE), false);
+  assert.equal(areHomeCardSourcesEqual(OPERATOR_SOURCE, null), false);
+});
+
+test("preloads and decodes an image before resolving the source", async () => {
+  const image = createFakeImage();
+  const pending = loadHomeCardImage(OWNER_SOURCE, {
+    createImage: () => image
+  });
+
+  assert.equal(image.src, OWNER_SOURCE.src);
+  assert.equal(image.decodeCalls, 0);
+
+  image.complete = true;
+  image.naturalWidth = 1497;
+  image.onload();
+
+  assert.deepEqual(await pending, OWNER_SOURCE);
+  assert.equal(image.decodeCalls, 1);
+  assert.equal(image.onload, null);
+  assert.equal(image.onerror, null);
+});
+
+test("uses complete and naturalWidth when decode is unavailable", async () => {
+  const image = createFakeImage({ decode: false });
+  const pending = loadHomeCardImage(OPERATOR_SOURCE, {
+    createImage: () => image
+  });
+
+  image.complete = true;
+  image.naturalWidth = 1497;
+  image.onload();
+
+  assert.deepEqual(await pending, OPERATOR_SOURCE);
+});
+
+test("rejects decode failures and aborts an in-flight decode", async () => {
+  const decodeFailure = createFakeImage({
+    decode: () => Promise.reject(new Error("decode failed"))
+  });
+  const failed = loadHomeCardImage(OWNER_SOURCE, {
+    createImage: () => decodeFailure
+  });
+  decodeFailure.complete = true;
+  decodeFailure.naturalWidth = 1497;
+  decodeFailure.onload();
+  await assert.rejects(failed, /decode failed/);
+
+  let releaseDecode;
+  const slowImage = createFakeImage({
+    decode: () => new Promise((resolve) => {
+      releaseDecode = resolve;
+    })
+  });
+  const controller = new AbortController();
+  const aborted = loadHomeCardImage(OWNER_SOURCE, {
+    createImage: () => slowImage,
+    signal: controller.signal
+  });
+  slowImage.complete = true;
+  slowImage.naturalWidth = 1497;
+  slowImage.onload();
+  controller.abort();
+  releaseDecode();
+
+  await assert.rejects(aborted, (error) => (
+    isHomeCardImageAbortError(error)
+  ));
+  assert.equal(slowImage.onload, null);
+  assert.equal(slowImage.onerror, null);
+});
+
 function createTransition() {
   return createHomeCardTransition({
     fallbackSrc: SAMPLE_SRC,
     target: OPERATOR_SOURCE
   });
+}
+
+function createFakeImage(options = {}) {
+  const image = {
+    complete: false,
+    decodeCalls: 0,
+    naturalWidth: 0,
+    onerror: null,
+    onload: null,
+    src: ""
+  };
+
+  if (options.decode !== false) {
+    image.decode = async () => {
+      image.decodeCalls += 1;
+      return options.decode?.();
+    };
+  }
+
+  return image;
 }
 
 function restoreProperty(name, descriptor) {

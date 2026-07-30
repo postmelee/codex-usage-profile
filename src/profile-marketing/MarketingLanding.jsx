@@ -6,16 +6,21 @@ import { createMarketingConfig } from "./marketing-config.js";
 
 export function MarketingLanding({
   cardAlt,
+  cardBusy = false,
   cardOverlay = null,
   cardPreviewUrl,
   cardRef,
+  cardSourceKind,
+  cardStatus,
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
   heroAction = null,
   onCardError,
   quickstart = null
 }) {
-  const resolvedCardUrl = cardPreviewUrl ?? config.sampleCardUrl;
+  const resolvedCardUrl = cardPreviewUrl === undefined
+    ? config.sampleCardUrl
+    : cardPreviewUrl;
   const resolvedCardAlt = cardAlt ?? config.copy.sampleCardAlt;
 
   return (
@@ -29,10 +34,15 @@ export function MarketingLanding({
 
           <MarketingCardPreview
             alt={resolvedCardAlt}
+            busy={cardBusy}
             cardRef={cardRef}
             onError={onCardError}
             overlay={cardOverlay}
+            sourceKind={cardSourceKind ?? (
+              resolvedCardUrl ? "sample" : null
+            )}
             src={resolvedCardUrl}
+            status={cardStatus ?? (cardBusy ? "loading" : "ready")}
             transitionSuspended={cardTransitionSuspended}
           />
 
@@ -49,10 +59,13 @@ export function MarketingLanding({
 
 export function MarketingCardPreview({
   alt,
+  busy = false,
   cardRef,
   onError,
   overlay,
+  sourceKind = null,
   src,
+  status = "ready",
   transitionSuspended = false
 }) {
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -76,15 +89,22 @@ export function MarketingCardPreview({
         size="md"
         strength={0.82}
       >
-        <div className="home-card-media">
-          <img
-            alt={alt}
-            className="home-card-preview"
-            height="918"
-            onError={onError}
-            src={src}
-            width="1497"
-          />
+        <div
+          aria-busy={busy}
+          className="home-card-media"
+          data-card-source-kind={sourceKind ?? undefined}
+          data-card-status={status}
+        >
+          {src ? (
+            <img
+              alt={alt}
+              className="home-card-preview"
+              height="918"
+              onError={onError}
+              src={src}
+              width="1497"
+            />
+          ) : null}
           {overlay}
           <span className="home-card-glare" aria-hidden="true" />
         </div>
