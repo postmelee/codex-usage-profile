@@ -4,6 +4,14 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { createMarketingConfig } from "./marketing-config.js";
 
+const HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT = 26;
+const HOME_CARD_SKELETON_HEATMAP_ROW_COUNT = 7;
+const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = (
+  HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT *
+  HOME_CARD_SKELETON_HEATMAP_ROW_COUNT
+);
+const HOME_CARD_SKELETON_STAT_COUNT = 4;
+
 export function MarketingLanding({
   cardAlt,
   cardBusy = false,
@@ -133,13 +141,29 @@ function HomeCardSkeleton({ active }) {
       data-active={active ? "true" : "false"}
     >
       <span className="home-card-skeleton-header" />
-      <span className="home-card-skeleton-stats">
-        <i />
-        <i />
-        <i />
-        <i />
+      <span
+        className="home-card-skeleton-heatmap"
+        data-column-count={HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT}
+        data-row-count={HOME_CARD_SKELETON_HEATMAP_ROW_COUNT}
+      >
+        {Array.from(
+          { length: HOME_CARD_SKELETON_HEATMAP_CELL_COUNT },
+          (_, index) => (
+            <span
+              className="home-card-skeleton-heatmap-cell"
+              key={index}
+            />
+          )
+        )}
       </span>
-      <span className="home-card-skeleton-heatmap" />
+      <span className="home-card-skeleton-stats">
+        {Array.from({ length: HOME_CARD_SKELETON_STAT_COUNT }, (_, index) => (
+          <span className="home-card-skeleton-stat" key={index}>
+            <span className="home-card-skeleton-stat-value" />
+            <span className="home-card-skeleton-stat-label" />
+          </span>
+        ))}
+      </span>
     </div>
   );
 }

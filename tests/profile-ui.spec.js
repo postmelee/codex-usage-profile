@@ -8,6 +8,7 @@ const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
 ));
+const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -424,6 +425,7 @@ test.describe("Home and share card flow", () => {
     await expect(skeleton).toHaveAttribute("data-active", "true");
     await expect(skeleton).toHaveCSS("opacity", "1");
     await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expectCardAccurateSkeleton(page);
     await expect(loadingStatus).toHaveText("Loading card preview");
     await expect(page.locator(".home-card-sample-identity")).toHaveCount(0);
     await expect(page.locator(".home-card-tilt"))
@@ -522,6 +524,7 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-status", "loading");
     await expect(media).toHaveAttribute("data-card-source-kind", "operator");
     await expect(skeleton).toHaveCSS("opacity", "1");
+    await expectCardAccurateSkeleton(page);
     const loadingCardBox = await media.boundingBox();
     const loadingQuickstartBox = await page
       .getByRole("heading", { name: "Quickstart" })
@@ -577,6 +580,7 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-status", "loading");
     await expect(skeleton).toHaveCSS("opacity", "1");
     await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expectCardAccurateSkeleton(page);
     await expect(page.locator(".home-card-tilt"))
       .toHaveAttribute("data-tilt-enabled", "false");
     const reducedLoadingStyles = await skeleton.evaluate((element) => ({
@@ -1797,6 +1801,98 @@ function expectRectNear(actual, expected, tolerance) {
   expect(Math.abs(actual.y - expected.y)).toBeLessThanOrEqual(tolerance);
   expect(Math.abs(actual.width - expected.width)).toBeLessThanOrEqual(tolerance);
   expect(Math.abs(actual.height - expected.height)).toBeLessThanOrEqual(tolerance);
+}
+
+async function expectCardAccurateSkeleton(page) {
+  const skeleton = page.locator(".home-card-skeleton");
+  const heatmap = skeleton.locator(".home-card-skeleton-heatmap");
+  const cells = heatmap.locator(".home-card-skeleton-heatmap-cell");
+  const stats = skeleton.locator(".home-card-skeleton-stat");
+
+  await expect(heatmap).toHaveAttribute("data-column-count", "26");
+  await expect(heatmap).toHaveAttribute("data-row-count", "7");
+  await expect(cells).toHaveCount(HOME_CARD_SKELETON_HEATMAP_CELL_COUNT);
+  await expect(stats).toHaveCount(4);
+  await expect(skeleton.locator(".home-card-skeleton-stat-value")).toHaveCount(4);
+  await expect(skeleton.locator(".home-card-skeleton-stat-label")).toHaveCount(4);
+  await expect(skeleton).toHaveText("");
+
+  const contract = await skeleton.evaluate((element) => {
+    const skeletonRect = element.getBoundingClientRect();
+    const header = element.querySelector(".home-card-skeleton-header");
+    const heatmapElement = element.querySelector(".home-card-skeleton-heatmap");
+    const statsElement = element.querySelector(".home-card-skeleton-stats");
+    const statElements = Array.from(
+      element.querySelectorAll(".home-card-skeleton-stat")
+    );
+    const cellElements = Array.from(
+      element.querySelectorAll(".home-card-skeleton-heatmap-cell")
+    );
+    const headerRect = header.getBoundingClientRect();
+    const heatmapRect = heatmapElement.getBoundingClientRect();
+    const statsRect = statsElement.getBoundingClientRect();
+    const cellRects = cellElements.map((cell) => cell.getBoundingClientRect());
+    const percent = (value, dimension) => (
+      Math.round((value / dimension) * 10000) / 100
+    );
+
+    return {
+      cellAnimationNames: Array.from(new Set(
+        cellElements.map((cell) => getComputedStyle(cell).animationName)
+      )),
+      cellColors: Array.from(new Set(
+        cellElements.map((cell) => getComputedStyle(cell).backgroundColor)
+      )),
+      maxCellAspectDelta: Math.max(...cellRects.map(
+        (rect) => Math.abs(rect.width - rect.height)
+      )),
+      positions: {
+        headerBottom: headerRect.bottom,
+        heatmapBottom: heatmapRect.bottom,
+        heatmapHeightPercent: percent(heatmapRect.height, skeletonRect.height),
+        heatmapLeftPercent: percent(
+          heatmapRect.left - skeletonRect.left,
+          skeletonRect.width
+        ),
+        heatmapTop: heatmapRect.top,
+        heatmapTopPercent: percent(
+          heatmapRect.top - skeletonRect.top,
+          skeletonRect.height
+        ),
+        heatmapWidthPercent: percent(heatmapRect.width, skeletonRect.width),
+        statsTop: statsRect.top,
+        statsTopPercent: percent(
+          statsRect.top - skeletonRect.top,
+          skeletonRect.height
+        )
+      },
+      statDividerColors: statElements.slice(1).map(
+        (stat) => getComputedStyle(stat).borderLeftColor
+      ),
+      statDividerWidths: statElements.slice(1).map(
+        (stat) => getComputedStyle(stat).borderLeftWidth
+      )
+    };
+  });
+
+  expect(contract.cellColors).toEqual(["rgb(47, 47, 47)"]);
+  expect(contract.cellAnimationNames).toEqual(["none"]);
+  expect(contract.maxCellAspectDelta).toBeLessThanOrEqual(1);
+  expect(contract.positions.headerBottom)
+    .toBeLessThan(contract.positions.heatmapTop);
+  expect(contract.positions.heatmapBottom)
+    .toBeLessThan(contract.positions.statsTop);
+  expect(contract.positions.heatmapLeftPercent).toBeCloseTo(6.41, 1);
+  expect(contract.positions.heatmapTopPercent).toBeCloseTo(31.37, 1);
+  expect(contract.positions.heatmapWidthPercent).toBeCloseTo(87.17, 1);
+  expect(contract.positions.heatmapHeightPercent).toBeCloseTo(37.58, 1);
+  expect(contract.positions.statsTopPercent).toBeCloseTo(76.47, 1);
+  expect(contract.statDividerColors).toEqual([
+    "rgb(36, 36, 36)",
+    "rgb(36, 36, 36)",
+    "rgb(36, 36, 36)"
+  ]);
+  expect(contract.statDividerWidths).toEqual(["1px", "1px", "1px"]);
 }
 
 function rectCenterX(rect) {

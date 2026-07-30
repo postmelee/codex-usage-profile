@@ -295,11 +295,85 @@ git diff --check
 Task #55 Stage 3: skeleton motion과 접근성
 ```
 
+## Stage 3.1 — card-accurate skeleton 구조 보완
+
+### 실행 전 조건
+
+- Stage 3 시각 확인 뒤 작업지시자가 card-accurate skeleton 보완안 승인
+- 기존 opacity, identity veil, reduced-motion과 layout 불변 계약 통과
+
+### 산출물
+
+수정:
+
+- `mydocs/plans/task_m100_55.md`
+- `mydocs/plans/task_m100_55_impl.md`
+- `src/profile-marketing/MarketingLanding.jsx`
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/orders/20260731.md`
+
+신규:
+
+- `mydocs/working/task_m100_55_stage3_1.md`
+
+### 변경 내용
+
+1. skeleton hierarchy를 실제 share card와 같은
+   `neutral header → heatmap → stats` 순서로 정렬한다.
+2. heatmap은 renderer 계약과 같은 26열×7행, 총 182개 cell을 사용한다.
+   모든 cell은 level 0의 동일한 neutral 색으로 표시하고 usage intensity,
+   날짜, tooltip 또는 identity data를 넣지 않는다.
+3. heatmap 아래에 4개 stat column을 배치하고 각 column에 text 없는
+   value placeholder와 label placeholder를 한 줄씩 둔다.
+4. stat column 사이에 실제 card와 같은 3개의 세로 divider를 둔다.
+5. 182개 cell과 stat placeholder에는 개별 animation이나 stagger를
+   적용하지 않는다. 기존 card 전체의 낮은 대비 shimmer 하나와 240ms
+   opacity transition만 유지한다.
+6. `prefers-reduced-motion: reduce`의 static skeleton, loading 중
+   tilt/beam 정지, opaque identity veil과 card/quickstart box 불변 계약을
+   그대로 유지한다.
+7. desktop/mobile screenshot과 DOM/computed style 검증으로 cell/stat
+   개수, hierarchy, neutral color, overflow와 layout shift를 확인한다.
+
+### 검증
+
+```bash
+npm run test:e2e -- --grep "Home card transition"
+npm run test:e2e -- --grep "Home"
+git diff --check
+```
+
+시각·구조 검증:
+
+- heatmap cell 182개, `data-column-count="26"`,
+  `data-row-count="7"`
+- 모든 heatmap cell이 동일한 neutral level-0 color
+- heatmap 아래 stat 4개와 value/label placeholder 각 4개
+- header → heatmap → stats의 vertical hierarchy
+- desktop 1280×900, mobile 390×844, reduced-motion screenshot
+- loading/ready card와 quickstart bounding box 오차 1px 이하
+- skeleton text/identity/usage payload 부재
+
+### 중단 조건
+
+- cell 크기·gap 또는 stat 위치가 실제 card hierarchy와 식별 가능하게
+  어긋난다.
+- skeleton markup에 owner identity, usage value 또는 실제 label이 들어간다.
+- cell별 animation, layout shift, horizontal overflow 또는
+  reduced-motion 회귀가 생긴다.
+
+### 커밋
+
+```text
+Task #55 [Stage 3.1]: card-accurate skeleton 구조
+```
+
 ## Stage 4 — Sites artifact와 통합 시각 QA
 
 ### 실행 전 조건
 
-- Stage 3 보고서 승인
+- Stage 3.1 보고서 승인
 - desktop/mobile/reduced-motion screenshot과 접근성 경계 확정
 
 ### 산출물

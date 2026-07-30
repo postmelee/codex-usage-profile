@@ -510,15 +510,11 @@ button {
 .home-card-skeleton {
   background: #181818;
   border-radius: inherit;
-  display: grid;
-  grid-template-rows: 15% 22% 1fr;
   inset: 0;
   opacity: 0;
   overflow: hidden;
-  padding: 8.2% 6.4% 7.4%;
   pointer-events: none;
   position: absolute;
-  row-gap: 11%;
   transition: opacity 240ms cubic-bezier(0.2, 0, 0, 1);
   z-index: 4;
 }
@@ -545,43 +541,72 @@ button {
 }
 
 .home-card-skeleton-header {
-  align-self: center;
   background: #292929;
   border-radius: 999px;
-  height: 44%;
+  height: 7.2%;
+  left: 6.4%;
+  position: absolute;
+  top: 13.9%;
   width: 42%;
+}
+
+.home-card-skeleton-heatmap {
+  column-gap: 0.653%;
+  display: grid;
+  grid-template-columns: repeat(26, minmax(0, 1fr));
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  height: 37.58%;
+  left: 6.41%;
+  position: absolute;
+  row-gap: 2.464%;
+  top: 31.37%;
+  width: 87.17%;
+}
+
+.home-card-skeleton-heatmap-cell {
+  background: #2f2f2f;
+  border-radius: 28.57%;
+  min-height: 0;
+  min-width: 0;
 }
 
 .home-card-skeleton-stats {
   display: grid;
-  gap: 3.2%;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: 13.07%;
+  left: 6.41%;
+  position: absolute;
+  top: 76.47%;
+  width: 87.17%;
 }
 
-.home-card-skeleton-stats i {
-  background: #232323;
-  border: 1px solid rgba(255, 255, 255, 0.025);
-  border-radius: 8px;
+.home-card-skeleton-stat {
+  position: relative;
 }
 
-.home-card-skeleton-heatmap {
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #252525 0,
-      #252525 2.15%,
-      transparent 2.15%,
-      transparent 3.35%
-    ),
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.022) 0,
-      rgba(255, 255, 255, 0.022) 12%,
-      transparent 12%,
-      transparent 16.6%
-    );
-  border-radius: 7px;
-  min-height: 0;
+.home-card-skeleton-stat + .home-card-skeleton-stat {
+  border-left: 1px solid #242424;
+}
+
+.home-card-skeleton-stat-value,
+.home-card-skeleton-stat-label {
+  background: #292929;
+  border-radius: 999px;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.home-card-skeleton-stat-value {
+  height: 22.5%;
+  top: 12.5%;
+  width: 46%;
+}
+
+.home-card-skeleton-stat-label {
+  height: 15%;
+  top: 67.5%;
+  width: 62%;
 }
 
 .home-card-media[data-card-status="loading"] .home-card-glare {
