@@ -461,7 +461,7 @@ Task #55 [Stage 3.2]: 고정 header skeleton 정렬
 수정:
 
 - `tests/profile-ui.spec.js`의 통합 회귀가 필요한 경우에만 보완
-- `mydocs/orders/20260730.md`
+- `mydocs/orders/20260731.md`
 
 신규:
 
