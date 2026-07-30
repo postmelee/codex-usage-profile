@@ -341,8 +341,9 @@ test.describe("Home and share card flow", () => {
   });
 
   for (const failureStatus of [404, 503]) {
-    test(`Home card transition falls back safely when the operator card returns ${failureStatus}`, async ({ page }) => {
+    test(`Home card transition falls back safely when the operator card returns ${failureStatus}`, async ({ page }, testInfo) => {
       await mockAnonymousAccount(page);
+      await page.setViewportSize({ width: 1280, height: 900 });
       await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
         body: "operator card unavailable",
         contentType: "text/plain",
@@ -362,10 +363,16 @@ test.describe("Home and share card flow", () => {
         "src",
         "/assets/codex-card-sample.png"
       );
+      await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
+      if (failureStatus === 503) {
+        await page.screenshot({
+          path: testInfo.outputPath("home-card-fallback-desktop.png")
+        });
+      }
     });
   }
 
-  test("Home card transition keeps the operator card pending until the owner image decodes", async ({ page }) => {
+  test("Home card transition keeps the operator card pending until the owner image decodes", async ({ page }, testInfo) => {
     let releaseProfile;
     let releaseOwnerImage;
     const profileGate = new Promise((resolve) => {
@@ -405,15 +412,33 @@ test.describe("Home and share card flow", () => {
       });
     });
 
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    const loadingStatus = page.getByTestId("home-card-loading-status");
     await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("aria-busy", "true");
+    await expect(skeleton).toHaveAttribute("data-active", "true");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expect(loadingStatus).toHaveText("Loading card preview");
+    await expect(page.locator(".home-card-sample-identity")).toHaveCount(0);
+    await expect(page.locator(".home-card-tilt"))
+      .toHaveAttribute("data-tilt-enabled", "false");
     await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Loading card" })).toBeDisabled();
+    const loadingCardBox = await media.boundingBox();
+    const loadingQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-loading-desktop.png")
+    });
 
     releaseProfile();
-    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
     await expect(media).toHaveAttribute("data-card-status", "loading");
     await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
     await page.evaluate(() => {
@@ -447,11 +472,135 @@ test.describe("Home and share card flow", () => {
     );
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
     await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("aria-busy", "false");
+    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCSS("transition-duration", "0.24s");
+    await expect(loadingStatus).toHaveText("");
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+    await expect(page.locator('[data-card-source="true"]'))
+      .toHaveAttribute("data-tilt-enabled", "true");
     await expect.poll(() => page.evaluate(
       () => globalThis.__ownerCardDomCommits
     )).toBe(1);
     expect(ownerImageRequests.length).toBeGreaterThanOrEqual(1);
+    const readyCardBox = await media.boundingBox();
+    const readyQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    expect(Math.abs(readyQuickstartBox.y - loadingQuickstartBox.y))
+      .toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-ready-desktop.png")
+    });
+  });
+
+  test("Home card transition keeps a stable skeleton box on mobile", async ({ page }, testInfo) => {
+    let releaseAccount;
+    const accountGate = new Promise((resolve) => {
+      releaseAccount = resolve;
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await accountGate;
+      await fulfillJson(route, {
+        error: { code: "unauthorized", message: "Session cookie is required" },
+        ok: false
+      }, 401);
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    const loadingCardBox = await media.boundingBox();
+    const loadingQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("home-card-loading-mobile.png")
+    });
+
+    releaseAccount();
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    const readyCardBox = await media.boundingBox();
+    const readyQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    expect(Math.abs(readyQuickstartBox.y - loadingQuickstartBox.y))
+      .toBeLessThanOrEqual(1);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("home-card-ready-mobile.png")
+    });
+  });
+
+  test("Home card transition removes shimmer and crossfade for reduced motion", async ({ page }, testInfo) => {
+    let releaseAccount;
+    const accountGate = new Promise((resolve) => {
+      releaseAccount = resolve;
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await accountGate;
+      await fulfillJson(route, {
+        error: { code: "unauthorized", message: "Session cookie is required" },
+        ok: false
+      }, 401);
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expect(page.locator(".home-card-tilt"))
+      .toHaveAttribute("data-tilt-enabled", "false");
+    const reducedLoadingStyles = await skeleton.evaluate((element) => ({
+      animationName: getComputedStyle(element, "::after").animationName,
+      overlayOpacity: getComputedStyle(element, "::after").opacity
+    }));
+    expect(reducedLoadingStyles).toEqual({
+      animationName: "none",
+      overlayOpacity: "0"
+    });
+    const loadingCardBox = await media.boundingBox();
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-loading-reduced-motion.png")
+    });
+
+    releaseAccount();
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    const readyCardBox = await media.boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-ready-reduced-motion.png")
+    });
   });
 
   test("Home card transition ignores a stale owner image after logout", async ({ page }) => {
@@ -1488,6 +1637,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/");
     const shareButton = page.getByRole("button", { name: "Share", exact: true });
     const sourceCard = page.locator('[data-card-source="true"]');
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
     await sourceCard.evaluate((element) => {
       element.getBoundingClientRect = () => ({
         bottom: 0,

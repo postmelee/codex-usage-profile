@@ -7,6 +7,7 @@ import { createMarketingConfig } from "./marketing-config.js";
 export function MarketingLanding({
   cardAlt,
   cardBusy = false,
+  cardLoadingLabel = "Loading card preview",
   cardOverlay = null,
   cardPreviewUrl,
   cardRef,
@@ -36,6 +37,7 @@ export function MarketingLanding({
             alt={resolvedCardAlt}
             busy={cardBusy}
             cardRef={cardRef}
+            loadingLabel={cardLoadingLabel}
             onError={onCardError}
             overlay={cardOverlay}
             sourceKind={cardSourceKind ?? (
@@ -61,6 +63,7 @@ export function MarketingCardPreview({
   alt,
   busy = false,
   cardRef,
+  loadingLabel = "Loading card preview",
   onError,
   overlay,
   sourceKind = null,
@@ -76,11 +79,11 @@ export function MarketingCardPreview({
   return (
     <MarketingCardTilt
       elementRef={cardRef}
-      enabled={supportsCardTilt && !prefersReducedMotion}
+      enabled={supportsCardTilt && !prefersReducedMotion && !busy}
       suspended={transitionSuspended}
     >
       <BorderBeam
-        active={!prefersReducedMotion && !transitionSuspended}
+        active={!busy && !prefersReducedMotion && !transitionSuspended}
         borderRadius={41}
         brightness={1.05}
         className="home-card-beam"
@@ -106,10 +109,38 @@ export function MarketingCardPreview({
             />
           ) : null}
           {overlay}
+          <HomeCardSkeleton active={busy} />
           <span className="home-card-glare" aria-hidden="true" />
+          <p
+            aria-live="polite"
+            className="sr-only"
+            data-testid="home-card-loading-status"
+            role="status"
+          >
+            {busy ? loadingLabel : ""}
+          </p>
         </div>
       </BorderBeam>
     </MarketingCardTilt>
+  );
+}
+
+function HomeCardSkeleton({ active }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="home-card-skeleton"
+      data-active={active ? "true" : "false"}
+    >
+      <span className="home-card-skeleton-header" />
+      <span className="home-card-skeleton-stats">
+        <i />
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="home-card-skeleton-heatmap" />
+    </div>
   );
 }
 

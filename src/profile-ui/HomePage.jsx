@@ -277,6 +277,7 @@ export function HomePage({
       <MarketingLanding
         cardAlt={getHomeCardAlt(visibleCardSource)}
         cardBusy={cardLoading}
+        cardLoadingLabel="Loading card preview"
         cardOverlay={showPersonalizedSample ? (
           <HomeSampleIdentity owner={owner} />
         ) : null}
