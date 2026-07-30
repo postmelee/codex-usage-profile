@@ -11,6 +11,7 @@ GitHub Issue: [#55](https://github.com/postmelee/codex-usage-profile/issues/55)
 | 1 | 운영자 카드 config와 전환 상태 계약 | `marketing-config.js`, `homeCardTransition.js` | config/state unit test |
 | 2 | preload/decode와 identity-safe 전환 | `HomePage.jsx`, `MarketingLanding.jsx` | slow session/image/logout E2E |
 | 3 | skeleton motion과 접근성 | `styles.css`, visual E2E | desktop/mobile/reduced-motion screenshot |
+| 3.2 | 고정 header skeleton 정렬 | avatar/identity/brand skeleton | exact header geometry E2E |
 | 4 | Sites artifact와 통합 시각 QA | 전체 회귀와 Stage 4 보고서 | test/build/e2e/artifact/scanner |
 
 ## 승인된 수행계획 반영
@@ -369,11 +370,90 @@ git diff --check
 Task #55 [Stage 3.1]: card-accurate skeleton 구조
 ```
 
+## Stage 3.2 — 고정 header skeleton 정렬
+
+### 실행 전 조건
+
+- Stage 3.1 시각 확인 뒤 작업지시자가 neutral avatar와 고정 `Codex`
+  brand 보완안 승인
+- 기존 opaque identity veil, card-accurate heatmap/stats, single shimmer와
+  reduced-motion 계약 통과
+
+### 산출물
+
+수정:
+
+- `mydocs/plans/task_m100_55.md`
+- `mydocs/plans/task_m100_55_impl.md`
+- `src/profile-marketing/MarketingLanding.jsx`
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/orders/20260731.md`
+
+신규:
+
+- `mydocs/working/task_m100_55_stage3_2.md`
+
+### 변경 내용
+
+1. skeleton header에 renderer와 같은 `x=36`, `y=36`, `44×44` geometry의
+   neutral 원형 avatar placeholder를 둔다. 실제 avatar, initial, 사용자별
+   색상은 사용하지 않는다.
+2. renderer의 display name과 username 시작점 `x=96`에 맞춰 두 줄의
+   text 없는 placeholder를 배치한다.
+3. 사용자별 정보가 아닌 고정 `Codex` brand는 renderer와 같은
+   `x=439.5`, `y=64.5`, 최대 폭 57의 위치·크기·secondary color로
+   skeleton에서도 그대로 표시한다.
+4. `Codex`는 skeleton DOM의 `aria-hidden` 경계 안에 두고 독립 animation을
+   적용하지 않는다. 전체 shimmer보다 위에 배치해 brand glyph가 shimmer로
+   변형되지 않게 한다.
+5. avatar와 identity placeholder에는 기존 card 전체의 낮은 대비 shimmer
+   한 번만 통과하며 개별 pulse, stagger, scale 또는 spatial motion을
+   추가하지 않는다.
+6. 26×7 heatmap, 4개 stats, opaque veil, 240ms opacity transition,
+   loading 중 tilt/beam 정지와 reduced-motion static 표현은 유지한다.
+7. desktop/mobile/reduced-motion DOM·computed style·screenshot으로 avatar,
+   identity, brand geometry와 loading/ready layout 불변을 확인한다.
+
+### 검증
+
+```bash
+npm run test:e2e -- --grep "Home card transition"
+npm run test:e2e -- --grep "Home"
+git diff --check
+```
+
+시각·구조 검증:
+
+- neutral avatar 1개, 원형 border radius와 renderer 기준
+  left/top/width/height
+- display name/username placeholder 각 1개와 text/identity payload 부재
+- 고정 text `Codex` 1개, renderer 기준 center/width와 독립 animation 부재
+- `Codex`가 shimmer layer보다 위에 있고 skeleton 전체는 `aria-hidden`
+- 기존 heatmap 182개와 stat 4개 계약 유지
+- desktop 1280×900, mobile 390×844, reduced-motion screenshot
+- loading/ready card와 quickstart bounding box 오차 1px 이하
+
+### 중단 조건
+
+- skeleton에 실제 avatar, initial, display name, username 또는 usage 값이
+  들어간다.
+- `Codex` 위치·크기가 ready card와 식별 가능하게 어긋나거나 shimmer가
+  glyph 위를 통과한다.
+- 기존 heatmap/stats, opaque veil, reduced-motion, layout 또는 Share
+  Studio 경계에 회귀가 생긴다.
+
+### 커밋
+
+```text
+Task #55 [Stage 3.2]: 고정 header skeleton 정렬
+```
+
 ## Stage 4 — Sites artifact와 통합 시각 QA
 
 ### 실행 전 조건
 
-- Stage 3.1 보고서 승인
+- Stage 3.2 보고서 승인
 - desktop/mobile/reduced-motion screenshot과 접근성 경계 확정
 
 ### 산출물
@@ -456,7 +536,7 @@ Task #55 Stage 4: Sites artifact와 통합 시각 QA
 - Stage 2는 Stage 1의 config/state contract 승인 뒤 진행한다.
 - Stage 3은 Stage 2의 functional preload/logout/failure 경계 승인 뒤
   진행한다.
-- Stage 4는 Stage 3의 motion/accessibility/visual 결과 승인 뒤 진행한다.
+- Stage 4는 Stage 3.2의 motion/accessibility/visual 결과 승인 뒤 진행한다.
 - 모든 Stage 뒤 `task-final-report`로 최종 보고서와 `publish/task55`
   PR을 준비한다.
 

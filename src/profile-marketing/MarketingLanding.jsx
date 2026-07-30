@@ -140,7 +140,14 @@ function HomeCardSkeleton({ active }) {
       className="home-card-skeleton"
       data-active={active ? "true" : "false"}
     >
-      <span className="home-card-skeleton-header" />
+      <span className="home-card-skeleton-header">
+        <span className="home-card-skeleton-avatar" />
+        <span className="home-card-skeleton-identity">
+          <span className="home-card-skeleton-display-name" />
+          <span className="home-card-skeleton-username" />
+        </span>
+        <span className="home-card-skeleton-brand">Codex</span>
+      </span>
       <span
         className="home-card-skeleton-heatmap"
         data-column-count={HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT}

@@ -1809,17 +1809,29 @@ async function expectCardAccurateSkeleton(page) {
   const cells = heatmap.locator(".home-card-skeleton-heatmap-cell");
   const stats = skeleton.locator(".home-card-skeleton-stat");
 
+  await expect(skeleton).toHaveAttribute("aria-hidden", "true");
   await expect(heatmap).toHaveAttribute("data-column-count", "26");
   await expect(heatmap).toHaveAttribute("data-row-count", "7");
   await expect(cells).toHaveCount(HOME_CARD_SKELETON_HEATMAP_CELL_COUNT);
   await expect(stats).toHaveCount(4);
   await expect(skeleton.locator(".home-card-skeleton-stat-value")).toHaveCount(4);
   await expect(skeleton.locator(".home-card-skeleton-stat-label")).toHaveCount(4);
-  await expect(skeleton).toHaveText("");
+  await expect(skeleton.locator(".home-card-skeleton-avatar")).toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-display-name"))
+    .toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-username")).toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-brand"))
+    .toHaveText("Codex");
+  await expect(skeleton).toHaveText("Codex");
 
   const contract = await skeleton.evaluate((element) => {
     const skeletonRect = element.getBoundingClientRect();
-    const header = element.querySelector(".home-card-skeleton-header");
+    const avatar = element.querySelector(".home-card-skeleton-avatar");
+    const displayName = element.querySelector(
+      ".home-card-skeleton-display-name"
+    );
+    const username = element.querySelector(".home-card-skeleton-username");
+    const brand = element.querySelector(".home-card-skeleton-brand");
     const heatmapElement = element.querySelector(".home-card-skeleton-heatmap");
     const statsElement = element.querySelector(".home-card-skeleton-stats");
     const statElements = Array.from(
@@ -1828,15 +1840,46 @@ async function expectCardAccurateSkeleton(page) {
     const cellElements = Array.from(
       element.querySelectorAll(".home-card-skeleton-heatmap-cell")
     );
-    const headerRect = header.getBoundingClientRect();
+    const avatarRect = avatar.getBoundingClientRect();
+    const displayNameRect = displayName.getBoundingClientRect();
+    const usernameRect = username.getBoundingClientRect();
+    const brandRect = brand.getBoundingClientRect();
     const heatmapRect = heatmapElement.getBoundingClientRect();
     const statsRect = statsElement.getBoundingClientRect();
     const cellRects = cellElements.map((cell) => cell.getBoundingClientRect());
     const percent = (value, dimension) => (
       Math.round((value / dimension) * 10000) / 100
     );
+    const relativeRect = (rect) => ({
+      heightPercent: percent(rect.height, skeletonRect.height),
+      leftPercent: percent(
+        rect.left - skeletonRect.left,
+        skeletonRect.width
+      ),
+      topPercent: percent(
+        rect.top - skeletonRect.top,
+        skeletonRect.height
+      ),
+      widthPercent: percent(rect.width, skeletonRect.width)
+    });
 
     return {
+      avatar: {
+        ...relativeRect(avatarRect),
+        borderRadius: getComputedStyle(avatar).borderRadius,
+        color: getComputedStyle(avatar).backgroundColor
+      },
+      brand: {
+        ...relativeRect(brandRect),
+        animationName: getComputedStyle(brand).animationName,
+        centerXPercent: percent(
+          brandRect.left - skeletonRect.left + (brandRect.width / 2),
+          skeletonRect.width
+        ),
+        color: getComputedStyle(brand).color,
+        text: brand.textContent,
+        zIndex: getComputedStyle(brand).zIndex
+      },
       cellAnimationNames: Array.from(new Set(
         cellElements.map((cell) => getComputedStyle(cell).animationName)
       )),
@@ -1846,8 +1889,20 @@ async function expectCardAccurateSkeleton(page) {
       maxCellAspectDelta: Math.max(...cellRects.map(
         (rect) => Math.abs(rect.width - rect.height)
       )),
+      identity: {
+        displayName: relativeRect(displayNameRect),
+        displayNameText: displayName.textContent,
+        username: relativeRect(usernameRect),
+        usernameText: username.textContent
+      },
+      shimmerZIndex: getComputedStyle(element, "::after").zIndex,
       positions: {
-        headerBottom: headerRect.bottom,
+        headerBottom: Math.max(
+          avatarRect.bottom,
+          displayNameRect.bottom,
+          usernameRect.bottom,
+          brandRect.bottom
+        ),
         heatmapBottom: heatmapRect.bottom,
         heatmapHeightPercent: percent(heatmapRect.height, skeletonRect.height),
         heatmapLeftPercent: percent(
@@ -1878,6 +1933,23 @@ async function expectCardAccurateSkeleton(page) {
   expect(contract.cellColors).toEqual(["rgb(47, 47, 47)"]);
   expect(contract.cellAnimationNames).toEqual(["none"]);
   expect(contract.maxCellAspectDelta).toBeLessThanOrEqual(1);
+  expect(contract.avatar.color).toBe("rgb(47, 47, 47)");
+  expect(contract.avatar.borderRadius).toBe("50%");
+  expect(contract.avatar.leftPercent).toBeCloseTo(7.21, 1);
+  expect(contract.avatar.topPercent).toBeCloseTo(11.76, 1);
+  expect(contract.avatar.widthPercent).toBeCloseTo(8.82, 1);
+  expect(contract.avatar.heightPercent).toBeCloseTo(14.38, 1);
+  expect(contract.identity.displayName.leftPercent).toBeCloseTo(19.24, 1);
+  expect(contract.identity.username.leftPercent).toBeCloseTo(19.24, 1);
+  expect(contract.identity.displayNameText).toBe("");
+  expect(contract.identity.usernameText).toBe("");
+  expect(contract.brand.text).toBe("Codex");
+  expect(contract.brand.color).toBe("rgb(174, 174, 174)");
+  expect(contract.brand.animationName).toBe("none");
+  expect(contract.brand.centerXPercent).toBeCloseTo(88.08, 1);
+  expect(contract.brand.widthPercent).toBeCloseTo(11.42, 1);
+  expect(contract.brand.zIndex).toBe("2");
+  expect(contract.shimmerZIndex).toBe("1");
   expect(contract.positions.headerBottom)
     .toBeLessThan(contract.positions.heatmapTop);
   expect(contract.positions.heatmapBottom)

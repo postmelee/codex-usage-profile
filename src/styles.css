@@ -538,16 +538,59 @@ button {
   inset: 0;
   position: absolute;
   transform: translateX(-100%);
+  z-index: 1;
 }
 
 .home-card-skeleton-header {
+  inset: 0;
+  position: absolute;
+}
+
+.home-card-skeleton-avatar {
+  aspect-ratio: 1;
+  background: #2f2f2f;
+  border-radius: 50%;
+  left: 7.214%;
+  position: absolute;
+  top: 11.765%;
+  width: 8.818%;
+}
+
+.home-card-skeleton-display-name,
+.home-card-skeleton-username {
   background: #292929;
   border-radius: 999px;
-  height: 7.2%;
-  left: 6.4%;
+  left: 19.238%;
   position: absolute;
-  top: 13.9%;
-  width: 42%;
+}
+
+.home-card-skeleton-display-name {
+  height: 2.614%;
+  top: 14.052%;
+  width: 30.06%;
+}
+
+.home-card-skeleton-username {
+  height: 1.634%;
+  top: 21.242%;
+  width: 19.238%;
+}
+
+.home-card-skeleton-brand {
+  align-items: center;
+  animation: none;
+  color: #aeaeae;
+  display: flex;
+  font-size: 4.008cqw;
+  font-weight: 600;
+  height: 7.843%;
+  justify-content: center;
+  left: 82.365%;
+  line-height: 1;
+  position: absolute;
+  top: 14.706%;
+  width: 11.423%;
+  z-index: 2;
 }
 
 .home-card-skeleton-heatmap {
