@@ -1,5 +1,10 @@
 export const MARKETING_SAMPLE_CARD_URL = "/assets/codex-card-sample.png";
+export const MARKETING_OPERATOR_CARD_HANDLE = "postmelee";
+export const MARKETING_CARD_LOCALES = Object.freeze(["en", "ko"]);
 export const MARKETING_SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
+
+const MARKETING_OPERATOR_HANDLE_PATTERN =
+  /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const MARKETING_QUICKSTART_STEPS = Object.freeze([
   createStep(
@@ -44,11 +49,15 @@ export function createMarketingConfig(options = {}) {
   const canonicalAppUrl = normalizeOptionalCanonicalAppUrl(
     options.canonicalAppUrl
   );
+  const operatorCardHandle = normalizeOperatorCardHandle(
+    options.operatorCardHandle ?? MARKETING_OPERATOR_CARD_HANDLE
+  );
 
   return Object.freeze({
     appHref: canonicalAppUrl ? new URL("/", canonicalAppUrl).toString() : null,
     canonicalAppUrl,
     copy,
+    operatorCardHandle,
     sampleCardUrl: normalizeNonEmptyString(
       options.sampleCardUrl ?? MARKETING_SAMPLE_CARD_URL,
       "sampleCardUrl"
@@ -59,6 +68,21 @@ export function createMarketingConfig(options = {}) {
     ),
     quickstartSteps: MARKETING_QUICKSTART_STEPS
   });
+}
+
+export function buildMarketingOperatorCardUrl(config, locale = "en") {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("config must be a marketing config object");
+  }
+
+  const handle = normalizeOperatorCardHandle(config.operatorCardHandle);
+  if (!MARKETING_CARD_LOCALES.includes(locale)) {
+    throw new TypeError(
+      `locale must be one of: ${MARKETING_CARD_LOCALES.join(", ")}`
+    );
+  }
+
+  return `/u/${handle}/card.png?locale=${locale}`;
 }
 
 export function normalizeOptionalCanonicalAppUrl(value) {
@@ -87,6 +111,25 @@ export function normalizeOptionalCanonicalAppUrl(value) {
   }
 
   return url.toString().replace(/\/$/, "");
+}
+
+function normalizeOperatorCardHandle(value) {
+  const normalized = normalizeNonEmptyString(
+    value,
+    "operatorCardHandle"
+  );
+
+  if (
+    normalized.length > 200 ||
+    normalized !== normalized.toLowerCase() ||
+    !MARKETING_OPERATOR_HANDLE_PATTERN.test(normalized)
+  ) {
+    throw new TypeError(
+      "operatorCardHandle must be a lowercase public profile handle"
+    );
+  }
+
+  return normalized;
 }
 
 function normalizeCopy(value) {

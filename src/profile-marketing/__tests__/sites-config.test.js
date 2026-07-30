@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildMarketingOperatorCardUrl } from "../marketing-config.js";
 import {
   createSitesMarketingConfig,
   validateSitesHostingManifest
 } from "../sites-config.js";
 import { handleSitesRequest } from "../sites-worker.js";
 
-test("creates a sample-only Sites config with a configured Cloud Run root CTA", () => {
+test("creates an operator-card Sites config with a static fallback and Cloud Run CTA", () => {
   const config = createSitesMarketingConfig({
     DEV: false,
     VITE_CANONICAL_APP_URL: "https://profiles.example.test/app"
@@ -15,6 +16,11 @@ test("creates a sample-only Sites config with a configured Cloud Run root CTA", 
 
   assert.equal(config.canonicalAppUrl, "https://profiles.example.test/app");
   assert.equal(config.appHref, "https://profiles.example.test/");
+  assert.equal(config.operatorCardHandle, "postmelee");
+  assert.equal(
+    buildMarketingOperatorCardUrl(config, "en"),
+    "/u/postmelee/card.png?locale=en"
+  );
   assert.equal(config.sampleCardUrl, "/assets/codex-card-sample.png");
 });
 
