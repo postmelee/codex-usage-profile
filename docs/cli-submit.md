@@ -5,13 +5,15 @@
 > production service URL은
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`로
 > 확정됐고 CLI 기본값에도 반영돼 있다. public npm release는
-> `codex-usage-profile@0.1.0`이며 provenance와 production end-to-end
-> smoke가 검증됐다. 자동화에서는 exact version을 고정한다.
+> `codex-usage-profile@0.1.1`이며 provenance와 production end-to-end
+> smoke가 검증됐다. 이 immutable patch는 macOS app bundle 자동 탐색을
+> 제공한다. 자동화에서는 registry에서 검증한 exact version을 고정한다.
 
 ## 요구사항
 
 - Node.js 20 이상
-- `PATH`에서 실행 가능한 최신 Codex CLI
+- `PATH`에서 실행 가능한 최신 Codex CLI, 또는 macOS의 표준 system/user
+  `Applications` 위치에 설치된 `ChatGPT.app`/`Codex.app`
 - `account/usage/read`를 지원하는 ChatGPT 기반 Codex 로그인
 - 웹사이트에서 GitHub로 연결할 수 있는 계정
 
@@ -38,6 +40,27 @@ CLI는 production Sites origin을 기본값으로 사용하고 첫 로그인에�
 
 raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
 
+## Codex 실행 파일 탐색
+
+`codex-usage-analyzer@0.4.1`이 실행 파일을 다음 순서로 찾는다.
+
+1. 현재 `PATH`의 executable `codex`
+2. `/Applications/ChatGPT.app/Contents/Resources/codex`
+3. `/Applications/Codex.app/Contents/Resources/codex`
+4. `~/Applications/ChatGPT.app/Contents/Resources/codex`
+5. `~/Applications/Codex.app/Contents/Resources/codex`
+
+2~5번 fallback은 macOS에서만 사용한다. 따라서 ChatGPT 또는 Codex
+desktop app이 위 표준 위치에 있으면
+`PATH="/Applications/ChatGPT.app/Contents/Resources:$PATH"` 같은 일회성
+prefix 없이 `npx codex-usage-profile@latest submit`을 실행할 수 있다.
+
+Linux, Windows와 비표준 macOS 설치 위치에서는 공식 Codex CLI를 설치해
+`codex`가 `PATH`에서 실행되게 한다. 모든 후보가 없거나 executable
+file이 아니면 analyzer는 안전한 `CODEX_NOT_FOUND`만 반환한다. 검사 중
+발생한 filesystem 오류, 후보 경로와 원본 예외는 CLI 출력으로 전달하지
+않는다.
+
 ## Automation / 비대화형 실행
 
 비대화형 실행은 일반적인 GitHub Actions 환경이 아니라 다음 조건을 충족하는 신뢰할 수 있는 machine을 전제로 한다.
@@ -50,7 +73,7 @@ raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제�
 ```bash
 export CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
 export CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>'
-npx --yes codex-usage-profile@0.1.0 submit --json
+npx --yes codex-usage-profile@0.1.1 submit --json
 ```
 
 여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
@@ -70,7 +93,7 @@ publish 전 package artifact는 tarball로 검증한다.
 
 ```bash
 npm pack --workspace packages/codex-usage-profile-cli
-npx --package=./codex-usage-profile-0.1.0.tgz \
+npx --package=./codex-usage-profile-0.1.1.tgz \
   codex-usage-profile --help
 ```
 
@@ -183,7 +206,7 @@ README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdevelop
 
 | 오류 | 확인 사항 |
 |---|---|
-| `CODEX_NOT_FOUND` | Codex 설치와 `PATH` 확인 |
+| `CODEX_NOT_FOUND` | macOS 표준 app 위치를 확인하거나 공식 Codex CLI를 설치해 `PATH`에 노출 |
 | `APP_SERVER_START_FAILED`, `APP_SERVER_EXITED` | 설치된 Codex가 `codex app-server`를 시작할 수 있는지 확인 |
 | `APP_SERVER_TIMEOUT` | connectivity 확인 후 timeout 범위 안에서 재시도 |
 | `APP_SERVER_RPC_ERROR` | Codex update와 ChatGPT 기반 로그인 확인 |

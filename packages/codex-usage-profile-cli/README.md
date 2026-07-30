@@ -2,23 +2,31 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-The public npm release is `codex-usage-profile@0.1.0`, published with
-provenance and verified against the production Sites service.
+The public release line starts at `codex-usage-profile@0.1.0`. This package is
+the immutable `0.1.1` patch, prepared for provenance publishing and production
+validation through the existing staged-release gate.
 
 > The production MVP service runs at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`, which is
-> also the CLI default. For reproducible automation, pin `0.1.0`; for an
+> also the CLI default. For reproducible automation, pin `0.1.1`; for an
 > interactive first run, review the version npm displays before accepting
 > `@latest`.
 
 ## Requirements
 
 - Node.js 20 or newer
-- A recent `codex` CLI on `PATH`
+- A recent `codex` CLI on `PATH`, or on macOS a standard `ChatGPT.app` or
+  `Codex.app` installation under the system or user `Applications` directory
 - A ChatGPT-backed Codex sign-in that supports `account/usage/read`
 - A Codex Usage Profile service account linked through GitHub
 
 API-key-only and Bedrock Codex authentication do not provide the account usage method consumed by the analyzer.
+
+Executable lookup prefers `codex` on `PATH`. If it is absent on macOS, the
+analyzer checks `/Applications/ChatGPT.app`,
+`/Applications/Codex.app`, `~/Applications/ChatGPT.app`, then
+`~/Applications/Codex.app`. Nonstandard installations must expose the
+official Codex CLI on `PATH`.
 
 ## Quick Start
 
@@ -52,7 +60,7 @@ On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-is
 ```bash
 CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.0 submit --json
+npx --yes codex-usage-profile@0.1.1 submit --json
 ```
 
 ## What Submit Sends

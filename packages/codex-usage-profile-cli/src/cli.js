@@ -20,7 +20,7 @@ import {
 } from "./service-client.js";
 import { submitAccountUsage } from "./submit.js";
 
-export const CLI_VERSION = "0.1.0";
+export const CLI_VERSION = "0.1.1";
 export const CLI_USAGE = `Usage: codex-usage-profile <command> [options]
 
 Commands:

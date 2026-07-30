@@ -16,7 +16,7 @@ import {
 
 test("normalizes one npm 11 array or npm 12 object candidate", () => {
   const candidate = {
-    id: "codex-usage-profile@0.1.0"
+    id: "codex-usage-profile@0.1.1"
   };
 
   assert.equal(normalizeNpmPackResult([candidate]), candidate);
@@ -34,7 +34,7 @@ test("normalizes one npm 11 array or npm 12 object candidate", () => {
     },
     candidate,
     null,
-    "codex-usage-profile@0.1.0"
+    "codex-usage-profile@0.1.1"
   ]) {
     assert.throws(
       () => normalizeNpmPackResult(invalid),
@@ -46,7 +46,7 @@ test("normalizes one npm 11 array or npm 12 object candidate", () => {
 test("npm release verifier accepts the exact local package candidate", async () => {
   const result = await verifyNpmRelease();
 
-  assert.equal(result.packageId, "codex-usage-profile@0.1.0");
+  assert.equal(result.packageId, "codex-usage-profile@0.1.1");
   assert.equal(result.entryCount, EXPECTED_NPM_PACKAGE_FILES.length);
   assert.match(result.shasum, /^[a-f0-9]{40}$/);
   assert.match(result.integrity, /^sha512-[A-Za-z0-9+/]+=*$/);
@@ -73,7 +73,7 @@ test("release metadata and lock reject analyzer dependency drift", async () => {
   ));
 
   const manifestWithRange = structuredClone(manifest);
-  manifestWithRange.dependencies[EXPECTED_ANALYZER_PACKAGE.name] = "^0.2.0";
+  manifestWithRange.dependencies[EXPECTED_ANALYZER_PACKAGE.name] = "^0.4.1";
   assert.throws(
     () => verifyPackageMetadata(manifestWithRange),
     /package dependencies/

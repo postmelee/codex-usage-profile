@@ -18,7 +18,9 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 ## 현재 운영 상태
 
-- `codex-usage-profile@0.1.0`은 public이며 `latest`가 이 버전을 가리킨다.
+- `codex-usage-profile@0.1.1`은 public이며 `latest`가 이 버전을 가리킨다.
+- 기존 `0.1.0` artifact와 canonical/recovery tag는 immutable 상태로
+  보존한다.
 - exact `0.1.0` install의 production device login, status, Account Usage
   Contract v1 submit, private preview, publish/unpublish, revoke/logout
   smoke가 통과했고 disposable owner D1/R2 데이터는 승인된 digest/count로
@@ -39,6 +41,37 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   `codex-usage-profile-v${version}` tag에서만 tokenless stage를 만든다.
   npm 웹에서 staged package와 provenance를 검토하고 2FA로 승인해야 실제
   version이 생성된다.
+- Task #57의 immutable `0.1.1` patch는 macOS 표준 ChatGPT/Codex app
+  bundle 자동 탐색을 담는다. approved Stage 3 commit과 annotated tag,
+  trusted publisher stage, maintainer 2FA를 거쳐 공개됐고 prefix 없는
+  production submit/status smoke가 통과했다.
+
+## `0.1.1` patch release 결과
+
+| 항목 | 검증 값 |
+|---|---|
+| package | `codex-usage-profile@0.1.1` |
+| dependency | exact `codex-usage-analyzer@0.4.1` |
+| source commit | `4093f3813ee88ac1abad31c21a6bf8bb58f09383` |
+| annotated tag | `codex-usage-profile-v0.1.1` |
+| workflow | `.github/workflows/publish-npm.yml` |
+| trusted publisher | `postmelee/codex-usage-profile`, workflow `publish-npm.yml`, environment `npm-publish` |
+| Actions run | [`30518613039`](https://github.com/postmelee/codex-usage-profile/actions/runs/30518613039), Node 20/22/24 verify와 staged publish 성공 |
+| tarball | 13 files, packed 14,451 bytes, unpacked 50,500 bytes |
+| SHA-1 | `4eeafe6d095f923f5bd0501c7639a649e9fa65cf` |
+| SHA-512 | `sha512-jj6jOdl0sH8om39rD5WTN2g3YiZ2LyuDMnOl+haUQXr1PigezLuQKmZJwAJLGFHp44kBAoipcP6W65LZTabsoQ==` |
+| dist-tag | `latest=0.1.1` |
+| production smoke | 별도 PATH prefix 없는 `@latest` submit accepted, Account Usage Contract v1, status 반영, visibility `private` 유지 |
+
+npm attestation의 package subject와 SHA-512는 위 tarball과 일치하며 SLSA
+provenance는 exact repository, workflow, tag, source commit과 Actions run을
+가리킨다. exact `0.1.1`과 `@latest` clean execution은 모두 CLI version
+`0.1.1`을 반환했다. production smoke는 prompt, response, Codex/OpenAI
+credential, session file 또는 raw usage aggregate를 출력·보고하지 않았다.
+
+`0.1.1`은 immutable이다. 결함이 발견되면 같은 version이나 tag를
+덮어쓰지 않고 별도 patch version과 provenance를 준비하며, 필요하면
+`0.1.1` deprecate를 별도 승인받는다.
 
 ## Stage 6 최종 release 판정
 
