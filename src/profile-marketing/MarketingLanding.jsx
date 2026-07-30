@@ -4,18 +4,32 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { createMarketingConfig } from "./marketing-config.js";
 
+const HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT = 26;
+const HOME_CARD_SKELETON_HEATMAP_ROW_COUNT = 7;
+const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = (
+  HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT *
+  HOME_CARD_SKELETON_HEATMAP_ROW_COUNT
+);
+const HOME_CARD_SKELETON_STAT_COUNT = 4;
+
 export function MarketingLanding({
   cardAlt,
+  cardBusy = false,
+  cardLoadingLabel = "Loading card preview",
   cardOverlay = null,
   cardPreviewUrl,
   cardRef,
+  cardSourceKind,
+  cardStatus,
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
   heroAction = null,
   onCardError,
   quickstart = null
 }) {
-  const resolvedCardUrl = cardPreviewUrl ?? config.sampleCardUrl;
+  const resolvedCardUrl = cardPreviewUrl === undefined
+    ? config.sampleCardUrl
+    : cardPreviewUrl;
   const resolvedCardAlt = cardAlt ?? config.copy.sampleCardAlt;
 
   return (
@@ -29,10 +43,16 @@ export function MarketingLanding({
 
           <MarketingCardPreview
             alt={resolvedCardAlt}
+            busy={cardBusy}
             cardRef={cardRef}
+            loadingLabel={cardLoadingLabel}
             onError={onCardError}
             overlay={cardOverlay}
+            sourceKind={cardSourceKind ?? (
+              resolvedCardUrl ? "sample" : null
+            )}
             src={resolvedCardUrl}
+            status={cardStatus ?? (cardBusy ? "loading" : "ready")}
             transitionSuspended={cardTransitionSuspended}
           />
 
@@ -49,10 +69,14 @@ export function MarketingLanding({
 
 export function MarketingCardPreview({
   alt,
+  busy = false,
   cardRef,
+  loadingLabel = "Loading card preview",
   onError,
   overlay,
+  sourceKind = null,
   src,
+  status = "ready",
   transitionSuspended = false
 }) {
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -63,11 +87,11 @@ export function MarketingCardPreview({
   return (
     <MarketingCardTilt
       elementRef={cardRef}
-      enabled={supportsCardTilt && !prefersReducedMotion}
+      enabled={supportsCardTilt && !prefersReducedMotion && !busy}
       suspended={transitionSuspended}
     >
       <BorderBeam
-        active={!prefersReducedMotion && !transitionSuspended}
+        active={!busy && !prefersReducedMotion && !transitionSuspended}
         borderRadius={41}
         brightness={1.05}
         className="home-card-beam"
@@ -76,20 +100,78 @@ export function MarketingCardPreview({
         size="md"
         strength={0.82}
       >
-        <div className="home-card-media">
-          <img
-            alt={alt}
-            className="home-card-preview"
-            height="918"
-            onError={onError}
-            src={src}
-            width="1497"
-          />
+        <div
+          aria-busy={busy}
+          className="home-card-media"
+          data-card-source-kind={sourceKind ?? undefined}
+          data-card-status={status}
+        >
+          {src ? (
+            <img
+              alt={alt}
+              className="home-card-preview"
+              height="918"
+              onError={onError}
+              src={src}
+              width="1497"
+            />
+          ) : null}
           {overlay}
+          <HomeCardSkeleton active={busy} />
           <span className="home-card-glare" aria-hidden="true" />
+          <p
+            aria-live="polite"
+            className="sr-only"
+            data-testid="home-card-loading-status"
+            role="status"
+          >
+            {busy ? loadingLabel : ""}
+          </p>
         </div>
       </BorderBeam>
     </MarketingCardTilt>
+  );
+}
+
+function HomeCardSkeleton({ active }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="home-card-skeleton"
+      data-active={active ? "true" : "false"}
+    >
+      <span className="home-card-skeleton-header">
+        <span className="home-card-skeleton-avatar" />
+        <span className="home-card-skeleton-identity">
+          <span className="home-card-skeleton-display-name" />
+          <span className="home-card-skeleton-username" />
+        </span>
+        <span className="home-card-skeleton-brand">Codex</span>
+      </span>
+      <span
+        className="home-card-skeleton-heatmap"
+        data-column-count={HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT}
+        data-row-count={HOME_CARD_SKELETON_HEATMAP_ROW_COUNT}
+      >
+        {Array.from(
+          { length: HOME_CARD_SKELETON_HEATMAP_CELL_COUNT },
+          (_, index) => (
+            <span
+              className="home-card-skeleton-heatmap-cell"
+              key={index}
+            />
+          )
+        )}
+      </span>
+      <span className="home-card-skeleton-stats">
+        {Array.from({ length: HOME_CARD_SKELETON_STAT_COUNT }, (_, index) => (
+          <span className="home-card-skeleton-stat" key={index}>
+            <span className="home-card-skeleton-stat-value" />
+            <span className="home-card-skeleton-stat-label" />
+          </span>
+        ))}
+      </span>
+    </div>
   );
 }
 

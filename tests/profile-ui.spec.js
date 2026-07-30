@@ -8,6 +8,7 @@ const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
 ));
+const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -313,6 +314,401 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByText("Sign in is temporarily unavailable.", { exact: true }))
       .toBeVisible();
     await expect(page.getByText("npx codex-usage-profile@latest submit")).toHaveCount(0);
+  });
+
+  test("Home card transition decodes the anonymous operator card before showing it", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.goto("/");
+
+    const media = page.locator(".home-card-media");
+    const operatorCard = page.getByRole("img", {
+      name: "Codex usage card for @postmelee"
+    });
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("aria-busy", "false");
+    await expect(operatorCard).toHaveAttribute(
+      "src",
+      "/u/postmelee/card.png?locale=en"
+    );
+    await expect.poll(() => operatorCard.evaluate((image) => image.naturalWidth))
+      .toBe(1497);
+  });
+
+  for (const failureStatus of [404, 503]) {
+    test(`Home card transition falls back safely when the operator card returns ${failureStatus}`, async ({ page }, testInfo) => {
+      await mockAnonymousAccount(page);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+        body: "operator card unavailable",
+        contentType: "text/plain",
+        status: failureStatus
+      }));
+
+      await page.goto("/");
+
+      const media = page.locator(".home-card-media");
+      const sampleCard = page.getByRole("img", {
+        name: "Sample Codex usage card"
+      });
+      await expect(media).toHaveAttribute("data-card-status", "fallback");
+      await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+      await expect(media).toHaveAttribute("aria-busy", "false");
+      await expect(sampleCard).toHaveAttribute(
+        "src",
+        "/assets/codex-card-sample.png"
+      );
+      await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
+      if (failureStatus === 503) {
+        await page.screenshot({
+          path: testInfo.outputPath("home-card-fallback-desktop.png")
+        });
+      }
+    });
+  }
+
+  test("Home card transition keeps the operator card pending until the owner image decodes", async ({ page }, testInfo) => {
+    let releaseProfile;
+    let releaseOwnerImage;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+    const ownerImageGate = new Promise((resolve) => {
+      releaseOwnerImage = resolve;
+    });
+    const ownerImageRequests = [];
+
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("private"),
+        ok: true
+      });
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/api/profile/card.png*", async (route) => {
+      ownerImageRequests.push(route.request().url());
+      await ownerImageGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    const loadingStatus = page.getByTestId("home-card-loading-status");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("aria-busy", "true");
+    await expect(skeleton).toHaveAttribute("data-active", "true");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expectCardAccurateSkeleton(page);
+    await expect(loadingStatus).toHaveText("Loading card preview");
+    await expect(page.locator(".home-card-sample-identity")).toHaveCount(0);
+    await expect(page.locator(".home-card-tilt"))
+      .toHaveAttribute("data-tilt-enabled", "false");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Loading card" })).toBeDisabled();
+    const loadingCardBox = await media.boundingBox();
+    const loadingQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-loading-desktop.png")
+    });
+
+    releaseProfile();
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    await page.evaluate(() => {
+      const mediaElement = document.querySelector(".home-card-media");
+      let previousSource = mediaElement?.querySelector("img")?.getAttribute("src") ?? null;
+      globalThis.__ownerCardDomCommits = 0;
+      new MutationObserver(() => {
+        const nextSource = mediaElement?.querySelector("img")?.getAttribute("src") ?? null;
+        if (
+          nextSource !== previousSource &&
+          nextSource?.includes("/api/profile/card.png")
+        ) {
+          globalThis.__ownerCardDomCommits += 1;
+        }
+        previousSource = nextSource;
+      }).observe(mediaElement, {
+        attributeFilter: ["src"],
+        attributes: true,
+        childList: true,
+        subtree: true
+      });
+    });
+
+    releaseOwnerImage();
+    const ownerCard = page.getByRole("img", {
+      name: "Your Codex usage card"
+    });
+    await expect(ownerCard).toHaveAttribute(
+      "src",
+      "/api/profile/card.png?locale=en"
+    );
+    await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("aria-busy", "false");
+    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCSS("transition-duration", "0.24s");
+    await expect(loadingStatus).toHaveText("");
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+    await expect(page.locator('[data-card-source="true"]'))
+      .toHaveAttribute("data-tilt-enabled", "true");
+    await expect.poll(() => page.evaluate(
+      () => globalThis.__ownerCardDomCommits
+    )).toBe(1);
+    expect(ownerImageRequests.length).toBeGreaterThanOrEqual(1);
+    const readyCardBox = await media.boundingBox();
+    const readyQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    expect(Math.abs(readyQuickstartBox.y - loadingQuickstartBox.y))
+      .toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-ready-desktop.png")
+    });
+  });
+
+  test("Home card transition keeps a stable skeleton box on mobile", async ({ page }, testInfo) => {
+    let releaseAccount;
+    const accountGate = new Promise((resolve) => {
+      releaseAccount = resolve;
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await accountGate;
+      await fulfillJson(route, {
+        error: { code: "unauthorized", message: "Session cookie is required" },
+        ok: false
+      }, 401);
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    await expectCardAccurateSkeleton(page);
+    const loadingCardBox = await media.boundingBox();
+    const loadingQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("home-card-loading-mobile.png")
+    });
+
+    releaseAccount();
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    const readyCardBox = await media.boundingBox();
+    const readyQuickstartBox = await page
+      .getByRole("heading", { name: "Quickstart" })
+      .boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    expect(Math.abs(readyQuickstartBox.y - loadingQuickstartBox.y))
+      .toBeLessThanOrEqual(1);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath("home-card-ready-mobile.png")
+    });
+  });
+
+  test("Home card transition removes shimmer and crossfade for reduced motion", async ({ page }, testInfo) => {
+    let releaseAccount;
+    const accountGate = new Promise((resolve) => {
+      releaseAccount = resolve;
+    });
+    await page.route("**/api/auth/me", async (route) => {
+      await accountGate;
+      await fulfillJson(route, {
+        error: { code: "unauthorized", message: "Session cookie is required" },
+        ok: false
+      }, 401);
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    const skeleton = page.locator(".home-card-skeleton");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expectCardAccurateSkeleton(page);
+    await expect(page.locator(".home-card-tilt"))
+      .toHaveAttribute("data-tilt-enabled", "false");
+    const reducedLoadingStyles = await skeleton.evaluate((element) => ({
+      animationName: getComputedStyle(element, "::after").animationName,
+      overlayOpacity: getComputedStyle(element, "::after").opacity
+    }));
+    expect(reducedLoadingStyles).toEqual({
+      animationName: "none",
+      overlayOpacity: "0"
+    });
+    const loadingCardBox = await media.boundingBox();
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-loading-reduced-motion.png")
+    });
+
+    releaseAccount();
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    const readyCardBox = await media.boundingBox();
+    expectRectNear(readyCardBox, loadingCardBox, 1);
+    await page.screenshot({
+      path: testInfo.outputPath("home-card-ready-reduced-motion.png")
+    });
+  });
+
+  test("Home card transition ignores a stale owner image after logout", async ({ page }) => {
+    let releaseOwnerImage;
+    const ownerImageGate = new Promise((resolve) => {
+      releaseOwnerImage = resolve;
+    });
+
+    await mockAuthenticatedAccount(page);
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/api/profile/card.png*", async (route) => {
+      await ownerImageGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+    await page.route("**/api/auth/logout", (route) => fulfillJson(route, {
+      data: { session: null },
+      ok: true
+    }));
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "loading");
+    await page.getByRole("button", {
+      name: "Account menu for postmelee"
+    }).click();
+    await page.getByRole("menuitem", { name: "Log out" }).click();
+    await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+
+    releaseOwnerImage();
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    const homeMarkup = await page.locator(".home-view").innerHTML();
+    expect(homeMarkup).not.toContain("owner_1");
+    expect(homeMarkup).not.toContain("/api/profile/card.png");
+  });
+
+  for (const failureStatus of [404, 503]) {
+    test(`Home card transition uses the personalized sample when the owner card returns ${failureStatus}`, async ({ page }) => {
+      await mockAuthenticatedAccount(page);
+      await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      }));
+      await page.route("**/api/profile/card.png*", (route) => route.fulfill({
+        body: "owner card unavailable",
+        contentType: "text/plain",
+        status: failureStatus
+      }));
+
+      await page.goto("/");
+
+      const media = page.locator(".home-card-media");
+      await expect(media).toHaveAttribute("data-card-status", "fallback");
+      await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+      await expect(page.getByRole("img", {
+        name: "Sample Codex usage card"
+      })).toHaveAttribute("src", "/assets/codex-card-sample.png");
+      await expect(page.locator(".home-card-sample-identity")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+      await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    });
+  }
+
+  test("Home card transition fails closed when owner image decode rejects", async ({ page }) => {
+    await page.addInitScript(() => {
+      const originalDecode = HTMLImageElement.prototype.decode;
+      HTMLImageElement.prototype.decode = function decode() {
+        if (this.src.includes("/api/profile/card.png")) {
+          return Promise.reject(new Error("synthetic decode failure"));
+        }
+        return originalDecode
+          ? originalDecode.call(this)
+          : Promise.resolve();
+      };
+    });
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto("/");
+
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-status", "fallback");
+    await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+    await expect(page.locator(".home-card-sample-identity")).toBeVisible();
+    await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
+    const storedValues = await page.evaluate(() => [
+      ...Object.values(localStorage),
+      ...Object.values(sessionStorage)
+    ]);
+    expect(JSON.stringify(storedValues)).not.toMatch(
+      /owner_1|api\/profile\/card\.png|postmelee-avatar/
+    );
   });
 
   test("Home preserves a manual command fallback when clipboard copy fails", async ({ page }) => {
@@ -1245,6 +1641,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/");
     const shareButton = page.getByRole("button", { name: "Share", exact: true });
     const sourceCard = page.locator('[data-card-source="true"]');
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
     await sourceCard.evaluate((element) => {
       element.getBoundingClientRect = () => ({
         bottom: 0,
@@ -1404,6 +1801,170 @@ function expectRectNear(actual, expected, tolerance) {
   expect(Math.abs(actual.y - expected.y)).toBeLessThanOrEqual(tolerance);
   expect(Math.abs(actual.width - expected.width)).toBeLessThanOrEqual(tolerance);
   expect(Math.abs(actual.height - expected.height)).toBeLessThanOrEqual(tolerance);
+}
+
+async function expectCardAccurateSkeleton(page) {
+  const skeleton = page.locator(".home-card-skeleton");
+  const heatmap = skeleton.locator(".home-card-skeleton-heatmap");
+  const cells = heatmap.locator(".home-card-skeleton-heatmap-cell");
+  const stats = skeleton.locator(".home-card-skeleton-stat");
+
+  await expect(skeleton).toHaveAttribute("aria-hidden", "true");
+  await expect(heatmap).toHaveAttribute("data-column-count", "26");
+  await expect(heatmap).toHaveAttribute("data-row-count", "7");
+  await expect(cells).toHaveCount(HOME_CARD_SKELETON_HEATMAP_CELL_COUNT);
+  await expect(stats).toHaveCount(4);
+  await expect(skeleton.locator(".home-card-skeleton-stat-value")).toHaveCount(4);
+  await expect(skeleton.locator(".home-card-skeleton-stat-label")).toHaveCount(4);
+  await expect(skeleton.locator(".home-card-skeleton-avatar")).toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-display-name"))
+    .toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-username")).toHaveCount(1);
+  await expect(skeleton.locator(".home-card-skeleton-brand"))
+    .toHaveText("Codex");
+  await expect(skeleton).toHaveText("Codex");
+
+  const contract = await skeleton.evaluate((element) => {
+    const skeletonRect = element.getBoundingClientRect();
+    const avatar = element.querySelector(".home-card-skeleton-avatar");
+    const displayName = element.querySelector(
+      ".home-card-skeleton-display-name"
+    );
+    const username = element.querySelector(".home-card-skeleton-username");
+    const brand = element.querySelector(".home-card-skeleton-brand");
+    const heatmapElement = element.querySelector(".home-card-skeleton-heatmap");
+    const statsElement = element.querySelector(".home-card-skeleton-stats");
+    const statElements = Array.from(
+      element.querySelectorAll(".home-card-skeleton-stat")
+    );
+    const cellElements = Array.from(
+      element.querySelectorAll(".home-card-skeleton-heatmap-cell")
+    );
+    const avatarRect = avatar.getBoundingClientRect();
+    const displayNameRect = displayName.getBoundingClientRect();
+    const usernameRect = username.getBoundingClientRect();
+    const brandRect = brand.getBoundingClientRect();
+    const heatmapRect = heatmapElement.getBoundingClientRect();
+    const statsRect = statsElement.getBoundingClientRect();
+    const cellRects = cellElements.map((cell) => cell.getBoundingClientRect());
+    const percent = (value, dimension) => (
+      Math.round((value / dimension) * 10000) / 100
+    );
+    const relativeRect = (rect) => ({
+      heightPercent: percent(rect.height, skeletonRect.height),
+      leftPercent: percent(
+        rect.left - skeletonRect.left,
+        skeletonRect.width
+      ),
+      topPercent: percent(
+        rect.top - skeletonRect.top,
+        skeletonRect.height
+      ),
+      widthPercent: percent(rect.width, skeletonRect.width)
+    });
+
+    return {
+      avatar: {
+        ...relativeRect(avatarRect),
+        borderRadius: getComputedStyle(avatar).borderRadius,
+        color: getComputedStyle(avatar).backgroundColor
+      },
+      brand: {
+        ...relativeRect(brandRect),
+        animationName: getComputedStyle(brand).animationName,
+        centerXPercent: percent(
+          brandRect.left - skeletonRect.left + (brandRect.width / 2),
+          skeletonRect.width
+        ),
+        color: getComputedStyle(brand).color,
+        text: brand.textContent,
+        zIndex: getComputedStyle(brand).zIndex
+      },
+      cellAnimationNames: Array.from(new Set(
+        cellElements.map((cell) => getComputedStyle(cell).animationName)
+      )),
+      cellColors: Array.from(new Set(
+        cellElements.map((cell) => getComputedStyle(cell).backgroundColor)
+      )),
+      maxCellAspectDelta: Math.max(...cellRects.map(
+        (rect) => Math.abs(rect.width - rect.height)
+      )),
+      identity: {
+        displayName: relativeRect(displayNameRect),
+        displayNameText: displayName.textContent,
+        username: relativeRect(usernameRect),
+        usernameText: username.textContent
+      },
+      shimmerZIndex: getComputedStyle(element, "::after").zIndex,
+      positions: {
+        headerBottom: Math.max(
+          avatarRect.bottom,
+          displayNameRect.bottom,
+          usernameRect.bottom,
+          brandRect.bottom
+        ),
+        heatmapBottom: heatmapRect.bottom,
+        heatmapHeightPercent: percent(heatmapRect.height, skeletonRect.height),
+        heatmapLeftPercent: percent(
+          heatmapRect.left - skeletonRect.left,
+          skeletonRect.width
+        ),
+        heatmapTop: heatmapRect.top,
+        heatmapTopPercent: percent(
+          heatmapRect.top - skeletonRect.top,
+          skeletonRect.height
+        ),
+        heatmapWidthPercent: percent(heatmapRect.width, skeletonRect.width),
+        statsTop: statsRect.top,
+        statsTopPercent: percent(
+          statsRect.top - skeletonRect.top,
+          skeletonRect.height
+        )
+      },
+      statDividerColors: statElements.slice(1).map(
+        (stat) => getComputedStyle(stat).borderLeftColor
+      ),
+      statDividerWidths: statElements.slice(1).map(
+        (stat) => getComputedStyle(stat).borderLeftWidth
+      )
+    };
+  });
+
+  expect(contract.cellColors).toEqual(["rgb(47, 47, 47)"]);
+  expect(contract.cellAnimationNames).toEqual(["none"]);
+  expect(contract.maxCellAspectDelta).toBeLessThanOrEqual(1);
+  expect(contract.avatar.color).toBe("rgb(47, 47, 47)");
+  expect(contract.avatar.borderRadius).toBe("50%");
+  expect(contract.avatar.leftPercent).toBeCloseTo(7.21, 1);
+  expect(contract.avatar.topPercent).toBeCloseTo(11.76, 1);
+  expect(contract.avatar.widthPercent).toBeCloseTo(8.82, 1);
+  expect(contract.avatar.heightPercent).toBeCloseTo(14.38, 1);
+  expect(contract.identity.displayName.leftPercent).toBeCloseTo(19.24, 1);
+  expect(contract.identity.username.leftPercent).toBeCloseTo(19.24, 1);
+  expect(contract.identity.displayNameText).toBe("");
+  expect(contract.identity.usernameText).toBe("");
+  expect(contract.brand.text).toBe("Codex");
+  expect(contract.brand.color).toBe("rgb(174, 174, 174)");
+  expect(contract.brand.animationName).toBe("none");
+  expect(contract.brand.centerXPercent).toBeCloseTo(88.08, 1);
+  expect(contract.brand.widthPercent).toBeCloseTo(11.42, 1);
+  expect(contract.brand.zIndex).toBe("2");
+  expect(contract.shimmerZIndex).toBe("1");
+  expect(contract.positions.headerBottom)
+    .toBeLessThan(contract.positions.heatmapTop);
+  expect(contract.positions.heatmapBottom)
+    .toBeLessThan(contract.positions.statsTop);
+  expect(contract.positions.heatmapLeftPercent).toBeCloseTo(6.41, 1);
+  expect(contract.positions.heatmapTopPercent).toBeCloseTo(31.37, 1);
+  expect(contract.positions.heatmapWidthPercent).toBeCloseTo(87.17, 1);
+  expect(contract.positions.heatmapHeightPercent).toBeCloseTo(37.58, 1);
+  expect(contract.positions.statsTopPercent).toBeCloseTo(76.47, 1);
+  expect(contract.statDividerColors).toEqual([
+    "rgb(36, 36, 36)",
+    "rgb(36, 36, 36)",
+    "rgb(36, 36, 36)"
+  ]);
+  expect(contract.statDividerWidths).toEqual(["1px", "1px", "1px"]);
 }
 
 function rectCenterX(rect) {
