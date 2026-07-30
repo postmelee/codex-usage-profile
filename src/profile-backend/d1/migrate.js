@@ -23,6 +23,11 @@ export const DEFAULT_D1_MIGRATIONS = Object.freeze([
     version: 2,
     name: "account_usage_rate_limits",
     file: "db/migrations/0002_account_usage_rate_limits.sql"
+  }),
+  Object.freeze({
+    version: 3,
+    name: "cli_login_intent",
+    file: "db/migrations/0003_cli_login_intent.sql"
   })
 ]);
 

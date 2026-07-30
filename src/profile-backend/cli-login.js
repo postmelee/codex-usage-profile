@@ -12,6 +12,10 @@ export const CLI_LOGIN_STATUS = Object.freeze({
   EXCHANGED: "exchanged",
   EXPIRED: "expired"
 });
+export const CLI_LOGIN_INTENT = Object.freeze({
+  LOGIN: "login",
+  SUBMIT: "submit"
+});
 
 export const DEFAULT_CLI_LOGIN_TTL_MS = 1000 * 60 * 10;
 export const DEFAULT_CLI_LOGIN_POLL_INTERVAL_SECONDS = 5;
@@ -64,6 +68,7 @@ export function createCliLoginService(options = {}) {
         id: createId("cli_login"),
         status: CLI_LOGIN_STATUS.PENDING,
         label: normalizeNullableString(startOptions.label),
+        intent: normalizeCliLoginIntent(startOptions.intent),
         redirectUri: normalizeNullableString(startOptions.redirectUri),
         deviceCodeDigest: createDeviceCodeDigest(deviceCode),
         userCode,
@@ -215,6 +220,23 @@ export function normalizeUserCode(value) {
   }
 
   return `${normalized.slice(0, 4)}-${normalized.slice(4)}`;
+}
+
+export function normalizeCliLoginIntent(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (
+    value === CLI_LOGIN_INTENT.LOGIN ||
+    value === CLI_LOGIN_INTENT.SUBMIT
+  ) {
+    return value;
+  }
+
+  throw new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+    "intent must be login or submit"
+  );
 }
 
 async function getChallenge(store, challengeId) {

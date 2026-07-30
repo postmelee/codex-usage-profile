@@ -3,6 +3,7 @@ import { CliError, requireNonEmptyString } from "./errors.js";
 
 export const ACCOUNT_USAGE_DEVICE_ID_HEADER = "x-codex-usage-profile-device-id";
 export const ACCOUNT_USAGE_DEVICE_NAME_HEADER = "x-codex-usage-profile-device-name";
+const DEVICE_LOGIN_INTENTS = new Set(["login", "submit"]);
 
 export class ServiceClientError extends CliError {
   constructor(code, message, options = {}) {
@@ -39,9 +40,11 @@ export function createServiceClient(options = {}) {
     serviceOrigin,
 
     startDeviceLogin(startOptions = {}) {
+      const intent = normalizeDeviceLoginIntent(startOptions.intent);
       return request("/api/auth/device", {
         body: {
-          label: normalizeOptionalString(startOptions.label)
+          label: normalizeOptionalString(startOptions.label),
+          ...(intent ? { intent } : {})
         },
         method: "POST"
       });
@@ -179,4 +182,15 @@ function normalizeOptionalString(value) {
   }
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function normalizeDeviceLoginIntent(value) {
+  if (value === undefined || value === null) return null;
+  if (!DEVICE_LOGIN_INTENTS.has(value)) {
+    throw new CliError(
+      "invalid_input",
+      "Device login intent must be login or submit."
+    );
+  }
+  return value;
 }

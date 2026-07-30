@@ -67,7 +67,7 @@ test("postgres adapter", { skip: skipWithoutDatabase }, async (t) => {
 
     await t.test("satisfies the store contract surface and readiness", async () => {
       assert.equal(assertProfileBackendStoreContract(store), store);
-      assert.deepEqual(await store.verifyReadiness(), { appliedVersions: [1] });
+      assert.deepEqual(await store.verifyReadiness(), { appliedVersions: [1, 2] });
     });
 
     await t.test("round-trips owners with validation and unique conflicts", async () => {
@@ -353,7 +353,8 @@ test("postgres adapter", { skip: skipWithoutDatabase }, async (t) => {
           createToken: () => `${CLI_TOKEN_PREFIX}postgres_cli_token`
         })
       });
-      const started = await cliService.startCliLogin();
+      const started = await cliService.startCliLogin({ intent: "submit" });
+      assert.equal(started.challenge.intent, "submit");
       await cliService.approveCliLogin({
         challengeId: started.challenge.id,
         ownerId: callback.owner.id

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CLI_LOGIN_INTENT,
   CLI_LOGIN_STATUS,
   CLI_DEVICE_CODE_PREFIX,
   CLI_TOKEN_PREFIX,
@@ -11,7 +12,8 @@ import {
   createDeviceCodeDigest,
   createCliLoginService,
   createCliTokenService,
-  createMemoryProfileBackendStore
+  createMemoryProfileBackendStore,
+  normalizeCliLoginIntent
 } from "../index.js";
 
 test("starts a CLI login challenge with a browser URL", async () => {
@@ -19,6 +21,7 @@ test("starts a CLI login challenge with a browser URL", async () => {
 
   const result = await service.startCliLogin({
     label: "macbook",
+    intent: CLI_LOGIN_INTENT.SUBMIT,
     redirectUri: "codex-usage-profile://callback"
   });
   const { challenge, browserUrl } = result;
@@ -26,6 +29,7 @@ test("starts a CLI login challenge with a browser URL", async () => {
 
   assert.equal(challenge.id, "cli_login_1");
   assert.equal(challenge.status, CLI_LOGIN_STATUS.PENDING);
+  assert.equal(challenge.intent, CLI_LOGIN_INTENT.SUBMIT);
   assert.equal(result.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
   assert.equal(result.userCode, "ABCD-1234");
   assert.equal(result.verificationUri, "/device");
@@ -37,6 +41,25 @@ test("starts a CLI login challenge with a browser URL", async () => {
   assert.equal(browserUrl, "/api/auth/github/login?cli_login_challenge=cli_login_1");
   assert.deepEqual(storedChallenge, challenge);
   assert.equal(JSON.stringify(storedChallenge).includes(result.deviceCode), false);
+});
+
+test("normalizes optional CLI login intent and rejects unknown values", async () => {
+  const { service } = createFixture();
+  const legacy = await service.startCliLogin();
+  const login = await service.startCliLogin({ intent: CLI_LOGIN_INTENT.LOGIN });
+
+  assert.equal(legacy.challenge.intent, null);
+  assert.equal(login.challenge.intent, CLI_LOGIN_INTENT.LOGIN);
+  assert.equal(normalizeCliLoginIntent(undefined), null);
+  assert.equal(normalizeCliLoginIntent(null), null);
+  assert.equal(
+    normalizeCliLoginIntent(CLI_LOGIN_INTENT.SUBMIT),
+    CLI_LOGIN_INTENT.SUBMIT
+  );
+  await assertBackendError(
+    () => service.startCliLogin({ intent: "publish" }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
 });
 
 test("approves and exchanges a CLI login challenge for a raw token", async () => {

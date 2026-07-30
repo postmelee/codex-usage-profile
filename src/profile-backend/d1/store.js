@@ -55,6 +55,7 @@ const CLI_LOGIN_CHALLENGE = spec("CLI login challenge", "cli_login_challenges", 
   ["id", "id"],
   ["status", "status"],
   ["label", "label"],
+  ["intent", "intent"],
   ["redirectUri", "redirect_uri"],
   ["deviceCodeDigest", "device_code_digest"],
   ["userCode", "user_code"],
@@ -336,7 +337,8 @@ export function createD1ProfileBackendStore(options = {}) {
         "SELECT version FROM schema_migrations ORDER BY version"
       ).all();
       const appliedVersions = (rows.results ?? []).map((row) => Number(row.version));
-      const missing = [1, 2].filter((version) => !appliedVersions.includes(version));
+      const missing = [1, 2, 3]
+        .filter((version) => !appliedVersions.includes(version));
       if (missing.length > 0) {
         throw new Error(`D1 store is missing migrations: ${missing.join(", ")}`);
       }

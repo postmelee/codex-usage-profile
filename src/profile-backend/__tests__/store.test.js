@@ -82,6 +82,7 @@ test("saves and reads CLI login challenges as cloned records", () => {
   const challenge = {
     id: "challenge_1",
     status: "pending",
+    intent: "submit",
     deviceCodeDigest: "device_digest_1",
     userCode: "ABCD-1234",
     expiresAt: "2026-06-08T00:10:00.000Z"
@@ -94,6 +95,7 @@ test("saves and reads CLI login challenges as cloned records", () => {
   assert.deepEqual(store.getCliLoginChallenge("challenge_1"), {
     id: "challenge_1",
     status: "pending",
+    intent: "submit",
     deviceCodeDigest: "device_digest_1",
     userCode: "ABCD-1234",
     expiresAt: "2026-06-08T00:10:00.000Z"

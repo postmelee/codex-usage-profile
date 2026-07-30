@@ -176,6 +176,7 @@ test("restarts device login for a revoked file credential", async () => {
   assert.equal(await runCli(["login"], io), 0);
   assert.equal(loginOptions.credentialStore, store);
   assert.equal(loginOptions.serviceOrigin, "https://profiles.example.test");
+  assert.equal(loginOptions.intent, "login");
   assert.match(io.stdout.value, /Login complete/);
   assert.equal(io.stdout.value.includes("cup_revoked_secret"), false);
 });
@@ -295,12 +296,14 @@ test("handles asynchronous command failures without stack traces or credentials"
 test("logs in automatically before submit and never persists an environment token", async () => {
   const store = createMemoryCredentialStore();
   let loginCalls = 0;
+  let loginIntent;
   let submittedToken;
   const io = createIo({
     env: { CODEX_USAGE_PROFILE_URL: "https://profiles.example.test" },
     credentialStore: store,
-    loginWithDeviceCode: async ({ credentialStore, serviceOrigin }) => {
+    loginWithDeviceCode: async ({ credentialStore, intent, serviceOrigin }) => {
       loginCalls += 1;
+      loginIntent = intent;
       await credentialStore.save({
         token: "cup_login_secret",
         serviceOrigin,
@@ -319,6 +322,7 @@ test("logs in automatically before submit and never persists an environment toke
 
   assert.equal(await runCli(["submit"], io), 0);
   assert.equal(loginCalls, 1);
+  assert.equal(loginIntent, "submit");
   assert.equal(submittedToken, "cup_login_secret");
   assert.equal(io.stdout.value.includes("cup_login_secret"), false);
 
@@ -371,6 +375,7 @@ test("disables terminal hyperlinks while JSON submit performs automatic login", 
   assert.equal(await runCli(["submit", "--json"], io), 0);
   assert.equal(loginOptions.hyperlinks, false);
   assert.equal(loginOptions.env, env);
+  assert.equal(loginOptions.intent, "submit");
   assert.equal(io.stdout.value.includes("\u001B"), false);
   assert.equal(JSON.parse(io.stdout.value).submission.status, "accepted");
 });

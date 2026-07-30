@@ -14,6 +14,7 @@ test("polls through pending and rate limit states then stores the raw token once
   const sleeps = [];
   const output = createOutput();
   const saved = [];
+  let startOptions;
   const client = createSequenceClient([
     { status: "pending" },
     new ServiceClientError("rate_limited", "limited", {
@@ -25,7 +26,11 @@ test("polls through pending and rate limit states then stores the raw token once
       token: "cup_secret_value",
       tokenRecord: { id: "cli_token_1", ownerId: "owner_1" }
     }
-  ]);
+  ], {
+    onStart(value) {
+      startOptions = value;
+    }
+  });
   const credentialStore = {
     async load() { return null; },
     async save(value) {
@@ -46,9 +51,11 @@ test("polls through pending and rate limit states then stores the raw token once
     },
     openBrowser: () => {},
     randomBytes: () => Buffer.alloc(18, 1),
-    label: "MacBook"
+    label: "MacBook",
+    intent: "submit"
   });
 
+  assert.deepEqual(startOptions, { label: "MacBook", intent: "submit" });
   assert.deepEqual(sleeps, [5000, 7000]);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].token, "cup_secret_value");
@@ -204,10 +211,11 @@ test("keeps JSON and explicitly disabled login output free of ANSI escapes", asy
   assert.match(output.value, /Open https:\/\/profiles\.example\.test/);
 });
 
-function createSequenceClient(sequence) {
+function createSequenceClient(sequence, options = {}) {
   let next = 0;
   return {
-    async startDeviceLogin() {
+    async startDeviceLogin(startOptions) {
+      options.onStart?.(startOptions);
       return {
         deviceCode: "cup_device_1",
         userCode: "ABCD-1234",
