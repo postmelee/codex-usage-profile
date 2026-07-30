@@ -4,18 +4,16 @@ Codex Usage Profile combines GitHub identity with the account usage reported by 
 
 A successful CLI submit updates stored usage and changes the card ETag while preserving one stable image URL. README Markdown therefore stays the same as usage changes.
 
-`codex-usage-profile@0.1.0` is publicly available on npm with provenance and
-has been verified end to end against the production Sites origin. The
-immutable `0.1.1` patch candidate adds standard macOS ChatGPT/Codex app-bundle
-discovery; it is not public until the staged release and maintainer 2FA gate
-complete.
+`codex-usage-profile@0.1.1` is publicly available on npm with provenance and
+has been verified end to end against the production Sites origin. This
+immutable patch adds standard macOS ChatGPT/Codex app-bundle discovery, so a
+standard desktop installation no longer needs a one-off PATH prefix.
 
 > The public MVP service runs on ChatGPT Sites at
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`.
 > The CLI uses this origin by default. For reproducible automation, pin
-> `0.1.1` after that exact version is visible in the registry; for an
-> interactive first run, review the version npm displays before accepting
-> `@latest`.
+> `0.1.1`; for an interactive first run, review the version npm displays
+> before accepting `@latest`.
 
 ## MVP Flow
 

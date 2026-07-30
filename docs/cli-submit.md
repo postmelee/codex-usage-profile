@@ -5,10 +5,9 @@
 > production service URL은
 > `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`로
 > 확정됐고 CLI 기본값에도 반영돼 있다. public npm release는
-> `codex-usage-profile@0.1.0`이며 provenance와 production end-to-end
-> smoke가 검증됐다. macOS app bundle 자동 탐색을 추가한 immutable
-> `0.1.1`은 staged release와 maintainer 2FA 승인 전까지 candidate다.
-> 자동화에서는 registry에서 검증한 exact version을 고정한다.
+> `codex-usage-profile@0.1.1`이며 provenance와 production end-to-end
+> smoke가 검증됐다. 이 immutable patch는 macOS app bundle 자동 탐색을
+> 제공한다. 자동화에서는 registry에서 검증한 exact version을 고정한다.
 
 ## 요구사항
 
