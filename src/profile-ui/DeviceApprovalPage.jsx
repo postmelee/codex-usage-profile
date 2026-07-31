@@ -1,37 +1,120 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+
+import { CodexCheckCircleIcon } from "./Icons.jsx";
+import {
+  DEVICE_APPROVAL_ERROR_KIND,
+  DEVICE_APPROVAL_UI_STATUS,
+  classifyDeviceApprovalError,
+  createDeviceApprovalGuidance,
+  normalizeDeviceApprovalResult
+} from "./deviceApproval.js";
 
 export function DeviceApprovalPage({ authState, client, location = window.location }) {
   const initialUserCode = useMemo(() => readDeviceUserCode(location), [location]);
   const [userCode, setUserCode] = useState(initialUserCode);
   const [approvalState, setApprovalState] = useState({
+    copyStatus: "idle",
     error: null,
-    status: "idle"
+    result: null,
+    status: DEVICE_APPROVAL_UI_STATUS.IDLE
   });
+  const approvalInFlightRef = useRef(false);
   const authStatus = authState?.status ?? "loading";
   const isAuthenticated = authStatus === "authenticated";
   const normalizedUserCode = normalizeUserCodeInput(userCode);
+  const isApproving = approvalState.status === DEVICE_APPROVAL_UI_STATUS.APPROVING;
+  const isApproved = approvalState.status === DEVICE_APPROVAL_UI_STATUS.APPROVED;
+  const isRetryableError = (
+    approvalState.status === DEVICE_APPROVAL_UI_STATUS.RETRYABLE_ERROR
+  );
+  const hasApprovalError = (
+    isRetryableError ||
+    approvalState.status === DEVICE_APPROVAL_UI_STATUS.TERMINAL_ERROR
+  );
   const loginHref = client.buildGitHubLoginUrl({
     redirectTo: buildDeviceRedirectPath(normalizedUserCode)
   });
-  const canApprove = isAuthenticated && normalizedUserCode && approvalState.status !== "submitting";
+  const canApprove = Boolean(
+    isAuthenticated &&
+    normalizedUserCode &&
+    (
+      approvalState.status === DEVICE_APPROVAL_UI_STATUS.IDLE ||
+      isRetryableError
+    )
+  );
+  const guidance = approvalState.result
+    ? createDeviceApprovalGuidance(
+      approvalState.result.intent,
+      location?.origin
+    )
+    : null;
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!canApprove) {
+    if (!canApprove || approvalInFlightRef.current) {
       return;
     }
 
-    setApprovalState({ error: null, status: "submitting" });
+    approvalInFlightRef.current = true;
+    setApprovalState({
+      copyStatus: "idle",
+      error: null,
+      result: null,
+      status: DEVICE_APPROVAL_UI_STATUS.APPROVING
+    });
 
     try {
-      await client.authorizeDeviceLogin({ userCode: normalizedUserCode });
-      setApprovalState({ error: null, status: "approved" });
-    } catch (error) {
+      const result = normalizeDeviceApprovalResult(
+        await client.authorizeDeviceLogin({ userCode: normalizedUserCode })
+      );
       setApprovalState({
-        error: error instanceof Error ? error.message : "Device approval failed",
-        status: "error"
+        copyStatus: "idle",
+        error: null,
+        result,
+        status: DEVICE_APPROVAL_UI_STATUS.APPROVED
       });
+    } catch (error) {
+      const { kind } = classifyDeviceApprovalError(error);
+      setApprovalState({
+        copyStatus: "idle",
+        error: error instanceof Error ? error.message : "Device approval failed",
+        result: null,
+        status: kind === DEVICE_APPROVAL_ERROR_KIND.RETRYABLE
+          ? DEVICE_APPROVAL_UI_STATUS.RETRYABLE_ERROR
+          : DEVICE_APPROVAL_UI_STATUS.TERMINAL_ERROR
+      });
+    } finally {
+      approvalInFlightRef.current = false;
+    }
+  }
+
+  function handleUserCodeChange(event) {
+    setUserCode(event.target.value);
+    if (hasApprovalError) {
+      setApprovalState({
+        copyStatus: "idle",
+        error: null,
+        result: null,
+        status: DEVICE_APPROVAL_UI_STATUS.IDLE
+      });
+    }
+  }
+
+  async function handleCopyCommand() {
+    if (!guidance?.command || approvalState.copyStatus === "copying") {
+      return;
+    }
+
+    setApprovalState((current) => ({ ...current, copyStatus: "copying" }));
+    try {
+      if (typeof navigator?.clipboard?.writeText !== "function") {
+        throw new Error("Clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(guidance.command);
+      setApprovalState((current) => ({ ...current, copyStatus: "copied" }));
+    } catch {
+      setApprovalState((current) => ({ ...current, copyStatus: "failed" }));
     }
   }
 
@@ -44,13 +127,20 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
             <h1 id="device-title">Authorize device</h1>
           </header>
 
-          <form className="device-form" onSubmit={handleSubmit}>
+          <form
+            aria-busy={isApproving ? "true" : "false"}
+            className="device-form"
+            onSubmit={handleSubmit}
+          >
             <label htmlFor="device-user-code">User code</label>
             <input
+              aria-describedby={hasApprovalError ? "device-approval-error" : undefined}
+              aria-invalid={hasApprovalError ? "true" : undefined}
               autoComplete="one-time-code"
+              disabled={isApproving || isApproved}
               id="device-user-code"
               inputMode="text"
-              onChange={(event) => setUserCode(event.target.value)}
+              onChange={handleUserCodeChange}
               placeholder="ABCD-1234"
               type="text"
               value={userCode}
@@ -69,18 +159,82 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
                 Sign in with GitHub
               </a>
             ) : (
-              <button className="device-primary-action" disabled={!canApprove} type="submit">
-                {approvalState.status === "submitting" ? "Approving" : "Approve device"}
+              <button
+                className={`device-primary-action${isApproved ? " is-approved" : ""}`}
+                disabled={!canApprove}
+                type="submit"
+              >
+                {isApproved ? (
+                  <>
+                    <CodexCheckCircleIcon />
+                    <span>Approved</span>
+                  </>
+                ) : isApproving ? (
+                  "Approving…"
+                ) : isRetryableError ? (
+                  "Retry approval"
+                ) : (
+                  "Approve device"
+                )}
               </button>
             )}
 
-            {approvalState.status === "approved" ? (
-              <p className="device-status is-success">Device approved.</p>
-            ) : null}
+            <div
+              aria-atomic="true"
+              aria-live="polite"
+              className="device-feedback"
+            >
+              {isApproving ? (
+                <p className="device-status">Approving device.</p>
+              ) : null}
 
-            {approvalState.status === "error" ? (
-              <p className="device-status is-error">{approvalState.error}</p>
-            ) : null}
+              {isApproved && guidance ? (
+                <section
+                  aria-label="Device approval complete"
+                  className="device-success"
+                >
+                  <p className="device-status is-success">{guidance.message}</p>
+
+                  {guidance.command ? (
+                    <>
+                      <div className="device-command-row">
+                        <code>{guidance.command}</code>
+                        <button
+                          className="device-copy-action"
+                          disabled={approvalState.copyStatus === "copying"}
+                          onClick={handleCopyCommand}
+                          type="button"
+                        >
+                          Copy command
+                        </button>
+                      </div>
+                      <p className="device-copy-status">
+                        {approvalState.copyStatus === "copied"
+                          ? "Command copied."
+                          : approvalState.copyStatus === "failed"
+                            ? "Copy failed. Select the command and copy it manually."
+                            : ""}
+                      </p>
+                    </>
+                  ) : null}
+
+                  <nav aria-label="Approval complete" className="device-success-links">
+                    <a href="/">Home</a>
+                    <a href="/profile">Profile</a>
+                  </nav>
+                </section>
+              ) : null}
+
+              {hasApprovalError ? (
+                <p
+                  className="device-status is-error"
+                  id="device-approval-error"
+                  role="alert"
+                >
+                  {approvalState.error}
+                </p>
+              ) : null}
+            </div>
           </form>
         </section>
       </main>

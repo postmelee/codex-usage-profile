@@ -250,11 +250,9 @@ test("authorizes device login with session credentials", async () => {
       return jsonResponse({
         ok: true,
         data: {
-          challenge: {
-            id: "cli_login_1",
-            ownerId: "owner_1",
-            status: "approved"
-          },
+          approvedAt: "2026-06-10T00:00:00.000Z",
+          exchangedAt: null,
+          intent: "submit",
           status: "approved"
         }
       });
@@ -272,8 +270,12 @@ test("authorizes device login with session credentials", async () => {
   assert.deepEqual(JSON.parse(requests[0].options.body), {
     userCode: "ABCD-1234"
   });
-  assert.equal(result.status, "approved");
-  assert.equal(result.challenge.ownerId, "owner_1");
+  assert.deepEqual(result, {
+    approvedAt: "2026-06-10T00:00:00.000Z",
+    exchangedAt: null,
+    intent: "submit",
+    status: "approved"
+  });
 });
 
 test("manages settings tokens with session credentials", async () => {

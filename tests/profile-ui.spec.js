@@ -858,23 +858,211 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("public-profile-short-viewport.png") });
   });
 
-  test("Sites root-query route keeps device approval usable", async ({ page }) => {
+  test("device approval prevents double submit and completes submit intent on desktop", async ({ page }) => {
     await mockAuthenticatedAccount(page);
-    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
-      data: {
-        challenge: {
+    let authorizationRequests = 0;
+    let releaseAuthorization;
+    const authorizationGate = new Promise((resolve) => {
+      releaseAuthorization = resolve;
+    });
+    await page.route("**/api/auth/device/authorize", async (route) => {
+      authorizationRequests += 1;
+      await authorizationGate;
+      await fulfillJson(route, {
+        data: {
+          approvedAt: "2026-07-31T00:00:00.000Z",
+          exchangedAt: null,
+          intent: "submit",
           status: "approved"
-        }
-      },
-      ok: true
-    }));
+        },
+        ok: true
+      });
+    });
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.goto("/?view=device&user_code=ABCD-1234");
+    const initialUrl = page.url();
 
     await expect(page.getByRole("heading", { name: "Authorize device" })).toBeVisible();
     await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
+    const approveButton = page.getByRole("button", { name: "Approve device" });
+    await approveButton.evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    await expect.poll(() => authorizationRequests).toBe(1);
+    await expect(page.getByRole("button", { name: "Approving…" })).toBeDisabled();
+    await expect(page.locator(".device-form")).toHaveAttribute("aria-busy", "true");
+
+    releaseAuthorization();
+
+    const approvedButton = page.getByRole("button", { name: "Approved" });
+    await expect(approvedButton).toBeDisabled();
+    await expect(approvedButton.locator("[data-codex-check-circle]")).toHaveCount(1);
+    await expect(page.getByLabel("User code")).toBeDisabled();
+    await expect(page.getByText(
+      "Return to your terminal. The current CLI process will continue submitting your usage.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy command" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Profile" }))
+      .toHaveAttribute("href", "/profile");
+    await expect(page.locator(".device-success")).toHaveCSS(
+      "animation-name",
+      "device-success-enter"
+    );
+    expect(page.url()).toBe(initialUrl);
+    expect(await page.evaluate(() => ({
+      local: Object.keys(localStorage).length,
+      session: Object.keys(sessionStorage).length
+    }))).toEqual({ local: 0, session: 0 });
+  });
+
+  test("device approval shows local login command with keyboard and reduced motion", async ({ page }) => {
+    await page.addInitScript(() => {
+      let copyAttempt = 0;
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value) {
+            copyAttempt += 1;
+            if (copyAttempt === 1) {
+              throw new Error("Clipboard denied");
+            }
+            globalThis.__copiedDeviceCommand = value;
+          }
+        }
+      });
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        approvedAt: "2026-07-31T00:00:00.000Z",
+        exchangedAt: null,
+        intent: "login",
+        status: "approved"
+      },
+      ok: true
+    }));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    const initialUrl = page.url();
+
+    await page.getByLabel("User code").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Approve device" })).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    const command =
+      "npx codex-usage-profile@latest submit --server http://127.0.0.1:5173";
+    await expect(page.getByText(command, { exact: true })).toBeVisible();
+    await expect(page.locator(".device-success")).toHaveCSS("animation-name", "none");
+    await expect(page.getByText(command, { exact: true })).not.toContainText("ABCD-1234");
+
+    const copyButton = page.getByRole("button", { name: "Copy command" });
+    await copyButton.click();
+    await expect(page.getByText(
+      "Copy failed. Select the command and copy it manually.",
+      { exact: true }
+    )).toBeVisible();
+    await copyButton.click();
+    await expect(page.getByText("Command copied.", { exact: true })).toBeVisible();
+    await expect.poll(
+      () => page.evaluate(() => globalThis.__copiedDeviceCommand)
+    ).toBe(command);
+
+    expect(page.url()).toBe(initialUrl);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+  });
+
+  test("device approval treats exchanged legacy intent as terminal success", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        approvedAt: "2026-07-31T00:00:00.000Z",
+        exchangedAt: "2026-07-31T00:00:01.000Z",
+        intent: null,
+        status: "exchanged"
+      },
+      ok: true
+    }));
+    await page.goto("/?view=device&user_code=WXYZ-9876");
+    const initialUrl = page.url();
+
     await page.getByRole("button", { name: "Approve device" }).click();
-    await expect(page.getByText("Device approved.", { exact: true })).toBeVisible();
+
+    await expect(page.getByRole("button", { name: "Approved" })).toBeDisabled();
+    await expect(page.getByText(
+      "Return to your terminal to continue.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.locator(".device-command-row")).toHaveCount(0);
+    expect(page.url()).toBe(initialUrl);
+  });
+
+  test("device approval retries transient errors and locks terminal errors until edit", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    const requestedCodes = [];
+    await page.route("**/api/auth/device/authorize", async (route) => {
+      const { userCode } = JSON.parse(route.request().postData() ?? "{}");
+      requestedCodes.push(userCode);
+
+      if (userCode === "ABCD-1234" && requestedCodes.length === 1) {
+        await fulfillJson(route, {
+          error: {
+            code: "media_unavailable",
+            message: "Approval temporarily unavailable"
+          },
+          ok: false
+        }, 503);
+        return;
+      }
+      if (userCode === "ABCD-1234") {
+        await fulfillJson(route, {
+          data: {
+            approvedAt: "2026-07-31T00:00:00.000Z",
+            exchangedAt: null,
+            intent: "submit",
+            status: "approved"
+          },
+          ok: true
+        });
+        return;
+      }
+      await fulfillJson(route, {
+        error: {
+          code: "invalid_request",
+          message: "CLI login challenge cannot be approved"
+        },
+        ok: false
+      }, 400);
+    });
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await page.getByRole("button", { name: "Approve device" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "Approval temporarily unavailable"
+    );
+    await expect(page.getByLabel("User code")).toHaveAttribute("aria-invalid", "true");
+    await page.getByRole("button", { name: "Retry approval" }).click();
+    await expect(page.getByRole("button", { name: "Approved" })).toBeDisabled();
+
+    await page.goto("/?view=device&user_code=WXYZ-9876");
+    await page.getByRole("button", { name: "Approve device" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "CLI login challenge cannot be approved"
+    );
+    await expect(page.getByRole("button", { name: "Approve device" })).toBeDisabled();
+    await expect(page.getByLabel("User code")).toBeEnabled();
+
+    await page.getByLabel("User code").fill("QRST-2345");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Approve device" })).toBeEnabled();
+    expect(requestedCodes).toEqual(["ABCD-1234", "ABCD-1234", "WXYZ-9876"]);
   });
 
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
