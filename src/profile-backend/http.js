@@ -279,10 +279,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           ownerId: owner.id
         });
 
-        return okResponse({
-          status: challenge.status,
-          challenge: serializeChallenge(challenge)
-        });
+        return okResponse(serializeDeviceAuthorization(challenge));
       }
 
       if (route === "POST /api/auth/device/poll") {
@@ -848,6 +845,15 @@ function serializeDeviceStart(result) {
     expiresAt: result.expiresAt,
     intervalSeconds: result.intervalSeconds,
     challenge: serializeChallenge(result.challenge)
+  };
+}
+
+function serializeDeviceAuthorization(challenge) {
+  return {
+    status: challenge.status,
+    intent: challenge.intent ?? null,
+    approvedAt: challenge.approvedAt ?? null,
+    exchangedAt: challenge.exchangedAt ?? null
   };
 }
 

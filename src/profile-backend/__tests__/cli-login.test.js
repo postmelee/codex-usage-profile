@@ -84,6 +84,78 @@ test("approves and exchanges a CLI login challenge for a raw token", async () =>
   assert.equal(storedChallenge.cliTokenId, exchanged.tokenRecord.id);
 });
 
+test("recovers fast same-owner approval replay without issuing a token", async () => {
+  const { store, service } = createFixture();
+  const { challenge } = await service.startCliLogin({
+    intent: CLI_LOGIN_INTENT.SUBMIT
+  });
+
+  const approved = await Promise.all([
+    service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    }),
+    service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    })
+  ]);
+
+  assert.equal(approved[0].status, CLI_LOGIN_STATUS.APPROVED);
+  assert.deepEqual(approved[1], approved[0]);
+  assert.equal(store.listCliTokensByOwnerId("owner_1").length, 0);
+});
+
+test("replays only same-owner completed approval states", async () => {
+  const { store, service } = createFixture();
+  store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const { challenge } = await service.startCliLogin({
+    intent: CLI_LOGIN_INTENT.LOGIN
+  });
+  const approved = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+  const approvedReplay = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+
+  assert.deepEqual(approvedReplay, approved);
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_2"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
+
+  const exchanged = await service.exchangeCliLogin({
+    challengeId: challenge.id
+  });
+  const exchangedReplay = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+
+  assert.deepEqual(exchangedReplay, exchanged.challenge);
+  assert.equal(store.listCliTokensByOwnerId("owner_1").length, 1);
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_2"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
+});
+
 test("approves a CLI login by user code and polls a raw token once", async () => {
   const { service } = createFixture();
   const started = await service.startCliLogin({ label: "macbook" });
@@ -162,10 +234,37 @@ test("expires pending challenges and persists expired status", async () => {
   );
 });
 
+test("checks expiry before recovering a completed approval", async () => {
+  const fixture = createFixture();
+  const { service } = fixture;
+  const { challenge } = await service.startCliLogin();
+
+  await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+  fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
+
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.EXPIRED
+  );
+});
+
 test("validates owner and challenge ids during approval", async () => {
   const { service } = createFixture();
   const { challenge } = await service.startCliLogin();
 
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: "missing",
+      ownerId: " "
+    }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
   await assertBackendError(
     () => service.approveCliLogin({
       challengeId: "missing",

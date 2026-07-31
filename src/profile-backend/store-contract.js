@@ -88,7 +88,9 @@ export const PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS = deepFreeze({
   approveCliLogin: {
     records: ["cliLoginChallenge", "owner"],
     serializationKey: "cliLoginChallenge.id",
-    invariant: "only a pending, unexpired challenge can be approved once",
+    invariant:
+      "a pending, unexpired challenge transitions atomically once; " +
+      "same-owner completed approval replay performs no token issuance",
     failurePolicy: "rollback"
   },
   completeOAuthCallback: {

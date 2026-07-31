@@ -119,6 +119,36 @@ test("postgres concurrency and failure injection", { skip: skipWithoutDatabase }
       assert.equal(challenge.ownerId, fulfilled[0].ownerId);
     });
 
+    await t.test("cli approve recovers fast same-owner replay without a token", async () => {
+      await store.clear();
+      await saveOwnerFixture(store, "owner_a", "a");
+      await saveOwnerFixture(store, "owner_b", "b");
+      const cli = createCliFixture(store);
+      const started = await cli.service.startCliLogin();
+
+      const approved = await Promise.all([
+        cli.service.approveCliLogin({
+          challengeId: started.challenge.id,
+          ownerId: "owner_a"
+        }),
+        cli.service.approveCliLogin({
+          challengeId: started.challenge.id,
+          ownerId: "owner_a"
+        })
+      ]);
+
+      assert.deepEqual(approved[1], approved[0]);
+      assert.equal(approved[0].status, "approved");
+      assert.equal((await store.listCliTokensByOwnerId("owner_a")).length, 0);
+      await assert.rejects(
+        () => cli.service.approveCliLogin({
+          challengeId: started.challenge.id,
+          ownerId: "owner_b"
+        }),
+        (error) => error.code === PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+      );
+    });
+
     await t.test("cli approve rolls back when the challenge write fails", async () => {
       await store.clear();
       await saveOwnerFixture(store, "owner_a", "a");

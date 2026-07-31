@@ -328,8 +328,12 @@ test("handles device login start, authorize, and poll token exchange", async () 
   assert.equal(JSON.stringify(started.body.data).includes("deviceCodeDigest"), false);
 
   assert.equal(authorized.status, 200);
-  assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
-  assert.equal(authorized.body.data.challenge.ownerId, "owner_1");
+  assert.deepEqual(authorized.body.data, {
+    approvedAt: "2026-06-10T00:00:00.000Z",
+    exchangedAt: null,
+    intent: "submit",
+    status: CLI_LOGIN_STATUS.APPROVED
+  });
 
   assert.equal(polled.status, 200);
   assert.equal(polled.body.data.status, CLI_LOGIN_STATUS.APPROVED);
