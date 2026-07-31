@@ -27,18 +27,52 @@ test("starts and polls device login with JSON requests", async () => {
     }
   });
 
-  await client.startDeviceLogin({ label: "MacBook" });
+  await client.startDeviceLogin({ label: "MacBook", intent: "login" });
   await client.pollDeviceLogin({ deviceCode: "cup_device_1", label: "MacBook" });
 
   assert.equal(requests[0].url, "https://profiles.example.test/api/auth/device");
   assert.equal(requests[0].options.method, "POST");
   assert.equal(requests[0].options.redirect, "error");
-  assert.deepEqual(JSON.parse(requests[0].options.body), { label: "MacBook" });
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    label: "MacBook",
+    intent: "login"
+  });
   assert.equal(requests[1].url, "https://profiles.example.test/api/auth/device/poll");
   assert.deepEqual(JSON.parse(requests[1].options.body), {
     deviceCode: "cup_device_1",
     label: "MacBook"
   });
+});
+
+test("omits a missing device intent and rejects unknown values before fetch", async () => {
+  const requests = [];
+  const client = createServiceClient({
+    serviceOrigin: "https://profiles.example.test",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          deviceCode: "cup_device_1",
+          userCode: "ABCD-1234",
+          expiresAt: "2026-07-13T01:00:00.000Z",
+          intervalSeconds: 5,
+          verificationUri: "/device"
+        }
+      });
+    }
+  });
+
+  await client.startDeviceLogin({ label: "Old CLI" });
+
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    label: "Old CLI"
+  });
+  assert.throws(
+    () => client.startDeviceLogin({ intent: "publish" }),
+    /intent must be login or submit/
+  );
+  assert.equal(requests.length, 1);
 });
 
 test("uses bearer auth for metadata-only status", async () => {

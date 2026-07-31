@@ -6,6 +6,11 @@ import {
   ownerFixture,
   usageFixture
 } from "./_d1-test-fixture.js";
+import {
+  PROFILE_BACKEND_ERROR_CODES,
+  ProfileBackendError,
+  createCliLoginService
+} from "../index.js";
 
 const NOW = "2026-07-23T00:00:10.000Z";
 const EXPIRES = "2026-07-23T00:10:00.000Z";
@@ -75,6 +80,51 @@ test("D1 named operations preserve all five invariants under concurrency", async
     const stored = await fixture.rpc("getCliLoginChallenge", "challenge_1");
     assert.equal(stored.status, "approved");
     assert.equal(["owner_a", "owner_b"].includes(stored.ownerId), true);
+  });
+
+  await t.test("approveCliLogin recovers fast same-owner replay without a token", async () => {
+    await fixture.rpc("clear");
+    await fixture.rpc("saveOwner", ownerFixture({
+      id: "owner_a",
+      providerUserId: "a",
+      handle: "owner-a"
+    }));
+    await fixture.rpc("saveOwner", ownerFixture({
+      id: "owner_b",
+      providerUserId: "b",
+      handle: "owner-b"
+    }));
+    await fixture.rpc("saveCliLoginChallenge", challenge());
+    const service = createCliLoginService({
+      store: createD1CliLoginStore(fixture),
+      now: () => new Date(NOW),
+      tokenService: {}
+    });
+
+    const approved = await Promise.all([
+      service.approveCliLogin({
+        challengeId: "challenge_1",
+        ownerId: "owner_a"
+      }),
+      service.approveCliLogin({
+        challengeId: "challenge_1",
+        ownerId: "owner_a"
+      })
+    ]);
+
+    assert.deepEqual(approved[1], approved[0]);
+    assert.equal(approved[0].status, "approved");
+    assert.equal(
+      (await fixture.rpc("listCliTokensByOwnerId", "owner_a")).length,
+      0
+    );
+    await assert.rejects(
+      () => service.approveCliLogin({
+        challengeId: "challenge_1",
+        ownerId: "owner_b"
+      }),
+      (error) => error.code === PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+    );
   });
 
   await t.test("exchangeCliLogin issues one token and rolls back the loser", async () => {
@@ -185,6 +235,7 @@ function challenge(overrides = {}) {
     id: "challenge_1",
     status: "pending",
     label: null,
+    intent: null,
     redirectUri: null,
     deviceCodeDigest: "device_digest_1",
     userCode: "ABCD-1234",
@@ -198,6 +249,31 @@ function challenge(overrides = {}) {
     ownerId: null,
     cliTokenId: null,
     ...overrides
+  };
+}
+
+function createD1CliLoginStore(fixture) {
+  return {
+    getCliLoginChallenge(challengeId) {
+      return fixture.rpc("getCliLoginChallenge", challengeId);
+    },
+    saveCliLoginChallenge(challenge) {
+      return fixture.rpc("saveCliLoginChallenge", challenge);
+    },
+    atomic: {
+      async approveCliLogin(command) {
+        try {
+          return await fixture.atomic("approveCliLogin", command);
+        } catch (error) {
+          if (error?.code) {
+            throw new ProfileBackendError(error.code, error.message, {
+              status: error.status
+            });
+          }
+          throw error;
+        }
+      }
+    }
   };
 }
 

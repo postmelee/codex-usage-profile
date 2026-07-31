@@ -259,6 +259,7 @@ export function createProfileBackendHttpHandler(options = {}) {
         const body = await readJsonBody(request);
         const result = await cliLoginService.startCliLogin({
           label: body.label,
+          intent: body.intent,
           redirectUri: body.redirectUri,
           verificationUri: body.verificationUri,
           intervalSeconds: body.intervalSeconds
@@ -278,10 +279,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           ownerId: owner.id
         });
 
-        return okResponse({
-          status: challenge.status,
-          challenge: serializeChallenge(challenge)
-        });
+        return okResponse(serializeDeviceAuthorization(challenge));
       }
 
       if (route === "POST /api/auth/device/poll") {
@@ -399,6 +397,7 @@ export function createProfileBackendHttpHandler(options = {}) {
         const body = await readJsonBody(request);
         const result = await cliLoginService.startCliLogin({
           label: body.label,
+          intent: body.intent,
           redirectUri: body.redirectUri
         });
 
@@ -406,6 +405,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           browserUrl: result.browserUrl,
           deviceCode: result.deviceCode,
           userCode: result.userCode,
+          intent: result.challenge.intent ?? null,
           verificationUri: result.verificationUri,
           verificationUriComplete: result.verificationUriComplete,
           expiresAt: result.expiresAt,
@@ -820,6 +820,7 @@ function serializeChallenge(challenge) {
     id: challenge.id,
     status: challenge.status,
     label: challenge.label ?? null,
+    intent: challenge.intent ?? null,
     redirectUri: challenge.redirectUri ?? null,
     userCode: challenge.userCode ?? null,
     verificationUri: challenge.verificationUri ?? null,
@@ -838,11 +839,21 @@ function serializeDeviceStart(result) {
   return {
     deviceCode: result.deviceCode,
     userCode: result.userCode,
+    intent: result.challenge.intent ?? null,
     verificationUri: result.verificationUri,
     verificationUriComplete: result.verificationUriComplete,
     expiresAt: result.expiresAt,
     intervalSeconds: result.intervalSeconds,
     challenge: serializeChallenge(result.challenge)
+  };
+}
+
+function serializeDeviceAuthorization(challenge) {
+  return {
+    status: challenge.status,
+    intent: challenge.intent ?? null,
+    approvedAt: challenge.approvedAt ?? null,
+    exchangedAt: challenge.exchangedAt ?? null
   };
 }
 

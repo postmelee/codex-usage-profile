@@ -60,7 +60,8 @@ test("handles GitHub callback owner upsert and optional CLI challenge approval",
 test("handles GitHub browser login redirect, callback session, and me lookup", async () => {
   const fixture = createFixture();
   const started = await requestJson(fixture.handler, "POST", "/api/cli/login/start", {
-    label: "macbook"
+    label: "macbook",
+    intent: "login"
   });
   const loginResponse = await requestResponse(
     fixture.handler,
@@ -246,7 +247,8 @@ test("handles CLI login start, approve, and exchange without exposing token dige
   const cookie = fixture.saveSession();
 
   const started = await requestJson(fixture.handler, "POST", "/api/cli/login/start", {
-    label: "macbook"
+    label: "macbook",
+    intent: "login"
   });
   const approved = await requestJson(
     fixture.handler,
@@ -264,6 +266,8 @@ test("handles CLI login start, approve, and exchange without exposing token dige
 
   assert.equal(started.status, 201);
   assert.equal(started.body.data.browserUrl, "/api/auth/github/login?cli_login_challenge=cli_login_1");
+  assert.equal(started.body.data.intent, "login");
+  assert.equal(started.body.data.challenge.intent, "login");
   assert.equal(approved.body.data.challenge.status, CLI_LOGIN_STATUS.APPROVED);
   assert.equal(approved.body.data.challenge.ownerId, "owner_1");
   assert.equal(exchanged.status, 200);
@@ -279,7 +283,8 @@ test("handles device login start, authorize, and poll token exchange", async () 
   const cookie = fixture.saveSession();
 
   const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
-    label: "macbook"
+    label: "macbook",
+    intent: "submit"
   });
   const authorized = await requestJson(
     fixture.handler,
@@ -311,6 +316,7 @@ test("handles device login start, authorize, and poll token exchange", async () 
   assert.equal(started.status, 201);
   assert.equal(started.body.data.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
   assert.equal(started.body.data.userCode, "ABCD-1234");
+  assert.equal(started.body.data.intent, "submit");
   assert.equal(started.body.data.verificationUri, "/device");
   assert.equal(
     started.body.data.verificationUriComplete,
@@ -318,11 +324,16 @@ test("handles device login start, authorize, and poll token exchange", async () 
   );
   assert.equal(started.body.data.intervalSeconds, 5);
   assert.equal(started.body.data.challenge.userCode, "ABCD-1234");
+  assert.equal(started.body.data.challenge.intent, "submit");
   assert.equal(JSON.stringify(started.body.data).includes("deviceCodeDigest"), false);
 
   assert.equal(authorized.status, 200);
-  assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
-  assert.equal(authorized.body.data.challenge.ownerId, "owner_1");
+  assert.deepEqual(authorized.body.data, {
+    approvedAt: "2026-06-10T00:00:00.000Z",
+    exchangedAt: null,
+    intent: "submit",
+    status: CLI_LOGIN_STATUS.APPROVED
+  });
 
   assert.equal(polled.status, 200);
   assert.equal(polled.body.data.status, CLI_LOGIN_STATUS.APPROVED);
@@ -336,6 +347,31 @@ test("handles device login start, authorize, and poll token exchange", async () 
   assert.equal(Object.hasOwn(reused.body.data, "token"), false);
   assert.equal(storedState.includes(polled.body.data.token), false);
   assert.equal(storedState.includes(started.body.data.deviceCode), false);
+});
+
+test("keeps missing device intent compatible and rejects unknown intent", async () => {
+  const fixture = createFixture();
+  const legacy = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device",
+    { label: "old-cli" }
+  );
+  const invalid = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device",
+    { intent: "publish" }
+  );
+
+  assert.equal(legacy.status, 201);
+  assert.equal(legacy.body.data.intent, null);
+  assert.equal(legacy.body.data.challenge.intent, null);
+  assert.equal(invalid.status, 400);
+  assert.equal(
+    invalid.body.error.code,
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
 });
 
 test("handles settings token create, list, revoke, and revoked submit failure", async () => {

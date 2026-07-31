@@ -175,7 +175,7 @@ test("completeOAuthCallback consumes a pending state exactly once", async () => 
 
 // --- approveCliLogin / exchangeCliLogin -------------------------------------
 
-test("approveCliLogin approves a pending challenge once", async () => {
+test("approveCliLogin approves once and replays the completed state for the same owner", async () => {
   const { cli, store } = createCliFixture();
   store.saveOwner(OWNER);
   const started = await cli.startCliLogin();
@@ -189,11 +189,15 @@ test("approveCliLogin approves a pending challenge once", async () => {
 
   await cli.exchangeCliLogin({ challengeId: started.challenge.id });
 
-  // Re-approving an exchanged challenge is rejected.
-  await assert.rejects(
-    () => cli.approveCliLogin({ challengeId: started.challenge.id, ownerId: OWNER.id }),
-    (error) => error.code === PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
-  );
+  // A same-owner browser retry recovers the completed state without issuing
+  // another token.
+  const replayed = await cli.approveCliLogin({
+    challengeId: started.challenge.id,
+    ownerId: OWNER.id
+  });
+  assert.equal(replayed.status, "exchanged");
+  assert.equal(replayed.ownerId, OWNER.id);
+  assert.equal(store.listCliTokensByOwnerId(OWNER.id).length, 1);
 });
 
 test("exchangeCliLogin issues exactly one token for an approved challenge", async () => {

@@ -13,12 +13,15 @@ test("D1 migrations execute in order and are idempotent on real workerd D1", asy
   const tables = (await fixture.inspect("tables")).map((row) => row.name);
 
   assert.deepEqual(first, {
-    appliedVersions: [1, 2],
-    newlyApplied: [1, 2]
+    appliedVersions: [1, 2, 3],
+    newlyApplied: [1, 2, 3]
   });
   assert.deepEqual(second, {
-    appliedVersions: [1, 2],
+    appliedVersions: [1, 2, 3],
     newlyApplied: []
+  });
+  assert.deepEqual(await fixture.rpc("verifyReadiness"), {
+    appliedVersions: [1, 2, 3]
   });
   for (const table of [
     "account_usage_rate_limits",

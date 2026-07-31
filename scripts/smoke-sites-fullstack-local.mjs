@@ -95,7 +95,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     const origin = ready.origin;
     const migrated = await requestJson(origin, "POST", "/__local/migrate");
     assert.equal(migrated.response.status, 200);
-    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2]);
+    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3]);
 
     const health = await requestJson(origin, "GET", "/healthz");
     assert.equal(health.response.status, 200);

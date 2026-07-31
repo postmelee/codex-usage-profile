@@ -127,6 +127,15 @@ test("device login responses expose raw secrets only at intended exchange points
       deviceCode: started.body.data.deviceCode
     }
   );
+  const replayedAuthorization = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie }
+  );
   const exportedState = JSON.stringify(fixture.store.exportState());
 
   assert.equal(started.status, 201);
@@ -139,10 +148,20 @@ test("device login responses expose raw secrets only at intended exchange points
   ]);
 
   assert.equal(authorized.status, 200);
-  assert.equal(authorized.body.data.challenge.status, CLI_LOGIN_STATUS.APPROVED);
-  assertNoSerializedKeys(authorized.body.data.challenge, [
+  assert.deepEqual(Object.keys(authorized.body.data).sort(), [
+    "approvedAt",
+    "exchangedAt",
+    "intent",
+    "status"
+  ]);
+  assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
+  assertNoSerializedKeys(authorized.body.data, [
+    "challenge",
+    "cliTokenId",
     "deviceCode",
     "deviceCodeDigest",
+    "ownerId",
+    "redirectUri",
     "token",
     "tokenDigest"
   ]);
@@ -162,6 +181,20 @@ test("device login responses expose raw secrets only at intended exchange points
   assert.equal(reused.body.data.status, CLI_LOGIN_STATUS.EXCHANGED);
   assert.equal(Object.hasOwn(reused.body.data, "token"), false);
   assert.equal(Object.hasOwn(reused.body.data, "tokenRecord"), false);
+  assert.deepEqual(replayedAuthorization.body.data, {
+    approvedAt: "2026-06-10T00:00:00.000Z",
+    exchangedAt: "2026-06-10T00:00:00.000Z",
+    intent: null,
+    status: CLI_LOGIN_STATUS.EXCHANGED
+  });
+  assertNoSerializedKeys(replayedAuthorization.body.data, [
+    "challenge",
+    "cliTokenId",
+    "deviceCodeDigest",
+    "ownerId",
+    "redirectUri",
+    "token"
+  ]);
 
   assert.equal(exportedState.includes(started.body.data.deviceCode), false);
   assert.equal(exportedState.includes(polled.body.data.token), false);
@@ -260,12 +293,20 @@ test("public profile responses exclude owner and usage storage metadata", async 
   }
 });
 
-test("device login rejects invalid, duplicate, expired, and unknown codes", async () => {
+test("device login recovers same-owner replay and rejects cross-owner approval", async () => {
   const fixture = createDeviceFixture();
   fixture.saveOwner();
   const cookie = fixture.saveSession();
+  fixture.saveOwner({
+    id: "owner_2",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other"
+  });
+  const otherCookie = fixture.saveSession("owner_2", { id: "session_2" });
 
   const started = await requestJson(fixture.handler, "POST", "/api/auth/device", {
+    intent: "submit",
     label: "workstation"
   });
   const invalid = await requestJson(
@@ -286,7 +327,7 @@ test("device login rejects invalid, duplicate, expired, and unknown codes", asyn
     },
     { cookie }
   );
-  const duplicate = await requestJson(
+  const replay = await requestJson(
     fixture.handler,
     "POST",
     "/api/auth/device/authorize",
@@ -294,6 +335,15 @@ test("device login rejects invalid, duplicate, expired, and unknown codes", asyn
       userCode: started.body.data.userCode
     },
     { cookie }
+  );
+  const otherOwner = await requestJson(
+    fixture.handler,
+    "POST",
+    "/api/auth/device/authorize",
+    {
+      userCode: started.body.data.userCode
+    },
+    { cookie: otherCookie }
   );
   const unknownPoll = await requestJson(
     fixture.handler,
@@ -322,8 +372,13 @@ test("device login rejects invalid, duplicate, expired, and unknown codes", asyn
   assert.equal(invalid.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
   assert.equal(authorized.status, 200);
   assert.equal(authorized.body.data.status, CLI_LOGIN_STATUS.APPROVED);
-  assert.equal(duplicate.status, 400);
-  assert.equal(duplicate.body.error.code, PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST);
+  assert.deepEqual(replay.body.data, authorized.body.data);
+  assert.equal(otherOwner.status, 400);
+  assert.equal(
+    otherOwner.body.error.code,
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
+  assert.equal(fixture.store.listCliTokensByOwnerId("owner_1").length, 0);
   assert.equal(unknownPoll.status, 404);
   assert.equal(unknownPoll.body.error.code, PROFILE_BACKEND_ERROR_CODES.NOT_FOUND);
   assert.equal(expired.status, 410);

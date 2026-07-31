@@ -31,6 +31,7 @@ export async function loginWithDeviceCode(options = {}) {
     openBrowser = openUrl,
     randomBytes,
     label = os.hostname(),
+    intent,
     env = process.env,
     hyperlinks
   } = options;
@@ -39,7 +40,10 @@ export async function loginWithDeviceCode(options = {}) {
     throw new TypeError("client, credentialStore, and stdout are required");
   }
 
-  const started = await client.startDeviceLogin({ label });
+  const started = await client.startDeviceLogin({
+    label,
+    ...(intent === undefined ? {} : { intent })
+  });
   const deviceCode = requireNonEmptyString(started.deviceCode, "deviceCode");
   const userCode = normalizeUserCode(started.userCode);
   const expiresAt = normalizeDate(started.expiresAt, "expiresAt");

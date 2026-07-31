@@ -279,7 +279,8 @@ async function runLogin(options) {
     credentialStore: options.credentialStore,
     serviceOrigin: options.serviceOrigin,
     stdout: options.stdout,
-    ...withoutUndefined(options.loginOptions)
+    ...withoutUndefined(options.loginOptions),
+    intent: "login"
   });
   options.stdout.write("Login complete.\n");
   return 0;
@@ -311,7 +312,8 @@ async function runSubmit(options) {
         openBrowser: options.openBrowser,
         randomBytes: options.randomBytes,
         env: options.env,
-        hyperlinks: options.json ? false : options.hyperlinks
+        hyperlinks: options.json ? false : options.hyperlinks,
+        intent: "submit"
       })
     });
     credentialSource = resolveCredentialSource({

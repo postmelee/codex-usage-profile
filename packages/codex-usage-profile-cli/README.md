@@ -43,6 +43,15 @@ deployment.
 
 During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
 
+After browser approval, `Device approved` means only that device authorization
+is complete. A `submit` flow continues in the same CLI process, and the terminal
+reports its final submission result. An explicit `login` flow instead shows the
+next submit command, preserving `--server` for a local or alternate service.
+The browser does not redirect, copy to the clipboard, or execute a command
+automatically; those actions remain under the user's control. Older clients
+without an intent receive a generic return-to-terminal message. See the
+detailed CLI guide below for the complete approval flow.
+
 ```bash
 npx codex-usage-profile@latest status
 npx codex-usage-profile@latest submit

@@ -12,6 +12,10 @@ export const CLI_LOGIN_STATUS = Object.freeze({
   EXCHANGED: "exchanged",
   EXPIRED: "expired"
 });
+export const CLI_LOGIN_INTENT = Object.freeze({
+  LOGIN: "login",
+  SUBMIT: "submit"
+});
 
 export const DEFAULT_CLI_LOGIN_TTL_MS = 1000 * 60 * 10;
 export const DEFAULT_CLI_LOGIN_POLL_INTERVAL_SECONDS = 5;
@@ -64,6 +68,7 @@ export function createCliLoginService(options = {}) {
         id: createId("cli_login"),
         status: CLI_LOGIN_STATUS.PENDING,
         label: normalizeNullableString(startOptions.label),
+        intent: normalizeCliLoginIntent(startOptions.intent),
         redirectUri: normalizeNullableString(startOptions.redirectUri),
         deviceCodeDigest: createDeviceCodeDigest(deviceCode),
         userCode,
@@ -94,19 +99,39 @@ export function createCliLoginService(options = {}) {
 
     async approveCliLogin(approveOptions = {}) {
       const nowDate = normalizeDate(now());
-      const challenge = await getChallengeForApproval(store, approveOptions);
-      await assertChallengeCanBeApproved(store, challenge, nowDate);
-
       const ownerId = requireNonEmptyString(approveOptions.ownerId, "ownerId");
+      const challenge = await getChallengeForApproval(store, approveOptions);
+      await assertChallengeNotExpired(store, challenge, nowDate);
+
+      if (challenge.status !== CLI_LOGIN_STATUS.PENDING) {
+        return recoverCompletedApproval(challenge, ownerId);
+      }
 
       // Only a pending, unexpired challenge can be approved once: the state is
       // re-read under the row lock so a racing approve cannot double-consume.
-      const result = await store.atomic.approveCliLogin({
-        challengeId: challenge.id,
-        ownerId,
-        now: nowDate.toISOString()
-      });
-      return result.challenge;
+      try {
+        const result = await store.atomic.approveCliLogin({
+          challengeId: challenge.id,
+          ownerId,
+          now: nowDate.toISOString()
+        });
+        return result.challenge;
+      } catch (error) {
+        if (!isApprovalRaceError(error)) {
+          throw error;
+        }
+
+        // A concurrent request may have completed the same-owner approval
+        // between the optimistic read and the atomic transition. Re-read once
+        // and recover only that completed state; every other result keeps the
+        // original fail-closed error.
+        const completed = await getChallenge(store, challenge.id);
+        await assertChallengeNotExpired(store, completed, nowDate);
+        if (isCompletedApprovalForOwner(completed, ownerId)) {
+          return completed;
+        }
+        throw error;
+      }
     },
 
     async exchangeCliLogin(exchangeOptions = {}) {
@@ -217,6 +242,23 @@ export function normalizeUserCode(value) {
   return `${normalized.slice(0, 4)}-${normalized.slice(4)}`;
 }
 
+export function normalizeCliLoginIntent(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (
+    value === CLI_LOGIN_INTENT.LOGIN ||
+    value === CLI_LOGIN_INTENT.SUBMIT
+  ) {
+    return value;
+  }
+
+  throw new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+    "intent must be login or submit"
+  );
+}
+
 async function getChallenge(store, challengeId) {
   const id = requireNonEmptyString(challengeId, "challengeId");
   const challenge = await store.getCliLoginChallenge(id);
@@ -278,22 +320,37 @@ async function exchangeChallenge({ store, tokenService, challenge, label, nowDat
   });
 }
 
-// Marks an expired challenge EXPIRED (a housekeeping write) then throws if the
-// challenge cannot move to the requested state. Runs before the transaction.
-async function assertChallengeCanBeApproved(store, challenge, nowDate) {
-  await assertChallengeNotExpired(store, challenge, nowDate);
-
-  if (challenge.status !== CLI_LOGIN_STATUS.PENDING) {
-    throw new ProfileBackendError(
-      PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
-      "CLI login challenge cannot be approved"
-    );
-  }
-}
-
 async function assertChallengeCanBeExchanged(store, challenge, nowDate) {
   await assertChallengeNotExpired(store, challenge, nowDate);
   checkChallengeExchangeable(challenge, nowDate);
+}
+
+function recoverCompletedApproval(challenge, ownerId) {
+  if (isCompletedApprovalForOwner(challenge, ownerId)) {
+    return challenge;
+  }
+
+  throw new ProfileBackendError(
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST,
+    "CLI login challenge cannot be approved"
+  );
+}
+
+function isCompletedApprovalForOwner(challenge, ownerId) {
+  return (
+    (
+      challenge.status === CLI_LOGIN_STATUS.APPROVED ||
+      challenge.status === CLI_LOGIN_STATUS.EXCHANGED
+    ) &&
+    challenge.ownerId === ownerId
+  );
+}
+
+function isApprovalRaceError(error) {
+  return (
+    error instanceof ProfileBackendError &&
+    error.code === PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
 }
 
 async function assertChallengeNotExpired(store, challenge, nowDate) {

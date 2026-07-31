@@ -14,7 +14,7 @@ test("full-stack artifact verifier accepts the production Sites shape", async ()
 
   assert.equal(result.clientFileCount, 2);
   assert.equal(result.hostingMode, "pre-hosted");
-  assert.equal(result.migrationFileCount, 2);
+  assert.equal(result.migrationFileCount, 3);
   assert.equal(result.workerFileCount, 1);
 });
 
@@ -128,6 +128,10 @@ async function createArtifact(options = {}) {
   await writeFile(
     join(migrationsDirectory, "0002_account_usage_rate_limits.sql"),
     "CREATE TABLE rate_limits (id TEXT PRIMARY KEY);"
+  );
+  await writeFile(
+    join(migrationsDirectory, "0003_cli_login_intent.sql"),
+    "ALTER TABLE cli_login_challenges ADD COLUMN intent TEXT;"
   );
 
   return outputDirectory;

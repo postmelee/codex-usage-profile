@@ -97,12 +97,14 @@ export {
 
 export {
   CLI_DEVICE_CODE_PREFIX,
+  CLI_LOGIN_INTENT,
   CLI_LOGIN_STATUS,
   DEFAULT_CLI_LOGIN_POLL_INTERVAL_SECONDS,
   DEFAULT_CLI_LOGIN_TTL_MS,
   DEFAULT_CLI_LOGIN_VERIFICATION_URI,
   createDeviceCodeDigest,
-  createCliLoginService
+  createCliLoginService,
+  normalizeCliLoginIntent
 } from "./cli-login.js";
 
 export {

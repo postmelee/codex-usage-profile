@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CLI_LOGIN_INTENT,
   CLI_LOGIN_STATUS,
   CLI_DEVICE_CODE_PREFIX,
   CLI_TOKEN_PREFIX,
@@ -11,7 +12,8 @@ import {
   createDeviceCodeDigest,
   createCliLoginService,
   createCliTokenService,
-  createMemoryProfileBackendStore
+  createMemoryProfileBackendStore,
+  normalizeCliLoginIntent
 } from "../index.js";
 
 test("starts a CLI login challenge with a browser URL", async () => {
@@ -19,6 +21,7 @@ test("starts a CLI login challenge with a browser URL", async () => {
 
   const result = await service.startCliLogin({
     label: "macbook",
+    intent: CLI_LOGIN_INTENT.SUBMIT,
     redirectUri: "codex-usage-profile://callback"
   });
   const { challenge, browserUrl } = result;
@@ -26,6 +29,7 @@ test("starts a CLI login challenge with a browser URL", async () => {
 
   assert.equal(challenge.id, "cli_login_1");
   assert.equal(challenge.status, CLI_LOGIN_STATUS.PENDING);
+  assert.equal(challenge.intent, CLI_LOGIN_INTENT.SUBMIT);
   assert.equal(result.deviceCode, `${CLI_DEVICE_CODE_PREFIX}test_1`);
   assert.equal(result.userCode, "ABCD-1234");
   assert.equal(result.verificationUri, "/device");
@@ -37,6 +41,25 @@ test("starts a CLI login challenge with a browser URL", async () => {
   assert.equal(browserUrl, "/api/auth/github/login?cli_login_challenge=cli_login_1");
   assert.deepEqual(storedChallenge, challenge);
   assert.equal(JSON.stringify(storedChallenge).includes(result.deviceCode), false);
+});
+
+test("normalizes optional CLI login intent and rejects unknown values", async () => {
+  const { service } = createFixture();
+  const legacy = await service.startCliLogin();
+  const login = await service.startCliLogin({ intent: CLI_LOGIN_INTENT.LOGIN });
+
+  assert.equal(legacy.challenge.intent, null);
+  assert.equal(login.challenge.intent, CLI_LOGIN_INTENT.LOGIN);
+  assert.equal(normalizeCliLoginIntent(undefined), null);
+  assert.equal(normalizeCliLoginIntent(null), null);
+  assert.equal(
+    normalizeCliLoginIntent(CLI_LOGIN_INTENT.SUBMIT),
+    CLI_LOGIN_INTENT.SUBMIT
+  );
+  await assertBackendError(
+    () => service.startCliLogin({ intent: "publish" }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
 });
 
 test("approves and exchanges a CLI login challenge for a raw token", async () => {
@@ -59,6 +82,78 @@ test("approves and exchanges a CLI login challenge for a raw token", async () =>
   assert.equal(Object.hasOwn(storedToken, "token"), false);
   assert.equal(storedChallenge.status, CLI_LOGIN_STATUS.EXCHANGED);
   assert.equal(storedChallenge.cliTokenId, exchanged.tokenRecord.id);
+});
+
+test("recovers fast same-owner approval replay without issuing a token", async () => {
+  const { store, service } = createFixture();
+  const { challenge } = await service.startCliLogin({
+    intent: CLI_LOGIN_INTENT.SUBMIT
+  });
+
+  const approved = await Promise.all([
+    service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    }),
+    service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    })
+  ]);
+
+  assert.equal(approved[0].status, CLI_LOGIN_STATUS.APPROVED);
+  assert.deepEqual(approved[1], approved[0]);
+  assert.equal(store.listCliTokensByOwnerId("owner_1").length, 0);
+});
+
+test("replays only same-owner completed approval states", async () => {
+  const { store, service } = createFixture();
+  store.saveOwner({
+    id: "owner_2",
+    authProvider: "github",
+    providerUserId: "2",
+    githubLogin: "other",
+    handle: "other",
+    visibility: PROFILE_VISIBILITY.PRIVATE
+  });
+  const { challenge } = await service.startCliLogin({
+    intent: CLI_LOGIN_INTENT.LOGIN
+  });
+  const approved = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+  const approvedReplay = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+
+  assert.deepEqual(approvedReplay, approved);
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_2"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
+
+  const exchanged = await service.exchangeCliLogin({
+    challengeId: challenge.id
+  });
+  const exchangedReplay = await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+
+  assert.deepEqual(exchangedReplay, exchanged.challenge);
+  assert.equal(store.listCliTokensByOwnerId("owner_1").length, 1);
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_2"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.INVALID_REQUEST
+  );
 });
 
 test("approves a CLI login by user code and polls a raw token once", async () => {
@@ -139,10 +234,37 @@ test("expires pending challenges and persists expired status", async () => {
   );
 });
 
+test("checks expiry before recovering a completed approval", async () => {
+  const fixture = createFixture();
+  const { service } = fixture;
+  const { challenge } = await service.startCliLogin();
+
+  await service.approveCliLogin({
+    challengeId: challenge.id,
+    ownerId: "owner_1"
+  });
+  fixture.setNow(new Date("2026-06-08T00:10:00.000Z"));
+
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: challenge.id,
+      ownerId: "owner_1"
+    }),
+    PROFILE_BACKEND_ERROR_CODES.EXPIRED
+  );
+});
+
 test("validates owner and challenge ids during approval", async () => {
   const { service } = createFixture();
   const { challenge } = await service.startCliLogin();
 
+  await assertBackendError(
+    () => service.approveCliLogin({
+      challengeId: "missing",
+      ownerId: " "
+    }),
+    PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED
+  );
   await assertBackendError(
     () => service.approveCliLogin({
       challengeId: "missing",

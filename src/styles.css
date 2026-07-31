@@ -2212,6 +2212,11 @@ button {
   box-shadow: 0 0 0 3px rgba(119, 169, 223, 0.18);
 }
 
+.device-form input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .device-primary-action {
   align-items: center;
   appearance: none;
@@ -2228,9 +2233,32 @@ button {
   text-decoration: none;
 }
 
+.device-primary-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.device-primary-action:focus-visible,
+.device-copy-action:focus-visible,
+.device-success-links a:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
 .device-primary-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.device-primary-action.is-approved:disabled {
+  background: #e7f6eb;
+  color: #174f27;
+  opacity: 1;
+}
+
+.device-feedback {
+  align-content: start;
+  display: grid;
+  min-height: 168px;
 }
 
 .device-status {
@@ -2246,6 +2274,85 @@ button {
 
 .device-status.is-error {
   color: #ff8b8b;
+}
+
+.device-success {
+  animation: device-success-enter 240ms cubic-bezier(0.2, 0, 0, 1) both;
+  display: grid;
+  gap: 12px;
+}
+
+.device-command-row {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.device-command-row code {
+  background: #101010;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: #d6d6d7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  user-select: text;
+}
+
+.device-copy-action {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.device-copy-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.device-copy-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  margin: -4px 0 0;
+  min-height: 18px;
+}
+
+.device-success-links {
+  display: flex;
+  gap: 16px;
+}
+
+.device-success-links a {
+  color: #c8dff7;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.device-success-links a:hover {
+  text-decoration: underline;
+}
+
+@keyframes device-success-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .profile-stage-ready {
@@ -2723,6 +2830,11 @@ button {
     transform: none;
   }
 
+  .device-success {
+    animation: none;
+    transform: none;
+  }
+
   .share-studio-backdrop {
     backdrop-filter: none;
   }
@@ -2904,6 +3016,20 @@ button {
 
   .profile-navigation a {
     padding-inline: 5px;
+  }
+
+  .device-shell {
+    align-items: flex-start;
+    min-height: 100dvh;
+    padding: 56px 20px 32px;
+  }
+
+  .device-command-row {
+    grid-template-columns: 1fr;
+  }
+
+  .device-copy-action {
+    min-height: 42px;
   }
 
   .profile-actions button {

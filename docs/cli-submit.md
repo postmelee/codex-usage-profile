@@ -110,6 +110,28 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
 5. 승인된 poll 응답에서 raw service token을 한 번만 받고 로컬 credential file에 저장한다.
 6. `submit`에서 시작한 경우 즉시 analyzer와 usage submit을 이어서 실행한다.
 
+승인 완료 화면의 안내는 CLI가 device flow를 시작할 때 보낸 intent에 따라
+달라진다.
+
+- `submit`에서 시작한 승인은 현재 실행 중인 CLI process로 돌아가면
+  analyzer와 usage submit이 계속되며 최종 성공·실패는 terminal에서
+  확인하라고 안내한다. 브라우저의 `Device approved`는 device 인증
+  완료만 의미하며 usage submit 성공을 의미하지 않는다.
+- 명시적인 `login`에서 시작한 승인은 로그인만 완료한다. 다음
+  `npx codex-usage-profile@latest submit` 명령을 화면에 제공하며, 사용자가
+  copy button을 눌렀을 때만 clipboard에 복사한다.
+- intent를 보내지 않는 이전 CLI의 승인은 특정 명령을 제안하지 않고
+  terminal로 돌아가라고 안내한다.
+
+local 또는 기본값이 아닌 service에서 `login --server <origin>`을 사용한
+경우, 승인 화면이 제공하는 다음 submit 명령에도 같은 normalized origin의
+`--server`가 포함된다. user code, URL query와 hash는 명령에 포함되지
+않는다.
+
+승인 완료 후 브라우저는 Home이나 profile로 자동 이동하지 않고,
+clipboard에 자동으로 쓰거나 명령을 실행하지 않는다. 완료 상태와
+Home/Profile 링크를 유지하므로 사용자가 다음 행동을 직접 선택할 수 있다.
+
 브라우저 자동 열기가 실패해도 출력된 URL과 code로 계속 진행할 수 있다. `429` 응답은 `Retry-After`를 따르며 expiry 이후 polling을 중단한다.
 
 ## 명령과 옵션

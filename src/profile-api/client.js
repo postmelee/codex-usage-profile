@@ -153,8 +153,10 @@ export function createProfileApiClient(options = {}) {
       const envelope = await readApiEnvelope(response);
 
       return {
-        challenge: envelope.data.challenge,
-        status: envelope.data.status
+        status: envelope.data.status,
+        intent: envelope.data.intent ?? null,
+        approvedAt: envelope.data.approvedAt ?? null,
+        exchangedAt: envelope.data.exchangedAt ?? null
       };
     },
 

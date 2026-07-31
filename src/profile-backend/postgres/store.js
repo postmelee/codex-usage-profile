@@ -95,6 +95,7 @@ const CLI_LOGIN_CHALLENGE = {
     ["id", "id"],
     ["status", "status"],
     ["label", "label"],
+    ["intent", "intent"],
     ["redirectUri", "redirect_uri"],
     ["deviceCodeDigest", "device_code_digest"],
     ["userCode", "user_code"],
