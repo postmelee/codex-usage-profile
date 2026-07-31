@@ -1,5 +1,6 @@
 import migrationOne from "../../../../db/migrations/0001_profile_backend.sql";
 import migrationTwo from "../../../../db/migrations/0002_account_usage_rate_limits.sql";
+import migrationThree from "../../../../db/migrations/0003_cli_login_intent.sql";
 import {
   migrateD1Database
 } from "../../../profile-backend/d1/migration-runner.js";
@@ -22,6 +23,11 @@ const migrations = Object.freeze([
     version: 2,
     name: "account_usage_rate_limits",
     sql: migrationTwo
+  }),
+  Object.freeze({
+    version: 3,
+    name: "cli_login_intent",
+    sql: migrationThree
   })
 ]);
 let localMaintenanceEnabled = false;

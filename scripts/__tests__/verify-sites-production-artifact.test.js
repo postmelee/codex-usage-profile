@@ -15,7 +15,7 @@ test("production artifact verifier accepts the exact hosted candidate shape", as
 
   assert.equal(result.clientFileCount, 3);
   assert.equal(result.expectedBindingCount, 3);
-  assert.equal(result.migrationFileCount, 2);
+  assert.equal(result.migrationFileCount, 3);
   assert.equal(result.workerFileCount, 1);
   assert.ok(result.artifactBytes > 0);
 });
@@ -143,6 +143,10 @@ async function createProductionArtifact(options = {}) {
   await writeFile(
     join(migrationsDirectory, "0002_account_usage_rate_limits.sql"),
     "CREATE TABLE rate_limits (id TEXT PRIMARY KEY);"
+  );
+  await writeFile(
+    join(migrationsDirectory, "0003_cli_login_intent.sql"),
+    "ALTER TABLE cli_login_challenges ADD COLUMN intent TEXT;"
   );
 
   return outputDirectory;

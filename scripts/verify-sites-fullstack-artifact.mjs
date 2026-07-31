@@ -49,9 +49,9 @@ export async function verifySitesFullStackArtifact(options = {}) {
 
   const migrationFiles = (await listSitesArtifactFiles(migrationsDirectory))
     .filter((path) => path.endsWith(".sql"));
-  if (migrationFiles.length !== 2) {
+  if (migrationFiles.length !== 3) {
     throw new Error(
-      `Expected two packaged D1 migrations, found ${migrationFiles.length}`
+      `Expected three packaged D1 migrations, found ${migrationFiles.length}`
     );
   }
 
