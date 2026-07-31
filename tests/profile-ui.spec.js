@@ -896,12 +896,12 @@ test.describe("Home and share card flow", () => {
 
     releaseAuthorization();
 
-    const approvedButton = page.getByRole("button", { name: "Approved" });
+    const approvedButton = page.getByRole("button", { name: "Device approved" });
     await expect(approvedButton).toBeDisabled();
     await expect(approvedButton.locator("[data-codex-check-circle]")).toHaveCount(1);
     await expect(page.getByLabel("User code")).toBeDisabled();
     await expect(page.getByText(
-      "Return to your terminal. The current CLI process will continue submitting your usage.",
+      "Authorization is complete. Return to your terminal to continue, and check the terminal for the final submission result.",
       { exact: true }
     )).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy command" })).toHaveCount(0);
@@ -995,9 +995,9 @@ test.describe("Home and share card flow", () => {
 
     await page.getByRole("button", { name: "Approve device" }).click();
 
-    await expect(page.getByRole("button", { name: "Approved" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Device approved" })).toBeDisabled();
     await expect(page.getByText(
-      "Return to your terminal to continue.",
+      "Authorization is complete. Return to your terminal to continue.",
       { exact: true }
     )).toBeVisible();
     await expect(page.locator(".device-command-row")).toHaveCount(0);
@@ -1049,7 +1049,7 @@ test.describe("Home and share card flow", () => {
     );
     await expect(page.getByLabel("User code")).toHaveAttribute("aria-invalid", "true");
     await page.getByRole("button", { name: "Retry approval" }).click();
-    await expect(page.getByRole("button", { name: "Approved" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Device approved" })).toBeDisabled();
 
     await page.goto("/?view=device&user_code=WXYZ-9876");
     await page.getByRole("button", { name: "Approve device" }).click();

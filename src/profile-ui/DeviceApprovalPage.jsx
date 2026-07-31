@@ -167,7 +167,7 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
                 {isApproved ? (
                   <>
                     <CodexCheckCircleIcon />
-                    <span>Approved</span>
+                    <span>Device approved</span>
                   </>
                 ) : isApproving ? (
                   "Approving…"
@@ -190,7 +190,7 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
 
               {isApproved && guidance ? (
                 <section
-                  aria-label="Device approval complete"
+                  aria-label="Device authorization complete"
                   className="device-success"
                 >
                   <p className="device-status is-success">{guidance.message}</p>
@@ -218,7 +218,10 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
                     </>
                   ) : null}
 
-                  <nav aria-label="Approval complete" className="device-success-links">
+                  <nav
+                    aria-label="Device authorization complete"
+                    className="device-success-links"
+                  >
                     <a href="/">Home</a>
                     <a href="/profile">Profile</a>
                   </nav>

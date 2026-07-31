@@ -83,15 +83,24 @@ test("builds intent-specific guidance without embedding response metadata", () =
   const legacy = createDeviceApprovalGuidance(null, DEVICE_APPROVAL_PRODUCTION_ORIGIN);
 
   assert.equal(submit.command, null);
-  assert.match(submit.message, /current CLI process/);
+  assert.equal(
+    submit.message,
+    "Authorization is complete. Return to your terminal to continue, and check the terminal for the final submission result."
+  );
   assert.equal(
     login.command,
     `${DEVICE_APPROVAL_SUBMIT_COMMAND} --server http://127.0.0.1:5177`
   );
   assert.equal(login.command.includes("SECRET"), false);
-  assert.match(login.message, /Run this command/);
+  assert.equal(
+    login.message,
+    "Authorization is complete. Return to your terminal. Run this command when you are ready to submit usage."
+  );
   assert.equal(legacy.command, null);
-  assert.equal(legacy.message, "Return to your terminal to continue.");
+  assert.equal(
+    legacy.message,
+    "Authorization is complete. Return to your terminal to continue."
+  );
 });
 
 test("uses the default command on production and a normalized local origin elsewhere", () => {

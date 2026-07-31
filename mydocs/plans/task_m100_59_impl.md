@@ -12,6 +12,7 @@ GitHub Issue: [#59](https://github.com/postmelee/codex-usage-profile/issues/59)
 | 2 | 동일 owner 승인 복구와 보안 경계 | idempotent approval, 최소 응답 serializer | token 단일 발급·owner/expiry·concurrency test |
 | 3 | terminal 승인 UI와 intent별 onboarding | UI 상태 모델, copy 안내, 접근성·motion | unit, focused Playwright, build |
 | 4 | 문서·통합 회귀와 Sites artifact | CLI 사용자 문서, 전체 검증 증적 | root test/build/E2E, production artifact |
+| 4.1 | 승인과 submit 결과 문구 분리 | device-scoped 완료 문구와 회귀 test | helper unit, focused Playwright, build |
 
 ## 문서 위치 확인
 
@@ -305,6 +306,52 @@ platform 제약 또는 외부 dependency 한계가 있으면 Stage 보고서에 
 Task #59 Stage 4: CLI 승인 안내 문서와 통합 검증 완료
 ```
 
+## Stage 4.1 — 승인과 submit 결과 문구 분리
+
+### 산출물
+
+신규:
+
+- `mydocs/working/task_m100_59_stage4_1.md`
+
+수정:
+
+- `src/profile-ui/deviceApproval.js`
+- `src/profile-ui/DeviceApprovalPage.jsx`
+- `src/profile-ui/__tests__/deviceApproval.test.js`
+- `tests/profile-ui.spec.js`
+- `docs/cli-submit.md`
+- `packages/codex-usage-profile-cli/README.md`
+
+### 변경 내용
+
+- terminal success button을 `Device approved`로 바꿔 device 인증 완료와
+  usage submit 성공을 구분한다.
+- `submit` intent는 authorization 완료 뒤 terminal로 돌아가 흐름을
+  계속하고 최종 제출 결과를 terminal에서 확인하라고 안내한다.
+- `login`과 no-intent도 `Authorization is complete`로 device-scoped
+  상태를 명시하되 기존 command와 terminal 복귀 의미는 유지한다.
+- 브라우저가 downstream analyzer 또는 submit 결과를 추론하거나 성공으로
+  표시하지 않는다.
+- query의 `user_code` 자동 채움, 수동 approve, no redirect/clipboard/
+  command execution과 credential 비노출 경계는 변경하지 않는다.
+
+### 검증
+
+```bash
+node --test src/profile-ui/__tests__/deviceApproval.test.js
+npm run build
+npm run test:e2e -- --grep "device approval"
+git diff --check
+git diff 7b3e8ec -- .openai/hosting.json
+```
+
+### 커밋
+
+```text
+Task #59 [Stage 4.1]: device 승인과 submit 결과 문구 분리
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 `task-stage-report` 절차로 단계 보고서를 작성하기
@@ -336,6 +383,7 @@ Task #59 Stage 1: CLI intent 계약과 저장소 migration 추가
 Task #59 Stage 2: device 승인 재시도 보안 경계 강화
 Task #59 Stage 3: device 승인 완료 UI와 intent 안내 구현
 Task #59 Stage 4: CLI 승인 안내 문서와 통합 검증 완료
+Task #59 [Stage 4.1]: device 승인과 submit 결과 문구 분리
 ```
 
 ## 단계 의존성
@@ -347,8 +395,10 @@ Task #59 Stage 4: CLI 승인 안내 문서와 통합 검증 완료
   연결한다.
 - Stage 4는 Stage 1~3 검증과 단계 보고서 승인이 모두 끝난 뒤 문서와
   전체 회귀를 확정한다.
+- Stage 4.1은 local QA에서 확인된 device 승인과 downstream submit 결과의
+  문구 혼동만 보정하고 Stage 4 artifact 경계를 유지한다.
 - 각 Stage 완료보고서 승인 전에는 다음 Stage 소스를 수정하지 않는다.
-- Stage 4 승인 후에만 최종 결과보고서와 PR 게시 절차로 이동한다.
+- Stage 4.1 승인 후에만 최종 결과보고서와 PR 게시 절차로 이동한다.
 
 ## 위험과 대응
 

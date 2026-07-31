@@ -74,7 +74,7 @@ export function createDeviceApprovalGuidance(intent, currentOrigin) {
     return {
       command: null,
       message:
-        "Return to your terminal. The current CLI process will continue submitting your usage."
+        "Authorization is complete. Return to your terminal to continue, and check the terminal for the final submission result."
     };
   }
 
@@ -82,13 +82,13 @@ export function createDeviceApprovalGuidance(intent, currentOrigin) {
     return {
       command: buildDeviceSubmitCommand(currentOrigin),
       message:
-        "Return to your terminal. Run this command when you are ready to submit usage."
+        "Authorization is complete. Return to your terminal. Run this command when you are ready to submit usage."
     };
   }
 
   return {
     command: null,
-    message: "Return to your terminal to continue."
+    message: "Authorization is complete. Return to your terminal to continue."
   };
 }
 

@@ -114,7 +114,9 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
 달라진다.
 
 - `submit`에서 시작한 승인은 현재 실행 중인 CLI process로 돌아가면
-  analyzer와 usage submit이 자동으로 계속된다고 안내한다.
+  analyzer와 usage submit이 계속되며 최종 성공·실패는 terminal에서
+  확인하라고 안내한다. 브라우저의 `Device approved`는 device 인증
+  완료만 의미하며 usage submit 성공을 의미하지 않는다.
 - 명시적인 `login`에서 시작한 승인은 로그인만 완료한다. 다음
   `npx codex-usage-profile@latest submit` 명령을 화면에 제공하며, 사용자가
   copy button을 눌렀을 때만 clipboard에 복사한다.
