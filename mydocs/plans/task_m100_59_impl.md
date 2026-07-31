@@ -13,6 +13,7 @@ GitHub Issue: [#59](https://github.com/postmelee/codex-usage-profile/issues/59)
 | 3 | terminal 승인 UI와 intent별 onboarding | UI 상태 모델, copy 안내, 접근성·motion | unit, focused Playwright, build |
 | 4 | 문서·통합 회귀와 Sites artifact | CLI 사용자 문서, 전체 검증 증적 | root test/build/E2E, production artifact |
 | 4.1 | 승인과 submit 결과 문구 분리 | device-scoped 완료 문구와 회귀 test | helper unit, focused Playwright, build |
+| 4.2 | review 방어 보정 | invalid-origin fallback과 live-region 분리 | helper unit, focused Playwright, build |
 
 ## 문서 위치 확인
 
@@ -352,6 +353,54 @@ git diff 7b3e8ec -- .openai/hosting.json
 Task #59 [Stage 4.1]: device 승인과 submit 결과 문구 분리
 ```
 
+## Stage 4.2 — review 방어 보정
+
+### 산출물
+
+신규:
+
+- `mydocs/working/task_m100_59_stage4_2.md`
+
+수정:
+
+- `src/profile-ui/deviceApproval.js`
+- `src/profile-ui/DeviceApprovalPage.jsx`
+- `src/profile-ui/__tests__/deviceApproval.test.js`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_59_impl.md`
+- `mydocs/report/task_m100_59_report.md`
+- `mydocs/orders/20260731.md`
+
+### 변경 내용
+
+- `login` intent의 current origin이 absolute HTTP(S) origin이 아닐 때
+  render 중 예외를 전파하지 않고 command 없는 일반 terminal 안내로
+  fallback한다. `buildDeviceSubmitCommand`의 직접 입력 검증은 유지한다.
+- approving/success용 polite live region과 error용 assertive alert를
+  형제 영역으로 분리해 중첩 live region과 중복 announce 가능성을 없앤다.
+- device 승인 상태, 정상 production/local command, retry/terminal error,
+  input/button lock, 자동 redirect/storage/clipboard 금지 계약은 변경하지
+  않는다.
+- PR #62 review의 D1 배포 순서, migration manifest drift와 canonical origin
+  중복은 production 운영·유지보수 후속 이슈로 분리하고 이 Stage에서는
+  runtime/storage/deployment 문서를 변경하지 않는다.
+
+### 검증
+
+```bash
+node --test src/profile-ui/__tests__/deviceApproval.test.js
+npm run build
+npm run test:e2e -- --grep "device approval"
+git diff --check
+git diff 44cace0 -- .openai/hosting.json
+```
+
+### 커밋
+
+```text
+Task #59 [Stage 4.2]: device 승인 fallback과 live region 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 `task-stage-report` 절차로 단계 보고서를 작성하기
@@ -384,6 +433,7 @@ Task #59 Stage 2: device 승인 재시도 보안 경계 강화
 Task #59 Stage 3: device 승인 완료 UI와 intent 안내 구현
 Task #59 Stage 4: CLI 승인 안내 문서와 통합 검증 완료
 Task #59 [Stage 4.1]: device 승인과 submit 결과 문구 분리
+Task #59 [Stage 4.2]: device 승인 fallback과 live region 보정
 ```
 
 ## 단계 의존성
@@ -397,8 +447,11 @@ Task #59 [Stage 4.1]: device 승인과 submit 결과 문구 분리
   전체 회귀를 확정한다.
 - Stage 4.1은 local QA에서 확인된 device 승인과 downstream submit 결과의
   문구 혼동만 보정하고 Stage 4 artifact 경계를 유지한다.
+- Stage 4.2는 PR #62 review에서 확인된 render 방어와 assistive technology
+  announce 경계만 보정하고 운영·migration refactor는 별도 이슈로 남긴다.
 - 각 Stage 완료보고서 승인 전에는 다음 Stage 소스를 수정하지 않는다.
-- Stage 4.1 승인 후에만 최종 결과보고서와 PR 게시 절차로 이동한다.
+- Stage 4.2 승인 후 최종 결과보고서와 PR 본문을 최신 commit 기준으로
+  갱신한다.
 
 ## 위험과 대응
 

@@ -101,6 +101,15 @@ test("builds intent-specific guidance without embedding response metadata", () =
     legacy.message,
     "Authorization is complete. Return to your terminal to continue."
   );
+
+  for (const invalidOrigin of ["null", "javascript:alert(1)"]) {
+    const fallback = createDeviceApprovalGuidance("login", invalidOrigin);
+    assert.equal(fallback.command, null);
+    assert.equal(
+      fallback.message,
+      "Authorization is complete. Return to your terminal to continue."
+    );
+  }
 });
 
 test("uses the default command on production and a normalized local origin elsewhere", () => {

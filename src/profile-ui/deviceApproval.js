@@ -79,8 +79,18 @@ export function createDeviceApprovalGuidance(intent, currentOrigin) {
   }
 
   if (normalizedIntent === DEVICE_APPROVAL_INTENT.LOGIN) {
+    let command;
+    try {
+      command = buildDeviceSubmitCommand(currentOrigin);
+    } catch {
+      return {
+        command: null,
+        message: "Authorization is complete. Return to your terminal to continue."
+      };
+    }
+
     return {
-      command: buildDeviceSubmitCommand(currentOrigin),
+      command,
       message:
         "Authorization is complete. Return to your terminal. Run this command when you are ready to submit usage."
     };

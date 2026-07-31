@@ -1047,6 +1047,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("alert")).toHaveText(
       "Approval temporarily unavailable"
     );
+    await expect(page.locator('[aria-live] [role="alert"]')).toHaveCount(0);
     await expect(page.getByLabel("User code")).toHaveAttribute("aria-invalid", "true");
     await page.getByRole("button", { name: "Retry approval" }).click();
     await expect(page.getByRole("button", { name: "Device approved" })).toBeDisabled();

@@ -179,54 +179,55 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
               </button>
             )}
 
-            <div
-              aria-atomic="true"
-              aria-live="polite"
-              className="device-feedback"
-            >
-              {isApproving ? (
-                <p className="device-status">Approving device.</p>
-              ) : null}
+            <div className="device-feedback">
+              <div
+                aria-atomic="true"
+                aria-live="polite"
+              >
+                {isApproving ? (
+                  <p className="device-status">Approving device.</p>
+                ) : null}
 
-              {isApproved && guidance ? (
-                <section
-                  aria-label="Device authorization complete"
-                  className="device-success"
-                >
-                  <p className="device-status is-success">{guidance.message}</p>
-
-                  {guidance.command ? (
-                    <>
-                      <div className="device-command-row">
-                        <code>{guidance.command}</code>
-                        <button
-                          className="device-copy-action"
-                          disabled={approvalState.copyStatus === "copying"}
-                          onClick={handleCopyCommand}
-                          type="button"
-                        >
-                          Copy command
-                        </button>
-                      </div>
-                      <p className="device-copy-status">
-                        {approvalState.copyStatus === "copied"
-                          ? "Command copied."
-                          : approvalState.copyStatus === "failed"
-                            ? "Copy failed. Select the command and copy it manually."
-                            : ""}
-                      </p>
-                    </>
-                  ) : null}
-
-                  <nav
+                {isApproved && guidance ? (
+                  <section
                     aria-label="Device authorization complete"
-                    className="device-success-links"
+                    className="device-success"
                   >
-                    <a href="/">Home</a>
-                    <a href="/profile">Profile</a>
-                  </nav>
-                </section>
-              ) : null}
+                    <p className="device-status is-success">{guidance.message}</p>
+
+                    {guidance.command ? (
+                      <>
+                        <div className="device-command-row">
+                          <code>{guidance.command}</code>
+                          <button
+                            className="device-copy-action"
+                            disabled={approvalState.copyStatus === "copying"}
+                            onClick={handleCopyCommand}
+                            type="button"
+                          >
+                            Copy command
+                          </button>
+                        </div>
+                        <p className="device-copy-status">
+                          {approvalState.copyStatus === "copied"
+                            ? "Command copied."
+                            : approvalState.copyStatus === "failed"
+                              ? "Copy failed. Select the command and copy it manually."
+                              : ""}
+                        </p>
+                      </>
+                    ) : null}
+
+                    <nav
+                      aria-label="Device authorization complete"
+                      className="device-success-links"
+                    >
+                      <a href="/">Home</a>
+                      <a href="/profile">Profile</a>
+                    </nav>
+                  </section>
+                ) : null}
+              </div>
 
               {hasApprovalError ? (
                 <p
