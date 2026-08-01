@@ -1,6 +1,13 @@
 export {
-  createD1ProfileBackendStore
+  createD1ProfileBackendStore,
+  inspectD1MigrationReadiness
 } from "./store.js";
+
+export {
+  D1_MIGRATION_MANIFEST,
+  D1_MIGRATION_VERSIONS,
+  createD1MigrationManifest
+} from "./migration-manifest.js";
 
 export {
   DEFAULT_PROFILE_RETENTION_DAYS,
