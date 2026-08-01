@@ -4,6 +4,13 @@ GitHub Issue: [#35](https://github.com/postmelee/codex-usage-profile/issues/35)
 구현계획서: [`task_m100_35_impl.md`](../plans/task_m100_35_impl.md)
 Stage: 1
 
+> **계획 변경 상태 — 2026-08-02**
+>
+> 이 단계는 당시 승인된 card tooltip 계획에 따라 완료되었으나, 작업지시자가
+> 상세 interaction을 Profile 52주 heatmap으로 이동하는 변경안 A를 승인했다.
+> 구현·검증 기록은 보존하며 card overlay에만 필요했던 산출물은 Stage 3에서
+> 최종 diff에서 정리한다.
+
 ## 단계 목적
 
 카드 PNG 위에 동일한 위치의 상호작용 영역을 배치할 수 있도록 native canvas와

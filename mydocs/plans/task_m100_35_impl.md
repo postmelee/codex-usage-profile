@@ -3,210 +3,188 @@
 수행계획서: [`task_m100_35.md`](task_m100_35.md)
 GitHub Issue: [#35](https://github.com/postmelee/codex-usage-profile/issues/35)
 마일스톤: M100
+계획 변경 승인: 2026-08-02
 
 ## 단계 개요
 
-| Stage | 제목 | 주요 산출 | 검증 |
+| Stage | 제목 | 상태 | 주요 산출 |
 |---|---|---|---|
-| 1 | 공유 geometry와 tooltip data contract | `src/profile-card/geometry.js`, `src/profile-ui/cardHeatmapTooltip.js` | geometry/renderer/formatting unit test, build |
-| 2 | 재사용 overlay와 Home/public profile 통합 | `src/profile-ui/CardHeatmapOverlay.jsx`, Home/public 연결, CSS | focused Playwright desktop/mobile·accessibility |
-| 3 | browser 통합·Sites artifact QA | `tests/profile-ui.spec.js`, 회귀 보정 | 전체 unit/E2E/build/Sites artifact |
+| 1 | 공유 card geometry와 tooltip contract | 완료 기록 보존·방향 대체 | 기존 Stage 1 보고서 |
+| 2 | Home/public card overlay 통합 | 완료 기록 보존·방향 대체 | 기존 Stage 2 보고서 |
+| 3 | 방향 전환 정리와 Profile heatmap data contract | 승인 대기 | card overlay 제거, 52주 mode builder |
+| 4 | owner/public Profile 통합 | Stage 3 후 승인 | Profile token activity UI·interaction |
+| 5 | browser·Sites artifact QA | Stage 4 후 승인 | 전체 회귀·build·artifact 검증 |
+
+## 계획 변경 처리 원칙
+
+- 기존 Stage 1·2 커밋과 보고서는 당시 구현·검증 기록으로 유지한다.
+- Git history를 reset 또는 rewrite하지 않는다.
+- Stage 3에서 최종 제품 방향에 필요 없는 card overlay와 geometry 변경을 명시적으로
+  제거해 PR final diff를 Profile 기능에 맞춘다.
+- Stage 1의 pure formatting/navigation 개념은 재사용할 수 있지만 card geometry와
+  결합된 파일을 그대로 유지하지 않는다.
+- 기존 Stage 3 계획은 취소하고 아래 Stage 3~5로 대체한다.
 
 ## 문서 위치 확인
 
-수행계획서에서 공식 제품 문서는 변경하지 않고 이슈별 설계·승인·검증 기록만
-표준 task 산출물에 남기기로 승인받았다. 실제 Stage 문서도 같은 위치를 사용한다.
+수행계획서의 변경된 문서 위치 판단을 그대로 따른다.
 
-| 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
-|---|---|---|---|---|
-| 수행·구현 계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_35*.md` | OK | 범위와 단계 승인 기록 |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_35_stage{N}.md` | OK | 각 Stage 소스와 함께 커밋 |
-| 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_35_report.md` | OK | 모든 Stage 완료 후 작성 |
-| 공식 제품 문서 | 변경하지 않음 | 해당 없음 | OK | route, API, CLI와 배포 절차 비변경 |
+| 파일 | 위치 | 비고 |
+|---|---|---|
+| 수행·구현 계획서 | `mydocs/plans/` | 변경 범위와 단계 승인 기록 |
+| 단계 보고서 | `mydocs/working/` | Stage 1·2 대체 이력 및 Stage 3~5 검증 |
+| 최종 보고서 | `mydocs/report/` | 최종 수용 기준과 잔여 위험 |
+| 공식 제품 문서 | 변경하지 않음 | route, API, CLI 절차 비변경 |
 
-## Stage 1 — 공유 geometry와 tooltip data contract
+## Stage 3 — 방향 전환 정리와 Profile heatmap data contract
 
-### 산출물
+### 목적
 
-신규:
+카드 위 interaction을 최종 제품에서 제거하고, Account Usage Contract v1의 실제
+daily bucket을 owner/public Profile이 공유할 수 있는 52주 heatmap data contract로
+정규화한다.
 
-- `src/profile-card/geometry.js`
-- `src/profile-card/__tests__/geometry.test.js`
+### 제거·원복 대상
+
+- `src/profile-ui/CardHeatmapOverlay.jsx`
 - `src/profile-ui/cardHeatmapTooltip.js`
 - `src/profile-ui/__tests__/cardHeatmapTooltip.test.js`
-- `mydocs/working/task_m100_35_stage1.md`
+- `src/profile-card/geometry.js`
+- `src/profile-card/__tests__/geometry.test.js`
+- `HomePage.jsx`, `PublicProfilePage.jsx`, `styles.css`, `tests/profile-ui.spec.js`의
+  card overlay 전용 부분
+- renderer와 `profile-card/index.js`의 card overlay만을 위한 geometry refactor
 
-수정:
+원복은 Stage 1 이전 동작을 기준으로 필요한 본문을 명시적으로 수정한다. 다른 task나
+작업지시자가 만든 변경을 되돌리지 않으며 `origin/devel`과 파일별 diff를 확인한다.
 
-- `src/profile-card/heatmap.js`
-- `src/profile-card/renderer.js`
-- `src/profile-card/worker-renderer.js`
-- `src/profile-card/index.js`
-- `src/profile-card/__tests__/heatmap.test.js`
-- `src/profile-card/__tests__/renderer.test.js`
-- `src/profile-card/__tests__/worker-renderer.test.js`
+### 구현 대상
 
-### 변경 내용
+- `src/profile-ui/heatmap.js` 또는 동등한 pure module을 실제
+  `dailyUsageBuckets[{ startDate, tokens }]` 입력 계약으로 정리한다.
+- 52주 UTC 범위와 미래 날짜 제외 규칙을 고정한다.
+- daily cell은 날짜별 raw token 값을 갖는다.
+- weekly mode는 Sunday~Saturday token 합계와 week range를 갖는다.
+- cumulative mode는 52주 시작부터 해당 week까지의 running total을 갖는다.
+- daily는 364개 cell, weekly/cumulative는 52개 semantic week target을 반환한다.
+- mode별 값으로 intensity 0~4를 독립 계산한다.
+- month label, latest scroll anchor와 grid geometry metadata를 pure 결과로 제공한다.
+- `en`/`ko` formatter는 축약값과 locale grouping을 적용한 정확한 raw token을 함께
+  반환한다.
+- 잘못된 날짜, 음수·비정수 token, 중복 날짜와 정렬되지 않은 입력의 처리 규칙을
+  Account Usage normalize contract와 일치시킨다.
 
-- `geometry.js`에 다음 불변값과 pure 계산을 둔다.
-  - logical card `499 × 306`
-  - heatmap bounds `x=32`, `y=96`, `width=435`, `height=115`
-  - cell `14 × 14`, `26 columns × 7 rows`
-  - column/row step, cell rect/center와 card 대비 percentage 계산
-- geometry 입력은 유한 숫자와 유효한 column/row만 허용하고 반환 객체는
-  mutation되지 않도록 고정한다.
-- `heatmap.js`의 count 상수는 기존 import compatibility를 유지하면서 geometry
-  module의 값을 재사용한다.
-- Node canvas renderer와 Sites worker SVG renderer는 같은 geometry를 import해
-  기존 x/y/size/step과 pixel output을 유지한다. renderer version과 static asset은
-  변경하지 않는다.
-- `index.js`는 기존 export를 깨지 않고 웹 UI가 geometry helper를 사용할 수 있게
-  명시적으로 re-export한다.
-- `cardHeatmapTooltip.js`에 다음 pure contract를 구현한다.
-  - `en`/`ko` locale 정규화와 date/token tooltip 문자열
-  - active cell index에서 ArrowLeft/Right/Up/Down으로 이동하는 column-major
-    roving grid 계산과 경계 clamp
-  - cell/card/viewport rect를 입력받는 좌우 clamp 및 위/아래 placement 계산
-  - bucket 배열이 비어 있으면 overlay를 만들지 않는 data availability 판정
-- tooltip token 값은 기존 `formatCardTokenCount`를 재사용하고 date는 UTC 기준
-  `Intl.DateTimeFormat`으로 포맷해 timezone에 따른 하루 이동을 방지한다.
-- unit test는 첫/마지막/모서리 cell, 열·행 step, sample fixture의 날짜 매핑,
-  `en`/`ko`, zero token, keyboard 경계와 placement fallback을 고정한다.
-- Stage 종료 시 `task-stage-report` 절차로 Stage 1 보고서를 작성하고 소스와 함께
-  커밋한다.
+### 테스트
+
+- 정확히 52주 범위, 첫/마지막 날짜와 leap/year 경계
+- 빈 날짜 0, 미래 날짜 제외, latest captured date anchor
+- daily/weekly/cumulative 합계와 intensity max
+- weekly/cumulative target 수 52와 중복 focus 제거
+- `en`/`ko`, 0/단수/대형 token의 축약·정확 값
+- card renderer와 static/public card output의 기존 테스트 통과
+- Home/public card에 `.card-heatmap-overlay`가 남지 않음
 
 ### 검증
 
 ```bash
-node --test src/profile-card/__tests__/geometry.test.js src/profile-card/__tests__/heatmap.test.js
-node --test src/profile-card/__tests__/renderer.test.js src/profile-card/__tests__/worker-renderer.test.js
-node --test src/profile-ui/__tests__/cardHeatmapTooltip.test.js
+node --test src/profile-ui/__tests__/heatmap.test.js
+node --test src/profile-card/__tests__/heatmap.test.js src/profile-card/__tests__/renderer.test.js src/profile-card/__tests__/worker-renderer.test.js
 npm run build
 git diff --check
 ```
 
-### 커밋
+추가 확인:
 
-```text
-Task #35 Stage 1: 카드 heatmap geometry와 tooltip 계약 구현
+```bash
+git diff origin/devel -- src/profile-card src/profile-ui/HomePage.jsx public/assets
 ```
 
-## Stage 2 — 재사용 overlay와 Home/public profile 통합
+card renderer와 static asset에는 Task #35 최종 변경이 없어야 한다.
 
-### 산출물
+### Stage 보고·커밋
 
-신규:
+- `mydocs/working/task_m100_35_stage3.md`
+- 커밋: `Task #35 Stage 3: Profile heatmap 데이터 계약으로 전환`
 
-- `src/profile-ui/CardHeatmapOverlay.jsx`
-- `mydocs/working/task_m100_35_stage2.md`
+## Stage 4 — owner/public Profile 통합
 
-수정:
+### 목적
 
-- `src/profile-marketing/MarketingLanding.jsx`
-- `src/profile-ui/HomePage.jsx`
+재사용 가능한 token activity heatmap을 owner `/profile`과 공개 Profile에 통합하고,
+참고 화면의 정보 계층을 현재 Site shell 안에서 구현한다.
+
+### 구현 대상
+
+- `TokenActivityChart`를 Account Usage Profile 전용 재사용 component로 정리한다.
+- identity와 summary stats 다음에 `Token activity` section을 배치한다.
+- mode control은 `Daily`, `Weekly`, `Cumulative`를 제공하고 현재 mode를
+  `aria-pressed` 또는 tab pattern으로 명시한다.
+- owner Profile은 기존 card preview, visibility mutation과 Share Studio를 별도
+  card section으로 유지한다.
+- public Profile은 owner mutation 없이 identity, stats, token activity와 공개 card를
+  표시한다.
+- mode별 target에 hover/focus/tap tooltip을 제공한다.
+- daily grid는 roving ArrowLeft/Right/Up/Down, weekly/cumulative는 좌우 이동을
+  제공한다.
+- Escape, blur, outside pointer, mode/source 변경, resize/scroll에서 tooltip을 닫는다.
+- 좁은 화면은 chart wrapper만 가로 스크롤하고 최근 주로 정렬한다.
+- tooltip은 viewport clamp, 위/아래 fallback과 reduced-motion을 지원한다.
+- no-usage는 기존 submit CTA를 유지하고 heatmap demo 값을 표시하지 않는다.
+
+### 수정 후보
+
+- `src/profile-ui/TokenActivityChart.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
 - `src/profile-ui/PublicProfilePage.jsx`
-- `src/profile-ui/publicProfileRoutes.js` — usage shape guard가 필요한 경우에만 수정
+- `src/profile-ui/publicProfileRoutes.js`
 - `src/profile-ui/__tests__/publicProfileRoutes.test.js`
 - `src/styles.css`
 - `tests/profile-ui.spec.js`
 
-### 변경 내용
+### 테스트
 
-- `CardHeatmapOverlay`는 완성된 `buildCardHeatmap` 결과와 locale을 props로 받고
-  26 × 7 transparent grid, roving tab stop과 `role="tooltip"`을 렌더한다.
-- 각 cell은 geometry helper가 만든 percentage 좌표를 CSS custom property로
-  전달한다. PNG 색이나 시각 cell은 다시 그리지 않고 focus-visible 표시만 card
-  디자인을 해치지 않는 최소 outline로 제공한다.
-- interaction state는 다음 규칙으로 분리한다.
-  - fine pointer: enter/move와 leave로 hover tooltip 표시·해제
-  - keyboard: focus와 Arrow key로 활성 cell 이동, Escape로 tooltip 닫기
-  - touch/coarse pointer: tap toggle, 다른 cell tap 전환, 외부 pointer로 닫기
-  - unmount/source 변경/loading 전환 시 active state 즉시 초기화
-- tooltip은 실제 DOM 크기를 측정한 뒤 Stage 1 placement helper 결과로 배치한다.
-  `aria-label`에는 날짜와 token을 모두 포함하고 tooltip id는 현재 active cell에만
-  연결한다.
-- `MarketingCardPreview`는 optional heatmap overlay를 card image와 같은
-  `.home-card-media` 좌표계에 합성한다. skeleton이 active하거나 Share Studio
-  transition이 진행 중일 때 overlay를 inert/hidden 처리한다.
-- Home의 데이터 선택을 보이는 source와 함께 계산한다.
-  - owner: `profile.usage.usage.dailyUsageBuckets`
-  - operator: `HOME_MARKETING_CONFIG.operatorCardHandle`의 public profile payload가
-    성공하고 handle이 일치할 때만 사용
-  - fallback static sample: anonymous 상태에서 sample fixture 사용
-  - authenticated no-usage personalized sample: overlay 없음
-- bucket 배열이 최소 한 건 있을 때만 `buildCardHeatmap`을 호출한다. 이로써
-  empty bucket이 현재 날짜로 재해석되어 stable PNG와 어긋나는 경우를 막는다.
-- operator profile 조회 실패는 card 표시를 실패시키지 않으며 tooltip만 fail-safe로
-  비활성화한다. auth/session state나 card image transition에는 결합하지 않는다.
-- public profile은 image와 overlay를 동일한 ratio wrapper로 감싸고 이미 받은
-  `profile.usage.usage.dailyUsageBuckets`만 사용한다. public payload guard가 usage
-  중첩 구조를 허용하는지 focused test로 고정한다.
-- CSS stacking은 image < interaction targets < tooltip < glare/skeleton의 의도를
-  명시하되 glare는 pointer를 가로채지 않는다. transformed tilt 안에서 overlay가
-  같은 transform을 받고 document horizontal overflow를 만들지 않게 한다.
-- Playwright fixture는 actual owner/public/sample/operator/no-usage payload를
-  분리하고 tooltip text가 visible card source와 일치하는지 검증한다.
-- Stage 종료 시 `task-stage-report` 절차로 Stage 2 보고서를 작성하고 소스와 함께
-  커밋한다.
+- owner actual usage identity/stats/daily mode
+- owner weekly/cumulative mode와 정확한 합계 tooltip
+- public actual usage와 private/missing public profile fail-close
+- desktop hover와 keyboard roving/Escape
+- mobile tap toggle/outside tap
+- mode 전환 시 stale tooltip 제거
+- 1280×900, 390×844, short viewport와 page horizontal overflow 없음
+- owner visibility/share/card preview 회귀
+- loading/no-usage/error 상태에서 profile data leak 없음
 
 ### 검증
 
 ```bash
-node --test src/profile-ui/__tests__/cardHeatmapTooltip.test.js src/profile-ui/__tests__/publicProfileRoutes.test.js
-npm run test:e2e -- --grep "heatmap tooltip"
+node --test src/profile-ui/__tests__/heatmap.test.js src/profile-ui/__tests__/publicProfileRoutes.test.js
+npm run test:e2e -- --grep "Token activity|Profile heatmap"
 npm run build
 git diff --check
 ```
 
-수동/시나리오 확인:
+### Stage 보고·커밋
 
-- 1280×900 fine pointer에서 Home owner/operator/sample hover와 keyboard
-- 390×844 touch viewport에서 tap toggle, 다른 cell 전환과 외부 tap 닫기
-- public profile 첫/마지막 column과 상·하단 row placement
-- authenticated no-usage, operator API 실패와 loading skeleton에서 overlay 부재
-- tilt enabled/reduced-motion, glare, Border Beam과 share transition 회귀
+- `mydocs/working/task_m100_35_stage4.md`
+- 커밋: `Task #35 Stage 4: owner와 public Profile heatmap 통합`
 
-### 커밋
+## Stage 5 — browser·Sites artifact QA
 
-```text
-Task #35 Stage 2: 카드 heatmap overlay와 상호작용 통합
-```
+### 목적
 
-## Stage 3 — browser 통합·Sites artifact QA
+변경된 Profile interaction과 기존 card/share/visibility 흐름을 전체 환경에서 검증하고
+production 배포 전 local artifact 수용 기준을 확정한다.
 
-### 산출물
+### 검증 시나리오
 
-신규:
-
-- `mydocs/working/task_m100_35_stage3.md`
-
-수정:
-
-- `tests/profile-ui.spec.js`
-- Stage 1·2 대상 파일 — 통합 검증에서 확인된 범위 내 보정만 허용
-
-### 변경 내용
-
-- Playwright 시나리오를 최종 수용 기준 단위로 정리한다.
-  - desktop hover와 tooltip leave
-  - Tab 1회 진입, Arrow key 이동, focus text와 Escape
-  - mobile tap toggle, outside tap과 emulated mouse 중복 방지
-  - `en`/`ko` locale date/token formatting
-  - card 네 모서리에서 card/viewport clipping과 위/아래 placement
-  - owner/operator/sample/public/no-usage/error/loading source matrix
-  - tilt/glare/Border Beam, skeleton과 Share Studio open/close 회귀
-- tooltip DOM이 source transition/unmount 뒤 남지 않고 owner data가 logout 후
-  sample/operator 화면에 노출되지 않는지 확인한다.
-- `prefers-reduced-motion`, desktop/mobile/short viewport와 document horizontal
-  overflow를 검증한다.
-- 전체 Node test와 Playwright, standard/production build, Sites full-stack와
-  production artifact verifier를 실행한다.
-- `.openai/hosting.json`, backend/API/D1/R2, package dependency, static sample asset과
-  card endpoint output이 변경되지 않았음을 diff로 확인한다.
-- visual 또는 source mismatch가 발견되면 Stage 1·2 계약 안에서만 보정한다.
-  API나 renderer pixel 디자인 변경이 필요하면 중단하고 계획 변경 승인을 요청한다.
-- Stage 종료 시 `task-stage-report` 절차로 Stage 3 보고서를 작성하고 소스와 함께
-  커밋한다.
+- owner/public daily, weekly, cumulative 합계와 exact token tooltip
+- `en`/`ko` locale과 UTC month/year 경계
+- desktop hover/leave, keyboard focus/Arrow/Escape
+- touch tap/전환/outside 닫기와 emulated mouse 중복 방지
+- mode 변경, logout, owner/public source 변경 뒤 stale tooltip 부재
+- mobile/reduced-motion/short viewport와 chart-only horizontal scroll
+- identity/stats, no-usage CTA, publish/unpublish, Share Studio와 public card 회귀
+- Home/static/README card에 tooltip overlay가 없는지 확인
+- API, backend, D1/R2, CLI, package, hosting manifest와 static asset 비변경 확인
 
 ### 검증
 
@@ -227,71 +205,32 @@ git diff origin/devel -- .openai/hosting.json src/profile-backend src/profile-ru
 git status --short
 ```
 
-위 제한 경로 diff는 빈 출력이어야 한다. production 배포와 원격 데이터 작업은
-실행하지 않는다.
+제한 경로 diff는 빈 출력이어야 한다. production 배포와 원격 data/environment/access
+mutation은 실행하지 않는다.
 
-### 커밋
+### Stage 보고·커밋
 
-```text
-Task #35 Stage 3: heatmap tooltip 통합 QA와 회귀 보정
-```
+- `mydocs/working/task_m100_35_stage5.md`
+- 커밋: `Task #35 Stage 5: Profile heatmap 통합 QA와 회귀 보정`
 
-## 검증
+## 단계 의존성과 승인
 
-- 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
-- 실패한 검증은 단계 완료로 처리하지 않고 같은 Stage 범위에서 원인을 보정한다.
-- 수동 browser 확인은 Playwright 결과와 별도로 viewport, input mode와 관찰 결과를
-  단계 보고서에 기록한다.
-- production Sites 검증은 local artifact까지만 수행하며 deployment/access/data
-  mutation은 하지 않는다.
-- 계획 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자 승인을 받는다.
-- 문서 위치가 수행계획서 판단과 달라지면 구현 전에 수행계획서 또는 구현계획서를
-  갱신하고 작업지시자 승인을 받는다.
-
-## 커밋
-
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_35_stage{N}.md`를 함께 묶는다.
-- 커밋 메시지는 다음 값을 사용한다.
-  - `Task #35 Stage 1: 카드 heatmap geometry와 tooltip 계약 구현`
-  - `Task #35 Stage 2: 카드 heatmap overlay와 상호작용 통합`
-  - `Task #35 Stage 3: heatmap tooltip 통합 QA와 회귀 보정`
-- Stage 승인 전 다음 Stage 소스 변경을 시작하지 않는다.
-
-## 단계 의존성
-
-- Stage 1은 renderer와 overlay가 공유할 geometry와 pure interaction contract를
-  먼저 확정한다.
-- Stage 2는 Stage 1 보고서 승인 후 해당 contract 위에 React overlay와 source
-  mapping을 구현한다.
-- Stage 3은 Stage 2 보고서 승인 후 전체 browser/Sites 회귀를 검증한다.
-- 각 Stage 결과가 수행계획의 source-aligned data 또는 비배포 경계를 깨면 다음
-  Stage로 진행하지 않는다.
+- 계획 변경 문서와 GitHub Issue 갱신 후 Stage 3 소스 구현 승인을 요청한다.
+- Stage 3 보고서 승인 전 Stage 4 소스를 수정하지 않는다.
+- Stage 4 보고서 승인 전 Stage 5 검증·보정을 시작하지 않는다.
+- API, renderer pixel, public payload 또는 공식 문서 변경이 필요하면 해당 Stage를
+  중단하고 수행계획 변경 승인을 다시 요청한다.
 
 ## 위험과 대응
 
-- **geometry export compatibility**: 기존 `heatmap.js`, `renderer.js`, `index.js`
-  import를 유지하거나 re-export test로 보호해 downstream break를 막는다.
-- **stable card 기준일 drift**: daily bucket이 비어 있으면 현재 날짜를 임의 기준으로
-  만들지 않고 overlay를 비활성화한다. non-empty data는 renderer와 동일하게 최신
-  bucket 날짜를 기준으로 heatmap을 만든다.
-- **operator 추가 요청 비용**: anonymous operator payload는 public profile API
-  한 번만 조회하고 실패를 card error로 승격하지 않는다. component lifetime과
-  handle 변경에 맞춰 stale response를 무시한다.
-- **접근성 과부하**: grid에는 roving tab stop 하나만 두고 cell 변경은 Arrow key로
-  처리한다. screen reader label과 visual tooltip은 같은 formatter를 사용한다.
-- **pointer event 충돌**: overlay event가 `hover-tilt` pointer tracking을 차단하지
-  않도록 bubbling과 stacking을 검증하며, glare/skeleton pointer contract를 명시한다.
-- **privacy/source leak**: logout 또는 owner 변경 시 owner heatmap과 active tooltip을
-  즉시 제거하고 operator/sample payload와 섞이지 않는 E2E를 둔다.
-- **범위 확장**: Share Studio export, backend/API, card pixel 디자인, deployment에서
-  요구가 발생하면 해당 Stage를 중단하고 별도 승인 또는 issue로 분리한다.
-
-## 승인 요청 사항
-
-- Stage 1을 shared geometry·pure tooltip contract, Stage 2를 React/source 통합,
-  Stage 3을 전체 browser/Sites QA로 나누는 3단계 구현 순서
-- Stage별 산출물, focused test와 최종 통합 검증 명령
-- 빈 bucket에는 overlay를 만들지 않고 stable card 기준일 drift를 차단하는 세부 정책
-- anonymous operator public profile 조회 실패를 tooltip-only fail-safe로 처리하는 정책
-- 각 Stage 소스와 `task_m100_35_stage{N}.md`를 같은 규칙의 커밋으로 묶는 방식
-- production 배포와 원격 environment/access/data 작업을 실행하지 않는 경계
+- **대체 코드 누락**: 최종 diff에 card overlay/geometry가 남지 않도록 Stage 3에서
+  파일 단위로 `origin/devel`과 대조한다.
+- **legacy chart와 canonical usage 혼용**: UI component 입력과 pure builder를
+  `dailyUsageBuckets`로 고정하고 `credits` alias를 만들지 않는다.
+- **weekly/cumulative 접근성 중복**: visual week column과 semantic target 수를
+  분리하고 unit/E2E에서 52개로 고정한다.
+- **owner/public drift**: 동일 component와 builder를 사용하고 data source만 분리한다.
+- **privacy/source leak**: public payload 밖의 owner data fallback을 금지하고 source
+  변경 시 active state를 제거한다.
+- **MVP 범위 확장**: Account Usage Contract에 없는 insight/plugin/skill 정보와
+  profile customization은 별도 issue로 남긴다.

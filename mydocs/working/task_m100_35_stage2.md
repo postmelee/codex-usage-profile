@@ -4,6 +4,13 @@ GitHub Issue: [#35](https://github.com/postmelee/codex-usage-profile/issues/35)
 구현계획서: [`task_m100_35_impl.md`](../plans/task_m100_35_impl.md)
 Stage: 2
 
+> **계획 변경 상태 — 2026-08-02**
+>
+> 이 단계는 당시 승인된 Home/public card overlay 계획에 따라 완료되었으나,
+> 작업지시자가 card tooltip을 제거하고 owner/public Profile 52주 heatmap으로
+> 이동하는 변경안 A를 승인했다. 구현·검증 기록은 보존하며 overlay와 관련
+> integration은 Stage 3에서 최종 제품 범위에서 제거한다.
+
 ## 단계 목적
 
 Stage 1에서 고정한 card heatmap geometry와 tooltip pure contract를 실제 카드 위의
