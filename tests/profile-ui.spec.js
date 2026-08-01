@@ -824,6 +824,20 @@ test.describe("Home and share card flow", () => {
       .toHaveClass(/lucide-settings/);
     await expect(logoutItem.locator('[data-account-icon="logOut"]'))
       .toHaveClass(/lucide-log-out/);
+
+    for (const [item, iconName] of [
+      [profileItem, "profile"],
+      [settingsItem, "settings"],
+      [logoutItem, "logOut"]
+    ]) {
+      const iconBox = await item.locator(`[data-account-icon="${iconName}"]`).boundingBox();
+      const textBox = await item.locator("span").boundingBox();
+      expect(iconBox).not.toBeNull();
+      expect(textBox).not.toBeNull();
+      expect(Math.abs(
+        iconBox.y + iconBox.height / 2 - (textBox.y + textBox.height / 2)
+      )).toBeLessThanOrEqual(1);
+    }
     await expect(profileItem).toBeFocused();
 
     await page.keyboard.press("ArrowDown");

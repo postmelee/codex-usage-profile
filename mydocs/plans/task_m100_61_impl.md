@@ -125,6 +125,15 @@ Task #61 Stage 1: 공통 header와 계정 menu 접근성 정렬
 Task #61 [Stage 1.1]: 계정 menu 공식 icon set 적용
 ```
 
+작업지시자의 후속 로컬 검토에서 Lucide icon의 15px box와 menu text의 18px
+line box가 flex 시작점에 맞춰진 시각 불일치가 확인되었다. Stage 1.2에서는
+menu row의 수직 중심선을 명시하고 실제 browser bounding box 중심 차이를
+검증한다. icon 종류·크기·menu 기능과 Stage 2 범위는 변경하지 않는다.
+
+```text
+Task #61 [Stage 1.2]: 계정 menu icon과 text 중심선 정렬
+```
+
 ## Stage 2 — Profile·Settings page canvas 정렬
 
 ### 산출물

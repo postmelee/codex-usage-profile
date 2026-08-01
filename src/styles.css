@@ -353,6 +353,7 @@ button {
 }
 
 .account-menu-item {
+  align-items: center;
   appearance: none;
   background: transparent;
   border: 0;
