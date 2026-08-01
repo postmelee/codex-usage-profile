@@ -40,6 +40,7 @@ const OWNER_COMMANDS = new Set([
   "repair-publication"
 ]);
 const COMMANDS = new Set([
+  "readiness",
   "plan",
   "export",
   "restore",
@@ -118,8 +119,11 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
       repositoryRoot: options.repositoryRoot ?? resolve(".")
     });
   }
-  stdout(JSON.stringify(result.summary));
-  return { summary: result.summary };
+  const summary = parsed.command === "readiness"
+    ? normalizeReadinessSummary(result.summary)
+    : result.summary;
+  stdout(JSON.stringify(summary));
+  return { summary };
 }
 
 export function parseSitesProfileMaintenanceArgs(args = []) {
@@ -173,6 +177,7 @@ export function sitesProfileMaintenanceHelpText() {
     "Usage: npm run sites:profile-maintenance -- <command> --origin <https-origin> [options]",
     "",
     "Commands:",
+    "  readiness           Verify the exact D1 migration set (read-only)",
     "  plan                Create an owner deletion plan",
     "  export              Export one durable owner backup",
     "  restore             Restore a backup (requires --apply)",
@@ -225,6 +230,10 @@ export async function readBackupFile(path) {
 async function createOperationPayload(parsed, options) {
   if (parsed.help) return { operation: parsed.command };
   if (!parsed.origin) throw new TypeError("--origin is required");
+  if (parsed.command === "readiness") {
+    assertReadinessOptions(parsed);
+    return { operation: "readiness" };
+  }
   if (OWNER_COMMANDS.has(parsed.command)) {
     requireKeySegment(parsed.ownerId, "ownerId");
     requireHandle(parsed.handle);
@@ -290,6 +299,64 @@ async function createOperationPayload(parsed, options) {
     };
   }
   return payload;
+}
+
+function assertReadinessOptions(parsed) {
+  if (parsed.apply === true) {
+    throw new TypeError("readiness does not accept --apply");
+  }
+  const allowed = new Set(["apply", "command", "help", "origin"]);
+  const unexpected = Object.keys(parsed)
+    .filter((key) => !allowed.has(key) && parsed[key] !== undefined);
+  if (unexpected.length > 0) {
+    throw new TypeError("readiness accepts only --origin");
+  }
+}
+
+function normalizeReadinessSummary(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw cliError("invalid_response");
+  }
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== 4 ||
+    keys[0] !== "appliedVersions" ||
+    keys[1] !== "expectedVersions" ||
+    keys[2] !== "operation" ||
+    keys[3] !== "ready" ||
+    value.operation !== "readiness" ||
+    value.ready !== true
+  ) {
+    throw cliError("invalid_response");
+  }
+  const appliedVersions = normalizeMigrationVersions(value.appliedVersions);
+  const expectedVersions = normalizeMigrationVersions(value.expectedVersions);
+  if (
+    appliedVersions.length !== expectedVersions.length ||
+    appliedVersions.some((version, index) => version !== expectedVersions[index])
+  ) {
+    throw cliError("invalid_response");
+  }
+  return Object.freeze({
+    appliedVersions,
+    expectedVersions,
+    operation: "readiness",
+    ready: true
+  });
+}
+
+function normalizeMigrationVersions(value) {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((version, index) =>
+      !Number.isSafeInteger(version) ||
+      version !== index + 1
+    )
+  ) {
+    throw cliError("invalid_response");
+  }
+  return Object.freeze([...value]);
 }
 
 async function readSafeResponse(response) {

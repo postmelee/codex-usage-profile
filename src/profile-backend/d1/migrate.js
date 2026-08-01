@@ -5,6 +5,7 @@ import {
   migrateD1Database as runD1Migrations,
   splitSqlStatements
 } from "./migration-runner.js";
+import { D1_MIGRATION_MANIFEST } from "./migration-manifest.js";
 
 export { splitSqlStatements };
 
@@ -13,23 +14,7 @@ const REPOSITORY_ROOT = resolve(
   "../../.."
 );
 
-export const DEFAULT_D1_MIGRATIONS = Object.freeze([
-  Object.freeze({
-    version: 1,
-    name: "profile_backend",
-    file: "db/migrations/0001_profile_backend.sql"
-  }),
-  Object.freeze({
-    version: 2,
-    name: "account_usage_rate_limits",
-    file: "db/migrations/0002_account_usage_rate_limits.sql"
-  }),
-  Object.freeze({
-    version: 3,
-    name: "cli_login_intent",
-    file: "db/migrations/0003_cli_login_intent.sql"
-  })
-]);
+export const DEFAULT_D1_MIGRATIONS = D1_MIGRATION_MANIFEST;
 
 export async function loadD1Migrations(options = {}) {
   const repositoryRoot = options.repositoryRoot ?? REPOSITORY_ROOT;

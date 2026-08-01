@@ -8,6 +8,9 @@ import {
 import {
   createD1ProfileMaintenance
 } from "../../profile-backend/d1/maintenance.js";
+import {
+  inspectD1MigrationReadiness
+} from "../../profile-backend/d1/store.js";
 import { createProfileCardServiceCore } from "../../profile-card/service-core.js";
 import {
   PROFILE_MEDIA_STABLE_STATE_KINDS,
@@ -25,6 +28,8 @@ export const PROFILE_SITES_MAINTENANCE_PATH =
   "/__ops/profile-maintenance";
 export const DEFAULT_PROFILE_SITES_MAINTENANCE_BODY_MAX_BYTES =
   512 * 1024;
+export const PROFILE_SITES_MIGRATION_NOT_READY_CODE =
+  "migration_not_ready";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -72,6 +77,12 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
       if (error?.code === "conflict") {
         return maintenanceResponse(409, "maintenance_conflict");
       }
+      if (error?.code === PROFILE_SITES_MIGRATION_NOT_READY_CODE) {
+        return maintenanceResponse(
+          503,
+          PROFILE_SITES_MIGRATION_NOT_READY_CODE
+        );
+      }
       if (error instanceof TypeError || error?.code === "invalid") {
         return maintenanceResponse(400, "invalid_request");
       }
@@ -94,6 +105,8 @@ export function createProfileSitesMaintenanceService(options = {}) {
     throw new TypeError("Sites maintenance requires D1 and R2 bindings");
   }
   const now = options.now ?? (() => new Date());
+  const inspectReadiness = options.inspectD1MigrationReadiness ??
+    inspectD1MigrationReadiness;
   const createId = options.createId ??
     ((prefix) => `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`);
   const d1 = options.d1Maintenance ?? createD1ProfileMaintenance({
@@ -127,10 +140,29 @@ export function createProfileSitesMaintenanceService(options = {}) {
     deleteAccount,
     exportOwner,
     planOwner,
+    readiness,
     repairPublication,
     restoreOwner,
     retention
   });
+
+  async function readiness() {
+    const result = await inspectReadiness(dependencies.database);
+    if (result.readyExact !== true) {
+      throw maintenanceError(
+        PROFILE_SITES_MIGRATION_NOT_READY_CODE,
+        "D1 migration readiness did not match the candidate"
+      );
+    }
+    return Object.freeze({
+      summary: Object.freeze({
+        appliedVersions: result.appliedVersions,
+        expectedVersions: result.expectedVersions,
+        operation: "readiness",
+        ready: true
+      })
+    });
+  }
 
   async function planOwner(operationOptions = {}) {
     const scope = requireOwnerScope(operationOptions);
@@ -385,6 +417,9 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
     throw new TypeError("maintenance payload must be an object");
   }
   switch (payload.operation) {
+    case "readiness":
+      assertReadinessPayload(payload);
+      return service.readiness();
     case "plan":
       return service.planOwner(payload);
     case "export":
@@ -399,6 +434,15 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
       return service.repairPublication(payload);
     default:
       throw new TypeError("maintenance operation is unsupported");
+  }
+}
+
+function assertReadinessPayload(payload) {
+  if (
+    Object.keys(payload).length !== 1 ||
+    payload.operation !== "readiness"
+  ) {
+    throw new TypeError("readiness accepts only the operation field");
   }
 }
 
@@ -651,6 +695,7 @@ function maintenanceMessage(code) {
     invalid_request: "Maintenance request is invalid",
     maintenance_conflict: "Maintenance plan is stale or conflicts",
     maintenance_unavailable: "Maintenance operation is unavailable",
+    migration_not_ready: "Maintenance readiness check failed",
     method_not_allowed: "Maintenance method is not allowed",
     not_found: "Not found",
     unsupported_media_type: "Maintenance request must use JSON"

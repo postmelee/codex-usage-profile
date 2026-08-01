@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { loadD1Migrations } from "../d1/migrate.js";
 import {
   createD1TestFixture,
   ownerFixture,
@@ -15,6 +16,40 @@ test("D1 store satisfies contract v2 without a generic transaction", async (t) =
   assert.deepEqual(await fixture.call("/contract"), {
     hasAtomic: true,
     hasTransaction: false
+  });
+});
+
+test("D1 store readiness rejects missing versions but permits higher versions", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  const migrations = await loadD1Migrations();
+
+  await fixture.call("/migrate", {
+    migrations: migrations.filter(({ version }) => version !== 2),
+    now: "2026-07-23T00:00:00.000Z"
+  });
+  await assert.rejects(
+    () => fixture.rpc("verifyReadiness"),
+    /D1 store is missing migrations: 2/
+  );
+
+  await fixture.call("/migrate", {
+    migrations,
+    now: "2026-07-23T00:01:00.000Z"
+  });
+  await fixture.call("/migrate", {
+    migrations: [
+      ...migrations,
+      {
+        version: 4,
+        name: "future_rollback_compatibility",
+        sql: "CREATE TABLE future_rollback_compatibility (id TEXT PRIMARY KEY)"
+      }
+    ],
+    now: "2026-07-23T00:02:00.000Z"
+  });
+  assert.deepEqual(await fixture.rpc("verifyReadiness"), {
+    appliedVersions: [1, 2, 3, 4]
   });
 });
 

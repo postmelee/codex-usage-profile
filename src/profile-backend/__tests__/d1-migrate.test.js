@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { splitSqlStatements } from "../d1/migrate.js";
+import {
+  DEFAULT_D1_MIGRATIONS,
+  loadD1Migrations,
+  splitSqlStatements
+} from "../d1/migrate.js";
+import {
+  D1_MIGRATION_MANIFEST,
+  D1_MIGRATION_VERSIONS
+} from "../d1/migration-manifest.js";
 import { createD1TestFixture } from "./_d1-test-fixture.js";
 
 test("D1 migrations execute in order and are idempotent on real workerd D1", async (t) => {
@@ -13,15 +21,15 @@ test("D1 migrations execute in order and are idempotent on real workerd D1", asy
   const tables = (await fixture.inspect("tables")).map((row) => row.name);
 
   assert.deepEqual(first, {
-    appliedVersions: [1, 2, 3],
-    newlyApplied: [1, 2, 3]
+    appliedVersions: D1_MIGRATION_VERSIONS,
+    newlyApplied: D1_MIGRATION_VERSIONS
   });
   assert.deepEqual(second, {
-    appliedVersions: [1, 2, 3],
+    appliedVersions: D1_MIGRATION_VERSIONS,
     newlyApplied: []
   });
   assert.deepEqual(await fixture.rpc("verifyReadiness"), {
-    appliedVersions: [1, 2, 3]
+    appliedVersions: D1_MIGRATION_VERSIONS
   });
   for (const table of [
     "account_usage_rate_limits",
@@ -39,6 +47,19 @@ test("D1 migrations execute in order and are idempotent on real workerd D1", asy
   ]) {
     assert.equal(tables.includes(table), true, `missing ${table}`);
   }
+});
+
+test("Node D1 migration loader preserves pure manifest metadata", async () => {
+  assert.equal(DEFAULT_D1_MIGRATIONS, D1_MIGRATION_MANIFEST);
+  const loaded = await loadD1Migrations();
+  assert.deepEqual(
+    loaded.map(({ file, name, version }) => ({ file, name, version })),
+    D1_MIGRATION_MANIFEST
+  );
+  assert.equal(
+    loaded.every(({ sql }) => typeof sql === "string" && sql.length > 0),
+    true
+  );
 });
 
 test("migration splitter gives prepare exactly one statement at a time", () => {

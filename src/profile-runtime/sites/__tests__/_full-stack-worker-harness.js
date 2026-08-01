@@ -1,9 +1,9 @@
-import migrationOne from "../../../../db/migrations/0001_profile_backend.sql";
-import migrationTwo from "../../../../db/migrations/0002_account_usage_rate_limits.sql";
-import migrationThree from "../../../../db/migrations/0003_cli_login_intent.sql";
 import {
   migrateD1Database
 } from "../../../profile-backend/d1/migration-runner.js";
+import {
+  D1_MIGRATION_MANIFEST
+} from "../../../profile-backend/d1/migration-manifest.js";
 import {
   WORKER_CARD_RENDERER_VERSION,
   createWorkerProfileCardRenderer
@@ -13,23 +13,14 @@ import {
 } from "../../../profile-card/worker-renderer-assets.js";
 import { createProfileSitesWorker } from "../worker.js";
 
-const migrations = Object.freeze([
-  Object.freeze({
-    version: 1,
-    name: "profile_backend",
-    sql: migrationOne
-  }),
-  Object.freeze({
-    version: 2,
-    name: "account_usage_rate_limits",
-    sql: migrationTwo
-  }),
-  Object.freeze({
-    version: 3,
-    name: "cli_login_intent",
-    sql: migrationThree
-  })
-]);
+const migrationSqlModules = import.meta.glob(
+  "../../../../db/migrations/*.sql",
+  { eager: true, import: "default", query: "?raw" }
+);
+const migrations = createBundledMigrations(
+  D1_MIGRATION_MANIFEST,
+  migrationSqlModules
+);
 let localMaintenanceEnabled = false;
 
 const worker = createProfileSitesWorker({
@@ -118,3 +109,29 @@ export default {
     return worker.fetch(request, runtimeEnvironment, executionContext);
   }
 };
+
+function createBundledMigrations(manifest, sqlModules) {
+  const expectedModuleKeys = new Set(
+    manifest.map((migration) => `../../../../${migration.file}`)
+  );
+  const unexpectedModuleKeys = Object.keys(sqlModules)
+    .filter((key) => !expectedModuleKeys.has(key));
+  if (unexpectedModuleKeys.length > 0) {
+    throw new TypeError(
+      `Unexpected bundled D1 migrations: ${unexpectedModuleKeys.join(", ")}`
+    );
+  }
+
+  return Object.freeze(manifest.map((migration) => {
+    const moduleKey = `../../../../${migration.file}`;
+    const sql = sqlModules[moduleKey];
+    if (typeof sql !== "string" || sql.trim() === "") {
+      throw new TypeError(`Missing bundled D1 migration: ${migration.file}`);
+    }
+    return Object.freeze({
+      version: migration.version,
+      name: migration.name,
+      sql
+    });
+  }));
+}

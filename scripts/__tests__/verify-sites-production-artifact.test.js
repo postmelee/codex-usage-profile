@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -80,6 +80,31 @@ test("production artifact verifier enforces the total candidate size", async () 
   );
 });
 
+test("production verifier rejects an unreviewed future migration", async () => {
+  const outputDirectory = await createProductionArtifact({
+    additionalMigrations: [
+      ["0004_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
+    ]
+  });
+
+  await assert.rejects(
+    () => verifySitesProductionArtifact({ outputDirectory }),
+    /unexpected filenames/
+  );
+});
+
+test("production verifier keeps an independent migration allowlist", async () => {
+  const source = await readFile(
+    new URL("../verify-sites-production-artifact.mjs", import.meta.url),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /D1_MIGRATION_MANIFEST|migration-manifest/);
+  assert.match(source, /"0001_profile_backend\.sql"/);
+  assert.match(source, /"0002_account_usage_rate_limits\.sql"/);
+  assert.match(source, /"0003_cli_login_intent\.sql"/);
+});
+
 async function createProductionArtifact(options = {}) {
   const outputDirectory = await mkdtemp(
     join(tmpdir(), "codex-usage-profile-production-artifact-")
@@ -148,6 +173,9 @@ async function createProductionArtifact(options = {}) {
     join(migrationsDirectory, "0003_cli_login_intent.sql"),
     "ALTER TABLE cli_login_challenges ADD COLUMN intent TEXT;"
   );
+  for (const [name, sql] of options.additionalMigrations ?? []) {
+    await writeFile(join(migrationsDirectory, name), sql);
+  }
 
   return outputDirectory;
 }

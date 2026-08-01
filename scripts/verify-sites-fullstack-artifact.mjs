@@ -3,13 +3,22 @@ import {
   readFile,
   readdir
 } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 
+import {
+  D1_MIGRATION_MANIFEST
+} from "../src/profile-backend/d1/migration-manifest.js";
+
 const DEFAULT_OUTPUT_DIRECTORY = resolve("dist");
 export const MAX_FREE_WORKER_COMPRESSED_BYTES = 3_000_000;
+const EXPECTED_MIGRATION_FILES = Object.freeze(
+  D1_MIGRATION_MANIFEST.map(({ file }) => (
+    file.slice("db/migrations/".length)
+  ))
+);
 const gzipAsync = promisify(gzip);
 const FORBIDDEN_CLIENT_PATTERNS = Object.freeze([
   /GITHUB_CLIENT_SECRET/,
@@ -49,11 +58,10 @@ export async function verifySitesFullStackArtifact(options = {}) {
 
   const migrationFiles = (await listSitesArtifactFiles(migrationsDirectory))
     .filter((path) => path.endsWith(".sql"));
-  if (migrationFiles.length !== 3) {
-    throw new Error(
-      `Expected three packaged D1 migrations, found ${migrationFiles.length}`
-    );
-  }
+  const packagedMigrationFiles = migrationFiles.map((path) => (
+    relative(migrationsDirectory, path).replaceAll("\\", "/")
+  ));
+  assertPackagedD1MigrationFiles(packagedMigrationFiles);
 
   const clientFiles = await listSitesArtifactFiles(clientDirectory);
   const clientText = await readTextFiles(clientFiles);
@@ -136,6 +144,26 @@ export async function verifySitesFullStackArtifact(options = {}) {
     workerMainPath,
     workerRawBytes
   });
+}
+
+export function assertPackagedD1MigrationFiles(packagedMigrationFiles) {
+  if (new Set(packagedMigrationFiles).size !== packagedMigrationFiles.length) {
+    throw new Error("Packaged D1 migrations contain duplicate filenames");
+  }
+
+  const packagedSet = new Set(packagedMigrationFiles);
+  const expectedSet = new Set(EXPECTED_MIGRATION_FILES);
+  if (EXPECTED_MIGRATION_FILES.some((file) => !packagedSet.has(file))) {
+    throw new Error("Packaged D1 migrations are missing manifest filenames");
+  }
+  if (packagedMigrationFiles.some((file) => !expectedSet.has(file))) {
+    throw new Error("Packaged D1 migrations contain unexpected filenames");
+  }
+  if (packagedMigrationFiles.some((file, index) => (
+    file !== EXPECTED_MIGRATION_FILES[index]
+  ))) {
+    throw new Error("Packaged D1 migrations do not follow manifest order");
+  }
 }
 
 export async function listSitesArtifactFiles(directory) {

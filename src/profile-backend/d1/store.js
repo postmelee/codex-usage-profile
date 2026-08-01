@@ -15,6 +15,15 @@ import {
 import {
   PROFILE_BACKEND_STORE_SCHEMA_VERSION
 } from "../store-values.js";
+import {
+  D1_MIGRATION_VERSIONS
+} from "./migration-manifest.js";
+
+const D1_MIGRATION_TABLE_QUERY =
+  "SELECT name FROM sqlite_master " +
+  "WHERE type = 'table' AND name = 'schema_migrations' LIMIT 1";
+const D1_MIGRATION_VERSION_QUERY =
+  "SELECT version FROM schema_migrations ORDER BY version";
 
 const OWNER = spec("owner", "owners", ["id"], [
   ["id", "id"],
@@ -333,16 +342,13 @@ export function createD1ProfileBackendStore(options = {}) {
     },
 
     async verifyReadiness() {
-      const rows = await prepare(
-        "SELECT version FROM schema_migrations ORDER BY version"
-      ).all();
-      const appliedVersions = (rows.results ?? []).map((row) => Number(row.version));
-      const missing = [1, 2, 3]
-        .filter((version) => !appliedVersions.includes(version));
-      if (missing.length > 0) {
-        throw new Error(`D1 store is missing migrations: ${missing.join(", ")}`);
+      const readiness = await inspectD1MigrationReadiness(database);
+      if (readiness.missingVersions.length > 0) {
+        throw new Error(
+          `D1 store is missing migrations: ${readiness.missingVersions.join(", ")}`
+        );
       }
-      return { appliedVersions };
+      return { appliedVersions: readiness.appliedVersions };
     }
   };
 
@@ -355,6 +361,41 @@ export function createD1ProfileBackendStore(options = {}) {
   });
 
   return store;
+}
+
+export async function inspectD1MigrationReadiness(database) {
+  const d1 = requireD1Database(database);
+  const table = await d1.prepare(D1_MIGRATION_TABLE_QUERY).all();
+  const hasMigrationTable = (table.results ?? []).some(
+    (row) => row.name === "schema_migrations"
+  );
+  const rows = hasMigrationTable
+    ? await d1.prepare(D1_MIGRATION_VERSION_QUERY).all()
+    : { results: [] };
+  const appliedVersions = Object.freeze(
+    (rows.results ?? []).map((row) =>
+      normalizeAppliedMigrationVersion(row.version)
+    )
+  );
+  const missingVersions = Object.freeze(
+    D1_MIGRATION_VERSIONS.filter(
+      (version) => !appliedVersions.includes(version)
+    )
+  );
+  const unexpectedVersions = Object.freeze(
+    appliedVersions.filter(
+      (version) => !D1_MIGRATION_VERSIONS.includes(version)
+    )
+  );
+
+  return Object.freeze({
+    appliedVersions,
+    expectedVersions: D1_MIGRATION_VERSIONS,
+    missingVersions,
+    readyExact:
+      missingVersions.length === 0 && unexpectedVersions.length === 0,
+    unexpectedVersions
+  });
 }
 
 function createD1AtomicOperations(context) {
@@ -883,4 +924,12 @@ function requireD1Database(database) {
     throw new TypeError("D1 database binding is required");
   }
   return database;
+}
+
+function normalizeAppliedMigrationVersion(value) {
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new TypeError("D1 schema_migrations contains an invalid version");
+  }
+  return version;
 }

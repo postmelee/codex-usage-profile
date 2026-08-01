@@ -46,6 +46,129 @@ test("operator CLI sends only a scoped plan and keeps the token in the header", 
   assert.doesNotMatch(output.join("\n"), new RegExp(SECRET));
 });
 
+test("operator CLI readiness sends and prints only exact version state", async () => {
+  const requests = [];
+  const output = [];
+  const result = await runSitesProfileMaintenanceCli([
+    "readiness",
+    "--origin", ORIGIN
+  ], {
+    environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+    fetchImpl: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return jsonResponse({
+        ok: true,
+        summary: {
+          appliedVersions: [1, 2, 3],
+          expectedVersions: [1, 2, 3],
+          operation: "readiness",
+          ready: true
+        }
+      });
+    },
+    stdout: (line) => output.push(line)
+  });
+
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    operation: "readiness"
+  });
+  assert.deepEqual(result.summary, {
+    appliedVersions: [1, 2, 3],
+    expectedVersions: [1, 2, 3],
+    operation: "readiness",
+    ready: true
+  });
+  assert.deepEqual(JSON.parse(output[0]), result.summary);
+  assert.doesNotMatch(
+    `${requests[0].init.body}\n${output.join("\n")}`,
+    /owner|handle|usage|token|session|credential|r2/i
+  );
+});
+
+test("operator CLI readiness rejects extra options and unsafe responses", async () => {
+  let fetches = 0;
+  const options = {
+    environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+    fetchImpl: async () => {
+      fetches += 1;
+      return jsonResponse({ ok: true });
+    },
+    stdout: () => {}
+  };
+  for (const extra of [
+    ["--apply"],
+    ["--owner-id", OWNER_ID],
+    ["--retention-days", "30"]
+  ]) {
+    await assert.rejects(
+      runSitesProfileMaintenanceCli([
+        "readiness",
+        "--origin", ORIGIN,
+        ...extra
+      ], options),
+      /readiness/
+    );
+  }
+  assert.equal(fetches, 0);
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli([
+      "readiness",
+      "--origin", ORIGIN
+    ], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async () => jsonResponse({
+        ok: true,
+        summary: {
+          appliedVersions: [1, 2, 3],
+          expectedVersions: [1, 2, 3],
+          operation: "readiness",
+          ownerId: OWNER_ID,
+          ready: true
+        }
+      }),
+      stdout: () => {}
+    }),
+    (error) => error.code === "invalid_response"
+  );
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli([
+      "readiness",
+      "--origin", ORIGIN
+    ], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async () => jsonResponse({
+        ok: true,
+        summary: {
+          appliedVersions: [1, 3],
+          expectedVersions: [1, 2, 3],
+          operation: "readiness",
+          ready: true
+        }
+      }),
+      stdout: () => {}
+    }),
+    (error) => error.code === "invalid_response"
+  );
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli([
+      "readiness",
+      "--origin", ORIGIN
+    ], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async () => jsonResponse({
+        ok: false,
+        error: { code: "migration_not_ready" }
+      }, 503),
+      stdout: () => {}
+    }),
+    (error) => error.code === "migration_not_ready"
+  );
+});
+
 test("operator CLI bounds an unresponsive request without leaking context", async () => {
   const output = [];
   let signal;
@@ -253,6 +376,7 @@ test("CLI rejects token arguments, wildcards, insecure origins, and unknown opti
     /value is missing/
   );
   assert.match(sitesProfileMaintenanceHelpText(), /PROFILE_MAINTENANCE_TOKEN/);
+  assert.match(sitesProfileMaintenanceHelpText(), /readiness/);
   assert.doesNotMatch(sitesProfileMaintenanceHelpText(), /--token/);
 });
 

@@ -5,8 +5,24 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertPackagedD1MigrationFiles,
   verifySitesFullStackArtifact
 } from "../verify-sites-fullstack-artifact.mjs";
+
+const DEFAULT_MIGRATIONS = Object.freeze([
+  Object.freeze([
+    "0001_profile_backend.sql",
+    "CREATE TABLE owners (id TEXT PRIMARY KEY);"
+  ]),
+  Object.freeze([
+    "0002_account_usage_rate_limits.sql",
+    "CREATE TABLE rate_limits (id TEXT PRIMARY KEY);"
+  ]),
+  Object.freeze([
+    "0003_cli_login_intent.sql",
+    "ALTER TABLE cli_login_challenges ADD COLUMN intent TEXT;"
+  ])
+]);
 
 test("full-stack artifact verifier accepts the production Sites shape", async () => {
   const outputDirectory = await createArtifact();
@@ -70,6 +86,69 @@ test("full-stack artifact verifier keeps pre-hosted bindings unprovisioned", asy
   );
 });
 
+test("full-stack artifact verifier rejects a missing manifest migration", async () => {
+  const outputDirectory = await createArtifact({
+    migrations: DEFAULT_MIGRATIONS.slice(0, 2)
+  });
+
+  await assert.rejects(
+    () => verifySitesFullStackArtifact({ outputDirectory }),
+    /missing manifest filenames/
+  );
+});
+
+test("full-stack artifact verifier rejects an unexpected packaged migration", async () => {
+  const outputDirectory = await createArtifact({
+    migrations: [
+      ...DEFAULT_MIGRATIONS,
+      ["0004_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
+    ]
+  });
+
+  await assert.rejects(
+    () => verifySitesFullStackArtifact({ outputDirectory }),
+    /unexpected filenames/
+  );
+});
+
+test("full-stack artifact verifier rejects migration filename drift", async () => {
+  const outputDirectory = await createArtifact({
+    migrations: [
+      DEFAULT_MIGRATIONS[0],
+      ["0002_rate_limits.sql", DEFAULT_MIGRATIONS[1][1]],
+      DEFAULT_MIGRATIONS[2]
+    ]
+  });
+
+  await assert.rejects(
+    () => verifySitesFullStackArtifact({ outputDirectory }),
+    /missing manifest filenames/
+  );
+});
+
+test("full-stack artifact verifier rejects duplicate migration filenames", () => {
+  assert.throws(
+    () => assertPackagedD1MigrationFiles([
+      DEFAULT_MIGRATIONS[0][0],
+      DEFAULT_MIGRATIONS[0][0],
+      DEFAULT_MIGRATIONS[1][0],
+      DEFAULT_MIGRATIONS[2][0]
+    ]),
+    /duplicate filenames/
+  );
+});
+
+test("full-stack artifact verifier rejects migration order drift", () => {
+  assert.throws(
+    () => assertPackagedD1MigrationFiles([
+      DEFAULT_MIGRATIONS[1][0],
+      DEFAULT_MIGRATIONS[0][0],
+      DEFAULT_MIGRATIONS[2][0]
+    ]),
+    /manifest order/
+  );
+});
+
 async function createArtifact(options = {}) {
   const outputDirectory = await mkdtemp(
     join(tmpdir(), "codex-usage-profile-sites-artifact-")
@@ -121,18 +200,9 @@ async function createArtifact(options = {}) {
       r2: null
     })
   );
-  await writeFile(
-    join(migrationsDirectory, "0001_profile_backend.sql"),
-    "CREATE TABLE owners (id TEXT PRIMARY KEY);"
-  );
-  await writeFile(
-    join(migrationsDirectory, "0002_account_usage_rate_limits.sql"),
-    "CREATE TABLE rate_limits (id TEXT PRIMARY KEY);"
-  );
-  await writeFile(
-    join(migrationsDirectory, "0003_cli_login_intent.sql"),
-    "ALTER TABLE cli_login_challenges ADD COLUMN intent TEXT;"
-  );
+  for (const [name, sql] of options.migrations ?? DEFAULT_MIGRATIONS) {
+    await writeFile(join(migrationsDirectory, name), sql);
+  }
 
   return outputDirectory;
 }
