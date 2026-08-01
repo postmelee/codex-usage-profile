@@ -94,6 +94,7 @@ export function App() {
         authState={authState}
         client={profileApiClient}
         location={window.location}
+        onAuthStateChange={handleAuthStateChange}
       />
     );
   }

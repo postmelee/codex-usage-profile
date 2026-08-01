@@ -108,6 +108,7 @@ button {
 }
 
 .profile-shell--fullscreen {
+  --profile-header-height: 52px;
   height: auto;
   min-height: 100dvh;
   overflow: visible;
@@ -130,7 +131,7 @@ button {
 .profile-shell--fullscreen .profile-topbar {
   background: rgba(23, 23, 23, 0.94);
   border-bottom: 1px solid var(--line);
-  height: 52px;
+  height: var(--profile-header-height);
   padding-inline: max(24px, calc((100vw - 1180px) / 2));
   width: 100%;
 }
@@ -160,6 +161,7 @@ button {
 
 .profile-topbar-title {
   align-items: center;
+  color: var(--text);
   display: flex;
   flex: 0 1 auto;
   font-size: 15px;
@@ -170,34 +172,13 @@ button {
   overflow: hidden;
   padding: 4px 0;
   text-overflow: ellipsis;
+  text-decoration: none;
   white-space: nowrap;
 }
 
-.profile-navigation {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-}
-
-.profile-navigation a {
-  border-radius: 6px;
-  color: var(--faint);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
-  padding: 4px 7px;
-  text-decoration: none;
-}
-
-.profile-navigation a:hover,
-.profile-navigation a:focus-visible {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-}
-
-.profile-navigation a:focus-visible {
+.profile-topbar-title:focus-visible {
   outline: 1px solid var(--blue);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .profile-actions {
@@ -373,6 +354,7 @@ button {
 }
 
 .account-menu-item {
+  align-items: center;
   appearance: none;
   background: transparent;
   border: 0;
@@ -407,11 +389,13 @@ button {
 
 .card-profile-view {
   align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
   min-width: 0;
-  padding: 70px 24px 96px;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .home-view {
@@ -454,8 +438,8 @@ button {
 }
 
 .home-heading h1,
-.card-profile-heading h2,
-.card-profile-message h2,
+.card-profile-heading h1,
+.card-profile-message h1,
 .share-studio h2 {
   color: var(--text);
   font-size: 25px;
@@ -1095,11 +1079,13 @@ button {
 
 .public-profile-view {
   align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
   min-width: 0;
-  padding: 70px 24px 96px;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .public-profile-stage {
@@ -1119,8 +1105,8 @@ button {
   min-width: 0;
 }
 
-.public-profile-heading h2,
-.public-profile-state h2 {
+.public-profile-heading h1,
+.public-profile-state h1 {
   color: var(--text);
   font-size: 25px;
   font-weight: 500;
@@ -1162,10 +1148,45 @@ button {
   width: min(100%, 520px);
 }
 
-.card-profile-message p {
+.card-profile-message > p {
   color: var(--muted);
   font-size: 14px;
   margin: -10px 0 0;
+}
+
+.card-profile-message.card-profile-empty {
+  align-self: flex-start;
+  gap: 0;
+  margin-top: 0;
+  width: min(100%, 560px);
+}
+
+.card-profile-message .card-profile-empty-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 12px 0 0;
+  max-width: 520px;
+}
+
+.card-profile-empty-command {
+  margin-top: 28px;
+  width: 100%;
+}
+
+.card-profile-empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.card-profile-message .card-profile-empty-privacy {
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 18px 0 0;
+  padding-top: 16px;
 }
 
 .share-studio-backdrop {
@@ -1778,14 +1799,18 @@ button {
 }
 
 .settings-view {
+  align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
-  padding: 82px 24px 100px;
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
+  min-width: 0;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .settings-stage {
-  max-width: 640px;
+  max-width: 720px;
   min-width: 0;
   width: 100%;
 }
@@ -1794,19 +1819,33 @@ button {
   margin-bottom: 24px;
 }
 
-.settings-heading h2 {
+.settings-heading h1 {
   color: var(--text);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 500;
   line-height: 1.15;
   margin: 0;
 }
 
-.settings-heading p {
+.settings-state-heading p {
   color: var(--muted);
   font-size: 15px;
   line-height: 1.45;
   margin: 8px 0 0;
+}
+
+.settings-state {
+  display: grid;
+  gap: 22px;
+  justify-items: start;
+}
+
+.settings-state-heading h2 {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
 }
 
 .settings-section-stack {
@@ -1815,6 +1854,7 @@ button {
 }
 
 .settings-panel {
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 22px;
@@ -1828,7 +1868,7 @@ button {
   min-width: 0;
 }
 
-.settings-panel-heading h3 {
+.settings-panel-heading h2 {
   color: var(--text);
   font-size: 18px;
   font-weight: 600;
@@ -2150,17 +2190,21 @@ button {
   opacity: 0.62;
 }
 
-.device-shell {
-  align-items: center;
-  background: var(--surface);
+.device-view {
+  background: #0d0d0d;
   display: flex;
-  min-height: min(620px, calc(100vh - 72px));
+  min-height: calc(100dvh - var(--profile-header-height, 52px));
   padding: 48px 24px;
+  width: 100%;
 }
 
 .device-panel {
-  margin: 0 auto;
-  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: auto;
+  max-width: 460px;
+  padding: 32px;
   width: 100%;
 }
 
@@ -2168,18 +2212,18 @@ button {
   margin-bottom: 24px;
 }
 
-.device-header p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-  margin: 0 0 10px;
-}
-
 .device-header h1 {
   font-size: 28px;
   font-weight: 500;
   line-height: 1.15;
   margin: 0;
+}
+
+.device-header p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 10px 0 0;
 }
 
 .device-form {
@@ -2215,6 +2259,13 @@ button {
 .device-form input:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.device-security-note {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 18px;
+  margin: -4px 0 0;
 }
 
 .device-primary-action {
@@ -2258,7 +2309,7 @@ button {
 .device-feedback {
   align-content: start;
   display: grid;
-  min-height: 168px;
+  min-height: 48px;
 }
 
 .device-status {
@@ -2341,6 +2392,23 @@ button {
 
 .device-success-links a:hover {
   text-decoration: underline;
+}
+
+.device-help-link {
+  color: #c8dff7;
+  font-size: 13px;
+  font-weight: 600;
+  justify-self: start;
+  text-decoration: none;
+}
+
+.device-help-link:hover {
+  text-decoration: underline;
+}
+
+.device-help-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
 }
 
 @keyframes device-success-enter {
@@ -2998,6 +3066,7 @@ button {
   }
 
   .profile-shell--fullscreen {
+    --profile-header-height: 48px;
     padding: 0;
   }
 
@@ -3018,10 +3087,14 @@ button {
     padding-inline: 5px;
   }
 
-  .device-shell {
-    align-items: flex-start;
-    min-height: 100dvh;
-    padding: 56px 20px 32px;
+  .device-view {
+    min-height: calc(100dvh - var(--profile-header-height, 48px));
+    padding: 40px 16px 48px;
+  }
+
+  .device-panel {
+    margin: 0 auto;
+    padding: 24px 20px;
   }
 
   .device-command-row {
@@ -3038,7 +3111,7 @@ button {
 
   .card-profile-view,
   .public-profile-view {
-    padding: 48px 0 70px;
+    padding: 48px 16px 72px;
   }
 
   .home-view {
@@ -3055,10 +3128,10 @@ button {
     line-height: 36px;
   }
 
-  .card-profile-heading h2,
-  .card-profile-message h2,
-  .public-profile-heading h2,
-  .public-profile-state h2 {
+  .card-profile-heading h1,
+  .card-profile-message h1,
+  .public-profile-heading h1,
+  .public-profile-state h1 {
     font-size: 22px;
   }
 
@@ -3122,6 +3195,16 @@ button {
 
   .card-profile-message {
     margin-top: 60px;
+  }
+
+  .card-profile-empty-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .card-profile-empty-actions > * {
+    width: 100%;
   }
 
   .public-profile-state {
@@ -3241,7 +3324,7 @@ button {
   }
 
   .settings-view {
-    padding: 52px 0 72px;
+    padding: 48px 16px 72px;
   }
 
   .settings-panel {

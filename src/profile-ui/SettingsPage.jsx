@@ -28,20 +28,28 @@ export function SettingsPage({
     <ProfileShell
       authState={authState}
       client={client}
+      layout="fullscreen"
       onAuthStateChange={onAuthStateChange}
+      pageHeading={false}
       showShare={false}
       title="Settings"
     >
       <section className="settings-view" aria-labelledby="settings-title">
-        {authStatus === "authenticated" ? (
-          <AuthenticatedSettings authState={authState} client={client} />
-        ) : (
-          <SettingsState
-            authStatus={authStatus}
-            client={client}
-            location={location}
-          />
-        )}
+        <div className="settings-stage">
+          <header className="settings-heading">
+            <h1 id="settings-title">Settings</h1>
+          </header>
+
+          {authStatus === "authenticated" ? (
+            <AuthenticatedSettings authState={authState} client={client} />
+          ) : (
+            <SettingsState
+              authStatus={authStatus}
+              client={client}
+              location={location}
+            />
+          )}
+        </div>
       </section>
     </ProfileShell>
   );
@@ -55,38 +63,39 @@ function AuthenticatedSettings({ authState, client }) {
   const details = getAccountDetails(owner);
 
   return (
-    <div className="settings-stage">
-      <header className="settings-heading">
-        <h2 id="settings-title">Profile</h2>
-      </header>
-
-      <div className="settings-section-stack">
-        <div className="settings-panel">
-          <div className="settings-account">
-            <SettingsAvatar avatar={avatar} />
-            <div className="settings-account-copy">
-              <strong>{displayName}</strong>
-              {login ? <span>@{login}</span> : null}
-            </div>
-          </div>
-
-          <p className="settings-note">
-            Profile information is synced from GitHub and cannot be edited here.
-          </p>
-
-          <dl className="settings-detail-list">
-            {details.map((detail) => (
-              <div className="settings-detail-row" key={detail.label}>
-                <dt>{detail.label}</dt>
-                <dd>{detail.value}</dd>
-              </div>
-            ))}
-          </dl>
+    <div className="settings-section-stack">
+      <section
+        aria-labelledby="settings-github-account-title"
+        className="settings-panel"
+      >
+        <div className="settings-panel-heading">
+          <h2 id="settings-github-account-title">GitHub account</h2>
         </div>
 
-        <SettingsTokenPanel client={client} />
-        <SettingsDevicePanel client={client} />
-      </div>
+        <div className="settings-account">
+          <SettingsAvatar avatar={avatar} />
+          <div className="settings-account-copy">
+            <strong>{displayName}</strong>
+            {login ? <span>@{login}</span> : null}
+          </div>
+        </div>
+
+        <p className="settings-note">
+          Profile information is synced from GitHub and cannot be edited here.
+        </p>
+
+        <dl className="settings-detail-list">
+          {details.map((detail) => (
+            <div className="settings-detail-row" key={detail.label}>
+              <dt>{detail.label}</dt>
+              <dd>{detail.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <SettingsTokenPanel client={client} />
+      <SettingsDevicePanel client={client} />
     </div>
   );
 }
@@ -197,9 +206,9 @@ function SettingsTokenPanel({ client }) {
   }
 
   return (
-    <div className="settings-panel">
+    <section className="settings-panel" aria-labelledby="settings-tokens-title">
       <div className="settings-panel-heading">
-        <h3>API Tokens</h3>
+        <h2 id="settings-tokens-title">API Tokens</h2>
         {loadState.status === "ready" ? (
           <span className="settings-token-count">
             {activeTokenCount}/{DEFAULT_MAX_ACTIVE_CLI_TOKENS}
@@ -259,7 +268,7 @@ function SettingsTokenPanel({ client }) {
         revokeState={revokeState}
         tokens={tokens}
       />
-    </div>
+    </section>
   );
 }
 
@@ -388,9 +397,9 @@ function SettingsDevicePanel({ client }) {
   }
 
   return (
-    <div className="settings-panel">
+    <section className="settings-panel" aria-labelledby="settings-devices-title">
       <div className="settings-panel-heading">
-        <h3>Devices</h3>
+        <h2 id="settings-devices-title">Devices</h2>
       </div>
 
       <SettingsDeviceList
@@ -406,7 +415,7 @@ function SettingsDevicePanel({ client }) {
         onStartEdit={startEditingDevice}
         saveState={saveState}
       />
-    </div>
+    </section>
   );
 }
 
@@ -521,9 +530,9 @@ function SettingsState({ authStatus, client, location }) {
   };
 
   return (
-    <div className={`settings-stage settings-stage-${authStatus}`}>
-      <header className="settings-heading">
-        <h2 id="settings-title">{copy.title}</h2>
+    <div className={`settings-state settings-state-${authStatus}`}>
+      <header className="settings-state-heading">
+        <h2>{copy.title}</h2>
         <p>{copy.message}</p>
       </header>
       {copy.action ? (

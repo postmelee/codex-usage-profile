@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  LogOut as LogOutIcon,
+  Settings as SettingsIcon,
+  UserRound as UserRoundIcon
+} from "lucide-react";
 
-import { Icon } from "./Icons.jsx";
 import {
   buildAccountLoginHref,
   getAccountMenuSummary
@@ -11,9 +15,12 @@ export function AccountMenu({
   client,
   location = globalThis.window?.location,
   onAuthStateChange,
+  profileHref = "/profile",
   settingsHref = "/?view=settings"
 }) {
   const menuRef = useRef(null);
+  const menuItemRefs = useRef([]);
+  const triggerRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [logoutState, setLogoutState] = useState({
     error: null,
@@ -23,6 +30,12 @@ export function AccountMenu({
   const isAuthenticated = authStatus === "authenticated";
   const isLoggingOut = logoutState.status === "submitting";
   const summary = getAccountMenuSummary(authState);
+
+  useEffect(() => {
+    if (isOpen) {
+      menuItemRefs.current.find((item) => item && !item.disabled)?.focus();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -43,7 +56,9 @@ export function AccountMenu({
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
+        event.preventDefault();
         setIsOpen(false);
+        triggerRef.current?.focus();
       }
     }
 
@@ -61,6 +76,32 @@ export function AccountMenu({
       current.status === "error" ? { error: null, status: "idle" } : current
     ));
     setIsOpen((value) => !value);
+  }
+
+  function handleMenuBlur(event) {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsOpen(false);
+    }
+  }
+
+  function handleMenuKeyDown(event) {
+    if (!["ArrowDown", "ArrowUp", "End", "Home"].includes(event.key)) {
+      return;
+    }
+
+    const items = menuItemRefs.current.filter((item) => item && !item.disabled);
+    if (items.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const currentIndex = items.indexOf(event.target);
+    const nextIndex = getNextMenuItemIndex(event.key, currentIndex, items.length);
+    items[nextIndex]?.focus();
+  }
+
+  function handleMenuItemClick() {
+    setIsOpen(false);
   }
 
   async function handleLogout() {
@@ -89,7 +130,7 @@ export function AccountMenu({
   if (authStatus === "anonymous") {
     return (
       <a className="account-login-link" href={buildAccountLoginHref(client, location)}>
-        <Icon name="user" size={14} />
+        <AccountIcon name="signIn" size={14} />
         <span>Sign in</span>
       </a>
     );
@@ -113,7 +154,7 @@ export function AccountMenu({
         title="Sign in is temporarily unavailable"
         type="button"
       >
-        <Icon name="user" size={14} />
+        <AccountIcon name="signIn" size={14} />
         <span>Sign in</span>
       </button>
     );
@@ -128,13 +169,20 @@ export function AccountMenu({
         aria-label={`Account menu for ${summary.displayName}`}
         className="account-avatar-button"
         onClick={handleToggleMenu}
+        ref={triggerRef}
         type="button"
       >
         <AccountAvatar avatar={summary.avatar} />
       </button>
 
       {isOpen ? (
-        <div className="account-popover" id="account-menu-popover" role="menu">
+        <div
+          className="account-popover"
+          id="account-menu-popover"
+          onBlur={handleMenuBlur}
+          onKeyDown={handleMenuKeyDown}
+          role="menu"
+        >
           <div className="account-popover-header">
             <AccountAvatar avatar={summary.avatar} />
             <div className="account-popover-identity">
@@ -144,18 +192,35 @@ export function AccountMenu({
           </div>
 
           <div className="account-menu-items">
-            <a className="account-menu-item" href={settingsHref} role="menuitem">
-              <Icon name="settings" size={15} />
+            <a
+              className="account-menu-item"
+              href={profileHref}
+              onClick={handleMenuItemClick}
+              ref={(item) => { menuItemRefs.current[0] = item; }}
+              role="menuitem"
+            >
+              <AccountIcon name="profile" />
+              <span>Profile</span>
+            </a>
+            <a
+              className="account-menu-item"
+              href={settingsHref}
+              onClick={handleMenuItemClick}
+              ref={(item) => { menuItemRefs.current[1] = item; }}
+              role="menuitem"
+            >
+              <AccountIcon name="settings" />
               <span>Settings</span>
             </a>
             <button
               className="account-menu-item"
               disabled={isLoggingOut}
               onClick={handleLogout}
+              ref={(item) => { menuItemRefs.current[2] = item; }}
               role="menuitem"
               type="button"
             >
-              <Icon name="logOut" size={15} />
+              <AccountIcon name="logOut" />
               <span>{isLoggingOut ? "Logging out" : "Log out"}</span>
             </button>
           </div>
@@ -167,6 +232,38 @@ export function AccountMenu({
       ) : null}
     </div>
   );
+}
+
+const ACCOUNT_ICON_COMPONENTS = {
+  logOut: LogOutIcon,
+  profile: UserRoundIcon,
+  settings: SettingsIcon,
+  signIn: UserRoundIcon
+};
+
+function AccountIcon({ name, size = 15 }) {
+  const IconComponent = ACCOUNT_ICON_COMPONENTS[name] ?? UserRoundIcon;
+
+  return (
+    <IconComponent
+      aria-hidden="true"
+      className="icon"
+      data-account-icon={name}
+      size={size}
+      strokeWidth={1.75}
+    />
+  );
+}
+
+function getNextMenuItemIndex(key, currentIndex, itemCount) {
+  if (key === "Home") return 0;
+  if (key === "End") return itemCount - 1;
+  if (key === "ArrowUp") {
+    return currentIndex <= 0 ? itemCount - 1 : currentIndex - 1;
+  }
+  return currentIndex < 0 || currentIndex === itemCount - 1
+    ? 0
+    : currentIndex + 1;
 }
 
 function AccountAvatar({ avatar }) {

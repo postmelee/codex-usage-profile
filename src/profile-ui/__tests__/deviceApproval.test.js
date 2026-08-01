@@ -8,6 +8,7 @@ import {
   buildDeviceSubmitCommand,
   classifyDeviceApprovalError,
   createDeviceApprovalGuidance,
+  getDeviceApprovalErrorMessage,
   isTerminalDeviceApprovalStatus,
   normalizeDeviceApprovalIntent,
   normalizeDeviceApprovalResult
@@ -69,6 +70,24 @@ test("classifies only network, rate-limit, and server errors as retryable", () =
       status
     });
   }
+});
+
+test("turns invalid or expired challenges into actionable guidance", () => {
+  for (const status of [400, 404, 409, 410]) {
+    const error = new Error("CLI login challenge not found");
+    error.status = status;
+    assert.equal(
+      getDeviceApprovalErrorMessage(error, DEVICE_APPROVAL_ERROR_KIND.TERMINAL),
+      "This code is invalid or expired. Run the command again in your terminal and enter the new code."
+    );
+  }
+
+  const retryable = new Error("Approval temporarily unavailable");
+  retryable.status = 503;
+  assert.equal(
+    getDeviceApprovalErrorMessage(retryable, DEVICE_APPROVAL_ERROR_KIND.RETRYABLE),
+    "Approval temporarily unavailable"
+  );
 });
 
 test("builds intent-specific guidance without embedding response metadata", () => {

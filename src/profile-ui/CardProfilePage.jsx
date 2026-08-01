@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
+import { Icon } from "./Icons.jsx";
 import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
+import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const authStatus = authState?.status ?? "loading";
@@ -81,8 +83,10 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     <ProfileShell
       authState={authState}
       client={client}
+      layout="fullscreen"
       onAuthStateChange={onAuthStateChange}
       onShare={() => setShareOpen(true)}
+      pageHeading={false}
       shareDisabled={!canShare}
       title="Profile"
     >
@@ -132,14 +136,14 @@ function CardProfileContent(props) {
     return <ProfileMessage title="Profile unavailable" message={profileState.error} />;
   }
   if (!props.hasUsage) {
-    return <ProfileMessage title="No usage submitted yet" />;
+    return <EmptyProfileState />;
   }
 
   return (
     <div className="card-profile-stage">
       <header className="card-profile-heading">
         <div>
-          <h2 id="card-profile-title">Your Codex card</h2>
+          <h1 id="card-profile-title">Your Codex card</h1>
           <span className={`visibility-status is-${props.isPublic ? "public" : "private"}`}>
             {props.isPublic ? "Public" : "Private"}
           </span>
@@ -171,14 +175,84 @@ function CardProfileContent(props) {
   );
 }
 
+function EmptyProfileState() {
+  const [copyState, setCopyState] = useState("idle");
+
+  async function handleCopyCommand() {
+    try {
+      if (!globalThis.navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+      await globalThis.navigator.clipboard.writeText(HOME_SUBMIT_COMMAND);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  return (
+    <div className="card-profile-message card-profile-empty">
+      <h1 id="card-profile-title">No usage submitted yet</h1>
+      <p className="card-profile-empty-description">
+        Submit your local Codex usage once to create your card. Run the same command
+        whenever you want to update it.
+      </p>
+
+      <div className="card-profile-empty-command">
+        <span className="home-command-label">Run in your terminal</span>
+        <div className="home-command-row">
+          <code>{HOME_SUBMIT_COMMAND}</code>
+          <button
+            aria-label="Copy submit command"
+            className="icon-command home-command-copy"
+            onClick={handleCopyCommand}
+            title="Copy submit command"
+            type="button"
+          >
+            <Icon name="copy" />
+          </button>
+        </div>
+        <p
+          aria-live="polite"
+          className={`home-copy-status is-${copyState}`}
+          role="status"
+        >
+          {getEmptyProfileCopyStatus(copyState)}
+        </p>
+      </div>
+
+      <div className="card-profile-empty-actions">
+        <a className="secondary-command" href="/#quickstart">
+          View setup guide
+        </a>
+      </div>
+
+      <p className="card-profile-empty-privacy">
+        Only aggregated usage is submitted. Prompts, responses, credentials, and local
+        session files stay on your device.
+      </p>
+    </div>
+  );
+}
+
 function ProfileMessage({ children, message, title }) {
   return (
     <div className="card-profile-message">
-      <h2 id="card-profile-title">{title}</h2>
+      <h1 id="card-profile-title">{title}</h1>
       {message ? <p>{message}</p> : null}
       {children}
     </div>
   );
+}
+
+function getEmptyProfileCopyStatus(status) {
+  if (status === "copied") {
+    return "Command copied.";
+  }
+  if (status === "error") {
+    return "Copy failed. Select the command and copy it manually.";
+  }
+  return "";
 }
 
 function getVisibilityActionLabel(isPublic, status) {

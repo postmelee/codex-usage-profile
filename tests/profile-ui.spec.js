@@ -9,6 +9,7 @@ const CARD_PNG = readFileSync(new URL(
   import.meta.url
 ));
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
+const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -787,7 +788,10 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Copy submit command" })).toBeFocused();
 
     await accountButton.click();
-    await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveAttribute(
+      "href",
+      "/profile"
+    );
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
       "/?view=settings"
@@ -795,7 +799,77 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
 
-  test("uses document scrolling on Home and keeps app surfaces framed", async ({ page }, testInfo) => {
+  test("account menu exposes Profile and supports keyboard focus", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const trigger = page.getByRole("button", { name: "Account menu for postmelee" });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const profileItem = page.getByRole("menuitem", { name: "Profile" });
+    const settingsItem = page.getByRole("menuitem", { name: "Settings" });
+    const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+    const menuItems = page.getByRole("menuitem");
+
+    await expect(menuItems).toHaveCount(3);
+    await expect(menuItems.nth(0)).toHaveText("Profile");
+    await expect(menuItems.nth(1)).toHaveText("Settings");
+    await expect(menuItems.nth(2)).toHaveText("Log out");
+    await expect(profileItem).toHaveAttribute("href", "/profile");
+    await expect(settingsItem).toHaveAttribute("href", "/?view=settings");
+    await expect(profileItem.locator('[data-account-icon="profile"]'))
+      .toHaveClass(/lucide-user-round/);
+    await expect(settingsItem.locator('[data-account-icon="settings"]'))
+      .toHaveClass(/lucide-settings/);
+    await expect(logoutItem.locator('[data-account-icon="logOut"]'))
+      .toHaveClass(/lucide-log-out/);
+
+    for (const [item, iconName] of [
+      [profileItem, "profile"],
+      [settingsItem, "settings"],
+      [logoutItem, "logOut"]
+    ]) {
+      const iconBox = await item.locator(`[data-account-icon="${iconName}"]`).boundingBox();
+      const textBox = await item.locator("span").boundingBox();
+      expect(iconBox).not.toBeNull();
+      expect(textBox).not.toBeNull();
+      expect(Math.abs(
+        iconBox.y + iconBox.height / 2 - (textBox.y + textBox.height / 2)
+      )).toBeLessThanOrEqual(1);
+    }
+    await expect(profileItem).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(settingsItem).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(profileItem).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await trigger.click();
+    await expect(profileItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(settingsItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeFocused();
+
+    await trigger.click();
+    await expect(profileItem).toBeFocused();
+    await page.getByRole("heading", { name: "Codex usage profile" }).click();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  test("uses document scrolling across Home, Profile, and Settings surfaces", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("private"),
@@ -828,33 +902,45 @@ test.describe("Home and share card flow", () => {
 
     for (const path of ["/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
-      const metrics = await getFrameScrollMetrics(page);
+      await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+      await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+      const metrics = await getLandingScrollMetrics(page);
       const titleMetrics = await page.locator(".profile-topbar-title").evaluate((title) => ({
         clientHeight: title.clientHeight,
         lineHeight: getComputedStyle(title).lineHeight,
         scrollHeight: title.scrollHeight
       }));
 
-      expect(metrics.frameBottom).toBeLessThanOrEqual(metrics.viewportHeight);
-      expect(metrics.frameHeight).toBeLessThanOrEqual(metrics.viewportHeight - 72 + 1);
-      expect(metrics.overflowY).toBe("auto");
-      expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+      expect(metrics.frameHeight).toBeGreaterThanOrEqual(metrics.viewportHeight);
+      expect(metrics.overflowY).toBe("visible");
+      expect(metrics.documentScrollHeight).toBeGreaterThan(metrics.viewportHeight);
       expect(titleMetrics.lineHeight).toBe("20px");
       expect(titleMetrics.clientHeight).toBeGreaterThanOrEqual(22);
       expect(titleMetrics.scrollHeight).toBeLessThanOrEqual(titleMetrics.clientHeight);
+      expect(await page.evaluate(
+        () => document.body.scrollWidth > document.documentElement.clientWidth
+      )).toBe(false);
     }
 
-    const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
-    await expect(primaryNavigation.getByRole("link", { name: "Home", exact: true }))
+    await expect(page.getByRole("link", { name: "Codex Usage", exact: true }))
       .toHaveAttribute("href", "/");
-    await expect(primaryNavigation.getByRole("link", { name: "Profile", exact: true }))
-      .toHaveCount(0);
+    await page.getByRole("button", { name: "Account menu for postmelee" }).click();
+    await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
+      .toHaveAttribute("href", "/profile");
 
-    const internalScrollTop = await page.locator(".profile-shell").evaluate((shell) => {
+    const scrollMetrics = await page.locator(".profile-shell").evaluate((shell) => {
       shell.scrollTop = 120;
-      return shell.scrollTop;
+      window.scrollTo(0, 120);
+      return {
+        documentScrollTop: window.scrollY,
+        shellScrollTop: shell.scrollTop
+      };
     });
-    expect(internalScrollTop).toBeGreaterThan(0);
+    expect(scrollMetrics.shellScrollTop).toBe(0);
+    expect(scrollMetrics.documentScrollTop).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath("public-profile-short-viewport.png") });
   });
 
@@ -883,7 +969,33 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     const initialUrl = page.url();
 
-    await expect(page.getByRole("heading", { name: "Authorize device" })).toBeVisible();
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
+    await expect(page.getByRole("link", { name: "Codex Usage" }))
+      .toHaveAttribute("href", "/");
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.locator(".device-view")).toHaveCSS(
+      "background-color",
+      "rgb(13, 13, 13)"
+    );
+    await expect(page.locator(".device-panel")).toHaveCSS(
+      "background-color",
+      "rgb(23, 23, 23)"
+    );
+    await expect(page.getByText(
+      "Enter the code shown in your terminal to connect the CLI.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByText(
+      "Only approve a code you requested from the Codex Usage Profile CLI.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByRole("link", { name: "View setup guide" }))
+      .toHaveAttribute("href", "/#quickstart");
+    await expect(page.locator(".device-feedback")).toHaveCSS("min-height", "48px");
     await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
     const approveButton = page.getByRole("button", { name: "Approve device" });
     await approveButton.evaluate((button) => {
@@ -950,6 +1062,14 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     const initialUrl = page.url();
 
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    const topbarBox = await page.locator(".profile-topbar").boundingBox();
+    const panelBox = await page.locator(".device-panel").boundingBox();
+    expect(topbarBox).not.toBeNull();
+    expect(panelBox).not.toBeNull();
+    expect(panelBox.y).toBeGreaterThanOrEqual(topbarBox.y + topbarBox.height + 40);
+
     await page.getByLabel("User code").focus();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Approve device" })).toBeFocused();
@@ -977,6 +1097,41 @@ test.describe("Home and share card flow", () => {
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
+  });
+
+  test("device approval common header keeps logout and auth state aligned", async ({ page }) => {
+    let logoutRequests = 0;
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/logout", (route) => {
+      logoutRequests += 1;
+      return fulfillJson(route, {
+        data: { session: null },
+        ok: true
+      });
+    });
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await page.getByRole("button", { name: "Account menu for postmelee" }).click();
+    await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
+      .toHaveAttribute("href", "/profile");
+    await expect(page.getByRole("menuitem", { name: "Settings", exact: true }))
+      .toHaveAttribute("href", "/?view=settings");
+    await page.getByRole("menuitem", { name: "Log out" }).click();
+
+    await expect(page.locator(".profile-shell")).toHaveAttribute(
+      "data-auth-status",
+      "anonymous"
+    );
+    await expect(page.locator(".device-view")).toHaveAttribute(
+      "data-auth-status",
+      "anonymous"
+    );
+    await expect(page.getByRole("link", { name: "Sign in", exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
+      .toBeVisible();
+    await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
+    expect(logoutRequests).toBe(1);
   });
 
   test("device approval treats exchanged legacy intent as terminal success", async ({ page }) => {
@@ -1055,12 +1210,18 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=WXYZ-9876");
     await page.getByRole("button", { name: "Approve device" }).click();
     await expect(page.getByRole("alert")).toHaveText(
-      "CLI login challenge cannot be approved"
+      "This code is invalid or expired. Run the command again in your terminal and enter the new code."
     );
-    await expect(page.getByRole("button", { name: "Approve device" })).toBeDisabled();
-    await expect(page.getByLabel("User code")).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Enter a new code" })).toBeDisabled();
+    const userCodeInput = page.getByLabel("User code");
+    await expect(userCodeInput).toBeEnabled();
+    await expect(userCodeInput).toBeFocused();
+    expect(await userCodeInput.evaluate((input) => ({
+      end: input.selectionEnd,
+      start: input.selectionStart
+    }))).toEqual({ end: 9, start: 0 });
 
-    await page.getByLabel("User code").fill("QRST-2345");
+    await userCodeInput.fill("QRST-2345");
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Approve device" })).toBeEnabled();
     expect(requestedCodes).toEqual(["ABCD-1234", "ABCD-1234", "WXYZ-9876"]);
@@ -1859,6 +2020,248 @@ test.describe("Home and share card flow", () => {
   });
 });
 
+test.describe("Profile and Settings canvases", () => {
+  test("owner Profile keeps Share Studio functional on the fullscreen canvas", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/profile");
+
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole("heading", { level: 1, name: "Your Codex card" }))
+      .toBeVisible();
+    await expect(page.getByText("Public", { exact: true })).toBeVisible();
+
+    const shareButton = page.getByRole("button", { name: "Share profile" });
+    await expect(shareButton).toBeEnabled();
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator(".app-frame")).toHaveAttribute("inert", "");
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
+    await expect(shareButton).toBeFocused();
+  });
+
+  test("owner Profile loading, empty, and error states keep one visual heading", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(globalThis.navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value) {
+            globalThis.__copiedProfileCommand = value;
+          }
+        }
+      });
+    });
+    await mockAuthenticatedAccount(page);
+    let releaseProfile;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: { ...ownerProfile("private"), usage: null },
+        ok: true
+      });
+    });
+
+    await page.goto("/profile", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { level: 1, name: "Loading profile" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+
+    releaseProfile();
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "No usage submitted yet"
+    })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.getByText(
+      "Submit your local Codex usage once to create your card. Run the same command whenever you want to update it."
+    )).toBeVisible();
+    await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View setup guide" }))
+      .toHaveAttribute("href", "/#quickstart");
+    await expect(page.getByText(
+      "Only aggregated usage is submitted. Prompts, responses, credentials, and local session files stay on your device."
+    )).toBeVisible();
+
+    const emptyState = page.locator(".card-profile-empty");
+    const commandRow = emptyState.locator(".home-command-row");
+    const copyButton = commandRow.getByRole("button", { name: "Copy submit command" });
+    await expect(copyButton.locator(".icon")).toBeVisible();
+
+    const desktopTopOffset = await page.evaluate(() => {
+      const empty = document.querySelector(".card-profile-empty").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(empty.top - topbar.bottom);
+    });
+    expect(desktopTopOffset).toBe(72);
+
+    const commandBox = await commandRow.locator("code").boundingBox();
+    const copyBox = await copyButton.boundingBox();
+    expect(commandBox).not.toBeNull();
+    expect(copyBox).not.toBeNull();
+    expect(copyBox.x).toBeGreaterThan(commandBox.x);
+
+    await copyButton.click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Command copied."
+    );
+    await expect.poll(() => page.evaluate(() => globalThis.__copiedProfileCommand))
+      .toBe(SUBMIT_COMMAND);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileTopOffset = await page.evaluate(() => {
+      const empty = document.querySelector(".card-profile-empty").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(empty.top - topbar.bottom);
+    });
+    expect(mobileTopOffset).toBe(48);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+
+    await page.unroute("**/api/profile");
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      error: { code: "service_unavailable", message: "Profile lookup failed" },
+      ok: false
+    }, 503));
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Profile unavailable" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  });
+
+  test("Settings keeps semantic sections and representative mutations", async ({ page }) => {
+    let createRequests = 0;
+    let renameRequests = 0;
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/settings/tokens", (route) => {
+      if (route.request().method() === "POST") {
+        createRequests += 1;
+        return fulfillJson(route, {
+          data: {
+            token: "cup_raw_token",
+            tokenRecord: { id: "token_2", label: "CI token" }
+          },
+          ok: true
+        }, 201);
+      }
+      return fulfillJson(route, {
+        data: { tokens: [{ id: "token_1", label: "Existing token" }] },
+        ok: true
+      });
+    });
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: {
+        devices: [{
+          customName: "Office Mac",
+          deviceKey: "machine-1",
+          displayName: "Office Mac",
+          id: "device_1"
+        }]
+      },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices/device_1", (route) => {
+      renameRequests += 1;
+      return fulfillJson(route, {
+        data: {
+          device: {
+            customName: "Desk Mac",
+            deviceKey: "machine-1",
+            displayName: "Desk Mac",
+            id: "device_1"
+          }
+        },
+        ok: true
+      });
+    });
+
+    await page.goto("/settings");
+
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".settings-view")).toHaveCSS(
+      "background-color",
+      "rgb(13, 13, 13)"
+    );
+    await expect(page.locator(".settings-panel").first()).toHaveCSS(
+      "background-color",
+      "rgb(23, 23, 23)"
+    );
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    for (const sectionName of ["GitHub account", "API Tokens", "Devices"]) {
+      await expect(page.getByRole("heading", { level: 2, name: sectionName }))
+        .toBeVisible();
+    }
+
+    await page.getByRole("button", { name: "Create token" }).click();
+    await expect(page.getByText("cup_raw_token", { exact: true })).toBeVisible();
+    expect(createRequests).toBe(1);
+
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("textbox", { name: "Device name" }).fill("Desk Mac");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Desk Mac", { exact: true })).toBeVisible();
+    expect(renameRequests).toBe(1);
+  });
+
+  test("anonymous Settings keeps Settings as the page heading", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.goto("/settings");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Sign in required" }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
+      .toHaveAttribute("href", "/api/auth/github/login?redirect_to=%2Fsettings");
+  });
+
+  test("owner Profile and Settings stay readable on mobile", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    for (const path of ["/profile", "/settings"]) {
+      await page.goto(path);
+      const pageHeading = page.getByRole("heading", { level: 1 });
+      const topbar = page.locator(".profile-topbar");
+      await expect(pageHeading).toHaveCount(1);
+      await expect(pageHeading).toBeVisible();
+
+      const headingBox = await pageHeading.boundingBox();
+      const topbarBox = await topbar.boundingBox();
+      expect(headingBox).not.toBeNull();
+      expect(topbarBox).not.toBeNull();
+      expect(headingBox.y).toBeGreaterThanOrEqual(topbarBox.y + topbarBox.height);
+      expect(await page.evaluate(
+        () => document.body.scrollWidth > document.documentElement.clientWidth
+      )).toBe(false);
+    }
+  });
+});
+
 test.describe("Public profile", () => {
   test("public profile renders the API-backed GitHub identity and stable card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
@@ -1867,8 +2270,13 @@ test.describe("Public profile", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(SITES_PROFILE_ROUTE);
 
-    await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "Codex card for Post Melee"
+    }))
       .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
     await expect(page.getByText("@postmelee", { exact: true })).toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
@@ -1933,12 +2341,18 @@ test.describe("Public profile", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(PROFILE_ROUTE);
 
-    await expect(page.getByRole("heading", { name: "Loading public profile" }))
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "Loading public profile"
+    }))
       .toBeVisible();
     await expect(page.getByText("postmelee", { exact: false })).toHaveCount(0);
 
     releaseResponse();
-    await expect(page.getByRole("heading", { name: "Codex card for Post Melee" }))
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "Codex card for Post Melee"
+    }))
       .toBeVisible();
   });
 
@@ -1953,7 +2367,10 @@ test.describe("Public profile", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/u/private-or-missing");
 
-    await expect(page.getByRole("heading", { name: "Profile unavailable" }))
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "Profile unavailable"
+    }))
       .toBeVisible();
     await expect(page.getByText("This public profile is not available."))
       .toBeVisible();
@@ -2278,22 +2695,6 @@ async function fulfillJson(route, body, status = 200) {
     body: JSON.stringify(body),
     contentType: "application/json",
     status
-  });
-}
-
-async function getFrameScrollMetrics(page) {
-  return page.locator(".app-frame").evaluate((frame) => {
-    const shell = frame.querySelector(".profile-shell");
-    const frameRect = frame.getBoundingClientRect();
-
-    return {
-      clientHeight: shell.clientHeight,
-      frameBottom: frameRect.bottom,
-      frameHeight: frameRect.height,
-      overflowY: getComputedStyle(shell).overflowY,
-      scrollHeight: shell.scrollHeight,
-      viewportHeight: window.innerHeight
-    };
   });
 }
 

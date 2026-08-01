@@ -1,15 +1,22 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CodexCheckCircleIcon } from "./Icons.jsx";
+import { ProfileShell } from "./ProfileShell.jsx";
 import {
   DEVICE_APPROVAL_ERROR_KIND,
   DEVICE_APPROVAL_UI_STATUS,
   classifyDeviceApprovalError,
   createDeviceApprovalGuidance,
+  getDeviceApprovalErrorMessage,
   normalizeDeviceApprovalResult
 } from "./deviceApproval.js";
 
-export function DeviceApprovalPage({ authState, client, location = window.location }) {
+export function DeviceApprovalPage({
+  authState,
+  client,
+  location = window.location,
+  onAuthStateChange
+}) {
   const initialUserCode = useMemo(() => readDeviceUserCode(location), [location]);
   const [userCode, setUserCode] = useState(initialUserCode);
   const [approvalState, setApprovalState] = useState({
@@ -19,6 +26,7 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
     status: DEVICE_APPROVAL_UI_STATUS.IDLE
   });
   const approvalInFlightRef = useRef(false);
+  const userCodeInputRef = useRef(null);
   const authStatus = authState?.status ?? "loading";
   const isAuthenticated = authStatus === "authenticated";
   const normalizedUserCode = normalizeUserCodeInput(userCode);
@@ -27,9 +35,12 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
   const isRetryableError = (
     approvalState.status === DEVICE_APPROVAL_UI_STATUS.RETRYABLE_ERROR
   );
+  const isTerminalError = (
+    approvalState.status === DEVICE_APPROVAL_UI_STATUS.TERMINAL_ERROR
+  );
   const hasApprovalError = (
     isRetryableError ||
-    approvalState.status === DEVICE_APPROVAL_UI_STATUS.TERMINAL_ERROR
+    isTerminalError
   );
   const loginHref = client.buildGitHubLoginUrl({
     redirectTo: buildDeviceRedirectPath(normalizedUserCode)
@@ -48,6 +59,13 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
       location?.origin
     )
     : null;
+
+  useEffect(() => {
+    if (!isTerminalError) return;
+
+    userCodeInputRef.current?.focus();
+    userCodeInputRef.current?.select();
+  }, [isTerminalError]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -78,7 +96,7 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
       const { kind } = classifyDeviceApprovalError(error);
       setApprovalState({
         copyStatus: "idle",
-        error: error instanceof Error ? error.message : "Device approval failed",
+        error: getDeviceApprovalErrorMessage(error, kind),
         result: null,
         status: kind === DEVICE_APPROVAL_ERROR_KIND.RETRYABLE
           ? DEVICE_APPROVAL_UI_STATUS.RETRYABLE_ERROR
@@ -119,12 +137,22 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
   }
 
   return (
-    <div className="app-frame">
-      <main className="device-shell" data-auth-status={authStatus}>
+    <ProfileShell
+      authState={authState}
+      client={client}
+      layout="fullscreen"
+      onAuthStateChange={onAuthStateChange}
+      pageHeading={false}
+      showShare={false}
+      title="Authorize device"
+    >
+      <section className="device-view" data-auth-status={authStatus}>
         <section className="device-panel" aria-labelledby="device-title">
           <header className="device-header">
-            <p>Codex Usage Profile</p>
             <h1 id="device-title">Authorize device</h1>
+            <p>
+              Enter the code shown in your terminal to connect the CLI.
+            </p>
           </header>
 
           <form
@@ -142,9 +170,15 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
               inputMode="text"
               onChange={handleUserCodeChange}
               placeholder="ABCD-1234"
+              ref={userCodeInputRef}
+              spellCheck="false"
               type="text"
               value={userCode}
             />
+
+            <p className="device-security-note">
+              Only approve a code you requested from the Codex Usage Profile CLI.
+            </p>
 
             {authStatus === "loading" ? (
               <p className="device-status">Checking signed-in account.</p>
@@ -173,6 +207,8 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
                   "Approving…"
                 ) : isRetryableError ? (
                   "Retry approval"
+                ) : isTerminalError ? (
+                  "Enter a new code"
                 ) : (
                   "Approve device"
                 )}
@@ -239,10 +275,14 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
                 </p>
               ) : null}
             </div>
+
+            <a className="device-help-link" href="/#quickstart">
+              View setup guide
+            </a>
           </form>
         </section>
-      </main>
-    </div>
+      </section>
+    </ProfileShell>
   );
 }
 
