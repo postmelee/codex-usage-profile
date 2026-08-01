@@ -2020,12 +2020,41 @@ test.describe("Profile and Settings canvases", () => {
       "Only aggregated usage is submitted. Prompts, responses, credentials, and local session files stay on your device."
     )).toBeVisible();
 
-    await page.getByRole("button", { name: "Copy submit command" }).click();
+    const emptyState = page.locator(".card-profile-empty");
+    const commandRow = emptyState.locator(".home-command-row");
+    const copyButton = commandRow.getByRole("button", { name: "Copy submit command" });
+    await expect(copyButton.locator(".icon")).toBeVisible();
+
+    const desktopTopOffset = await page.evaluate(() => {
+      const empty = document.querySelector(".card-profile-empty").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(empty.top - topbar.bottom);
+    });
+    expect(desktopTopOffset).toBe(72);
+
+    const commandBox = await commandRow.locator("code").boundingBox();
+    const copyBox = await copyButton.boundingBox();
+    expect(commandBox).not.toBeNull();
+    expect(copyBox).not.toBeNull();
+    expect(copyBox.x).toBeGreaterThan(commandBox.x);
+
+    await copyButton.click();
     await expect(page.getByRole("status")).toHaveText(
-      "Command copied. Run it in your terminal, then refresh this page."
+      "Command copied."
     );
     await expect.poll(() => page.evaluate(() => globalThis.__copiedProfileCommand))
       .toBe(SUBMIT_COMMAND);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileTopOffset = await page.evaluate(() => {
+      const empty = document.querySelector(".card-profile-empty").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(empty.top - topbar.bottom);
+    });
+    expect(mobileTopOffset).toBe(48);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
 
     await page.unroute("**/api/profile");
     await page.route("**/api/profile", (route) => fulfillJson(route, {

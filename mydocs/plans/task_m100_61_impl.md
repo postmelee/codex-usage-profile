@@ -215,6 +215,26 @@ Task #61 Stage 2: Profile과 Settings page canvas 정렬
 Task #61 [Stage 2.1]: Profile canvas와 empty state 안내 정렬
 ```
 
+### Stage 2.2 empty state 복사 control·상단 정렬 보정
+
+작업지시자의 Stage 2.1 로컬 검토에서 Profile의 submit command가 Home과 달리
+별도 primary 복사 button을 사용하고, empty state가 page 중앙에 남아 Settings와
+수직 시작점이 어긋나는 점이 확인되었다.
+
+- Profile empty state의 command field에 Home의 `home-command-row`, 우측
+  `Icon name="copy"` button과 copy status 스타일을 그대로 재사용한다.
+- 별도 `Copy submit command` primary button을 제거하고 `View setup guide`만
+  보조 CTA로 유지한다.
+- empty state에 한해 `align-self: flex-start`, `margin-top: 0`을 적용해 공통
+  page padding 기준 desktop 72px, mobile 48px 지점에서 시작한다. loading과
+  error message의 기존 중앙 배치는 유지한다.
+- Playwright에서 copy icon 존재·command 오른쪽 배치, clipboard 결과,
+  desktop/mobile header 하단 offset과 horizontal overflow 부재를 검증한다.
+
+```text
+Task #61 [Stage 2.2]: Profile empty state 복사와 상단 정렬 통일
+```
+
 ## Stage 3 — Device Approve 공통 shell 통합
 
 ### 산출물

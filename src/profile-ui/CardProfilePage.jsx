@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
+import { Icon } from "./Icons.jsx";
 import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
 import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
@@ -198,26 +199,33 @@ function EmptyProfileState() {
       </p>
 
       <div className="card-profile-empty-command">
-        <span>Run in your terminal</span>
-        <code>{HOME_SUBMIT_COMMAND}</code>
+        <span className="home-command-label">Run in your terminal</span>
+        <div className="home-command-row">
+          <code>{HOME_SUBMIT_COMMAND}</code>
+          <button
+            aria-label="Copy submit command"
+            className="icon-command home-command-copy"
+            onClick={handleCopyCommand}
+            title="Copy submit command"
+            type="button"
+          >
+            <Icon name="copy" />
+          </button>
+        </div>
+        <p
+          aria-live="polite"
+          className={`home-copy-status is-${copyState}`}
+          role="status"
+        >
+          {getEmptyProfileCopyStatus(copyState)}
+        </p>
       </div>
 
       <div className="card-profile-empty-actions">
-        <button className="primary-command" onClick={handleCopyCommand} type="button">
-          Copy submit command
-        </button>
         <a className="secondary-command" href="/#quickstart">
           View setup guide
         </a>
       </div>
-
-      <p
-        aria-live="polite"
-        className={`card-profile-empty-status is-${copyState}`}
-        role="status"
-      >
-        {getEmptyProfileCopyStatus(copyState)}
-      </p>
 
       <p className="card-profile-empty-privacy">
         Only aggregated usage is submitted. Prompts, responses, credentials, and local
@@ -239,7 +247,7 @@ function ProfileMessage({ children, message, title }) {
 
 function getEmptyProfileCopyStatus(status) {
   if (status === "copied") {
-    return "Command copied. Run it in your terminal, then refresh this page.";
+    return "Command copied.";
   }
   if (status === "error") {
     return "Copy failed. Select the command and copy it manually.";

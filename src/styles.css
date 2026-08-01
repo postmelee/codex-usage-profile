@@ -1148,14 +1148,16 @@ button {
   width: min(100%, 520px);
 }
 
-.card-profile-message p {
+.card-profile-message > p {
   color: var(--muted);
   font-size: 14px;
   margin: -10px 0 0;
 }
 
-.card-profile-empty {
+.card-profile-message.card-profile-empty {
+  align-self: flex-start;
   gap: 0;
+  margin-top: 0;
   width: min(100%, 560px);
 }
 
@@ -1168,30 +1170,7 @@ button {
 }
 
 .card-profile-empty-command {
-  display: grid;
-  gap: 8px;
   margin-top: 28px;
-  width: 100%;
-}
-
-.card-profile-empty-command span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
-.card-profile-empty-command code {
-  background: #111;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  color: #e3e3e3;
-  display: block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  line-height: 20px;
-  overflow-wrap: anywhere;
-  padding: 13px;
   width: 100%;
 }
 
@@ -1199,22 +1178,6 @@ button {
   display: flex;
   gap: 10px;
   margin-top: 16px;
-}
-
-.card-profile-message .card-profile-empty-status {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
-  margin: 8px 0 0;
-  min-height: 18px;
-}
-
-.card-profile-message .card-profile-empty-status.is-copied {
-  color: #91c4a4;
-}
-
-.card-profile-message .card-profile-empty-status.is-error {
-  color: #ff8b8b;
 }
 
 .card-profile-message .card-profile-empty-privacy {
