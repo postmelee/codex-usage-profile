@@ -21,6 +21,18 @@ export {
 } from "./heatmap.js";
 
 export {
+  CARD_HEATMAP_BOUNDS,
+  CARD_HEATMAP_CELL_SIZE,
+  CARD_HEATMAP_COLUMN_STEP,
+  CARD_HEATMAP_HEIGHT,
+  CARD_HEATMAP_ROW_STEP,
+  CARD_HEATMAP_WIDTH,
+  CARD_HEATMAP_X,
+  CARD_HEATMAP_Y,
+  getCardHeatmapCellGeometry
+} from "./geometry.js";
+
+export {
   CARD_COLORS,
   CARD_LOGICAL_HEIGHT,
   CARD_LOGICAL_WIDTH,

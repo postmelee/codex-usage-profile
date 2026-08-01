@@ -1,10 +1,18 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
+import {
+  CARD_HEATMAP_CELL_SIZE,
+  CARD_HEATMAP_COLUMN_STEP,
+  CARD_HEATMAP_ROW_STEP,
+  CARD_HEATMAP_X,
+  CARD_HEATMAP_Y,
+  CARD_LOGICAL_HEIGHT,
+  CARD_LOGICAL_WIDTH
+} from "./geometry.js";
+
 export const WORKER_CARD_RENDERER_VERSION =
   "codex-share-card-2-resvg-wasm-1";
 
-const CARD_LOGICAL_WIDTH = 499;
-const CARD_LOGICAL_HEIGHT = 306;
 const CARD_OUTPUT_SCALE = 3;
 const CARD_COLORS = Object.freeze({
   background: "#181818",
@@ -16,11 +24,6 @@ const CARD_COLORS = Object.freeze({
 const AVATAR_X = 36;
 const AVATAR_Y = 36;
 const AVATAR_SIZE = 44;
-const HEATMAP_X = 32;
-const HEATMAP_Y = 96;
-const HEATMAP_WIDTH = 435;
-const HEATMAP_HEIGHT = 115;
-const HEATMAP_CELL_SIZE = 14;
 const STAT_CENTERS = Object.freeze([86.375, 195.125, 303.875, 412.625]);
 const STAT_DIVIDERS = Object.freeze([140.5, 249.5, 358.5]);
 
@@ -156,16 +159,12 @@ function createAvatarMarkup(header, source) {
 }
 
 function createHeatmapMarkup(heatmap) {
-  const columnStep = (HEATMAP_WIDTH - HEATMAP_CELL_SIZE) /
-    Math.max(heatmap.columnCount - 1, 1);
-  const rowStep = (HEATMAP_HEIGHT - HEATMAP_CELL_SIZE) /
-    Math.max(heatmap.rowCount - 1, 1);
-
   return heatmap.cells.map((cell) => {
-    const x = HEATMAP_X + cell.column * columnStep;
-    const y = HEATMAP_Y + cell.row * rowStep;
+    const x = CARD_HEATMAP_X + cell.column * CARD_HEATMAP_COLUMN_STEP;
+    const y = CARD_HEATMAP_Y + cell.row * CARD_HEATMAP_ROW_STEP;
     return `<rect x="${formatNumber(x)}" y="${formatNumber(y)}"` +
-      ` width="${HEATMAP_CELL_SIZE}" height="${HEATMAP_CELL_SIZE}"` +
+      ` width="${CARD_HEATMAP_CELL_SIZE}"` +
+      ` height="${CARD_HEATMAP_CELL_SIZE}"` +
       ` rx="4" fill="${escapeXml(cell.color)}"/>`;
   }).join("");
 }
