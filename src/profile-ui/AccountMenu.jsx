@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  LogOut as LogOutIcon,
+  Settings as SettingsIcon,
+  UserRound as UserRoundIcon
+} from "lucide-react";
 
-import { Icon } from "./Icons.jsx";
 import {
   buildAccountLoginHref,
   getAccountMenuSummary
@@ -126,7 +130,7 @@ export function AccountMenu({
   if (authStatus === "anonymous") {
     return (
       <a className="account-login-link" href={buildAccountLoginHref(client, location)}>
-        <Icon name="user" size={14} />
+        <AccountIcon name="signIn" size={14} />
         <span>Sign in</span>
       </a>
     );
@@ -150,7 +154,7 @@ export function AccountMenu({
         title="Sign in is temporarily unavailable"
         type="button"
       >
-        <Icon name="user" size={14} />
+        <AccountIcon name="signIn" size={14} />
         <span>Sign in</span>
       </button>
     );
@@ -195,7 +199,7 @@ export function AccountMenu({
               ref={(item) => { menuItemRefs.current[0] = item; }}
               role="menuitem"
             >
-              <Icon name="user" size={15} />
+              <AccountIcon name="profile" />
               <span>Profile</span>
             </a>
             <a
@@ -205,7 +209,7 @@ export function AccountMenu({
               ref={(item) => { menuItemRefs.current[1] = item; }}
               role="menuitem"
             >
-              <Icon name="settings" size={15} />
+              <AccountIcon name="settings" />
               <span>Settings</span>
             </a>
             <button
@@ -216,7 +220,7 @@ export function AccountMenu({
               role="menuitem"
               type="button"
             >
-              <Icon name="logOut" size={15} />
+              <AccountIcon name="logOut" />
               <span>{isLoggingOut ? "Logging out" : "Log out"}</span>
             </button>
           </div>
@@ -227,6 +231,27 @@ export function AccountMenu({
         </div>
       ) : null}
     </div>
+  );
+}
+
+const ACCOUNT_ICON_COMPONENTS = {
+  logOut: LogOutIcon,
+  profile: UserRoundIcon,
+  settings: SettingsIcon,
+  signIn: UserRoundIcon
+};
+
+function AccountIcon({ name, size = 15 }) {
+  const IconComponent = ACCOUNT_ICON_COMPONENTS[name] ?? UserRoundIcon;
+
+  return (
+    <IconComponent
+      aria-hidden="true"
+      className="icon"
+      data-account-icon={name}
+      size={size}
+      strokeWidth={1.75}
+    />
   );
 }
 

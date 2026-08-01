@@ -112,6 +112,19 @@ header 회귀도 유지한다. menu keyboard 구현을 위해 별도 pure helper
 Task #61 Stage 1: 공통 header와 계정 menu 접근성 정렬
 ```
 
+### Stage 1.1 시각 피드백 보정
+
+작업지시자의 Stage 1 로컬 검토에 따라 계정 menu에서 임시로 작성한 SVG path를
+사용하지 않고 ChatGPT macOS 앱의 제3자 고지에도 포함된 공개
+`lucide-react` 아이콘을 사용한다. 앱 bundle 내부 자산은 복사하지 않으며,
+`UserRound`·`Settings`·`LogOut`을 menu 의미에 맞게 적용한다. 변경 범위는
+`AccountMenu`, dependency manifest·lockfile과 focused E2E assertion으로
+제한하고 다른 surface의 기존 icon은 후속 범위로 확장하지 않는다.
+
+```text
+Task #61 [Stage 1.1]: 계정 menu 공식 icon set 적용
+```
+
 ## Stage 2 — Profile·Settings page canvas 정렬
 
 ### 산출물

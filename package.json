@@ -44,6 +44,7 @@
     "@resvg/resvg-wasm": "^2.6.2",
     "border-beam": "^1.3.0",
     "hover-tilt": "^1.0.0",
+    "lucide-react": "^1.28.0",
     "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

@@ -818,6 +818,12 @@ test.describe("Home and share card flow", () => {
     await expect(menuItems.nth(2)).toHaveText("Log out");
     await expect(profileItem).toHaveAttribute("href", "/profile");
     await expect(settingsItem).toHaveAttribute("href", "/?view=settings");
+    await expect(profileItem.locator('[data-account-icon="profile"]'))
+      .toHaveClass(/lucide-user-round/);
+    await expect(settingsItem.locator('[data-account-icon="settings"]'))
+      .toHaveClass(/lucide-settings/);
+    await expect(logoutItem.locator('[data-account-icon="logOut"]'))
+      .toHaveClass(/lucide-log-out/);
     await expect(profileItem).toBeFocused();
 
     await page.keyboard.press("ArrowDown");
