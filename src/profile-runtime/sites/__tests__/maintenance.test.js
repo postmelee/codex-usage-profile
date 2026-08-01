@@ -179,6 +179,31 @@ test("maintenance readiness fails closed without provider details", async () => 
     }
   });
 
+  const unmigratedDatabase = readinessDatabase([], {
+    hasMigrationTable: false
+  });
+  const unmigrated = await createServiceFixture({
+    database: unmigratedDatabase
+  });
+  const unmigratedResponse = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: unmigrated.service
+  })(new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify({ operation: "readiness" })
+  }));
+  assert.equal(unmigratedResponse.status, 503);
+  assert.deepEqual(await unmigratedResponse.json(), {
+    ok: false,
+    error: {
+      code: "migration_not_ready",
+      message: "Maintenance readiness check failed"
+    }
+  });
+  assert.equal(unmigratedDatabase.versionReadCalls, 0);
+  assert.equal(unmigratedDatabase.batchCalls, 0);
+
   const providerResponse = await createProfileSitesMaintenanceHandler({
     config: enabledConfig(),
     service: {
@@ -449,20 +474,37 @@ function createStubService() {
   };
 }
 
-function readinessDatabase(versions) {
+function readinessDatabase(versions, options = {}) {
   const database = {
     batchCalls: 0,
+    versionReadCalls: 0,
     batch() {
       database.batchCalls += 1;
       throw new Error("readiness must not mutate D1");
     },
     prepare(sql) {
+      if (
+        sql ===
+        "SELECT name FROM sqlite_master " +
+          "WHERE type = 'table' AND name = 'schema_migrations' LIMIT 1"
+      ) {
+        return {
+          async all() {
+            return {
+              results: options.hasMigrationTable === false
+                ? []
+                : [{ name: "schema_migrations" }]
+            };
+          }
+        };
+      }
       assert.equal(
         sql,
         "SELECT version FROM schema_migrations ORDER BY version"
       );
       return {
         async all() {
+          database.versionReadCalls += 1;
           return {
             results: versions.map((version) => ({ version }))
           };

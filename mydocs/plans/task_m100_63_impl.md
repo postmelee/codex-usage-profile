@@ -29,6 +29,13 @@ GitHub Issue: [#63](https://github.com/postmelee/codex-usage-profile/issues/63)
 rollback 가능한 기존 Worker를 깨뜨리지 않으면서 신규 public 전환은
 unknown version에서도 fail-closed로 유지한다.
 
+PR #64 리뷰 보정 승인에 따라 exact gate의 기본 동작은 완화하지 않는다.
+대신 미마이그레이션 D1을 명시적인 migration 미준비 상태로 분류하고,
+readiness 성공 직후 maintenance surface를 닫은 뒤 기능 smoke를 진행한다.
+더 높은 migration version을 가진 schema로 application rollback이 필요한
+예외는 자동 우회 옵션이 아니라 별도 호환성 검토와 작업지시자 승인 절차로
+운영 문서에 고정한다.
+
 ## 단계 개요
 
 | Stage | 제목 | 주요 산출 | 검증 |
@@ -37,6 +44,7 @@ unknown version에서도 fail-closed로 유지한다.
 | 2 | protected Sites readiness preflight | maintenance operation/CLI, local smoke, 운영 순서 | auth·payload 최소화·read-only·mismatch fail-close |
 | 3 | artifact와 canonical origin drift 방지 | manifest 기반 full-stack verifier, 독립 production allowlist, origin contract | missing/extra migration·origin mismatch 회귀 |
 | 4 | 통합 검증과 문서 정합성 | 전체 검증 증적, 불변 경계 확인 | root test/build/artifact/local production smoke |
+| 5 | PR #64 리뷰 보정 | 미마이그레이션 진단, maintenance 최소 노출, rollback 예외 문서 | focused regression, full-stack smoke, 전체 회귀 |
 
 각 Stage는 소스와 `mydocs/working/task_m100_63_stage{N}.md`를 함께
 커밋한다. 단계 보고 후 작업지시자 승인 없이는 다음 Stage로 진행하지
@@ -174,18 +182,21 @@ Task #63 Stage 1: D1 migration manifest와 readiness 계약 정렬
 npm run sites:profile-maintenance -- readiness --origin <https-origin>
 ```
 
-- local full-stack smoke는 maintenance 활성화 직후 readiness를 호출해
-  exact match를 확인한 다음 기존 OAuth/CLI/publication 흐름을 실행한다.
+- local full-stack smoke는 maintenance 활성화 직후 migration 미적용 상태가
+  `migration_not_ready`인지 확인하고, migration 적용 후 exact readiness를
+  통과하면 maintenance를 즉시 비활성화한다. operator route `404`를 확인한
+  다음에만 기존 OAuth/CLI/publication 흐름을 실행한다.
 - `docs/sites-operations.md`의 향후 실제 운영 순서를 다음으로 고정한다.
   1. exact commit build·artifact verify·package
   2. owner-only candidate deploy
   3. protected readiness exact match
-  4. 기능 smoke
-  5. 별도 승인 후 public access 전환
-- mismatch/provider error에서는 public 전환과 데이터 작업을 하지 않고
-  owner-only/maintenance 상태를 유지하거나 기존 문서의 원복 절차를
-  따른다. 정상 public baseline은 operator secret absent/route disabled를
-  유지한다.
+  4. maintenance disabled/secret-absent 복원과 operator route `404` 확인
+  5. 기능 smoke
+  6. 별도 승인 후 public access 전환
+- mismatch/provider error 또는 maintenance 비활성화 실패에서는 public
+  전환, 기능 smoke와 데이터 작업을 하지 않고 owner-only access를 유지한
+  채 disabled/secret-absent baseline으로 원복한다. 정상 public baseline은
+  operator secret absent/route disabled를 유지한다.
 - 이 Stage에서 실제 Sites candidate를 배포하거나 원격 readiness를
   실행하지 않는다.
 
@@ -336,12 +347,75 @@ D1/R2 mutation과 remote smoke를 수행하지 않는다.
 Task #63 Stage 4: Sites 배포 계약 통합 검증 완료
 ```
 
+## Stage 5 — PR #64 리뷰 보정
+
+### 산출물
+
+신규:
+
+- `mydocs/working/task_m100_63_stage5.md`
+
+수정:
+
+- `src/profile-backend/d1/store.js`
+- `src/profile-backend/__tests__/d1-migration-contract.test.js`
+- `src/profile-runtime/sites/__tests__/maintenance.test.js`
+- `scripts/smoke-sites-fullstack-local.mjs`
+- `docs/sites-operations.md`
+- `mydocs/plans/task_m100_63.md`
+- `mydocs/plans/task_m100_63_impl.md`
+- `mydocs/report/task_m100_63_report.md`
+
+### 변경 내용
+
+- readiness inspector는 `sqlite_master`를 read-only 조회해
+  `schema_migrations` 존재 여부를 먼저 확인한다. 테이블이 없으면 적용
+  version을 빈 배열로 취급해 모든 expected version을 missing으로 보고한다.
+- `schema_migrations`가 없는 대표 미적용 상태는 maintenance route에서
+  `migration_not_ready` 503으로 응답한다. sqlite metadata/version query의
+  실제 provider failure는 계속 generic `maintenance_unavailable`로 감춘다.
+- exact public cutover gate는 missing/unexpected version을 모두 거부한다.
+  higher-version schema에서의 긴급 application rollback은 자동 허용하지
+  않고, known-compatible saved version과 별도 호환성 검토·승인을 요구한다.
+- owner-only candidate의 readiness 성공 직후 maintenance mode를 disabled로
+  바꾸고 operator secret을 제거한 뒤 route `404`를 검증한다. 이 복원이
+  성공하기 전에는 OAuth/CLI/publication 기능 smoke를 시작하지 않는다.
+- 실제 Sites/D1/R2/environment/access 변경은 수행하지 않는다.
+
+### 검증
+
+```bash
+node --test \
+  src/profile-backend/__tests__/d1-migration-contract.test.js \
+  src/profile-runtime/sites/__tests__/maintenance.test.js
+npm run smoke:sites-production:local
+npm test
+npm run build
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+git diff origin/devel -- \
+  .openai/hosting.json \
+  db/migrations \
+  packages/codex-usage-profile-cli/src/config.js \
+  src/profile-ui/deviceApproval.js
+```
+
+### 커밋
+
+```text
+Task #63 Stage 5: PR 리뷰 readiness와 maintenance 경계 보정
+```
+
 ## 단계 의존성과 중단 조건
 
 - Stage 2는 Stage 1의 exact inspector와 manifest 계약 승인 후 시작한다.
 - Stage 3는 Stage 1 manifest export가 안정화된 뒤 artifact verifier를
   연결한다. Stage 2와의 공통 변경이 생기면 Stage 2 승인 내용을 보존한다.
 - Stage 4는 Stage 1~3 단계 보고 승인 후 실행한다.
+- Stage 5는 PR #64 리뷰 검토와 작업지시자의 권고안 승인에 따라 기존
+  Stage 1~4 불변 조건을 보존하는 보정 단계다.
 - manifest 변경이 실제 migration 4/schema 변경을 요구하면 범위 밖이므로
   즉시 중단한다.
 - readiness 구현이 owner/usage/R2 조회나 public health 노출을 요구하면
@@ -355,6 +429,10 @@ Task #63 Stage 4: Sites 배포 계약 통합 검증 완료
 - 일반 D1 store는 필수 version 누락을 거부하고 higher version을 허용한다.
 - public 전환용 protected readiness는 missing/unexpected version 모두
   거부한다.
+- migration metadata table 부재는 missing version으로 분류하고 provider
+  장애와 구분한다.
+- 기능 smoke는 maintenance disabled/secret-absent와 operator route `404`
+  복원을 확인한 뒤에만 시작한다.
 - public `/healthz`와 일반 사용자 API에 schema metadata가 노출되지 않는다.
 - production exact migration allowlist는 application manifest와 독립이다.
 - CLI/UI canonical origin 값과 OAuth callback은 바뀌지 않는다.

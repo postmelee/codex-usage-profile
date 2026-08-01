@@ -93,9 +93,63 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   try {
     const ready = await miniflare.ready;
     const origin = ready.origin;
+    const maintenanceDisabled = await requestMaintenance(origin, {
+      operation: "retention",
+      retentionDays: 90,
+      recentRevisions: 5
+    });
+    assert.equal(maintenanceDisabled.response.status, 404);
+    const maintenanceEnabled = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: true }
+    );
+    assert.equal(maintenanceEnabled.response.status, 200);
+    assert.equal(maintenanceEnabled.body.maintenanceEnabled, true);
+
+    const unmigratedReadiness = await requestMaintenance(origin, {
+      operation: "readiness"
+    });
+    assert.equal(unmigratedReadiness.response.status, 503);
+    assert.deepEqual(unmigratedReadiness.body, {
+      ok: false,
+      error: {
+        code: "migration_not_ready",
+        message: "Maintenance readiness check failed"
+      }
+    });
+
     const migrated = await requestJson(origin, "POST", "/__local/migrate");
     assert.equal(migrated.response.status, 200);
     assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3]);
+
+    const readiness = await requestMaintenance(origin, {
+      operation: "readiness"
+    });
+    assert.equal(readiness.response.status, 200);
+    assert.deepEqual(readiness.body, {
+      ok: true,
+      summary: {
+        appliedVersions: [1, 2, 3],
+        expectedVersions: [1, 2, 3],
+        operation: "readiness",
+        ready: true
+      }
+    });
+
+    const maintenanceClosed = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: false }
+    );
+    assert.equal(maintenanceClosed.response.status, 200);
+    assert.equal(maintenanceClosed.body.maintenanceEnabled, false);
+    const maintenanceHidden = await requestMaintenance(origin, {
+      operation: "readiness"
+    });
+    assert.equal(maintenanceHidden.response.status, 404);
 
     const health = await requestJson(origin, "GET", "/healthz");
     assert.equal(health.response.status, 200);
@@ -112,35 +166,6 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     const spa = await fetch(new URL("/settings", origin));
     assert.equal(spa.status, 200);
     assert.match(await spa.text(), /<div id="root"><\/div>/);
-
-    const maintenanceDisabled = await requestMaintenance(origin, {
-      operation: "retention",
-      retentionDays: 90,
-      recentRevisions: 5
-    });
-    assert.equal(maintenanceDisabled.response.status, 404);
-    const maintenanceEnabled = await requestJson(
-      origin,
-      "POST",
-      "/__local/maintenance-mode",
-      { enabled: true }
-    );
-    assert.equal(maintenanceEnabled.response.status, 200);
-    assert.equal(maintenanceEnabled.body.maintenanceEnabled, true);
-
-    const readiness = await requestMaintenance(origin, {
-      operation: "readiness"
-    });
-    assert.equal(readiness.response.status, 200);
-    assert.deepEqual(readiness.body, {
-      ok: true,
-      summary: {
-        appliedVersions: [1, 2, 3],
-        expectedVersions: [1, 2, 3],
-        operation: "readiness",
-        ready: true
-      }
-    });
 
     let sessionCookie = null;
     const serviceClient = createServiceClient({
@@ -372,6 +397,17 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       ko: restoredKoCard.headers.get("etag")
     };
 
+    // The user-flow smoke above runs with the operator route hidden. Reopen it
+    // only for the explicitly scoped maintenance lifecycle checks below.
+    const maintenanceForLifecycle = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: true }
+    );
+    assert.equal(maintenanceForLifecycle.response.status, 200);
+    assert.equal(maintenanceForLifecycle.body.maintenanceEnabled, true);
+
     const exported = await requestMaintenance(origin, {
       operation: "export",
       ownerId: localOwnerId,
@@ -482,11 +518,24 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(retention.response.status, 200);
     assert.equal(retention.body.summary.operation, "retention");
 
+    const maintenanceBaseline = await requestJson(
+      origin,
+      "POST",
+      "/__local/maintenance-mode",
+      { enabled: false }
+    );
+    assert.equal(maintenanceBaseline.response.status, 200);
+    assert.equal(maintenanceBaseline.body.maintenanceEnabled, false);
+    const maintenanceBaselineHidden = await requestMaintenance(origin, {
+      operation: "readiness"
+    });
+    assert.equal(maintenanceBaselineHidden.response.status, 404);
+
     return Object.freeze({
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 36,
+      routesVerified: 42,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {

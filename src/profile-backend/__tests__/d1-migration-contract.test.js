@@ -91,6 +91,20 @@ test("D1 readiness inspector reports exact, missing, and unexpected versions", a
   assert.equal(driftedDatabase.batchCalls, 0);
 });
 
+test("D1 readiness reports every migration missing when metadata is absent", async () => {
+  const database = readinessDatabase([], { hasMigrationTable: false });
+
+  assert.deepEqual(await inspectD1MigrationReadiness(database), {
+    appliedVersions: [],
+    expectedVersions: [1, 2, 3],
+    missingVersions: [1, 2, 3],
+    readyExact: false,
+    unexpectedVersions: []
+  });
+  assert.equal(database.versionReadCalls, 0);
+  assert.equal(database.batchCalls, 0);
+});
+
 test("D1 readiness inspector rejects invalid stored versions", async () => {
   await assert.rejects(
     () => inspectD1MigrationReadiness(readinessDatabase([1, "invalid"])),
@@ -98,20 +112,37 @@ test("D1 readiness inspector rejects invalid stored versions", async () => {
   );
 });
 
-function readinessDatabase(versions) {
+function readinessDatabase(versions, options = {}) {
   const database = {
     batchCalls: 0,
+    versionReadCalls: 0,
     batch() {
       database.batchCalls += 1;
       throw new Error("readiness must not mutate D1");
     },
     prepare(sql) {
+      if (
+        sql ===
+        "SELECT name FROM sqlite_master " +
+          "WHERE type = 'table' AND name = 'schema_migrations' LIMIT 1"
+      ) {
+        return {
+          async all() {
+            return {
+              results: options.hasMigrationTable === false
+                ? []
+                : [{ name: "schema_migrations" }]
+            };
+          }
+        };
+      }
       assert.equal(
         sql,
         "SELECT version FROM schema_migrations ORDER BY version"
       );
       return {
         async all() {
+          database.versionReadCalls += 1;
           return {
             results: versions.map((version) => ({ version }))
           };

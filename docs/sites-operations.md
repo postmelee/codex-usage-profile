@@ -114,17 +114,25 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    응답은 `operation=readiness`, `ready=true`이고 `expectedVersions`와
    `appliedVersions`가 순서까지 정확히 같아야 한다. owner/usage/token/session,
    SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
-6. readiness를 통과한 같은 candidate에서 `/healthz`, OAuth/session/logout,
-   packed CLI, private preview, publish/unpublish/ETag/404를 검증한다.
-7. error event를 확인한 뒤 `PROFILE_MAINTENANCE_MODE=disabled`, operator secret
-   absent, profile private와 test token/session revoked baseline으로 복원한다.
+   `schema_migrations` table이 아직 없거나 expected version이 누락된 상태는
+   `migration_not_ready`로 중단한다. 실제 D1/provider 조회 장애는 세부 원문을
+   노출하지 않는 `maintenance_unavailable`로 중단한다.
+6. readiness 성공 직후 `PROFILE_MAINTENANCE_MODE=disabled`로 바꾸고 operator
+   secret을 제거한 environment를 같은 source saved version에 적용한다.
+   owner-only access를 유지하면서 operator route가 generic `404`, `/healthz`가
+   `200`인지 확인한다. 이 전환이나 확인이 실패하면 다음 단계로 진행하지
+   않는다.
+7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
+   private preview, publish/unpublish/ETag/404를 검증한다.
+8. error event를 확인한 뒤 profile private와 test token/session revoked
+   baseline을 복원한다.
 
-배포, readiness, 기능 smoke 중 하나라도 실패하거나 expected/applied에 missing
-또는 unexpected version이 있으면 데이터 작업과 public 전환을 수행하지 않는다.
-이전 saved version과 owner-only policy를 유지하고 environment를
-disabled/secret-absent baseline 또는 직전 key set으로 되돌린 뒤 같은 health를
-확인한다. provider 오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지
-않는다.
+배포, readiness, maintenance 비활성화 또는 기능 smoke 중 하나라도 실패하거나
+expected/applied에 missing 또는 unexpected version이 있으면 기능 smoke,
+데이터 작업과 public 전환을 수행하지 않는다. 이전 saved version과 owner-only
+policy를 유지하고 environment를 disabled/secret-absent baseline 또는 직전 key
+set으로 되돌린 뒤 operator route `404`와 같은 health를 확인한다. provider
+오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지 않는다.
 
 ## Environment와 OAuth rotation
 
@@ -194,7 +202,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 1. owner-only health, saved version, OAuth callback, quota/추가 과금 표시와
    원복할 exact custom access policy를 다시 확인한다. 같은 saved version과
    environment 후보의 protected readiness exact-match 성공 기록이 없으면
-   public 전환을 시작하지 않는다.
+   public 전환을 시작하지 않는다. readiness 뒤 maintenance를
+   disabled/secret-absent로 복원하고 operator route `404`를 확인한 기록도
+   필수다.
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card 404, OAuth/CLI/submit, publish `GET|HEAD|304`, unpublish 404를
@@ -230,9 +240,27 @@ exception을 추가로 출력하지 않는다.
 
 ## Rollback과 Cloud Run fallback 평가
 
-application rollback은 이전 saved version을 재배포한다. schema/data rollback은
-먼저 승인된 D1/R2 backup 복구 가능성을 검증하고, backward-compatible migration
-구간을 벗어나면 자동으로 진행하지 않는다.
+일반 candidate와 public cutover의 protected readiness는 missing뿐 아니라
+unexpected migration version도 계속 거부한다. 신규 후보가 알지 못하는 schema를
+자동 승인하지 않기 위한 배포 certification gate이며 CLI에 우회 옵션을 두지
+않는다.
+
+application rollback은 이전 saved version을 재배포한다. 이미 적용된 더 높은
+migration version을 이전 saved version의 store가 허용하더라도 exact candidate
+gate를 통과한 것으로 간주하지 않는다. 긴급 rollback이 필요하면 다음 조건을
+별도 Gate에서 검토하고 작업지시자 승인을 받은 경우에만 known-compatible saved
+version을 선택한다.
+
+- 이전 application이 요구하는 migration version이 모두 적용돼 있다.
+- 추가된 migration이 이전 application의 read/write 계약과 backward-compatible
+  하다는 source/migration 검토 증적이 있다.
+- owner-only health, backup 가능성, 원복할 exact saved version/access policy가
+  확인됐다.
+- 자동 readiness 우회가 아니라 승인 기록에 unexpected version과 호환성 근거가
+  남는다.
+
+schema/data rollback은 먼저 승인된 D1/R2 backup 복구 가능성을 검증하고,
+backward-compatible migration 구간을 벗어나면 자동으로 진행하지 않는다.
 
 Cloud Run fallback은 다음 순서로 평가하며 별도 승인 전에는 provider resource를
 만들지 않는다.

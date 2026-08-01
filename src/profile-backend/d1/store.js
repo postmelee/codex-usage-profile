@@ -19,6 +19,12 @@ import {
   D1_MIGRATION_VERSIONS
 } from "./migration-manifest.js";
 
+const D1_MIGRATION_TABLE_QUERY =
+  "SELECT name FROM sqlite_master " +
+  "WHERE type = 'table' AND name = 'schema_migrations' LIMIT 1";
+const D1_MIGRATION_VERSION_QUERY =
+  "SELECT version FROM schema_migrations ORDER BY version";
+
 const OWNER = spec("owner", "owners", ["id"], [
   ["id", "id"],
   ["authProvider", "auth_provider"],
@@ -359,9 +365,13 @@ export function createD1ProfileBackendStore(options = {}) {
 
 export async function inspectD1MigrationReadiness(database) {
   const d1 = requireD1Database(database);
-  const rows = await d1.prepare(
-    "SELECT version FROM schema_migrations ORDER BY version"
-  ).all();
+  const table = await d1.prepare(D1_MIGRATION_TABLE_QUERY).all();
+  const hasMigrationTable = (table.results ?? []).some(
+    (row) => row.name === "schema_migrations"
+  );
+  const rows = hasMigrationTable
+    ? await d1.prepare(D1_MIGRATION_VERSION_QUERY).all()
+    : { results: [] };
   const appliedVersions = Object.freeze(
     (rows.results ?? []).map((row) =>
       normalizeAppliedMigrationVersion(row.version)
