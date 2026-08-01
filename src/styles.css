@@ -108,6 +108,7 @@ button {
 }
 
 .profile-shell--fullscreen {
+  --profile-header-height: 52px;
   height: auto;
   min-height: 100dvh;
   overflow: visible;
@@ -130,7 +131,7 @@ button {
 .profile-shell--fullscreen .profile-topbar {
   background: rgba(23, 23, 23, 0.94);
   border-bottom: 1px solid var(--line);
-  height: 52px;
+  height: var(--profile-header-height);
   padding-inline: max(24px, calc((100vw - 1180px) / 2));
   width: 100%;
 }
@@ -390,9 +391,10 @@ button {
   align-items: flex-start;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
   min-width: 0;
-  padding: 70px 24px 96px;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .home-view {
@@ -435,8 +437,8 @@ button {
 }
 
 .home-heading h1,
-.card-profile-heading h2,
-.card-profile-message h2,
+.card-profile-heading h1,
+.card-profile-message h1,
 .share-studio h2 {
   color: var(--text);
   font-size: 25px;
@@ -1078,9 +1080,10 @@ button {
   align-items: flex-start;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
   min-width: 0;
-  padding: 70px 24px 96px;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .public-profile-stage {
@@ -1100,8 +1103,8 @@ button {
   min-width: 0;
 }
 
-.public-profile-heading h2,
-.public-profile-state h2 {
+.public-profile-heading h1,
+.public-profile-state h1 {
   color: var(--text);
   font-size: 25px;
   font-weight: 500;
@@ -1759,14 +1762,17 @@ button {
 }
 
 .settings-view {
+  align-items: flex-start;
   display: flex;
   justify-content: center;
-  min-height: calc(100% - 50px);
-  padding: 82px 24px 100px;
+  min-height: calc(100dvh - var(--profile-header-height, 50px));
+  min-width: 0;
+  padding: 72px 24px 96px;
+  width: 100%;
 }
 
 .settings-stage {
-  max-width: 640px;
+  max-width: 720px;
   min-width: 0;
   width: 100%;
 }
@@ -1775,19 +1781,33 @@ button {
   margin-bottom: 24px;
 }
 
-.settings-heading h2 {
+.settings-heading h1 {
   color: var(--text);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 500;
   line-height: 1.15;
   margin: 0;
 }
 
-.settings-heading p {
+.settings-state-heading p {
   color: var(--muted);
   font-size: 15px;
   line-height: 1.45;
   margin: 8px 0 0;
+}
+
+.settings-state {
+  display: grid;
+  gap: 22px;
+  justify-items: start;
+}
+
+.settings-state-heading h2 {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
 }
 
 .settings-section-stack {
@@ -1809,7 +1829,7 @@ button {
   min-width: 0;
 }
 
-.settings-panel-heading h3 {
+.settings-panel-heading h2 {
   color: var(--text);
   font-size: 18px;
   font-weight: 600;
@@ -2979,6 +2999,7 @@ button {
   }
 
   .profile-shell--fullscreen {
+    --profile-header-height: 48px;
     padding: 0;
   }
 
@@ -3019,7 +3040,7 @@ button {
 
   .card-profile-view,
   .public-profile-view {
-    padding: 48px 0 70px;
+    padding: 48px 16px 72px;
   }
 
   .home-view {
@@ -3036,10 +3057,10 @@ button {
     line-height: 36px;
   }
 
-  .card-profile-heading h2,
-  .card-profile-message h2,
-  .public-profile-heading h2,
-  .public-profile-state h2 {
+  .card-profile-heading h1,
+  .card-profile-message h1,
+  .public-profile-heading h1,
+  .public-profile-state h1 {
     font-size: 22px;
   }
 
@@ -3222,7 +3243,7 @@ button {
   }
 
   .settings-view {
-    padding: 52px 0 72px;
+    padding: 48px 16px 72px;
   }
 
   .settings-panel {

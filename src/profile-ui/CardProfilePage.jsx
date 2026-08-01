@@ -81,8 +81,10 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     <ProfileShell
       authState={authState}
       client={client}
+      layout="fullscreen"
       onAuthStateChange={onAuthStateChange}
       onShare={() => setShareOpen(true)}
+      pageHeading={false}
       shareDisabled={!canShare}
       title="Profile"
     >
@@ -139,7 +141,7 @@ function CardProfileContent(props) {
     <div className="card-profile-stage">
       <header className="card-profile-heading">
         <div>
-          <h2 id="card-profile-title">Your Codex card</h2>
+          <h1 id="card-profile-title">Your Codex card</h1>
           <span className={`visibility-status is-${props.isPublic ? "public" : "private"}`}>
             {props.isPublic ? "Public" : "Private"}
           </span>
@@ -174,7 +176,7 @@ function CardProfileContent(props) {
 function ProfileMessage({ children, message, title }) {
   return (
     <div className="card-profile-message">
-      <h2 id="card-profile-title">{title}</h2>
+      <h1 id="card-profile-title">{title}</h1>
       {message ? <p>{message}</p> : null}
       {children}
     </div>

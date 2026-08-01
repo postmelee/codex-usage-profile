@@ -11,7 +11,9 @@ export function PublicProfilePage({
     <ProfileShell
       authState={authState}
       client={client}
+      layout="fullscreen"
       onAuthStateChange={onAuthStateChange}
+      pageHeading={false}
       showShare={false}
       title="Profile"
     >
@@ -35,7 +37,7 @@ function ReadyPublicProfile({ profile }) {
     <div className="public-profile-stage">
       <header className="public-profile-heading">
         <div>
-          <h2 id="public-profile-title">Codex card for {displayName}</h2>
+          <h1 id="public-profile-title">Codex card for {displayName}</h1>
           <p>@{githubLogin}</p>
         </div>
         <span className="visibility-status is-public">Public</span>
@@ -67,7 +69,7 @@ function PublicProfileState({ status }) {
   return (
     <div className={`public-profile-state is-${status}`}>
       <div className="profile-state-indicator" aria-hidden="true" />
-      <h2>{copy.title}</h2>
+      <h1>{copy.title}</h1>
       <p>{copy.message}</p>
     </div>
   );
