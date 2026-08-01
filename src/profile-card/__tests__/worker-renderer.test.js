@@ -77,17 +77,6 @@ test("reuses the native view model information and keeps locale text in Worker S
   assert.doesNotMatch(koreanSvg, /href="data:image/);
 });
 
-test("places Worker heatmap cells on the shared first and last geometry", () => {
-  const svg = createWorkerProfileCardSvg(createViewModel("en"));
-  const heatmapRects = Array.from(svg.matchAll(
-    /<rect x="([^"]+)" y="([^"]+)" width="14" height="14" rx="4" fill="#[^"]+"\/>/g
-  ));
-
-  assert.equal(heatmapRects.length, 182);
-  assert.deepEqual(heatmapRects[0].slice(1), ["32", "96"]);
-  assert.deepEqual(heatmapRects.at(-1).slice(1), ["453", "197"]);
-});
-
 test("keeps native and Worker dimensions while selecting a distinct renderer digest", async () => {
   const viewModel = createViewModel("ko");
   const native = await renderProfileCardPng(viewModel, { avatarSource: avatar });

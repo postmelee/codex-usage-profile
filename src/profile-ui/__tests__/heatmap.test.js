@@ -1,97 +1,225 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sampleProfileSnapshot } from "../../profile-snapshot/fixtures/sample-snapshot.js";
 import {
+  HEATMAP_CELL_COUNT,
   buildTokenHeatmap,
   formatHeatmapTooltip,
-  getHeatmapLevel
+  formatTokenCount,
+  getHeatmapLevel,
+  normalizeDailyUsageBuckets
 } from "../heatmap.js";
 
-const tokenActivity = {
-  capturedAt: sampleProfileSnapshot.capturedAt,
-  dailyUsage: sampleProfileSnapshot.dailyUsage
-};
+const CAPTURED_AT = "2026-08-02T23:59:59.000Z";
+const DAILY_USAGE_BUCKETS = Object.freeze([
+  Object.freeze({ startDate: "2026-08-03", tokens: 999 }),
+  Object.freeze({ startDate: "2026-08-02", tokens: 40 }),
+  Object.freeze({ startDate: "2026-08-01", tokens: 30 }),
+  Object.freeze({ startDate: "2025-01-01", tokens: 500 }),
+  Object.freeze({ startDate: "2026-07-27", tokens: 20 }),
+  Object.freeze({ startDate: "2025-08-10", tokens: 7 }),
+  Object.freeze({ startDate: "2026-07-26", tokens: 10 })
+]);
 
-test("builds a 52 week daily heatmap with missing days filled as zero", () => {
-  const heatmap = buildTokenHeatmap(tokenActivity, {
-    mode: "daily",
-    todayIso: "2026-06-06"
+test("builds an exact 52-week UTC daily range across year and leap boundaries", () => {
+  const heatmap = buildTokenHeatmap([
+    { startDate: "2024-02-29", tokens: 29 }
+  ], {
+    capturedAt: "2024-03-01T12:00:00.000Z",
+    mode: "daily"
   });
-  const zeroCell = heatmap.cells.find((cell) => cell.dateIso === "2025-07-20");
-  const peakCell = heatmap.cells.find((cell) => cell.dateIso === "2026-06-02");
 
-  assert.equal(heatmap.mode, "daily");
+  assert.equal(heatmap.cells.length, HEATMAP_CELL_COUNT);
+  assert.equal(heatmap.startDateIso, "2023-03-05");
+  assert.equal(heatmap.endDateIso, "2024-03-02");
+  assert.equal(heatmap.todayIso, "2024-03-01");
+  assert.equal(heatmap.cells[0].dateIso, "2023-03-05");
+  assert.equal(heatmap.cells.at(-1).dateIso, "2024-03-02");
+  assert.equal(
+    heatmap.cells.find((cell) => cell.dateIso === "2024-02-29").tokens,
+    29
+  );
+  assert.deepEqual(heatmap.grid, {
+    cellCount: 364,
+    columnCount: 52,
+    endDateIso: "2024-03-02",
+    latestColumn: 51,
+    rowCount: 7,
+    startDateIso: "2023-03-05",
+    weekStartsOn: 0
+  });
+});
+
+test("fills missing days with zero and excludes future usage from daily values", () => {
+  const heatmap = buildTokenHeatmap(DAILY_USAGE_BUCKETS, {
+    capturedAt: CAPTURED_AT,
+    mode: "daily"
+  });
+  const first = heatmap.cells[0];
+  const missing = heatmap.cells.find((cell) => cell.dateIso === "2025-08-11");
+  const today = heatmap.cells.find((cell) => cell.dateIso === "2026-08-02");
+  const future = heatmap.cells.find((cell) => cell.dateIso === "2026-08-03");
+
   assert.equal(heatmap.cells.length, 364);
-  assert.equal(heatmap.columnCount, 52);
-  assert.equal(heatmap.rowCount, 7);
-  assert.equal(heatmap.startDateIso, "2025-06-08");
-  assert.deepEqual(heatmap.monthLabels, [
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun"
+  assert.equal(first.dateIso, "2025-08-10");
+  assert.equal(first.tokens, 7);
+  assert.equal(missing.tokens, 0);
+  assert.equal(today.tokens, 40);
+  assert.equal(today.column, 51);
+  assert.equal(today.row, 0);
+  assert.equal(today.level, 4);
+  assert.equal(future.tokens, 0);
+  assert.equal(future.interactive, false);
+  assert.equal(future.isFuture, true);
+  assert.equal(heatmap.latestTargetKey, "daily:2026-08-02");
+  assert.equal(heatmap.monthLabels[0].dateIso, "2025-08-10");
+  assert.deepEqual(heatmap.monthLabels.at(-1), {
+    column: 50,
+    dateIso: "2026-08-01",
+    month: 8,
+    year: 2026
+  });
+});
+
+test("aggregates Sunday-Saturday weeks into 52 semantic targets", () => {
+  const heatmap = buildTokenHeatmap(DAILY_USAGE_BUCKETS, {
+    capturedAt: CAPTURED_AT,
+    mode: "weekly"
+  });
+  const previousWeek = heatmap.cells[50];
+  const currentWeek = heatmap.cells[51];
+
+  assert.equal(heatmap.cells.length, 52);
+  assert.deepEqual(
+    {
+      endDateIso: previousWeek.endDateIso,
+      row: previousWeek.row,
+      rowSpan: previousWeek.rowSpan,
+      startDateIso: previousWeek.startDateIso,
+      tokens: previousWeek.tokens
+    },
+    {
+      endDateIso: "2026-08-01",
+      row: 0,
+      rowSpan: 7,
+      startDateIso: "2026-07-26",
+      tokens: 60
+    }
+  );
+  assert.equal(previousWeek.level, 4);
+  assert.equal(currentWeek.startDateIso, "2026-08-02");
+  assert.equal(currentWeek.endDateIso, "2026-08-02");
+  assert.equal(currentWeek.tokens, 40);
+  assert.equal(currentWeek.level, 3);
+  assert.equal(heatmap.maxTokens, 60);
+  assert.equal(heatmap.latestTargetKey, "weekly:2026-08-02");
+});
+
+test("builds 52 cumulative week targets from the visible range start", () => {
+  const heatmap = buildTokenHeatmap(DAILY_USAGE_BUCKETS, {
+    capturedAt: CAPTURED_AT,
+    mode: "cumulative"
+  });
+
+  assert.equal(heatmap.cells.length, 52);
+  assert.equal(heatmap.cells[0].tokens, 7);
+  assert.equal(heatmap.cells[50].tokens, 67);
+  assert.equal(heatmap.cells[51].tokens, 107);
+  assert.equal(heatmap.cells[51].level, 4);
+  assert.equal(heatmap.maxTokens, 107);
+  assert.equal(heatmap.latestTargetKey, "cumulative:2026-08-02");
+});
+
+test("anchors to the captured date before falling back to the latest bucket", () => {
+  const captured = buildTokenHeatmap(DAILY_USAGE_BUCKETS, {
+    capturedAt: CAPTURED_AT
+  });
+  const latestBucket = buildTokenHeatmap([
+    { startDate: "2026-07-31", tokens: 1 },
+    { startDate: "2026-08-02", tokens: 2 }
   ]);
-  assert.equal(zeroCell.tokenCount, 0);
-  assert.equal(zeroCell.tooltip, "0 tokens on Jul 20, 2025");
-  assert.equal(peakCell.tokenCount, 703000000);
-  assert.equal(peakCell.level, 4);
+
+  assert.equal(captured.todayIso, "2026-08-02");
+  assert.equal(latestBucket.todayIso, "2026-08-02");
 });
 
-test("aggregates weekly token totals across all days in a week", () => {
-  const heatmap = buildTokenHeatmap(tokenActivity, {
+test("formats English and Korean compact plus exact token tooltips", () => {
+  const daily = {
+    dateIso: "2026-08-02",
+    mode: "daily",
+    tokens: 123_456_789
+  };
+  const weekly = {
+    endDateIso: "2026-08-01",
     mode: "weekly",
-    todayIso: "2026-06-06"
-  });
-  const juneSecondCell = heatmap.cells.find((cell) => cell.dateIso === "2026-06-02");
-  const juneSixthCell = heatmap.cells.find((cell) => cell.dateIso === "2026-06-06");
-
-  assert.equal(heatmap.mode, "weekly");
-  assert.equal(juneSecondCell.weekStartIso, "2026-05-31");
-  assert.equal(juneSecondCell.tokenCount, 2012000000);
-  assert.equal(juneSixthCell.tokenCount, juneSecondCell.tokenCount);
-  assert.equal(juneSecondCell.tooltip, "2B tokens on week of May 31");
-});
-
-test("builds cumulative weekly totals", () => {
-  const heatmap = buildTokenHeatmap(tokenActivity, {
+    startDateIso: "2026-07-26",
+    tokens: 1
+  };
+  const cumulative = {
+    endDateIso: "2026-08-02",
     mode: "cumulative",
-    todayIso: "2026-06-06"
-  });
-  const mayTwentyFourthCell = heatmap.cells.find((cell) => cell.dateIso === "2026-05-24");
-  const juneSecondCell = heatmap.cells.find((cell) => cell.dateIso === "2026-06-02");
+    startDateIso: "2025-08-10",
+    tokens: 0
+  };
 
-  assert.equal(heatmap.mode, "cumulative");
-  assert.equal(mayTwentyFourthCell.tokenCount, 952000000);
-  assert.equal(juneSecondCell.tokenCount, 2964000000);
-  assert.equal(juneSecondCell.tooltip, "3B tokens through week of May 31");
-  assert.equal(juneSecondCell.level, 4);
+  assert.equal(
+    formatHeatmapTooltip(daily, "en"),
+    "August 2, 2026 · 123.5M tokens (123,456,789)"
+  );
+  assert.equal(
+    formatHeatmapTooltip(daily, "ko-KR"),
+    "2026년 8월 2일 · 1.2억 토큰 (123,456,789)"
+  );
+  assert.equal(
+    formatHeatmapTooltip(weekly, "en"),
+    "Jul 26, 2026–Aug 1, 2026 · 1 token (1)"
+  );
+  assert.equal(
+    formatHeatmapTooltip(cumulative, "ko"),
+    "2026년 8월 2일까지 · 0 토큰 (0)"
+  );
+  assert.equal(formatTokenCount(1_500_000_000, "en"), "1.5B");
+  assert.equal(formatTokenCount(150_000_000, "ko"), "1.5억");
 });
 
-test("formats tooltip labels for daily, weekly, and cumulative modes", () => {
-  assert.equal(
-    formatHeatmapTooltip("daily", 0, "2025-07-20", "2025-07-20", "2026-06-06"),
-    "0 tokens on Jul 20, 2025"
+test("matches Account Usage bucket validation and sorting rules", () => {
+  assert.deepEqual(normalizeDailyUsageBuckets([
+    { startDate: "2026-08-02", tokens: 2 },
+    { startDate: "2026-08-01", tokens: 1 }
+  ]), [
+    { startDate: "2026-08-01", tokens: 1 },
+    { startDate: "2026-08-02", tokens: 2 }
+  ]);
+  assert.deepEqual(normalizeDailyUsageBuckets(null), []);
+
+  assert.throws(
+    () => normalizeDailyUsageBuckets([{ startDate: "2026-02-30", tokens: 1 }]),
+    /valid UTC date/
   );
-  assert.equal(
-    formatHeatmapTooltip("weekly", 2012000000, "2026-06-02", "2026-05-31", "2026-06-06"),
-    "2B tokens on week of May 31"
+  assert.throws(
+    () => normalizeDailyUsageBuckets([{ startDate: "2026-08-02", tokens: -1 }]),
+    /non-negative safe integer/
   );
-  assert.equal(
-    formatHeatmapTooltip("cumulative", 2964000000, "2026-06-02", "2026-05-31", "2026-06-06"),
-    "3B tokens through week of May 31"
+  assert.throws(
+    () => normalizeDailyUsageBuckets([{ startDate: "2026-08-02", tokens: 1.5 }]),
+    /non-negative safe integer/
+  );
+  assert.throws(
+    () => normalizeDailyUsageBuckets([
+      { startDate: "2026-08-02", tokens: 1 },
+      { startDate: "2026-08-02", tokens: 2 }
+    ]),
+    /must not duplicate/
+  );
+  assert.throws(
+    () => normalizeDailyUsageBuckets([
+      { extra: true, startDate: "2026-08-02", tokens: 1 }
+    ]),
+    /is not allowed/
   );
 });
 
-test("assigns stable heatmap levels", () => {
+test("assigns stable mode-relative intensity levels", () => {
   assert.equal(getHeatmapLevel(0, 100), 0);
   assert.equal(getHeatmapLevel(10, 100), 1);
   assert.equal(getHeatmapLevel(25, 100), 2);

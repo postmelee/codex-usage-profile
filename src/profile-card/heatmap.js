@@ -1,14 +1,8 @@
-import {
-  CARD_HEATMAP_CELL_COUNT,
-  CARD_HEATMAP_COLUMN_COUNT,
-  CARD_HEATMAP_ROW_COUNT
-} from "./geometry.js";
-
-export {
-  CARD_HEATMAP_CELL_COUNT,
-  CARD_HEATMAP_COLUMN_COUNT,
-  CARD_HEATMAP_ROW_COUNT
-} from "./geometry.js";
+export const CARD_HEATMAP_COLUMN_COUNT = 26;
+export const CARD_HEATMAP_ROW_COUNT = 7;
+export const CARD_HEATMAP_CELL_COUNT = (
+  CARD_HEATMAP_COLUMN_COUNT * CARD_HEATMAP_ROW_COUNT
+);
 
 export const CARD_HEATMAP_LEVEL_COLORS = Object.freeze([
   "#2f2f2f",

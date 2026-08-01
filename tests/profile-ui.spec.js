@@ -10,10 +10,6 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
-const CARD_DAILY_USAGE_BUCKETS = Object.freeze([
-  Object.freeze({ startDate: "2026-06-04", tokens: 50_000_000 }),
-  Object.freeze({ startDate: "2026-06-11", tokens: 100_000_000 })
-]);
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -270,83 +266,6 @@ test.describe("Home and share card flow", () => {
     ]) {
       expect(homeMarkup).not.toContain(internalValue);
     }
-  });
-
-  test("Home heatmap tooltip supports hover and roving keyboard focus", async ({ page }) => {
-    await mockAuthenticatedAccount(page);
-    await mockCardImages(page);
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/");
-
-    const grid = page.getByRole("grid", { name: "Daily Codex token usage" });
-    const todayCell = grid.locator('[data-date="2026-06-11"]');
-    await expect(grid.getByRole("gridcell")).toHaveCount(26 * 7);
-    await expect(todayCell).toHaveAttribute("tabindex", "0");
-
-    await todayCell.hover();
-    const tooltip = page.getByRole("tooltip");
-    await expect(tooltip).toHaveText("Jun 11, 2026 · 100M tokens");
-    await expect(tooltip).toHaveAttribute("data-positioned", "true");
-
-    await page.getByRole("heading", { name: "Codex usage profile" }).hover();
-    await expect(tooltip).toHaveCount(0);
-
-    await todayCell.focus();
-    await expect(tooltip).toHaveText("Jun 11, 2026 · 100M tokens");
-    await page.keyboard.press("ArrowLeft");
-    const previousWeekCell = grid.locator('[data-date="2026-06-04"]');
-    await expect(previousWeekCell).toBeFocused();
-    await expect(tooltip).toHaveText("Jun 4, 2026 · 50M tokens");
-    await page.keyboard.press("Escape");
-    await expect(tooltip).toHaveCount(0);
-  });
-
-  test("Home heatmap tooltip follows the visible operator card data", async ({ page }) => {
-    await mockAnonymousAccount(page);
-    await mockPublicProfile(page);
-    await mockCardImages(page);
-    await page.goto("/");
-
-    await expect(page.locator(".home-card-media"))
-      .toHaveAttribute("data-card-source-kind", "operator");
-    const grid = page.getByRole("grid", { name: "Daily Codex token usage" });
-    await grid.locator('[data-date="2026-06-11"]').hover();
-    await expect(page.getByRole("tooltip"))
-      .toHaveText("Jun 11, 2026 · 100M tokens");
-  });
-
-  test("Home heatmap tooltip stays absent while loading and without usage", async ({ page }) => {
-    let releaseProfile;
-    const profileGate = new Promise((resolve) => {
-      releaseProfile = resolve;
-    });
-    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
-      data: {
-        owner: AUTH_OWNER,
-        session: { id: "session_1", ownerId: AUTH_OWNER.id }
-      },
-      ok: true
-    }));
-    await page.route("**/api/profile", async (route) => {
-      await profileGate;
-      await fulfillJson(route, {
-        data: { ...ownerProfile("private"), usage: null },
-        ok: true
-      });
-    });
-    await mockCardImages(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    await expect(page.locator(".home-card-media"))
-      .toHaveAttribute("data-card-status", "loading");
-    await expect(page.locator(".card-heatmap-overlay")).toHaveCount(0);
-
-    releaseProfile();
-    await expect(page.locator(".home-card-media"))
-      .toHaveAttribute("data-card-source-kind", "sample");
-    await expect(page.locator(".home-card-media"))
-      .toHaveAttribute("data-card-status", "ready");
-    await expect(page.locator(".card-heatmap-overlay")).toHaveCount(0);
   });
 
   test("Home keeps loading and unavailable account states neutral", async ({ page }) => {
@@ -2408,36 +2327,6 @@ test.describe("Public profile", () => {
     await page.screenshot({ path: testInfo.outputPath("public-profile-mobile.png") });
   });
 
-  test("public profile heatmap tooltip toggles by touch and closes outside", async ({ page }) => {
-    await mockAnonymousAccount(page);
-    await mockPublicProfile(page);
-    await mockCardImages(page);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(PROFILE_ROUTE);
-
-    const grid = page.getByRole("grid", { name: "Daily Codex token usage" });
-    const cell = grid.locator('[data-date="2026-06-11"]');
-    await cell.dispatchEvent("pointerdown", { pointerType: "touch" });
-    await cell.dispatchEvent("pointerup", { pointerType: "touch" });
-
-    const tooltip = page.getByRole("tooltip");
-    await expect(tooltip).toHaveText("Jun 11, 2026 · 100M tokens");
-    await expect(tooltip).toHaveAttribute("data-positioned", "true");
-    const tooltipBox = await tooltip.boundingBox();
-    const cardBox = await page.locator(".public-profile-card-media").boundingBox();
-    expect(tooltipBox).not.toBeNull();
-    expect(cardBox).not.toBeNull();
-    expect(tooltipBox.x).toBeGreaterThanOrEqual(cardBox.x);
-    expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(
-      cardBox.x + cardBox.width
-    );
-
-    await page.locator("body").dispatchEvent("pointerdown", {
-      pointerType: "touch"
-    });
-    await expect(tooltip).toHaveCount(0);
-  });
-
   test("public profile moves from a neutral loading state to ready", async ({ page }) => {
     await mockAnonymousAccount(page);
     let releaseResponse;
@@ -2778,7 +2667,7 @@ function publicProfile() {
       capturedAt: "2026-07-14T00:00:00.000Z",
       uploadedAt: "2026-07-14T00:01:00.000Z",
       usage: {
-        dailyUsageBuckets: CARD_DAILY_USAGE_BUCKETS,
+        dailyUsageBuckets: [],
         summary: {
           currentStreakDays: 10,
           lifetimeTokens: 15_090_000_000,
@@ -2796,20 +2685,7 @@ function ownerProfile(visibility) {
   return {
     owner: { ...AUTH_OWNER, visibility },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
-    usage: {
-      capturedAt: "2026-06-11T00:00:00.000Z",
-      uploadedAt: "2026-06-11T00:01:00.000Z",
-      usage: {
-        dailyUsageBuckets: CARD_DAILY_USAGE_BUCKETS,
-        summary: {
-          currentStreakDays: 2,
-          lifetimeTokens: 150_000_000,
-          longestStreakDays: 2,
-          longestRunningTurnSec: 60,
-          peakDailyTokens: 100_000_000
-        }
-      }
-    },
+    usage: { uploadedAt: "2026-06-11T00:01:00.000Z" },
     visibility
   };
 }

@@ -481,8 +481,6 @@ button {
 .home-card-preview {
   border-radius: inherit;
   filter: none;
-  position: relative;
-  z-index: 0;
 }
 
 .home-card-media {
@@ -640,77 +638,6 @@ button {
 
 .home-card-media[data-card-status="loading"] .home-card-glare {
   opacity: 0;
-}
-
-.card-heatmap-overlay {
-  border-radius: inherit;
-  inset: 0;
-  position: absolute;
-  z-index: 1;
-}
-
-.card-heatmap-overlay[data-disabled="true"],
-.home-card-media[data-card-status="loading"] .card-heatmap-overlay {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.card-heatmap-cell {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: 28.57%;
-  cursor: pointer;
-  height: var(--card-heatmap-cell-height);
-  left: var(--card-heatmap-cell-left);
-  margin: 0;
-  outline: 0;
-  padding: 0;
-  position: absolute;
-  top: var(--card-heatmap-cell-top);
-  width: var(--card-heatmap-cell-width);
-}
-
-.card-heatmap-cell:focus-visible {
-  box-shadow:
-    0 0 0 1px rgba(9, 15, 23, 0.92),
-    0 0 0 2.5px rgba(146, 202, 255, 0.95);
-}
-
-.card-heatmap-tooltip {
-  animation: card-heatmap-tooltip-in 100ms cubic-bezier(0.2, 0, 0, 1);
-  background: rgba(11, 12, 14, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
-  color: #f3f3f3;
-  font-size: clamp(11px, 2.5cqw, 14px);
-  font-weight: 500;
-  line-height: 1.25;
-  max-width: calc(100% - 16px);
-  opacity: 1;
-  padding: 6px 8px;
-  pointer-events: none;
-  position: absolute;
-  white-space: nowrap;
-  z-index: 2;
-}
-
-.card-heatmap-tooltip[data-positioned="false"] {
-  opacity: 0;
-  visibility: hidden;
-}
-
-@keyframes card-heatmap-tooltip-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .home-card-tilt[data-share-transition-active="true"] {
@@ -1198,16 +1125,8 @@ button {
   overflow-wrap: anywhere;
 }
 
-.public-profile-card-media {
-  aspect-ratio: 499 / 306;
-  container-type: inline-size;
-  margin-top: 28px;
-  position: relative;
-  width: 100%;
-}
-
 .public-profile-card {
-  margin-top: 0;
+  margin-top: 28px;
 }
 
 .public-profile-state {
@@ -2962,7 +2881,6 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .account-status-button:not(.is-unavailable) .account-status-dot,
-  .card-heatmap-tooltip,
   .home-card-preview,
   .home-card-media,
   .profile-stage-loading .profile-state-indicator,

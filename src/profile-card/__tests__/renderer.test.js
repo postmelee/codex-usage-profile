@@ -11,7 +11,6 @@ import {
   CARD_OUTPUT_WIDTH,
   renderProfileCardPng
 } from "../renderer.js";
-import { getCardHeatmapCellGeometry } from "../geometry.js";
 import { buildCardViewModel } from "../view-model.js";
 import {
   SAMPLE_CARD_TODAY_ISO,
@@ -41,27 +40,11 @@ test("renders the Codex share card as a 1497x918 PNG", async () => {
   const canvas = createCanvas(image.width, image.height);
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0);
-  const firstHeatmapCell = getCardHeatmapCellGeometry(0, 0);
-  const peakHeatmapCell = getCardHeatmapCellGeometry(16, 5);
 
   assert.deepEqual(readLogicalPixel(context, 249.5, 153), rgba(CARD_COLORS.background));
   assert.equal(readLogicalPixel(context, 0, 0)[3], 0);
-  assert.deepEqual(
-    readLogicalPixel(
-      context,
-      firstHeatmapCell.centerX,
-      firstHeatmapCell.centerY
-    ),
-    rgba("#2f2f2f")
-  );
-  assert.deepEqual(
-    readLogicalPixel(
-      context,
-      peakHeatmapCell.centerX,
-      peakHeatmapCell.centerY
-    ),
-    rgba("#339cff")
-  );
+  assert.deepEqual(readLogicalPixel(context, 39, 103), rgba("#2f2f2f"));
+  assert.deepEqual(readLogicalPixel(context, 308.5, 187.5), rgba("#339cff"));
   assert.deepEqual(readLogicalPixel(context, 140.5, 250), rgba(CARD_COLORS.divider));
   assert.notDeepEqual(readLogicalPixel(context, 57, 57), rgba(CARD_COLORS.background));
   assert.notDeepEqual(readLogicalPixel(context, 79, 58), rgba(CARD_COLORS.background));
