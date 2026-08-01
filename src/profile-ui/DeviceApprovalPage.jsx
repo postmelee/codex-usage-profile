@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 
 import { CodexCheckCircleIcon } from "./Icons.jsx";
+import { ProfileShell } from "./ProfileShell.jsx";
 import {
   DEVICE_APPROVAL_ERROR_KIND,
   DEVICE_APPROVAL_UI_STATUS,
@@ -9,7 +10,12 @@ import {
   normalizeDeviceApprovalResult
 } from "./deviceApproval.js";
 
-export function DeviceApprovalPage({ authState, client, location = window.location }) {
+export function DeviceApprovalPage({
+  authState,
+  client,
+  location = window.location,
+  onAuthStateChange
+}) {
   const initialUserCode = useMemo(() => readDeviceUserCode(location), [location]);
   const [userCode, setUserCode] = useState(initialUserCode);
   const [approvalState, setApprovalState] = useState({
@@ -119,11 +125,18 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
   }
 
   return (
-    <div className="app-frame">
-      <main className="device-shell" data-auth-status={authStatus}>
+    <ProfileShell
+      authState={authState}
+      client={client}
+      layout="fullscreen"
+      onAuthStateChange={onAuthStateChange}
+      pageHeading={false}
+      showShare={false}
+      title="Authorize device"
+    >
+      <section className="device-view" data-auth-status={authStatus}>
         <section className="device-panel" aria-labelledby="device-title">
           <header className="device-header">
-            <p>Codex Usage Profile</p>
             <h1 id="device-title">Authorize device</h1>
           </header>
 
@@ -241,8 +254,8 @@ export function DeviceApprovalPage({ authState, client, location = window.locati
             </div>
           </form>
         </section>
-      </main>
-    </div>
+      </section>
+    </ProfileShell>
   );
 }
 

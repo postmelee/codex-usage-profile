@@ -2190,29 +2190,26 @@ button {
   opacity: 0.62;
 }
 
-.device-shell {
-  align-items: center;
-  background: var(--surface);
+.device-view {
+  background: #0d0d0d;
   display: flex;
-  min-height: min(620px, calc(100vh - 72px));
+  min-height: calc(100dvh - var(--profile-header-height, 52px));
   padding: 48px 24px;
+  width: 100%;
 }
 
 .device-panel {
-  margin: 0 auto;
-  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: auto;
+  max-width: 460px;
+  padding: 32px;
   width: 100%;
 }
 
 .device-header {
   margin-bottom: 24px;
-}
-
-.device-header p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-  margin: 0 0 10px;
 }
 
 .device-header h1 {
@@ -3059,10 +3056,14 @@ button {
     padding-inline: 5px;
   }
 
-  .device-shell {
-    align-items: flex-start;
-    min-height: 100dvh;
-    padding: 56px 20px 32px;
+  .device-view {
+    min-height: calc(100dvh - var(--profile-header-height, 48px));
+    padding: 40px 16px 48px;
+  }
+
+  .device-panel {
+    margin: 0 auto;
+    padding: 24px 20px;
   }
 
   .device-command-row {

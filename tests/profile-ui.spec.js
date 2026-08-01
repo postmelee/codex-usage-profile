@@ -969,7 +969,22 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     const initialUrl = page.url();
 
-    await expect(page.getByRole("heading", { name: "Authorize device" })).toBeVisible();
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
+    await expect(page.getByRole("link", { name: "Codex Usage" }))
+      .toHaveAttribute("href", "/");
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.locator(".device-view")).toHaveCSS(
+      "background-color",
+      "rgb(13, 13, 13)"
+    );
+    await expect(page.locator(".device-panel")).toHaveCSS(
+      "background-color",
+      "rgb(23, 23, 23)"
+    );
     await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
     const approveButton = page.getByRole("button", { name: "Approve device" });
     await approveButton.evaluate((button) => {
@@ -1036,6 +1051,14 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     const initialUrl = page.url();
 
+    await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    const topbarBox = await page.locator(".profile-topbar").boundingBox();
+    const panelBox = await page.locator(".device-panel").boundingBox();
+    expect(topbarBox).not.toBeNull();
+    expect(panelBox).not.toBeNull();
+    expect(panelBox.y).toBeGreaterThanOrEqual(topbarBox.y + topbarBox.height + 40);
+
     await page.getByLabel("User code").focus();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Approve device" })).toBeFocused();
@@ -1063,6 +1086,41 @@ test.describe("Home and share card flow", () => {
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
+  });
+
+  test("device approval common header keeps logout and auth state aligned", async ({ page }) => {
+    let logoutRequests = 0;
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/logout", (route) => {
+      logoutRequests += 1;
+      return fulfillJson(route, {
+        data: { session: null },
+        ok: true
+      });
+    });
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await page.getByRole("button", { name: "Account menu for postmelee" }).click();
+    await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
+      .toHaveAttribute("href", "/profile");
+    await expect(page.getByRole("menuitem", { name: "Settings", exact: true }))
+      .toHaveAttribute("href", "/?view=settings");
+    await page.getByRole("menuitem", { name: "Log out" }).click();
+
+    await expect(page.locator(".profile-shell")).toHaveAttribute(
+      "data-auth-status",
+      "anonymous"
+    );
+    await expect(page.locator(".device-view")).toHaveAttribute(
+      "data-auth-status",
+      "anonymous"
+    );
+    await expect(page.getByRole("link", { name: "Sign in", exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
+      .toBeVisible();
+    await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
+    expect(logoutRequests).toBe(1);
   });
 
   test("device approval treats exchanged legacy intent as terminal success", async ({ page }) => {
