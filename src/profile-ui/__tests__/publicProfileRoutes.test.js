@@ -18,7 +18,9 @@ const PUBLIC_PROFILE = Object.freeze({
     capturedAt: "2026-07-14T00:00:00.000Z",
     uploadedAt: "2026-07-14T00:01:00.000Z",
     usage: {
-      dailyUsageBuckets: [],
+      dailyUsageBuckets: [
+        { startDate: "2026-06-11", tokens: 100_000_000 }
+      ],
       summary: {
         currentStreakDays: 10,
         lifetimeTokens: 15_090_000_000,

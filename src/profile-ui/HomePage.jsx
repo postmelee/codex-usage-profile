@@ -5,6 +5,12 @@ import {
   buildMarketingOperatorCardUrl,
   createMarketingConfig
 } from "../profile-marketing/marketing-config.js";
+import { buildCardHeatmap } from "../profile-card/heatmap.js";
+import {
+  SAMPLE_CARD_TODAY_ISO,
+  sampleAccountUsageReadResult
+} from "../profile-card/fixtures/sample-account-usage.js";
+import { CardHeatmapOverlay } from "./CardHeatmapOverlay.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
@@ -15,6 +21,7 @@ import {
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
+import { hasCardHeatmapData } from "./cardHeatmapTooltip.js";
 import { resolveShareLocale } from "./cardShare.js";
 import {
   HOME_CARD_SOURCE_KINDS,
@@ -67,6 +74,10 @@ export function HomePage({
     error: null,
     status: "idle"
   });
+  const [operatorProfileState, setOperatorProfileState] = useState({
+    profile: null,
+    status: "idle"
+  });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
   const shareSourceCardRef = useRef(null);
@@ -100,6 +111,34 @@ export function HomePage({
 
     return () => { isCurrent = false; };
   }, [client, isAuthenticated, ownerKey]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (status !== "anonymous") {
+      setOperatorProfileState({ profile: null, status: "idle" });
+      return () => { isCurrent = false; };
+    }
+
+    setOperatorProfileState({ profile: null, status: "loading" });
+    client.getPublicProfile(HOME_MARKETING_CONFIG.operatorCardHandle)
+      .then((operatorProfile) => {
+        if (!isCurrent) return;
+        const profileMatchesCard = operatorProfile?.owner?.handle ===
+          HOME_MARKETING_CONFIG.operatorCardHandle;
+        setOperatorProfileState({
+          profile: profileMatchesCard ? operatorProfile : null,
+          status: profileMatchesCard ? "ready" : "unavailable"
+        });
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setOperatorProfileState({ profile: null, status: "unavailable" });
+        }
+      });
+
+    return () => { isCurrent = false; };
+  }, [client, status]);
 
   const profile = profileState.profile;
   const hasUsage = Boolean(profile?.usage);
@@ -217,6 +256,17 @@ export function HomePage({
   const sharePreviewUrl = hasUsage
     ? client.buildOwnerCardPreviewUrl({ locale, revision: previewRevision })
     : null;
+  const cardHeatmap = useMemo(() => resolveVisibleCardHeatmap({
+    isAuthenticated,
+    operatorProfile: operatorProfileState.profile,
+    profile,
+    source: visibleCardSource
+  }), [
+    isAuthenticated,
+    operatorProfileState.profile,
+    profile,
+    visibleCardSource
+  ]);
 
   function handleVisibleCardError() {
     setCardTransition((current) => {
@@ -278,9 +328,16 @@ export function HomePage({
         cardAlt={getHomeCardAlt(visibleCardSource)}
         cardBusy={cardLoading}
         cardLoadingLabel="Loading card preview"
-        cardOverlay={showPersonalizedSample ? (
-          <HomeSampleIdentity owner={owner} />
-        ) : null}
+        cardOverlay={(
+          <>
+            {showPersonalizedSample ? (
+              <HomeSampleIdentity owner={owner} />
+            ) : null}
+            {cardReady && !shareOpen && cardHeatmap ? (
+              <CardHeatmapOverlay heatmap={cardHeatmap} locale={locale} />
+            ) : null}
+          </>
+        )}
         cardPreviewUrl={visibleCardSource?.src ?? null}
         cardRef={shareSourceCardRef}
         cardSourceKind={visibleCardSource?.kind ?? null}
@@ -330,6 +387,34 @@ export function HomePage({
       />
     </ProfileShell>
   );
+}
+
+function resolveVisibleCardHeatmap({
+  isAuthenticated,
+  operatorProfile,
+  profile,
+  source
+}) {
+  let dailyUsageBuckets = null;
+  let todayIso;
+
+  if (source?.kind === HOME_CARD_SOURCE_KINDS.OWNER) {
+    dailyUsageBuckets = profile?.usage?.usage?.dailyUsageBuckets;
+  } else if (
+    source?.kind === HOME_CARD_SOURCE_KINDS.OPERATOR &&
+    operatorProfile?.owner?.handle === HOME_MARKETING_CONFIG.operatorCardHandle
+  ) {
+    dailyUsageBuckets = operatorProfile?.usage?.usage?.dailyUsageBuckets;
+  } else if (
+    source?.kind === HOME_CARD_SOURCE_KINDS.SAMPLE &&
+    !isAuthenticated
+  ) {
+    dailyUsageBuckets = sampleAccountUsageReadResult.dailyUsageBuckets;
+    todayIso = SAMPLE_CARD_TODAY_ISO;
+  }
+
+  if (!hasCardHeatmapData(dailyUsageBuckets)) return null;
+  return buildCardHeatmap(dailyUsageBuckets, { todayIso });
 }
 
 function snapshotRect(rect) {

@@ -1,4 +1,10 @@
+import { useMemo } from "react";
+
+import { buildCardHeatmap } from "../profile-card/heatmap.js";
+import { CardHeatmapOverlay } from "./CardHeatmapOverlay.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { hasCardHeatmapData } from "./cardHeatmapTooltip.js";
+import { resolveShareLocale } from "./cardShare.js";
 
 export function PublicProfilePage({
   authState,
@@ -32,6 +38,16 @@ function ReadyPublicProfile({ profile }) {
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
   const githubLogin = owner.githubLogin || owner.handle;
+  const locale = useMemo(
+    () => resolveShareLocale(globalThis.navigator?.language),
+    []
+  );
+  const dailyUsageBuckets = profile.usage?.usage?.dailyUsageBuckets;
+  const heatmap = useMemo(() => (
+    hasCardHeatmapData(dailyUsageBuckets)
+      ? buildCardHeatmap(dailyUsageBuckets)
+      : null
+  ), [dailyUsageBuckets]);
 
   return (
     <div className="public-profile-stage">
@@ -43,14 +59,19 @@ function ReadyPublicProfile({ profile }) {
         <span className="visibility-status is-public">Public</span>
       </header>
 
-      <img
-        alt={`Codex usage card for ${displayName}`}
-        aria-describedby="public-profile-title"
-        className="public-profile-card"
-        height="612"
-        src={profile.publicCardUrl}
-        width="998"
-      />
+      <div className="public-profile-card-media">
+        <img
+          alt={`Codex usage card for ${displayName}`}
+          aria-describedby="public-profile-title"
+          className="public-profile-card"
+          height="612"
+          src={profile.publicCardUrl}
+          width="998"
+        />
+        {heatmap ? (
+          <CardHeatmapOverlay heatmap={heatmap} locale={locale} />
+        ) : null}
+      </div>
     </div>
   );
 }
