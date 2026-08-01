@@ -787,12 +787,65 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Copy submit command" })).toBeFocused();
 
     await accountButton.click();
-    await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveAttribute(
+      "href",
+      "/profile"
+    );
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
       "/?view=settings"
     );
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
+  });
+
+  test("account menu exposes Profile and supports keyboard focus", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const trigger = page.getByRole("button", { name: "Account menu for postmelee" });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const profileItem = page.getByRole("menuitem", { name: "Profile" });
+    const settingsItem = page.getByRole("menuitem", { name: "Settings" });
+    const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+    const menuItems = page.getByRole("menuitem");
+
+    await expect(menuItems).toHaveCount(3);
+    await expect(menuItems.nth(0)).toHaveText("Profile");
+    await expect(menuItems.nth(1)).toHaveText("Settings");
+    await expect(menuItems.nth(2)).toHaveText("Log out");
+    await expect(profileItem).toHaveAttribute("href", "/profile");
+    await expect(settingsItem).toHaveAttribute("href", "/?view=settings");
+    await expect(profileItem).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(settingsItem).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(profileItem).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await trigger.click();
+    await expect(profileItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(settingsItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(logoutItem).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Publish card" })).toBeFocused();
+
+    await trigger.click();
+    await expect(profileItem).toBeFocused();
+    await page.getByRole("heading", { name: "Codex usage profile" }).click();
+    await expect(page.getByRole("menu")).toHaveCount(0);
   });
 
   test("uses document scrolling on Home and keeps app surfaces framed", async ({ page }, testInfo) => {
@@ -844,11 +897,11 @@ test.describe("Home and share card flow", () => {
       expect(titleMetrics.scrollHeight).toBeLessThanOrEqual(titleMetrics.clientHeight);
     }
 
-    const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
-    await expect(primaryNavigation.getByRole("link", { name: "Home", exact: true }))
+    await expect(page.getByRole("link", { name: "Codex Usage", exact: true }))
       .toHaveAttribute("href", "/");
-    await expect(primaryNavigation.getByRole("link", { name: "Profile", exact: true }))
-      .toHaveCount(0);
+    await page.getByRole("button", { name: "Account menu for postmelee" }).click();
+    await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
+      .toHaveAttribute("href", "/profile");
 
     const internalScrollTop = await page.locator(".profile-shell").evaluate((shell) => {
       shell.scrollTop = 120;

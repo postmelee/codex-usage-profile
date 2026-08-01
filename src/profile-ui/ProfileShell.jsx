@@ -13,10 +13,7 @@ export function ProfileShell({
   title = "Profile"
 }) {
   const authStatus = authState?.status ?? "unknown";
-  const currentPath = globalThis.window?.location?.pathname ?? "/";
   const isFullscreen = layout === "fullscreen";
-  const TitleElement = pageHeading ? "h1" : "span";
-  const homeBrand = isFullscreen && currentPath === "/" && !pageHeading;
 
   return (
     <div className={`app-frame${isFullscreen ? " app-frame--fullscreen" : ""}`}>
@@ -26,14 +23,7 @@ export function ProfileShell({
       >
         <header className="profile-topbar">
           <div className="profile-topbar-leading">
-            {homeBrand ? (
-              <a className="profile-topbar-title" href="/">{title}</a>
-            ) : (
-              <TitleElement className="profile-topbar-title">{title}</TitleElement>
-            )}
-            <nav aria-label="Primary" className="profile-navigation">
-              {currentPath !== "/" ? <a href="/">Home</a> : null}
-            </nav>
+            <a className="profile-topbar-title" href="/">Codex Usage</a>
           </div>
           <div className="profile-actions" aria-label="Page actions">
             {showShare ? (
@@ -56,6 +46,7 @@ export function ProfileShell({
         <p className="sr-only" aria-live="polite">
           {getSessionStatusLabel(authStatus)}
         </p>
+        {pageHeading ? <h1 className="sr-only">{title}</h1> : null}
         {children}
       </main>
     </div>

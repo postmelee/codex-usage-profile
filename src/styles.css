@@ -160,6 +160,7 @@ button {
 
 .profile-topbar-title {
   align-items: center;
+  color: var(--text);
   display: flex;
   flex: 0 1 auto;
   font-size: 15px;
@@ -170,34 +171,13 @@ button {
   overflow: hidden;
   padding: 4px 0;
   text-overflow: ellipsis;
+  text-decoration: none;
   white-space: nowrap;
 }
 
-.profile-navigation {
-  align-items: center;
-  display: flex;
-  gap: 4px;
-}
-
-.profile-navigation a {
-  border-radius: 6px;
-  color: var(--faint);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
-  padding: 4px 7px;
-  text-decoration: none;
-}
-
-.profile-navigation a:hover,
-.profile-navigation a:focus-visible {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-}
-
-.profile-navigation a:focus-visible {
+.profile-topbar-title:focus-visible {
   outline: 1px solid var(--blue);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .profile-actions {
