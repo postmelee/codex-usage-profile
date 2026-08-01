@@ -355,13 +355,16 @@ git diff origin/devel -- \
   db/migrations \
   packages/codex-usage-profile-cli \
   src/profile-backend \
-  src/profile-runtime \
-  src/profile-ui/deviceApproval.js
+  src/profile-runtime
+git diff 6bbdb6e -- src/profile-ui/deviceApproval.js
 ```
 
-마지막 보호 경계 diff는 빈 출력이어야 한다. test skip, 환경 제약이나 외부
-dependency 한계는 Stage 보고서에 정확히 기록하고 실패 또는 미실행을 통과로
-표현하지 않는다. Sites hosting 단계는 명시적으로 생략한다.
+첫 번째 보호 경계 diff는 infrastructure 무변경을 증명하므로 빈 출력이어야
+한다. `deviceApproval.js`는 승인된 Stage 3.1 UX 보정이 `origin/devel`에 아직
+없으므로 Stage 3.1 완료 commit `6bbdb6e` 이후 추가 drift가 없는지를 두 번째
+diff의 빈 출력으로 확인한다. test skip, 환경 제약이나 외부 dependency 한계는
+Stage 보고서에 정확히 기록하고 실패 또는 미실행을 통과로 표현하지 않는다.
+Sites hosting 단계는 명시적으로 생략한다.
 
 ### 커밋
 
