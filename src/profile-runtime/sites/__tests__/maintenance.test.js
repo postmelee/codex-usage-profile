@@ -41,7 +41,7 @@ test("maintenance route is a generic 404 unless every security gate passes", asy
     })(new Request(MAINTENANCE_URL, {
       method: "POST",
       headers: item.headers,
-      body: JSON.stringify({ operation: "plan" })
+      body: JSON.stringify({ operation: "readiness" })
     }));
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
@@ -56,7 +56,7 @@ test("maintenance route is a generic 404 unless every security gate passes", asy
   })(new Request("http://profile.example/__ops/profile-maintenance", {
     method: "POST",
     headers: authorizedHeaders({ origin: "http://profile.example" }),
-    body: JSON.stringify({ operation: "plan" })
+    body: JSON.stringify({ operation: "readiness" })
   }));
   assert.equal(insecure.status, 404);
   assert.equal(serviceCreations, 0);
@@ -114,6 +114,89 @@ test("bad maintenance tokens of different lengths produce the same safe response
   }));
   assert.deepEqual(responses[0], responses[1]);
   assert.doesNotMatch(responses[0].body, /maintenance-secret|Bearer/);
+});
+
+test("maintenance readiness returns only exact version state without mutations", async () => {
+  const calls = [];
+  const database = readinessDatabase([1, 2, 3]);
+  const fixture = await createServiceFixture({ calls, database });
+  const handler = createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  });
+  const response = await handler(new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify({ operation: "readiness" })
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    summary: {
+      appliedVersions: [1, 2, 3],
+      expectedVersions: [1, 2, 3],
+      operation: "readiness",
+      ready: true
+    }
+  });
+  assert.equal(database.batchCalls, 0);
+  assert.deepEqual(calls, []);
+
+  const extraPayload = await handler(new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify({
+      operation: "readiness",
+      ownerId: "private-owner"
+    })
+  }));
+  assert.equal(extraPayload.status, 400);
+  assert.doesNotMatch(
+    await extraPayload.text(),
+    /private-owner|usage|token|session|credential|r2/i
+  );
+});
+
+test("maintenance readiness fails closed without provider details", async () => {
+  const mismatch = await createServiceFixture({
+    database: readinessDatabase([1, 3, 4])
+  });
+  const mismatchResponse = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: mismatch.service
+  })(new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify({ operation: "readiness" })
+  }));
+  assert.equal(mismatchResponse.status, 503);
+  assert.deepEqual(await mismatchResponse.json(), {
+    ok: false,
+    error: {
+      code: "migration_not_ready",
+      message: "Maintenance readiness check failed"
+    }
+  });
+
+  const providerResponse = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: {
+      async readiness() {
+        throw new Error(
+          "SQL failed for owner private-owner with usage and token bytes"
+        );
+      }
+    }
+  })(new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify({ operation: "readiness" })
+  }));
+  assert.equal(providerResponse.status, 503);
+  const providerBody = await providerResponse.text();
+  assert.match(providerBody, /maintenance_unavailable/);
+  assert.doesNotMatch(providerBody, /SQL|private-owner|usage|token/i);
 });
 
 test("account deletion fails closed after tombstone and private transition", async () => {
@@ -313,7 +396,7 @@ async function createServiceFixture(options = {}) {
     async unpublishCard() {}
   };
   const service = createProfileSitesMaintenanceService({
-    database: { batch() {}, prepare() {} },
+    database: options.database ?? { batch() {}, prepare() {} },
     media: { delete() {}, head() {}, list() {} },
     mediaStore,
     store,
@@ -340,6 +423,16 @@ async function createServiceFixture(options = {}) {
 
 function createStubService() {
   return {
+    async readiness() {
+      return {
+        summary: {
+          appliedVersions: [1, 2, 3],
+          expectedVersions: [1, 2, 3],
+          operation: "readiness",
+          ready: true
+        }
+      };
+    },
     async planOwner() {
       return {
         summary: {
@@ -354,6 +447,30 @@ function createStubService() {
       };
     }
   };
+}
+
+function readinessDatabase(versions) {
+  const database = {
+    batchCalls: 0,
+    batch() {
+      database.batchCalls += 1;
+      throw new Error("readiness must not mutate D1");
+    },
+    prepare(sql) {
+      assert.equal(
+        sql,
+        "SELECT version FROM schema_migrations ORDER BY version"
+      );
+      return {
+        async all() {
+          return {
+            results: versions.map((version) => ({ version }))
+          };
+        }
+      };
+    }
+  };
+  return database;
 }
 
 function durableProfile() {

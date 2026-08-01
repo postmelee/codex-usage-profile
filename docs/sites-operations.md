@@ -99,16 +99,32 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
-4. saved version을 한 번 만들고 private deployment operation으로 배포한다.
-   non-terminal 상태는 같은 version/deployment id를 끝까지 조회한다.
-5. owner-only custom access와 `/healthz`, OAuth/session/logout, packed CLI,
-   private preview, publish/unpublish/ETag/404를 검증한다.
-6. error event를 확인한 뒤 maintenance는 disabled, profile은 private, test
-   token/session은 revoked 상태로 남긴다.
+4. temporary `PROFILE_MAINTENANCE_MODE=enabled`와 새 operator secret을
+   environment에 설정하고, saved version을 한 번 만들어 private deployment
+   operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
+   끝까지 조회한다.
+5. owner-only access가 유지된 상태에서 protected read-only readiness를 먼저
+   실행한다.
 
-배포 실패 시 새 public access를 열지 않는다. 이전 saved version과 owner-only
-policy를 유지하고 environment 변경을 이전 key set으로 되돌린 뒤 같은 health를
-확인한다.
+   ```bash
+   npm run sites:profile-maintenance -- readiness \
+     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+   ```
+
+   응답은 `operation=readiness`, `ready=true`이고 `expectedVersions`와
+   `appliedVersions`가 순서까지 정확히 같아야 한다. owner/usage/token/session,
+   SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
+6. readiness를 통과한 같은 candidate에서 `/healthz`, OAuth/session/logout,
+   packed CLI, private preview, publish/unpublish/ETag/404를 검증한다.
+7. error event를 확인한 뒤 `PROFILE_MAINTENANCE_MODE=disabled`, operator secret
+   absent, profile private와 test token/session revoked baseline으로 복원한다.
+
+배포, readiness, 기능 smoke 중 하나라도 실패하거나 expected/applied에 missing
+또는 unexpected version이 있으면 데이터 작업과 public 전환을 수행하지 않는다.
+이전 saved version과 owner-only policy를 유지하고 environment를
+disabled/secret-absent baseline 또는 직전 key set으로 되돌린 뒤 같은 health를
+확인한다. provider 오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지
+않는다.
 
 ## Environment와 OAuth rotation
 
@@ -176,7 +192,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 연다.
 
 1. owner-only health, saved version, OAuth callback, quota/추가 과금 표시와
-   원복할 exact custom access policy를 다시 확인한다.
+   원복할 exact custom access policy를 다시 확인한다. 같은 saved version과
+   environment 후보의 protected readiness exact-match 성공 기록이 없으면
+   public 전환을 시작하지 않는다.
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card 404, OAuth/CLI/submit, publish `GET|HEAD|304`, unpublish 404를

@@ -128,6 +128,20 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(maintenanceEnabled.response.status, 200);
     assert.equal(maintenanceEnabled.body.maintenanceEnabled, true);
 
+    const readiness = await requestMaintenance(origin, {
+      operation: "readiness"
+    });
+    assert.equal(readiness.response.status, 200);
+    assert.deepEqual(readiness.body, {
+      ok: true,
+      summary: {
+        appliedVersions: [1, 2, 3],
+        expectedVersions: [1, 2, 3],
+        operation: "readiness",
+        ready: true
+      }
+    });
+
     let sessionCookie = null;
     const serviceClient = createServiceClient({
       serviceOrigin: origin,
@@ -472,7 +486,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 35,
+      routesVerified: 36,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {
