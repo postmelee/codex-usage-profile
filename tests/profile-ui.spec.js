@@ -9,6 +9,7 @@ const CARD_PNG = readFileSync(new URL(
   import.meta.url
 ));
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
+const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -1975,6 +1976,16 @@ test.describe("Profile and Settings canvases", () => {
   });
 
   test("owner Profile loading, empty, and error states keep one visual heading", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(globalThis.navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value) {
+            globalThis.__copiedProfileCommand = value;
+          }
+        }
+      });
+    });
     await mockAuthenticatedAccount(page);
     let releaseProfile;
     const profileGate = new Promise((resolve) => {
@@ -1999,6 +2010,22 @@ test.describe("Profile and Settings canvases", () => {
       name: "No usage submitted yet"
     })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(page.getByText(
+      "Submit your local Codex usage once to create your card. Run the same command whenever you want to update it."
+    )).toBeVisible();
+    await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View setup guide" }))
+      .toHaveAttribute("href", "/#quickstart");
+    await expect(page.getByText(
+      "Only aggregated usage is submitted. Prompts, responses, credentials, and local session files stay on your device."
+    )).toBeVisible();
+
+    await page.getByRole("button", { name: "Copy submit command" }).click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Command copied. Run it in your terminal, then refresh this page."
+    );
+    await expect.poll(() => page.evaluate(() => globalThis.__copiedProfileCommand))
+      .toBe(SUBMIT_COMMAND);
 
     await page.unroute("**/api/profile");
     await page.route("**/api/profile", (route) => fulfillJson(route, {
@@ -2060,6 +2087,14 @@ test.describe("Profile and Settings canvases", () => {
     await page.goto("/settings");
 
     await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
+    await expect(page.locator(".settings-view")).toHaveCSS(
+      "background-color",
+      "rgb(13, 13, 13)"
+    );
+    await expect(page.locator(".settings-panel").first()).toHaveCSS(
+      "background-color",
+      "rgb(23, 23, 23)"
+    );
     await expect(page.getByRole("heading", { level: 1, name: "Settings" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);

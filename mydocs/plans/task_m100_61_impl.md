@@ -194,6 +194,27 @@ Settings anonymous/authenticated와 token/device mutation의 기존 대표
 Task #61 Stage 2: Profile과 Settings page canvas 정렬
 ```
 
+### Stage 2.1 로컬 시각 피드백 보정
+
+작업지시자의 Stage 2 로컬 검토에서 fullscreen 전환 뒤 header와 main canvas가
+모두 `#171717`로 보여 화면 계층이 약하고, 사용량이 없는 owner Profile에는
+`No usage submitted yet` 제목만 남아 다음 행동을 알기 어렵다는 점이 확인되었다.
+
+- Home과 동일한 `#0d0d0d`를 owner/public Profile 및 Settings page canvas에
+  적용하고, Settings 내부 panel은 기존 `#171717` surface로 유지해 header,
+  page, panel의 계층을 구분한다.
+- owner Profile empty state에 카드 생성 목적과 반복 갱신 안내, 공용 submit
+  command, clipboard CTA, `/#quickstart` setup guide link와 집계 데이터만
+  전송한다는 privacy 안내를 추가한다.
+- usage가 없을 때 Share action이 비활성화되는 기존 계약, API payload,
+  submit command와 public Profile 동작은 변경하지 않는다.
+- desktop/mobile empty state, clipboard 성공 feedback과 canvas 색상 계약을
+  focused Playwright에 포함한다.
+
+```text
+Task #61 [Stage 2.1]: Profile canvas와 empty state 안내 정렬
+```
+
 ## Stage 3 — Device Approve 공통 shell 통합
 
 ### 산출물

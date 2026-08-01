@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
+import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const authStatus = authState?.status ?? "loading";
@@ -134,7 +135,7 @@ function CardProfileContent(props) {
     return <ProfileMessage title="Profile unavailable" message={profileState.error} />;
   }
   if (!props.hasUsage) {
-    return <ProfileMessage title="No usage submitted yet" />;
+    return <EmptyProfileState />;
   }
 
   return (
@@ -173,6 +174,59 @@ function CardProfileContent(props) {
   );
 }
 
+function EmptyProfileState() {
+  const [copyState, setCopyState] = useState("idle");
+
+  async function handleCopyCommand() {
+    try {
+      if (!globalThis.navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+      await globalThis.navigator.clipboard.writeText(HOME_SUBMIT_COMMAND);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  return (
+    <div className="card-profile-message card-profile-empty">
+      <h1 id="card-profile-title">No usage submitted yet</h1>
+      <p className="card-profile-empty-description">
+        Submit your local Codex usage once to create your card. Run the same command
+        whenever you want to update it.
+      </p>
+
+      <div className="card-profile-empty-command">
+        <span>Run in your terminal</span>
+        <code>{HOME_SUBMIT_COMMAND}</code>
+      </div>
+
+      <div className="card-profile-empty-actions">
+        <button className="primary-command" onClick={handleCopyCommand} type="button">
+          Copy submit command
+        </button>
+        <a className="secondary-command" href="/#quickstart">
+          View setup guide
+        </a>
+      </div>
+
+      <p
+        aria-live="polite"
+        className={`card-profile-empty-status is-${copyState}`}
+        role="status"
+      >
+        {getEmptyProfileCopyStatus(copyState)}
+      </p>
+
+      <p className="card-profile-empty-privacy">
+        Only aggregated usage is submitted. Prompts, responses, credentials, and local
+        session files stay on your device.
+      </p>
+    </div>
+  );
+}
+
 function ProfileMessage({ children, message, title }) {
   return (
     <div className="card-profile-message">
@@ -181,6 +235,16 @@ function ProfileMessage({ children, message, title }) {
       {children}
     </div>
   );
+}
+
+function getEmptyProfileCopyStatus(status) {
+  if (status === "copied") {
+    return "Command copied. Run it in your terminal, then refresh this page.";
+  }
+  if (status === "error") {
+    return "Copy failed. Select the command and copy it manually.";
+  }
+  return "";
 }
 
 function getVisibilityActionLabel(isPublic, status) {

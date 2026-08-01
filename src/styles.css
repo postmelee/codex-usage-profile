@@ -389,6 +389,7 @@ button {
 
 .card-profile-view {
   align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
   min-height: calc(100dvh - var(--profile-header-height, 50px));
@@ -1078,6 +1079,7 @@ button {
 
 .public-profile-view {
   align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
   min-height: calc(100dvh - var(--profile-header-height, 50px));
@@ -1150,6 +1152,78 @@ button {
   color: var(--muted);
   font-size: 14px;
   margin: -10px 0 0;
+}
+
+.card-profile-empty {
+  gap: 0;
+  width: min(100%, 560px);
+}
+
+.card-profile-message .card-profile-empty-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 12px 0 0;
+  max-width: 520px;
+}
+
+.card-profile-empty-command {
+  display: grid;
+  gap: 8px;
+  margin-top: 28px;
+  width: 100%;
+}
+
+.card-profile-empty-command span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.card-profile-empty-command code {
+  background: #111;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: #e3e3e3;
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  padding: 13px;
+  width: 100%;
+}
+
+.card-profile-empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.card-profile-message .card-profile-empty-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 8px 0 0;
+  min-height: 18px;
+}
+
+.card-profile-message .card-profile-empty-status.is-copied {
+  color: #91c4a4;
+}
+
+.card-profile-message .card-profile-empty-status.is-error {
+  color: #ff8b8b;
+}
+
+.card-profile-message .card-profile-empty-privacy {
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 18px 0 0;
+  padding-top: 16px;
 }
 
 .share-studio-backdrop {
@@ -1763,6 +1837,7 @@ button {
 
 .settings-view {
   align-items: flex-start;
+  background: #0d0d0d;
   display: flex;
   justify-content: center;
   min-height: calc(100dvh - var(--profile-header-height, 50px));
@@ -1816,6 +1891,7 @@ button {
 }
 
 .settings-panel {
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 22px;
@@ -3124,6 +3200,16 @@ button {
 
   .card-profile-message {
     margin-top: 60px;
+  }
+
+  .card-profile-empty-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .card-profile-empty-actions > * {
+    width: 100%;
   }
 
   .public-profile-state {
