@@ -985,6 +985,17 @@ test.describe("Home and share card flow", () => {
       "background-color",
       "rgb(23, 23, 23)"
     );
+    await expect(page.getByText(
+      "Enter the code shown in your terminal to connect the CLI.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByText(
+      "Only approve a code you requested from the Codex Usage Profile CLI.",
+      { exact: true }
+    )).toBeVisible();
+    await expect(page.getByRole("link", { name: "View setup guide" }))
+      .toHaveAttribute("href", "/#quickstart");
+    await expect(page.locator(".device-feedback")).toHaveCSS("min-height", "48px");
     await expect(page.getByLabel("User code")).toHaveValue("ABCD-1234");
     const approveButton = page.getByRole("button", { name: "Approve device" });
     await approveButton.evaluate((button) => {
@@ -1199,12 +1210,18 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=WXYZ-9876");
     await page.getByRole("button", { name: "Approve device" }).click();
     await expect(page.getByRole("alert")).toHaveText(
-      "CLI login challenge cannot be approved"
+      "This code is invalid or expired. Run the command again in your terminal and enter the new code."
     );
-    await expect(page.getByRole("button", { name: "Approve device" })).toBeDisabled();
-    await expect(page.getByLabel("User code")).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Enter a new code" })).toBeDisabled();
+    const userCodeInput = page.getByLabel("User code");
+    await expect(userCodeInput).toBeEnabled();
+    await expect(userCodeInput).toBeFocused();
+    expect(await userCodeInput.evaluate((input) => ({
+      end: input.selectionEnd,
+      start: input.selectionStart
+    }))).toEqual({ end: 9, start: 0 });
 
-    await page.getByLabel("User code").fill("QRST-2345");
+    await userCodeInput.fill("QRST-2345");
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Approve device" })).toBeEnabled();
     expect(requestedCodes).toEqual(["ABCD-1234", "ABCD-1234", "WXYZ-9876"]);

@@ -67,6 +67,24 @@ export function classifyDeviceApprovalError(error) {
   };
 }
 
+export function getDeviceApprovalErrorMessage(error, kind) {
+  const status = Number.isInteger(error?.status) ? error.status : 0;
+
+  if (
+    kind === DEVICE_APPROVAL_ERROR_KIND.TERMINAL &&
+    [400, 404, 409, 410].includes(status)
+  ) {
+    return (
+      "This code is invalid or expired. Run the command again in your terminal " +
+      "and enter the new code."
+    );
+  }
+
+  return error instanceof Error && error.message.trim() !== ""
+    ? error.message
+    : "Device approval failed";
+}
+
 export function createDeviceApprovalGuidance(intent, currentOrigin) {
   const normalizedIntent = normalizeDeviceApprovalIntent(intent);
 

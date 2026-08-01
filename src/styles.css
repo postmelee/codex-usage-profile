@@ -2219,6 +2219,13 @@ button {
   margin: 0;
 }
 
+.device-header p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+  margin: 10px 0 0;
+}
+
 .device-form {
   display: grid;
   gap: 14px;
@@ -2252,6 +2259,13 @@ button {
 .device-form input:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.device-security-note {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 18px;
+  margin: -4px 0 0;
 }
 
 .device-primary-action {
@@ -2295,7 +2309,7 @@ button {
 .device-feedback {
   align-content: start;
   display: grid;
-  min-height: 168px;
+  min-height: 48px;
 }
 
 .device-status {
@@ -2378,6 +2392,23 @@ button {
 
 .device-success-links a:hover {
   text-decoration: underline;
+}
+
+.device-help-link {
+  color: #c8dff7;
+  font-size: 13px;
+  font-weight: 600;
+  justify-self: start;
+  text-decoration: none;
+}
+
+.device-help-link:hover {
+  text-decoration: underline;
+}
+
+.device-help-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
 }
 
 @keyframes device-success-enter {

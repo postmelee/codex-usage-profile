@@ -288,6 +288,26 @@ shape는 변경하지 않는다.
 Task #61 Stage 3: Device Approve 공통 shell 통합
 ```
 
+### Stage 3.1 Device 오류 복구·안내 보정
+
+작업지시자의 Stage 3 로컬 검토에서 Device card의 승인 맥락이 부족하고,
+terminal error가 raw backend 문구로 노출되며 고정 feedback 높이 때문에 card
+하단에 큰 빈 공간이 남는 점이 확인되었다.
+
+- 제목 아래 terminal code 연결 안내와 요청하지 않은 code를 승인하지 말라는
+  보안 안내를 추가하고 `/#quickstart` setup guide를 제공한다.
+- 400·404·409·410 terminal error를 invalid/expired code의 행동 중심 문구로
+  정규화한다. retryable server error의 원문과 retry 동작은 유지한다.
+- terminal error 뒤 code input에 focus하고 전체 값을 선택하며 disabled action
+  label을 `Enter a new code`로 바꾼다. code를 수정하면 기존 계약대로 error를
+  해제하고 다시 승인할 수 있다.
+- `device-feedback`의 reserved height를 168px에서 48px로 줄여 idle/error
+  card의 빈 공간을 축소하고 success content는 자연스럽게 확장되도록 한다.
+
+```text
+Task #61 [Stage 3.1]: Device 오류 복구와 안내 UX 보정
+```
+
 ## Stage 4 — 통합 browser·Sites artifact QA
 
 ### 산출물
