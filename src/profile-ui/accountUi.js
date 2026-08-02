@@ -1,38 +1,40 @@
+import { formatMessage } from "./i18n.js";
+
 export function getAccountOwner(authState) {
   return authState?.account?.owner ?? null;
 }
 
-export function getAccountStatus(authState) {
+export function getAccountStatus(authState, locale = "en") {
   const status = authState?.status ?? "loading";
 
   return {
     authenticated: {
-      label: "Signed in",
+      label: formatMessage(locale, "account.status.authenticated"),
       status
     },
     anonymous: {
-      label: "Not signed in",
+      label: formatMessage(locale, "account.status.anonymous"),
       status
     },
     loading: {
-      label: "Checking account",
+      label: formatMessage(locale, "account.status.loading"),
       status
     },
     unavailable: {
-      label: "Account unavailable",
+      label: formatMessage(locale, "account.status.unavailable"),
       status
     }
   }[status] ?? {
-    label: "Account status unknown",
+    label: formatMessage(locale, "account.status.unknown"),
     status
   };
 }
 
-export function getAccountDisplayName(owner) {
+export function getAccountDisplayName(owner, locale = "en") {
   return normalizeText(owner?.displayName)
     ?? normalizeText(owner?.githubLogin)
     ?? normalizeText(owner?.handle)
-    ?? "GitHub user";
+    ?? formatMessage(locale, "account.genericUser");
 }
 
 export function getAccountLogin(owner) {
@@ -41,25 +43,25 @@ export function getAccountLogin(owner) {
     ?? null;
 }
 
-export function getAccountAvatar(owner) {
-  const displayName = getAccountDisplayName(owner);
+export function getAccountAvatar(owner, locale = "en") {
+  const displayName = getAccountDisplayName(owner, locale);
   const login = getAccountLogin(owner);
   const initialSource = login ?? displayName;
 
   return {
-    alt: `${displayName} avatar`,
+    alt: formatMessage(locale, "account.avatarAlt", { name: displayName }),
     initial: initialSource.slice(0, 1).toUpperCase() || "G",
     url: normalizeText(owner?.avatarUrl)
   };
 }
 
-export function getAccountMenuSummary(authState) {
+export function getAccountMenuSummary(authState, locale = "en") {
   const owner = getAccountOwner(authState);
-  const status = getAccountStatus(authState);
+  const status = getAccountStatus(authState, locale);
 
   return {
-    avatar: getAccountAvatar(owner),
-    displayName: owner ? getAccountDisplayName(owner) : status.label,
+    avatar: getAccountAvatar(owner, locale),
+    displayName: owner ? getAccountDisplayName(owner, locale) : status.label,
     login: owner ? getAccountLogin(owner) : null,
     owner,
     status
@@ -85,23 +87,23 @@ export function buildAccountLoginHref(client, location) {
   return `/api/auth/github/login?${params.toString()}`;
 }
 
-export function getAccountAuthError(location) {
+export function getAccountAuthError(location, locale = "en") {
   const search = typeof location?.search === "string" ? location.search : "";
   const params = new URLSearchParams(search);
   const code = params.get("auth_error");
 
   return {
     github_login_failed: {
-      action: "Sign in with GitHub",
+      action: formatMessage(locale, "account.loginWithGitHub"),
       code,
-      message: "GitHub sign in could not be completed.",
-      title: "Sign in failed"
+      message: formatMessage(locale, "account.loginFailed.message"),
+      title: formatMessage(locale, "account.loginFailed.title")
     },
     github_oauth_not_configured: {
       action: null,
       code,
-      message: "GitHub sign in is not configured for this environment.",
-      title: "Sign in unavailable"
+      message: formatMessage(locale, "account.loginUnavailable.message"),
+      title: formatMessage(locale, "account.loginUnavailable.label")
     }
   }[code] ?? null;
 }

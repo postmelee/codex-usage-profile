@@ -67,32 +67,32 @@ export function classifyDeviceApprovalError(error) {
   };
 }
 
-export function getDeviceApprovalErrorMessage(error, kind) {
+export function getDeviceApprovalErrorMessage(error, kind, locale = "en") {
+  return formatMessage(locale, getDeviceApprovalErrorMessageId(error, kind));
+}
+
+export function getDeviceApprovalErrorMessageId(error, kind) {
   const status = Number.isInteger(error?.status) ? error.status : 0;
 
   if (
     kind === DEVICE_APPROVAL_ERROR_KIND.TERMINAL &&
     [400, 404, 409, 410].includes(status)
   ) {
-    return (
-      "This code is invalid or expired. Run the command again in your terminal " +
-      "and enter the new code."
-    );
+    return "device.error.invalidCode";
   }
 
-  return error instanceof Error && error.message.trim() !== ""
-    ? error.message
-    : "Device approval failed";
+  return kind === DEVICE_APPROVAL_ERROR_KIND.RETRYABLE
+    ? "device.error.temporary"
+    : "device.error.failed";
 }
 
-export function createDeviceApprovalGuidance(intent, currentOrigin) {
+export function createDeviceApprovalGuidance(intent, currentOrigin, locale = "en") {
   const normalizedIntent = normalizeDeviceApprovalIntent(intent);
 
   if (normalizedIntent === DEVICE_APPROVAL_INTENT.SUBMIT) {
     return {
       command: null,
-      message:
-        "Authorization is complete. Return to your terminal to continue, and check the terminal for the final submission result."
+      message: formatMessage(locale, "device.guidance.submit")
     };
   }
 
@@ -103,20 +103,19 @@ export function createDeviceApprovalGuidance(intent, currentOrigin) {
     } catch {
       return {
         command: null,
-        message: "Authorization is complete. Return to your terminal to continue."
+        message: formatMessage(locale, "device.guidance.default")
       };
     }
 
     return {
       command,
-      message:
-        "Authorization is complete. Return to your terminal. Run this command when you are ready to submit usage."
+      message: formatMessage(locale, "device.guidance.login")
     };
   }
 
   return {
     command: null,
-    message: "Authorization is complete. Return to your terminal to continue."
+    message: formatMessage(locale, "device.guidance.default")
   };
 }
 
@@ -165,3 +164,4 @@ function invalidApprovalResult() {
   error.status = 400;
   return error;
 }
+import { formatMessage } from "./i18n.js";

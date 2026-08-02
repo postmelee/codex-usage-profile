@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import {
   buildAccountLoginHref,
   getAccountAuthError,
@@ -13,9 +14,6 @@ import {
   DEFAULT_MAX_ACTIVE_CLI_TOKENS
 } from "../profile-shared/tokenLimits.js";
 
-const DEFAULT_TOKEN_NAME = "CI token";
-const SETTINGS_TOKEN_LIMIT_MESSAGE = "Active token limit reached. Revoke a token before creating another.";
-
 export function SettingsPage({
   authState,
   client,
@@ -23,6 +21,7 @@ export function SettingsPage({
   onAuthStateChange
 }) {
   const authStatus = authState?.status ?? "loading";
+  const { t } = useLocale();
 
   return (
     <ProfileShell
@@ -32,12 +31,12 @@ export function SettingsPage({
       onAuthStateChange={onAuthStateChange}
       pageHeading={false}
       showShare={false}
-      title="Settings"
+      title={t("settings.title")}
     >
       <section className="settings-view" aria-labelledby="settings-title">
         <div className="settings-stage">
           <header className="settings-heading">
-            <h1 id="settings-title">Settings</h1>
+            <h1 id="settings-title">{t("settings.title")}</h1>
           </header>
 
           {authStatus === "authenticated" ? (
@@ -56,11 +55,12 @@ export function SettingsPage({
 }
 
 function AuthenticatedSettings({ authState, client }) {
+  const { locale, t } = useLocale();
   const owner = getAccountOwner(authState);
-  const avatar = getAccountAvatar(owner);
-  const displayName = getAccountDisplayName(owner);
+  const avatar = getAccountAvatar(owner, locale);
+  const displayName = getAccountDisplayName(owner, locale);
   const login = getAccountLogin(owner);
-  const details = getAccountDetails(owner);
+  const details = getAccountDetails(owner, t);
 
   return (
     <div className="settings-section-stack">
@@ -69,7 +69,9 @@ function AuthenticatedSettings({ authState, client }) {
         className="settings-panel"
       >
         <div className="settings-panel-heading">
-          <h2 id="settings-github-account-title">GitHub account</h2>
+          <h2 id="settings-github-account-title">
+            {t("settings.account.githubAccount")}
+          </h2>
         </div>
 
         <div className="settings-account">
@@ -81,7 +83,7 @@ function AuthenticatedSettings({ authState, client }) {
         </div>
 
         <p className="settings-note">
-          Profile information is synced from GitHub and cannot be edited here.
+          {t("settings.account.note")}
         </p>
 
         <dl className="settings-detail-list">
@@ -101,6 +103,9 @@ function AuthenticatedSettings({ authState, client }) {
 }
 
 function SettingsTokenPanel({ client }) {
+  const { formatDate, t } = useLocale();
+  const defaultTokenName = t("settings.tokens.defaultName");
+  const previousDefaultTokenName = useRef(defaultTokenName);
   const [tokens, setTokens] = useState([]);
   const [loadState, setLoadState] = useState({
     error: null,
@@ -114,7 +119,7 @@ function SettingsTokenPanel({ client }) {
     error: null,
     tokenId: null
   });
-  const [tokenName, setTokenName] = useState(DEFAULT_TOKEN_NAME);
+  const [tokenName, setTokenName] = useState(defaultTokenName);
   const [createdToken, setCreatedToken] = useState(null);
   const activeTokenCount = tokens.length;
   const tokenLimitReached = activeTokenCount >= DEFAULT_MAX_ACTIVE_CLI_TOKENS;
@@ -123,11 +128,18 @@ function SettingsTokenPanel({ client }) {
     loadState.status === "loading";
 
   useEffect(() => {
+    setTokenName((current) => (
+      current === previousDefaultTokenName.current ? defaultTokenName : current
+    ));
+    previousDefaultTokenName.current = defaultTokenName;
+  }, [defaultTokenName]);
+
+  useEffect(() => {
     let isCurrent = true;
 
     if (!client || typeof client.listSettingsTokens !== "function") {
       setLoadState({
-        error: "Token settings are unavailable.",
+        error: "settings.tokens.unavailable",
         status: "error"
       });
       return () => {
@@ -140,10 +152,10 @@ function SettingsTokenPanel({ client }) {
       if (!isCurrent) return;
       setTokens(nextTokens);
       setLoadState({ error: null, status: "ready" });
-    }).catch((error) => {
+    }).catch(() => {
       if (!isCurrent) return;
       setLoadState({
-        error: error instanceof Error ? error.message : "Failed to load tokens.",
+        error: "settings.tokens.loadFailed",
         status: "error"
       });
     });
@@ -165,11 +177,11 @@ function SettingsTokenPanel({ client }) {
       const result = await client.createSettingsToken({ label: tokenName });
       setCreatedToken(result);
       setTokens((current) => prependTokenRecord(current, result.tokenRecord));
-      setTokenName(DEFAULT_TOKEN_NAME);
+      setTokenName(defaultTokenName);
       setCreateState({ error: null, status: "idle" });
     } catch (error) {
       setCreateState({
-        error: formatCreateTokenError(error),
+        error: getCreateTokenErrorId(error),
         status: "error"
       });
     }
@@ -197,9 +209,9 @@ function SettingsTokenPanel({ client }) {
       await client.revokeSettingsToken(tokenId);
       setTokens((current) => current.filter((token) => token.id !== tokenId));
       setRevokeState({ error: null, tokenId: null });
-    } catch (error) {
+    } catch {
       setRevokeState({
-        error: error instanceof Error ? error.message : "Failed to revoke token.",
+        error: "settings.tokens.revokeFailed",
         tokenId: null
       });
     }
@@ -208,7 +220,7 @@ function SettingsTokenPanel({ client }) {
   return (
     <section className="settings-panel" aria-labelledby="settings-tokens-title">
       <div className="settings-panel-heading">
-        <h2 id="settings-tokens-title">API Tokens</h2>
+        <h2 id="settings-tokens-title">{t("settings.tokens.title")}</h2>
         {loadState.status === "ready" ? (
           <span className="settings-token-count">
             {activeTokenCount}/{DEFAULT_MAX_ACTIVE_CLI_TOKENS}
@@ -217,7 +229,7 @@ function SettingsTokenPanel({ client }) {
       </div>
 
       <form className="settings-token-form" onSubmit={handleCreateToken}>
-        <label htmlFor="settings-token-name">Token name</label>
+        <label htmlFor="settings-token-name">{t("settings.tokens.name")}</label>
         <div className="settings-action-row">
           <input
             id="settings-token-name"
@@ -231,24 +243,24 @@ function SettingsTokenPanel({ client }) {
             disabled={createDisabled}
             type="submit"
           >
-            {getCreateTokenButtonLabel(createState.status, tokenLimitReached)}
+            {getCreateTokenButtonLabel(createState.status, tokenLimitReached, t)}
           </button>
         </div>
       </form>
 
       {tokenLimitReached ? (
         <p className="settings-limit-note" role="status">
-          {SETTINGS_TOKEN_LIMIT_MESSAGE}
+          {t("settings.tokens.limitMessage")}
         </p>
       ) : null}
 
       {createState.status === "error" ? (
-        <p className="settings-error">{createState.error}</p>
+        <p className="settings-error">{t(createState.error)}</p>
       ) : null}
 
       {createdToken ? (
         <div className="settings-token-reveal">
-          <strong>Copy this token now. It will not be shown again.</strong>
+          <strong>{t("settings.tokens.reveal")}</strong>
           <div className="settings-token-code-row">
             <code>{createdToken.token}</code>
             <button
@@ -256,7 +268,7 @@ function SettingsTokenPanel({ client }) {
               onClick={handleCopyCreatedToken}
               type="button"
             >
-              Copy
+              {t("settings.tokens.copy")}
             </button>
           </div>
         </div>
@@ -266,6 +278,8 @@ function SettingsTokenPanel({ client }) {
         loadState={loadState}
         onRevokeToken={handleRevokeToken}
         revokeState={revokeState}
+        formatDate={formatDate}
+        t={t}
         tokens={tokens}
       />
     </section>
@@ -273,21 +287,23 @@ function SettingsTokenPanel({ client }) {
 }
 
 function SettingsTokenList({
+  formatDate,
   loadState,
   onRevokeToken,
   revokeState,
+  t,
   tokens
 }) {
   if (loadState.status === "loading") {
-    return <p className="settings-list-state">Loading tokens.</p>;
+    return <p className="settings-list-state">{t("settings.tokens.loading")}</p>;
   }
 
   if (loadState.status === "error") {
-    return <p className="settings-error">{loadState.error}</p>;
+    return <p className="settings-error">{t(loadState.error)}</p>;
   }
 
   if (tokens.length === 0) {
-    return <p className="settings-list-state">No API tokens yet.</p>;
+    return <p className="settings-list-state">{t("settings.tokens.empty")}</p>;
   }
 
   return (
@@ -295,8 +311,8 @@ function SettingsTokenList({
       {tokens.map((token) => (
         <div className="settings-token-row" key={token.id}>
           <div className="settings-token-info">
-            <strong>{token.label ?? "CLI token"}</strong>
-            <span>{formatTokenMeta(token)}</span>
+            <strong>{token.label ?? t("settings.tokens.defaultName")}</strong>
+            <span>{formatTokenMeta(token, formatDate, t)}</span>
           </div>
           <button
             className="settings-danger-action"
@@ -304,18 +320,21 @@ function SettingsTokenList({
             onClick={() => onRevokeToken(token.id)}
             type="button"
           >
-            {revokeState.tokenId === token.id ? "Revoking" : "Revoke"}
+            {revokeState.tokenId === token.id
+              ? t("settings.tokens.revoking")
+              : t("settings.tokens.revoke")}
           </button>
         </div>
       ))}
       {revokeState.error ? (
-        <p className="settings-error">{revokeState.error}</p>
+        <p className="settings-error">{t(revokeState.error)}</p>
       ) : null}
     </div>
   );
 }
 
 function SettingsDevicePanel({ client }) {
+  const { formatDate, t } = useLocale();
   const [devices, setDevices] = useState([]);
   const [loadState, setLoadState] = useState({
     error: null,
@@ -335,7 +354,7 @@ function SettingsDevicePanel({ client }) {
 
     if (!client || typeof client.listSettingsDevices !== "function") {
       setLoadState({
-        error: "Device settings are unavailable.",
+        error: "settings.devices.unavailable",
         status: "error"
       });
       return () => {
@@ -348,10 +367,10 @@ function SettingsDevicePanel({ client }) {
       if (!isCurrent) return;
       setDevices(nextDevices);
       setLoadState({ error: null, status: "ready" });
-    }).catch((error) => {
+    }).catch(() => {
       if (!isCurrent) return;
       setLoadState({
-        error: error instanceof Error ? error.message : "Failed to load devices.",
+        error: "settings.devices.loadFailed",
         status: "error"
       });
     });
@@ -388,10 +407,10 @@ function SettingsDevicePanel({ client }) {
       )));
       setEditState({ deviceId: null, name: "" });
       setSaveState({ deviceId: null, error: null });
-    } catch (error) {
+    } catch {
       setSaveState({
         deviceId: null,
-        error: error instanceof Error ? error.message : "Failed to rename device."
+        error: "settings.devices.renameFailed"
       });
     }
   }
@@ -399,12 +418,13 @@ function SettingsDevicePanel({ client }) {
   return (
     <section className="settings-panel" aria-labelledby="settings-devices-title">
       <div className="settings-panel-heading">
-        <h2 id="settings-devices-title">Devices</h2>
+        <h2 id="settings-devices-title">{t("settings.devices.title")}</h2>
       </div>
 
       <SettingsDeviceList
         devices={devices}
         editState={editState}
+        formatDate={formatDate}
         loadState={loadState}
         onCancelEdit={cancelEditingDevice}
         onEditNameChange={(name) => setEditState((current) => ({
@@ -414,6 +434,7 @@ function SettingsDevicePanel({ client }) {
         onSaveDevice={handleSaveDevice}
         onStartEdit={startEditingDevice}
         saveState={saveState}
+        t={t}
       />
     </section>
   );
@@ -422,23 +443,25 @@ function SettingsDevicePanel({ client }) {
 function SettingsDeviceList({
   devices,
   editState,
+  formatDate,
   loadState,
   onCancelEdit,
   onEditNameChange,
   onSaveDevice,
   onStartEdit,
-  saveState
+  saveState,
+  t
 }) {
   if (loadState.status === "loading") {
-    return <p className="settings-list-state">Loading devices.</p>;
+    return <p className="settings-list-state">{t("settings.devices.loading")}</p>;
   }
 
   if (loadState.status === "error") {
-    return <p className="settings-error">{loadState.error}</p>;
+    return <p className="settings-error">{t(loadState.error)}</p>;
   }
 
   if (devices.length === 0) {
-    return <p className="settings-list-state">No devices yet.</p>;
+    return <p className="settings-list-state">{t("settings.devices.empty")}</p>;
   }
 
   return (
@@ -448,7 +471,7 @@ function SettingsDeviceList({
           {editState.deviceId === device.id ? (
             <div className="settings-device-edit-row">
               <input
-                aria-label="Device name"
+                aria-label={t("settings.devices.deviceName")}
                 maxLength={120}
                 onChange={(event) => onEditNameChange(event.target.value)}
                 onKeyDown={(event) => {
@@ -460,7 +483,7 @@ function SettingsDeviceList({
                     onCancelEdit();
                   }
                 }}
-                placeholder="Device name"
+                placeholder={t("settings.devices.deviceName")}
                 type="text"
                 value={editState.name}
               />
@@ -470,7 +493,9 @@ function SettingsDeviceList({
                 onClick={() => onSaveDevice(device)}
                 type="button"
               >
-                {saveState.deviceId === device.id ? "Saving" : "Save"}
+                {saveState.deviceId === device.id
+                  ? t("settings.devices.saving")
+                  : t("settings.devices.save")}
               </button>
               <button
                 className="settings-muted-action"
@@ -478,55 +503,56 @@ function SettingsDeviceList({
                 onClick={onCancelEdit}
                 type="button"
               >
-                Cancel
+                {t("settings.devices.cancel")}
               </button>
             </div>
           ) : (
             <>
               <div className="settings-token-info">
-                <strong>{device.displayName ?? "Unnamed device"}</strong>
-                <span>{formatDeviceMeta(device)}</span>
+                <strong>{device.displayName ?? t("settings.devices.unnamed")}</strong>
+                <span>{formatDeviceMeta(device, formatDate, t)}</span>
               </div>
               <button
                 className="settings-secondary-action"
                 onClick={() => onStartEdit(device)}
                 type="button"
               >
-                Rename
+                {t("settings.devices.rename")}
               </button>
             </>
           )}
         </div>
       ))}
       {saveState.error ? (
-        <p className="settings-error">{saveState.error}</p>
+        <p className="settings-error">{t(saveState.error)}</p>
       ) : null}
     </div>
   );
 }
 
 function SettingsState({ authStatus, client, location }) {
-  const authError = getAccountAuthError(location);
+  const { locale, t } = useLocale();
+  const authError = getAccountAuthError(location, locale);
   const copy = authError ?? {
     anonymous: {
-      action: "Sign in with GitHub",
-      message: "Sign in with GitHub to view account settings.",
-      title: "Sign in required"
+      action: t("account.loginWithGitHub"),
+      message: t("settings.state.anonymous.message"),
+      title: t("settings.state.anonymous.title")
     },
     loading: {
       action: null,
-      message: "Checking signed-in account.",
-      title: "Loading account"
+      message: t("settings.state.loading.message"),
+      title: t("settings.state.loading.title")
     },
     unavailable: {
       action: null,
-      message: "Signed-in account unavailable.",
-      title: "Account unavailable"
+      message: t("settings.state.unavailable.message"),
+      title: t("settings.state.unavailable.title")
     }
   }[authStatus] ?? {
     action: null,
-    message: "Account status unavailable.",
-    title: "Account unavailable"
+    message: t("settings.state.unavailable.message"),
+    title: t("settings.state.unavailable.title")
   };
 
   return (
@@ -555,60 +581,60 @@ function prependTokenRecord(tokens, tokenRecord) {
   ];
 }
 
-function getCreateTokenButtonLabel(createStatus, tokenLimitReached) {
+function getCreateTokenButtonLabel(createStatus, tokenLimitReached, t) {
   if (createStatus === "submitting") {
-    return "Creating";
+    return t("settings.tokens.creating");
   }
   if (tokenLimitReached) {
-    return "Limit reached";
+    return t("settings.tokens.limitReached");
   }
-  return "Create token";
+  return t("settings.tokens.create");
 }
 
-function formatCreateTokenError(error) {
+function getCreateTokenErrorId(error) {
   if (error?.code === "conflict" || error?.status === 409) {
-    return SETTINGS_TOKEN_LIMIT_MESSAGE;
+    return "settings.tokens.limitMessage";
   }
 
-  return error instanceof Error ? error.message : "Failed to create token.";
+  return "settings.tokens.createFailed";
 }
 
-function formatTokenMeta(token) {
+function formatTokenMeta(token, formatDate, t) {
   const parts = [];
-  const created = formatShortDate(token.createdAt);
-  const lastUsed = formatShortDate(token.lastUsedAt);
+  const created = formatShortDate(token.createdAt, formatDate);
+  const lastUsed = formatShortDate(token.lastUsedAt, formatDate);
 
   if (created) {
-    parts.push(`Created ${created}`);
+    parts.push(t("settings.tokens.created", { date: created }));
   }
   if (lastUsed) {
-    parts.push(`Last used ${lastUsed}`);
+    parts.push(t("settings.tokens.lastUsed", { date: lastUsed }));
   }
   if (token.sourceChallengeId) {
-    parts.push("Device login");
+    parts.push(t("settings.tokens.deviceLogin"));
   }
 
-  return parts.join(" · ") || "Token metadata unavailable";
+  return parts.join(" · ") || t("settings.tokens.metadataUnavailable");
 }
 
-function formatDeviceMeta(device) {
+function formatDeviceMeta(device, formatDate, t) {
   const parts = [];
-  const lastSubmittedAt = formatShortDate(device.lastSubmittedAt);
-  const createdAt = formatShortDate(device.createdAt);
+  const lastSubmittedAt = formatShortDate(device.lastSubmittedAt, formatDate);
+  const createdAt = formatShortDate(device.createdAt, formatDate);
 
   if (device.deviceKey) {
     parts.push(device.deviceKey);
   }
   if (lastSubmittedAt) {
-    parts.push(`Last submit ${lastSubmittedAt}`);
+    parts.push(t("settings.devices.lastSubmit", { date: lastSubmittedAt }));
   } else if (createdAt) {
-    parts.push(`Created ${createdAt}`);
+    parts.push(t("settings.devices.created", { date: createdAt }));
   }
 
-  return parts.join(" · ") || "Device metadata unavailable";
+  return parts.join(" · ") || t("settings.devices.metadataUnavailable");
 }
 
-function formatShortDate(value) {
+function formatShortDate(value, formatDate) {
   if (!value) {
     return null;
   }
@@ -618,7 +644,7 @@ function formatShortDate(value) {
     return null;
   }
 
-  return date.toLocaleDateString(undefined, {
+  return formatDate(date, {
     day: "numeric",
     month: "short",
     year: "numeric"
@@ -645,21 +671,22 @@ function SettingsAvatar({ avatar }) {
   );
 }
 
-function getAccountDetails(owner) {
+function getAccountDetails(owner, t) {
   const login = getAccountLogin(owner);
+  const visibility = owner?.visibility === "public" ? "public" : "private";
 
   return [
     {
-      label: "GitHub",
-      value: login ? `@${login}` : "Unknown"
+      label: t("settings.account.github"),
+      value: login ? `@${login}` : t("settings.account.unknown")
     },
     {
-      label: "Handle",
-      value: owner?.handle ?? "Not set"
+      label: t("settings.account.handle"),
+      value: owner?.handle ?? t("settings.account.notSet")
     },
     {
-      label: "Visibility",
-      value: owner?.visibility ?? "private"
+      label: t("settings.account.visibility"),
+      value: t(`settings.account.visibility.${visibility}`)
     }
   ];
 }

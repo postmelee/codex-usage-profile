@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { BorderBeam } from "border-beam";
 
 import { Icon } from "../profile-ui/Icons.jsx";
-import { createMarketingConfig } from "./marketing-config.js";
+import { useLocale } from "../profile-ui/LocaleProvider.jsx";
+import {
+  DEFAULT_MARKETING_COPY,
+  createMarketingConfig
+} from "./marketing-config.js";
 
 const HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT = 26;
 const HOME_CARD_SKELETON_HEATMAP_ROW_COUNT = 7;
@@ -15,7 +19,7 @@ const HOME_CARD_SKELETON_STAT_COUNT = 4;
 export function MarketingLanding({
   cardAlt,
   cardBusy = false,
-  cardLoadingLabel = "Loading card preview",
+  cardLoadingLabel,
   cardOverlay = null,
   cardPreviewUrl,
   cardRef,
@@ -27,25 +31,33 @@ export function MarketingLanding({
   onCardError,
   quickstart = null
 }) {
+  const { t } = useLocale();
   const resolvedCardUrl = cardPreviewUrl === undefined
     ? config.sampleCardUrl
     : cardPreviewUrl;
-  const resolvedCardAlt = cardAlt ?? config.copy.sampleCardAlt;
+  const resolvedCardAlt = cardAlt ?? resolveMarketingCopy(
+    config,
+    "sampleCardAlt",
+    t,
+    "home.sampleCardAlt"
+  );
 
   return (
     <div className="home-view">
       <section className="home-hero" aria-labelledby="home-title">
         <div className="home-stage">
           <header className="home-heading">
-            <h1 id="home-title">{config.copy.title}</h1>
-            <p>{config.copy.description}</p>
+            <h1 id="home-title">
+              {resolveMarketingCopy(config, "title", t, "home.title")}
+            </h1>
+            <p>{resolveMarketingCopy(config, "description", t, "home.description")}</p>
           </header>
 
           <MarketingCardPreview
             alt={resolvedCardAlt}
             busy={cardBusy}
             cardRef={cardRef}
-            loadingLabel={cardLoadingLabel}
+            loadingLabel={cardLoadingLabel ?? t("home.loadingCardPreview")}
             onError={onCardError}
             overlay={cardOverlay}
             sourceKind={cardSourceKind ?? (
@@ -71,7 +83,7 @@ export function MarketingCardPreview({
   alt,
   busy = false,
   cardRef,
-  loadingLabel = "Loading card preview",
+  loadingLabel,
   onError,
   overlay,
   sourceKind = null,
@@ -79,6 +91,7 @@ export function MarketingCardPreview({
   status = "ready",
   transitionSuspended = false
 }) {
+  const { t } = useLocale();
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const supportsCardTilt = useMediaQuery(
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
@@ -125,7 +138,7 @@ export function MarketingCardPreview({
             data-testid="home-card-loading-status"
             role="status"
           >
-            {busy ? loadingLabel : ""}
+            {busy ? (loadingLabel ?? t("home.loadingCardPreview")) : ""}
           </p>
         </div>
       </BorderBeam>
@@ -177,6 +190,7 @@ function HomeCardSkeleton({ active }) {
 
 export function MarketingQuickstart({ config }) {
   const [copyState, setCopyState] = useState("idle");
+  const { t } = useLocale();
 
   async function handleCopyCommand() {
     try {
@@ -199,19 +213,28 @@ export function MarketingQuickstart({ config }) {
     >
       <div className="home-quickstart-inner">
         <header className="home-quickstart-heading">
-          <h2 id="quickstart-title">{config.copy.quickstartTitle}</h2>
-          <p>{config.copy.quickstartDescription}</p>
+          <h2 id="quickstart-title">
+            {resolveMarketingCopy(config, "quickstartTitle", t, "quickstart.title")}
+          </h2>
+          <p>
+            {resolveMarketingCopy(
+              config,
+              "quickstartDescription",
+              t,
+              "quickstart.description"
+            )}
+          </p>
         </header>
 
         <div className="home-command-tool">
-          <span className="home-command-label">Run in your terminal</span>
+          <span className="home-command-label">{t("quickstart.runInTerminal")}</span>
           <div className="home-command-row">
             <code>{config.submitCommand}</code>
             <button
-              aria-label="Copy submit command"
+              aria-label={t("quickstart.copyCommand")}
               className="icon-command home-command-copy"
               onClick={handleCopyCommand}
-              title="Copy submit command"
+              title={t("quickstart.copyCommand")}
               type="button"
             >
               <Icon name="copy" />
@@ -222,7 +245,7 @@ export function MarketingQuickstart({ config }) {
             className={`home-copy-status is-${copyState}`}
             role="status"
           >
-            {getCopyStatus(copyState)}
+            {getCopyStatus(copyState, t)}
           </p>
         </div>
 
@@ -233,8 +256,8 @@ export function MarketingQuickstart({ config }) {
                 {String(index + 1).padStart(2, "0")}
               </span>
               <div>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
+                <h3>{t(`quickstart.step.${step.id}.title`)}</h3>
+                <p>{t(`quickstart.step.${step.id}.description`)}</p>
               </div>
             </li>
           ))}
@@ -245,17 +268,24 @@ export function MarketingQuickstart({ config }) {
 }
 
 function MarketingAppAction({ config }) {
+  const { t } = useLocale();
+
   if (!config.appHref) {
     return (
       <button className="secondary-command" disabled type="button">
-        {config.copy.appUnavailable}
+        {resolveMarketingCopy(
+          config,
+          "appUnavailable",
+          t,
+          "quickstart.appUnavailable"
+        )}
       </button>
     );
   }
 
   return (
     <a className="primary-command marketing-app-action" href={config.appHref}>
-      {config.copy.appCta}
+      {resolveMarketingCopy(config, "appCta", t, "quickstart.appCta")}
     </a>
   );
 }
@@ -331,10 +361,17 @@ function useMediaQuery(mediaQuery) {
   return matches;
 }
 
-function getCopyStatus(status) {
+function getCopyStatus(status, t) {
   return {
-    copied: "Command copied.",
-    error: "Copy failed. Select the command and copy it manually.",
+    copied: t("quickstart.commandCopied"),
+    error: t("quickstart.copyFailed"),
     idle: ""
   }[status] ?? "";
+}
+
+function resolveMarketingCopy(config, key, t, messageId) {
+  const configuredValue = config.copy[key];
+  return configuredValue === DEFAULT_MARKETING_COPY[key]
+    ? t(messageId)
+    : configuredValue;
 }

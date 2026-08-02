@@ -5,6 +5,7 @@ import {
   HOME_QUICKSTART_STEPS,
   HOME_SUBMIT_COMMAND
 } from "../homeOnboarding.js";
+import { formatMessage } from "../i18n.js";
 
 test("defines the canonical interactive submit command", () => {
   assert.equal(
@@ -37,4 +38,19 @@ test("keeps the Quickstart flow ordered and immutable", () => {
     )),
     true
   );
+});
+
+test("resolves every Quickstart step in English and Korean", () => {
+  for (const step of HOME_QUICKSTART_STEPS) {
+    for (const locale of ["en", "ko"]) {
+      assert.notEqual(
+        formatMessage(locale, `quickstart.step.${step.id}.title`),
+        "Something went wrong."
+      );
+      assert.notEqual(
+        formatMessage(locale, `quickstart.step.${step.id}.description`),
+        "Something went wrong."
+      );
+    }
+  }
 });

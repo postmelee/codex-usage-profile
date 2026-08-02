@@ -25,6 +25,88 @@ const AUTH_OWNER = Object.freeze({
   visibility: "private"
 });
 
+test.describe("Stage 2 locale surfaces", () => {
+  test("locale shell follows Korean browser preferences", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.locator(".profile-actions")).toHaveAttribute(
+      "aria-label",
+      "페이지 작업"
+    );
+    await expect(page.getByRole("link", { name: "로그인", exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "GitHub로 로그인" }))
+      .toBeVisible();
+  });
+
+  test("locale onboarding localizes product and sample-only Sites copy", async ({ page }) => {
+    await useKoreanLocale(page);
+    const apiRequests = [];
+    await page.route("**/api/**", (route) => {
+      apiRequests.push(route.request().url());
+      return route.abort();
+    });
+    await page.goto("/sites.html");
+
+    await expect(page.getByRole("heading", { name: "빠른 시작" })).toBeVisible();
+    await expect(page.getByText("터미널에서 실행", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "기기 승인" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "내 카드 만들기" })).toBeVisible();
+    expect(apiRequests).toEqual([]);
+  });
+
+  test("locale device keeps approval state and guidance in Korean", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        approvedAt: "2026-07-31T00:00:00.000Z",
+        exchangedAt: null,
+        intent: "submit",
+        status: "approved"
+      },
+      ok: true
+    }));
+    await page.goto("/?view=device&user_code=ABCD-1234");
+
+    await expect(page.getByRole("heading", { level: 1, name: "기기 승인" }))
+      .toBeVisible();
+    await expect(page.getByLabel("사용자 코드")).toHaveValue("ABCD-1234");
+    await page.getByRole("button", { name: "기기 승인", exact: true }).click();
+    await expect(page.getByRole("button", { name: "기기 승인 완료" })).toBeDisabled();
+    await expect(page.getByText(
+      "인증이 완료되었습니다. 터미널로 돌아가 계속 진행하고 최종 제출 결과를 확인하세요.",
+      { exact: true }
+    )).toBeVisible();
+  });
+
+  test("locale settings localizes account and empty management states", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await page.goto("/settings");
+
+    await expect(page.getByRole("heading", { level: 1, name: "설정" }))
+      .toBeVisible();
+    for (const sectionName of ["GitHub 계정", "API 토큰", "기기"]) {
+      await expect(page.getByRole("heading", { level: 2, name: sectionName }))
+        .toBeVisible();
+    }
+    await expect(page.getByText("API 토큰이 없습니다.", { exact: true })).toBeVisible();
+    await expect(page.getByText("등록된 기기가 없습니다.", { exact: true })).toBeVisible();
+  });
+});
+
 test.describe("Marketing mirror", () => {
   test("Marketing stays sample-only and matches the landing layout", async ({ page }, testInfo) => {
     const apiRequests = [];
@@ -1206,7 +1288,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     await page.getByRole("button", { name: "Approve device" }).click();
     await expect(page.getByRole("alert")).toHaveText(
-      "Approval temporarily unavailable"
+      "Device approval is temporarily unavailable. Try again."
     );
     await expect(page.locator('[aria-live] [role="alert"]')).toHaveCount(0);
     await expect(page.getByLabel("User code")).toHaveAttribute("aria-invalid", "true");
@@ -1445,12 +1527,7 @@ test.describe("Home and share card flow", () => {
   });
 
   test("Share Studio renders the Korean third instruction step", async ({ page }, testInfo) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "language", {
-        configurable: true,
-        get: () => "ko-KR"
-      });
-    });
+    await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -1460,7 +1537,7 @@ test.describe("Home and share card flow", () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
-    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await page.getByRole("button", { name: "공유", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "활동 공유하기" })).toBeVisible();
     const redditButton = page.getByRole("button", { name: "Reddit에 공유" });
@@ -2517,6 +2594,19 @@ async function mockAuthenticatedAccount(page) {
     data: ownerProfile("private"),
     ok: true
   }));
+}
+
+async function useKoreanLocale(page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", {
+      configurable: true,
+      get: () => ["ko-KR", "en-US"]
+    });
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      get: () => "ko-KR"
+    });
+  });
 }
 
 function expectRectNear(actual, expected, tolerance) {

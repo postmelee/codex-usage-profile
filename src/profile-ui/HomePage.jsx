@@ -7,6 +7,7 @@ import {
 } from "../profile-marketing/marketing-config.js";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import {
   buildAccountLoginHref,
@@ -15,7 +16,6 @@ import {
   getAccountLogin,
   getAccountOwner
 } from "./accountUi.js";
-import { resolveShareLocale } from "./cardShare.js";
 import {
   HOME_CARD_SOURCE_KINDS,
   HOME_CARD_TRANSITION_STATUSES,
@@ -40,10 +40,7 @@ export function HomePage({
 }) {
   const status = authState?.status ?? "loading";
   const owner = getAccountOwner(authState);
-  const locale = useMemo(
-    () => resolveShareLocale(globalThis.navigator?.language),
-    []
-  );
+  const { locale, t } = useLocale();
   const operatorCardSource = useMemo(() => createHomeCardSource({
     kind: HOME_CARD_SOURCE_KINDS.OPERATOR,
     src: buildMarketingOperatorCardUrl(HOME_MARKETING_CONFIG, locale)
@@ -88,10 +85,10 @@ export function HomePage({
       if (isCurrent) {
         setProfileState({ error: null, profile, status: "ready" });
       }
-    }).catch((error) => {
+    }).catch(() => {
       if (isCurrent) {
         setProfileState({
-          error: error instanceof Error ? error.message : "Card unavailable",
+          error: "home.cardUnavailable",
           profile: null,
           status: "error"
         });
@@ -256,9 +253,9 @@ export function HomePage({
           account: { ...authState.account, owner: nextProfile.owner }
         });
       }
-    } catch (error) {
+    } catch {
       setMutationState({
-        error: error instanceof Error ? error.message : "Card update failed",
+        error: "home.updateFailed",
         status: "error"
       });
     }
@@ -272,12 +269,12 @@ export function HomePage({
       onAuthStateChange={onAuthStateChange}
       pageHeading={false}
       showShare={false}
-      title="Codex Usage"
+      title={t("app.brand")}
     >
       <MarketingLanding
-        cardAlt={getHomeCardAlt(visibleCardSource)}
+        cardAlt={getHomeCardAlt(visibleCardSource, t)}
         cardBusy={cardLoading}
-        cardLoadingLabel="Loading card preview"
+        cardLoadingLabel={t("home.loadingCardPreview")}
         cardOverlay={showPersonalizedSample ? (
           <HomeSampleIdentity owner={owner} />
         ) : null}
@@ -344,8 +341,9 @@ function snapshotRect(rect) {
 }
 
 function HomeSampleIdentity({ owner }) {
-  const avatar = getAccountAvatar(owner);
-  const displayName = getAccountDisplayName(owner);
+  const { locale } = useLocale();
+  const avatar = getAccountAvatar(owner, locale);
+  const displayName = getAccountDisplayName(owner, locale);
   const login = getAccountLogin(owner);
 
   return (
@@ -374,8 +372,9 @@ function AuthenticatedHome({
   owner,
   profileState
 }) {
-  const avatar = getAccountAvatar(owner);
-  const displayName = getAccountDisplayName(owner);
+  const { locale, t } = useLocale();
+  const avatar = getAccountAvatar(owner, locale);
+  const displayName = getAccountDisplayName(owner, locale);
   const login = getAccountLogin(owner);
 
   return (
@@ -403,10 +402,12 @@ function AuthenticatedHome({
           profileStatus={profileState.status}
         />
         {mutationState.error ? (
-          <p className="home-status is-error" role="status">{mutationState.error}</p>
+          <p className="home-status is-error" role="status">{t(mutationState.error)}</p>
         ) : null}
         {profileState.status === "error" ? (
-          <p className="home-status is-error" role="status">Card unavailable</p>
+          <p className="home-status is-error" role="status">
+            {t("home.cardUnavailable")}
+          </p>
         ) : null}
       </div>
     </>
@@ -423,15 +424,29 @@ function HomeCardAction({
   ownerCardReady,
   profileStatus
 }) {
+  const { t } = useLocale();
+
   if (profileStatus === "loading" || profileStatus === "idle") {
-    return <button className="secondary-command" disabled type="button">Loading card</button>;
+    return (
+      <button className="secondary-command" disabled type="button">
+        {t("home.loadingCard")}
+      </button>
+    );
   }
   if (profileStatus === "error") return null;
   if (!hasUsage) {
-    return <button className="secondary-command" disabled type="button">Submit usage first</button>;
+    return (
+      <button className="secondary-command" disabled type="button">
+        {t("home.submitUsageFirst")}
+      </button>
+    );
   }
   if (!cardReady) {
-    return <button className="secondary-command" disabled type="button">Loading card</button>;
+    return (
+      <button className="secondary-command" disabled type="button">
+        {t("home.loadingCard")}
+      </button>
+    );
   }
 
   const isSubmitting = mutationStatus === "submitting";
@@ -443,34 +458,38 @@ function HomeCardAction({
         onClick={onShare}
         type="button"
       >
-        {ownerCardReady ? "Share" : "Card unavailable"}
+        {ownerCardReady ? t("common.share") : t("home.cardUnavailable")}
       </button>
     );
   }
 
   return (
     <button className="primary-command" disabled={isSubmitting} onClick={onPublish} type="button">
-      {isSubmitting ? "Publishing" : "Publish card"}
+      {isSubmitting ? t("home.publishing") : t("home.publishCard")}
     </button>
   );
 }
 
-function getHomeCardAlt(source) {
+function getHomeCardAlt(source, t) {
   if (source?.kind === HOME_CARD_SOURCE_KINDS.OWNER) {
-    return "Your Codex usage card";
+    return t("home.yourCardAlt");
   }
   if (source?.kind === HOME_CARD_SOURCE_KINDS.OPERATOR) {
-    return `Codex usage card for @${HOME_MARKETING_CONFIG.operatorCardHandle}`;
+    return t("home.operatorCardAlt", {
+      handle: HOME_MARKETING_CONFIG.operatorCardHandle
+    });
   }
-  return HOME_MARKETING_CONFIG.copy.sampleCardAlt;
+  return t("home.sampleCardAlt");
 }
 
 function AnonymousHome({ loginHref, status }) {
+  const { t } = useLocale();
+
   if (status === "loading") {
-    return <p className="home-status" role="status">Checking account</p>;
+    return <p className="home-status" role="status">{t("home.checkingAccount")}</p>;
   }
   if (status === "unavailable") {
-    return <p className="home-status is-error">Account unavailable</p>;
+    return <p className="home-status is-error">{t("home.accountUnavailable")}</p>;
   }
 
   return (
@@ -478,7 +497,7 @@ function AnonymousHome({ loginHref, status }) {
       className="primary-command"
       href={loginHref}
     >
-      Sign in with GitHub
+      {t("account.loginWithGitHub")}
     </a>
   );
 }

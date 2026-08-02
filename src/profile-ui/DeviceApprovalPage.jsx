@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CodexCheckCircleIcon } from "./Icons.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import {
   DEVICE_APPROVAL_ERROR_KIND,
   DEVICE_APPROVAL_UI_STATUS,
   classifyDeviceApprovalError,
   createDeviceApprovalGuidance,
-  getDeviceApprovalErrorMessage,
+  getDeviceApprovalErrorMessageId,
   normalizeDeviceApprovalResult
 } from "./deviceApproval.js";
 
@@ -17,11 +18,12 @@ export function DeviceApprovalPage({
   location = window.location,
   onAuthStateChange
 }) {
+  const { locale, t } = useLocale();
   const initialUserCode = useMemo(() => readDeviceUserCode(location), [location]);
   const [userCode, setUserCode] = useState(initialUserCode);
   const [approvalState, setApprovalState] = useState({
     copyStatus: "idle",
-    error: null,
+    errorId: null,
     result: null,
     status: DEVICE_APPROVAL_UI_STATUS.IDLE
   });
@@ -56,7 +58,8 @@ export function DeviceApprovalPage({
   const guidance = approvalState.result
     ? createDeviceApprovalGuidance(
       approvalState.result.intent,
-      location?.origin
+      location?.origin,
+      locale
     )
     : null;
 
@@ -77,7 +80,7 @@ export function DeviceApprovalPage({
     approvalInFlightRef.current = true;
     setApprovalState({
       copyStatus: "idle",
-      error: null,
+      errorId: null,
       result: null,
       status: DEVICE_APPROVAL_UI_STATUS.APPROVING
     });
@@ -88,7 +91,7 @@ export function DeviceApprovalPage({
       );
       setApprovalState({
         copyStatus: "idle",
-        error: null,
+        errorId: null,
         result,
         status: DEVICE_APPROVAL_UI_STATUS.APPROVED
       });
@@ -96,7 +99,7 @@ export function DeviceApprovalPage({
       const { kind } = classifyDeviceApprovalError(error);
       setApprovalState({
         copyStatus: "idle",
-        error: getDeviceApprovalErrorMessage(error, kind),
+        errorId: getDeviceApprovalErrorMessageId(error, kind),
         result: null,
         status: kind === DEVICE_APPROVAL_ERROR_KIND.RETRYABLE
           ? DEVICE_APPROVAL_UI_STATUS.RETRYABLE_ERROR
@@ -112,7 +115,7 @@ export function DeviceApprovalPage({
     if (hasApprovalError) {
       setApprovalState({
         copyStatus: "idle",
-        error: null,
+        errorId: null,
         result: null,
         status: DEVICE_APPROVAL_UI_STATUS.IDLE
       });
@@ -144,15 +147,13 @@ export function DeviceApprovalPage({
       onAuthStateChange={onAuthStateChange}
       pageHeading={false}
       showShare={false}
-      title="Authorize device"
+      title={t("device.title")}
     >
       <section className="device-view" data-auth-status={authStatus}>
         <section className="device-panel" aria-labelledby="device-title">
           <header className="device-header">
-            <h1 id="device-title">Authorize device</h1>
-            <p>
-              Enter the code shown in your terminal to connect the CLI.
-            </p>
+            <h1 id="device-title">{t("device.title")}</h1>
+            <p>{t("device.description")}</p>
           </header>
 
           <form
@@ -160,7 +161,7 @@ export function DeviceApprovalPage({
             className="device-form"
             onSubmit={handleSubmit}
           >
-            <label htmlFor="device-user-code">User code</label>
+            <label htmlFor="device-user-code">{t("device.userCode")}</label>
             <input
               aria-describedby={hasApprovalError ? "device-approval-error" : undefined}
               aria-invalid={hasApprovalError ? "true" : undefined}
@@ -177,20 +178,22 @@ export function DeviceApprovalPage({
             />
 
             <p className="device-security-note">
-              Only approve a code you requested from the Codex Usage Profile CLI.
+              {t("device.securityNote")}
             </p>
 
             {authStatus === "loading" ? (
-              <p className="device-status">Checking signed-in account.</p>
+              <p className="device-status">{t("settings.state.loading.message")}</p>
             ) : null}
 
             {authStatus === "unavailable" ? (
-              <p className="device-status is-error">Signed-in account unavailable.</p>
+              <p className="device-status is-error">
+                {t("settings.state.unavailable.message")}
+              </p>
             ) : null}
 
             {authStatus === "anonymous" ? (
               <a className="device-primary-action" href={loginHref}>
-                Sign in with GitHub
+                {t("account.loginWithGitHub")}
               </a>
             ) : (
               <button
@@ -201,16 +204,16 @@ export function DeviceApprovalPage({
                 {isApproved ? (
                   <>
                     <CodexCheckCircleIcon />
-                    <span>Device approved</span>
+                    <span>{t("device.approved")}</span>
                   </>
                 ) : isApproving ? (
-                  "Approving…"
+                  t("device.approving")
                 ) : isRetryableError ? (
-                  "Retry approval"
+                  t("device.retry")
                 ) : isTerminalError ? (
-                  "Enter a new code"
+                  t("device.enterNewCode")
                 ) : (
-                  "Approve device"
+                  t("device.approve")
                 )}
               </button>
             )}
@@ -221,12 +224,12 @@ export function DeviceApprovalPage({
                 aria-live="polite"
               >
                 {isApproving ? (
-                  <p className="device-status">Approving device.</p>
+                  <p className="device-status">{t("device.approvingStatus")}</p>
                 ) : null}
 
                 {isApproved && guidance ? (
                   <section
-                    aria-label="Device authorization complete"
+                    aria-label={t("device.authorizationComplete")}
                     className="device-success"
                   >
                     <p className="device-status is-success">{guidance.message}</p>
@@ -241,25 +244,25 @@ export function DeviceApprovalPage({
                             onClick={handleCopyCommand}
                             type="button"
                           >
-                            Copy command
+                            {t("device.copyCommand")}
                           </button>
                         </div>
                         <p className="device-copy-status">
                           {approvalState.copyStatus === "copied"
-                            ? "Command copied."
+                            ? t("device.commandCopied")
                             : approvalState.copyStatus === "failed"
-                              ? "Copy failed. Select the command and copy it manually."
+                              ? t("device.copyFailed")
                               : ""}
                         </p>
                       </>
                     ) : null}
 
                     <nav
-                      aria-label="Device authorization complete"
+                      aria-label={t("device.authorizationComplete")}
                       className="device-success-links"
                     >
-                      <a href="/">Home</a>
-                      <a href="/profile">Profile</a>
+                      <a href="/">{t("common.nav.home")}</a>
+                      <a href="/profile">{t("common.nav.profile")}</a>
                     </nav>
                   </section>
                 ) : null}
@@ -271,13 +274,13 @@ export function DeviceApprovalPage({
                   id="device-approval-error"
                   role="alert"
                 >
-                  {approvalState.error}
+                  {t(approvalState.errorId)}
                 </p>
               ) : null}
             </div>
 
             <a className="device-help-link" href="/#quickstart">
-              View setup guide
+              {t("device.viewSetupGuide")}
             </a>
           </form>
         </section>
