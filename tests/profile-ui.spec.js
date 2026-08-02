@@ -243,6 +243,11 @@ test.describe("Stage 4 locale contract", () => {
       "Only approve a code you requested from the Codex Usage Profile CLI."
     )).toBeVisible();
 
+    await page.unroute("**/api/profile");
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
     await page.goto("/profile");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
