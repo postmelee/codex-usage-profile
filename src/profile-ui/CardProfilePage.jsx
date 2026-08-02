@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { Icon } from "./Icons.jsx";
@@ -96,6 +97,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
           client={client}
           hasUsage={hasUsage}
           isPublic={isPublic}
+          locale={locale}
           mutationState={mutationState}
           onVisibilityChange={updateVisibility}
           previewUrl={previewUrl}
@@ -141,36 +143,43 @@ function CardProfileContent(props) {
 
   return (
     <div className="card-profile-stage">
-      <header className="card-profile-heading">
-        <div>
-          <h1 id="card-profile-title">Your Codex card</h1>
+      <AccountUsageProfile
+        headingId="card-profile-title"
+        locale={props.locale}
+        owner={props.profile.owner}
+        usage={props.profile.usage}
+      />
+
+      <section className="profile-card-section" aria-labelledby="owner-card-title">
+        <header className="card-profile-heading">
+          <h2 id="owner-card-title">Your Codex card</h2>
           <span className={`visibility-status is-${props.isPublic ? "public" : "private"}`}>
             {props.isPublic ? "Public" : "Private"}
           </span>
+        </header>
+
+        <img
+          alt="Your Codex usage card"
+          className="card-profile-preview"
+          height="612"
+          src={props.previewUrl}
+          width="998"
+        />
+
+        <div className="card-profile-controls">
+          <button
+            className={props.isPublic ? "secondary-command" : "primary-command"}
+            disabled={props.mutationState.status === "submitting"}
+            onClick={() => props.onVisibilityChange(props.isPublic ? "private" : "public")}
+            type="button"
+          >
+            {getVisibilityActionLabel(props.isPublic, props.mutationState.status)}
+          </button>
         </div>
-      </header>
-
-      <img
-        alt="Your Codex usage card"
-        className="card-profile-preview"
-        height="612"
-        src={props.previewUrl}
-        width="998"
-      />
-
-      <div className="card-profile-controls">
-        <button
-          className={props.isPublic ? "secondary-command" : "primary-command"}
-          disabled={props.mutationState.status === "submitting"}
-          onClick={() => props.onVisibilityChange(props.isPublic ? "private" : "public")}
-          type="button"
-        >
-          {getVisibilityActionLabel(props.isPublic, props.mutationState.status)}
-        </button>
-      </div>
-      {props.mutationState.error ? (
-        <p className="card-profile-error">{props.mutationState.error}</p>
-      ) : null}
+        {props.mutationState.error ? (
+          <p className="card-profile-error">{props.mutationState.error}</p>
+        ) : null}
+      </section>
     </div>
   );
 }

@@ -1,4 +1,8 @@
+import { useMemo } from "react";
+
+import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { resolveShareLocale } from "./cardShare.js";
 
 export function PublicProfilePage({
   authState,
@@ -7,6 +11,11 @@ export function PublicProfilePage({
   profile,
   status
 }) {
+  const locale = useMemo(
+    () => resolveShareLocale(globalThis.navigator?.language),
+    []
+  );
+
   return (
     <ProfileShell
       authState={authState}
@@ -19,7 +28,7 @@ export function PublicProfilePage({
     >
       <section className="public-profile-view" aria-label="Public Codex profile">
         {status === "ready" && profile ? (
-          <ReadyPublicProfile profile={profile} />
+          <ReadyPublicProfile locale={locale} profile={profile} />
         ) : (
           <PublicProfileState status={status} />
         )}
@@ -28,29 +37,34 @@ export function PublicProfilePage({
   );
 }
 
-function ReadyPublicProfile({ profile }) {
+function ReadyPublicProfile({ locale, profile }) {
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
-  const githubLogin = owner.githubLogin || owner.handle;
 
   return (
     <div className="public-profile-stage">
-      <header className="public-profile-heading">
-        <div>
-          <h1 id="public-profile-title">Codex card for {displayName}</h1>
-          <p>@{githubLogin}</p>
-        </div>
-        <span className="visibility-status is-public">Public</span>
-      </header>
-
-      <img
-        alt={`Codex usage card for ${displayName}`}
-        aria-describedby="public-profile-title"
-        className="public-profile-card"
-        height="612"
-        src={profile.publicCardUrl}
-        width="998"
+      <AccountUsageProfile
+        headingId="public-profile-title"
+        locale={locale}
+        owner={owner}
+        usage={profile.usage}
       />
+
+      <section className="profile-card-section" aria-labelledby="public-card-title">
+        <header className="card-profile-heading">
+          <h2 id="public-card-title">Shared Codex card</h2>
+          <span className="visibility-status is-public">Public</span>
+        </header>
+
+        <img
+          alt={`Codex usage card for ${displayName}`}
+          aria-describedby="public-profile-title"
+          className="public-profile-card"
+          height="612"
+          src={profile.publicCardUrl}
+          width="998"
+        />
+      </section>
     </div>
   );
 }

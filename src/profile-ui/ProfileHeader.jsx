@@ -1,14 +1,19 @@
 import { useState } from "react";
 
-export function ProfileHeader({ header }) {
+export function ProfileHeader({
+  header,
+  headingId,
+  headingLevel = 2
+}) {
   const displayName = header.displayName ?? "Codex user";
   const username = header.username ? `@${header.username}` : "@profile";
+  const Heading = headingLevel === 1 ? "h1" : "h2";
 
   return (
     <header className="profile-header">
       <ProfileAvatar asset={header.avatarAsset} displayName={displayName} />
       <div className="profile-heading">
-        <h2>{displayName}</h2>
+        <Heading id={headingId}>{displayName}</Heading>
         <p>
           <span>{username}</span>
           {header.planLabel ? <span className="plan-pill">{header.planLabel}</span> : null}

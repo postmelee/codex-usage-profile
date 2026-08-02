@@ -18,12 +18,15 @@ const PUBLIC_PROFILE = Object.freeze({
     capturedAt: "2026-07-14T00:00:00.000Z",
     uploadedAt: "2026-07-14T00:01:00.000Z",
     usage: {
-      dailyUsageBuckets: [],
+      dailyUsageBuckets: [
+        { startDate: "2026-07-13", tokens: 50_000_000 },
+        { startDate: "2026-07-14", tokens: 100_000_000 }
+      ],
       summary: {
         currentStreakDays: 10,
         lifetimeTokens: 15_090_000_000,
         longestStreakDays: 49,
-        longestTaskDurationMs: 6_780_000,
+        longestRunningTurnSec: 6_780,
         peakDailyTokens: 700_000_000
       }
     }
@@ -108,7 +111,24 @@ test("maps missing, private, invalid, and failed responses to one unavailable st
   const responses = [
     null,
     { ...PUBLIC_PROFILE, visibility: "private" },
-    { ...PUBLIC_PROFILE, publicCardUrl: null }
+    { ...PUBLIC_PROFILE, publicCardUrl: null },
+    {
+      ...PUBLIC_PROFILE,
+      usage: {
+        ...PUBLIC_PROFILE.usage,
+        capturedAt: "not-a-timestamp"
+      }
+    },
+    {
+      ...PUBLIC_PROFILE,
+      usage: {
+        ...PUBLIC_PROFILE.usage,
+        usage: {
+          ...PUBLIC_PROFILE.usage.usage,
+          dailyUsageBuckets: [{ startDate: "2026-07-14", tokens: -1 }]
+        }
+      }
+    }
   ];
 
   for (const profile of responses) {

@@ -10,6 +10,12 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
+const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
+  Object.freeze({ startDate: "2026-06-01", tokens: 50_000_000 }),
+  Object.freeze({ startDate: "2026-06-04", tokens: 50_000_000 }),
+  Object.freeze({ startDate: "2026-06-07", tokens: 25_000_000 }),
+  Object.freeze({ startDate: "2026-06-11", tokens: 100_000_000 })
+]);
 const AUTH_OWNER = Object.freeze({
   avatarUrl: "/assets/postmelee-avatar.png",
   displayName: "postmelee",
@@ -2034,7 +2040,9 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
     await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1, name: "Your Codex card" }))
+    await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Your Codex card" }))
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
 
@@ -2048,6 +2056,65 @@ test.describe("Profile and Settings canvases", () => {
     await expect(dialog).toBeHidden();
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
     await expect(shareButton).toBeFocused();
+  });
+
+  test("Token activity owner supports daily hover and keyboard roving", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("private"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    const grid = page.getByRole("grid", { name: "Daily token activity" });
+    await expect(grid).toBeVisible();
+    await expect(grid.locator(".token-cell")).toHaveCount(364);
+
+    const latest = grid.locator('[data-date="2026-06-11"]');
+    await expect(latest).toHaveAttribute("tabindex", "0");
+    await latest.hover();
+    const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toHaveText(
+      "June 11, 2026 · 100M tokens (100,000,000)"
+    );
+    await expect(tooltip).toHaveAttribute("data-positioned", "true");
+
+    await latest.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(grid.locator('[data-date="2026-06-04"]')).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(tooltip).toHaveCount(0);
+  });
+
+  test("Profile heatmap switches weekly and cumulative without duplicate targets", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("private"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    await page.getByRole("button", { name: "Weekly" }).click();
+    const weeklyGrid = page.getByRole("grid", { name: "Weekly token activity" });
+    await expect(weeklyGrid.getByRole("gridcell")).toHaveCount(52);
+    const currentWeek = weeklyGrid.locator('[data-start-date="2026-06-07"]');
+    await currentWeek.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Jun 7, 2026–Jun 11, 2026 · 125M tokens (125,000,000)"
+    );
+
+    await page.getByRole("button", { name: "Cumulative" }).click();
+    const cumulativeGrid = page.getByRole("grid", {
+      name: "Cumulative token activity"
+    });
+    await expect(cumulativeGrid.getByRole("gridcell")).toHaveCount(52);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await cumulativeGrid.locator('[data-start-date="2026-06-07"]').hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Through June 11, 2026 · 225M tokens (225,000,000)"
+    );
   });
 
   test("owner Profile loading, empty, and error states keep one visual heading", async ({ page }) => {
@@ -2272,7 +2339,7 @@ test.describe("Public profile", () => {
 
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "Codex card for Post Melee"
+      name: "Post Melee"
     }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
@@ -2291,7 +2358,9 @@ test.describe("Public profile", () => {
 
     await expect(page.getByText("Activity insights", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Most used plugins", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Token activity", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Token activity", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Shared Codex card" }))
+      .toBeVisible();
     const publicMarkup = await page.locator(".public-profile-view").innerHTML();
     for (const internalValue of [
       "owner_1",
@@ -2327,6 +2396,30 @@ test.describe("Public profile", () => {
     await page.screenshot({ path: testInfo.outputPath("public-profile-mobile.png") });
   });
 
+  test("Profile heatmap public touch toggles and stays inside mobile page", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(PROFILE_ROUTE);
+
+    const target = page.getByRole("grid", { name: "Daily token activity" })
+      .locator('[data-date="2026-06-11"]');
+    await target.dispatchEvent("pointerdown", { pointerType: "touch" });
+    await target.dispatchEvent("pointerup", { pointerType: "touch" });
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "June 11, 2026 · 100M tokens (100,000,000)"
+    );
+
+    await page.locator(".profile-topbar").dispatchEvent("pointerdown", {
+      pointerType: "touch"
+    });
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+  });
+
   test("public profile moves from a neutral loading state to ready", async ({ page }) => {
     await mockAnonymousAccount(page);
     let releaseResponse;
@@ -2351,7 +2444,7 @@ test.describe("Public profile", () => {
     releaseResponse();
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "Codex card for Post Melee"
+      name: "Post Melee"
     }))
       .toBeVisible();
   });
@@ -2664,16 +2757,16 @@ function publicProfile() {
     },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
     usage: {
-      capturedAt: "2026-07-14T00:00:00.000Z",
-      uploadedAt: "2026-07-14T00:01:00.000Z",
+      capturedAt: "2026-06-11T00:00:00.000Z",
+      uploadedAt: "2026-06-11T00:01:00.000Z",
       usage: {
-        dailyUsageBuckets: [],
+        dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
         summary: {
-          currentStreakDays: 10,
-          lifetimeTokens: 15_090_000_000,
+          currentStreakDays: 5,
+          lifetimeTokens: 250_000_000,
           longestStreakDays: 49,
-          longestTaskDurationMs: 6_780_000,
-          peakDailyTokens: 700_000_000
+          longestRunningTurnSec: 6_030,
+          peakDailyTokens: 100_000_000
         }
       }
     },
@@ -2685,7 +2778,20 @@ function ownerProfile(visibility) {
   return {
     owner: { ...AUTH_OWNER, visibility },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
-    usage: { uploadedAt: "2026-06-11T00:01:00.000Z" },
+    usage: {
+      capturedAt: "2026-06-11T00:00:00.000Z",
+      uploadedAt: "2026-06-11T00:01:00.000Z",
+      usage: {
+        dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
+        summary: {
+          currentStreakDays: 5,
+          lifetimeTokens: 250_000_000,
+          longestRunningTurnSec: 6_030,
+          longestStreakDays: 49,
+          peakDailyTokens: 100_000_000
+        }
+      }
+    },
     visibility
   };
 }
