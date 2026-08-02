@@ -15,7 +15,7 @@ export function ProfileHeader({
 
   return (
     <header className="profile-header">
-      <ProfileAvatar asset={header.avatarAsset} displayName={displayName} />
+      <ProfileAvatar asset={header.avatarAsset} />
       <div className="profile-heading">
         <Heading id={headingId}>{displayName}</Heading>
         <p>
@@ -27,25 +27,20 @@ export function ProfileHeader({
   );
 }
 
-function ProfileAvatar({ asset, displayName }) {
-  const { t } = useLocale();
+function ProfileAvatar({ asset }) {
   const [hasImageError, setHasImageError] = useState(false);
   const shouldUseImage = Boolean(asset?.url) && !hasImageError;
 
   return (
-    <div className="avatar-shell">
+    <div aria-hidden="true" className="avatar-shell">
       {shouldUseImage ? (
         <img
-          alt={t("account.avatarAlt", { name: displayName })}
+          alt=""
           onError={() => setHasImageError(true)}
           src={asset.url}
         />
       ) : (
-        <div
-          aria-label={t("account.avatarAlt", { name: displayName })}
-          className="avatar-fallback"
-          role="img"
-        >
+        <div className="avatar-fallback">
           <span className="avatar-face avatar-face-top" />
           <span className="avatar-face avatar-face-mouth" />
           <span className="avatar-face avatar-face-teeth" />

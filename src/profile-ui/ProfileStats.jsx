@@ -1,8 +1,8 @@
 import { formatStatValue } from "./formatters.js";
 import { useLocale } from "./LocaleProvider.jsx";
 
-export function ProfileStats({ locale = "en", stats }) {
-  const { t } = useLocale();
+export function ProfileStats({ stats }) {
+  const { locale, t } = useLocale();
 
   return (
     <dl className="profile-stats" aria-label={t("profile.stats.label")}>

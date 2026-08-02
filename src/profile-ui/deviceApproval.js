@@ -1,3 +1,5 @@
+import { formatMessage } from "./i18n.js";
+
 export const DEVICE_APPROVAL_UI_STATUS = Object.freeze({
   IDLE: "idle",
   APPROVING: "approving",
@@ -164,4 +166,3 @@ function invalidApprovalResult() {
   error.status = 400;
   return error;
 }
-import { formatMessage } from "./i18n.js";

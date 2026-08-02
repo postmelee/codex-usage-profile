@@ -4,7 +4,7 @@ import { TokenActivityChart } from "./TokenActivityChart.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 
 export function AccountUsageProfile({ headingId, owner, usage }) {
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const summary = usage.usage.summary;
 
   return (
@@ -44,7 +44,7 @@ export function AccountUsageProfile({ headingId, owner, usage }) {
           label: t("profile.stat.longestStreak"),
           value: summary.longestStreakDays
         }
-      ]} locale={locale} />
+      ]} />
       <TokenActivityChart
         capturedAt={usage.capturedAt}
         dailyUsageBuckets={usage.usage.dailyUsageBuckets}

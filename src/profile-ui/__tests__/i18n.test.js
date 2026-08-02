@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   formatLocalizedDate,
@@ -13,6 +16,12 @@ import {
   syncDocumentLocale
 } from "../i18n.js";
 import { MESSAGE_CATALOGS, getMessageIds } from "../messages.js";
+
+const SOURCE_ROOT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  ".."
+);
 
 test("locale matching normalizes supported English and Korean tags", () => {
   assert.equal(matchSupportedLocale("en-US"), "en");
@@ -66,6 +75,34 @@ test("message catalogs have matching ids and never expose unknown ids", () => {
   );
 });
 
+test("message catalogs keep placeholder tokens aligned", () => {
+  for (const id of getMessageIds("en")) {
+    assert.deepEqual(
+      getPlaceholderTokens(MESSAGE_CATALOGS.ko[id]),
+      getPlaceholderTokens(MESSAGE_CATALOGS.en[id]),
+      `${id} must use the same placeholders in English and Korean`
+    );
+  }
+});
+
+test("literal message ids referenced by source files exist in the catalog", async () => {
+  const knownIds = new Set(getMessageIds("en"));
+  const missingReferences = [];
+
+  for (const filePath of await collectSourceFiles(SOURCE_ROOT)) {
+    const source = await readFile(filePath, "utf8");
+    for (const messageId of findLiteralMessageIds(source)) {
+      if (!knownIds.has(messageId)) {
+        missingReferences.push(
+          `${relative(SOURCE_ROOT, filePath)}:${messageId}`
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(missingReferences.sort(), []);
+});
+
 test("number and date formatters use the resolved locale", () => {
   assert.equal(formatLocalizedNumber(1_234_567, "en"), "1,234,567");
   assert.equal(formatLocalizedNumber(1_234_567, "ko"), "1,234,567");
@@ -117,3 +154,42 @@ test("languagechange subscription resolves the latest browser language", () => {
 
   assert.deepEqual(observed, ["ko"]);
 });
+
+async function collectSourceFiles(directory) {
+  const files = [];
+
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.name === "__tests__") continue;
+
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectSourceFiles(entryPath));
+    } else if (entry.isFile() && /\.(?:js|jsx)$/.test(entry.name)) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+}
+
+function findLiteralMessageIds(source) {
+  const ids = [];
+  const patterns = [
+    /\bt\(\s*["']([^"']+)["']/g,
+    /\bformatMessage\(\s*(?:[A-Za-z_$][\w$]*|["'][^"']*["'])\s*,\s*["']([^"']+)["']/g
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) ids.push(match[1]);
+  }
+
+  return ids;
+}
+
+function getPlaceholderTokens(message) {
+  return [...new Set(
+    Array.from(String(message).matchAll(/\{([a-z][a-z\d_]*)\}/gi), (match) => (
+      match[1]
+    ))
+  )].sort();
+}

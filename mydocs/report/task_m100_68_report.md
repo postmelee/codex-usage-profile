@@ -24,7 +24,7 @@ catalog·formatter·React Provider를 구현했다. `ko-*` 브라우저는 한�
 | `src/main.jsx`, `src/profile-marketing/sites-entry.jsx` | 첫 React 렌더 전에 locale을 결정하고 같은 값으로 Provider 초기화 | 초기 언어 깜빡임 방지, product/Sites 진입점 일치 |
 | `src/profile-ui/*.jsx`, `src/profile-marketing/MarketingLanding.jsx` | Home, menu/shell, Settings, device approval, owner/public Profile, heatmap, Share Studio 문구 이관 | visible text, loading·empty·error, 버튼·tooltip·ARIA |
 | `src/profile-ui/accountUi.js`, `deviceApproval.js`, `formatters.js`, `heatmap.js`, `cardShare.js`, `shareStudio.js` | 공통 locale adapter와 날짜·숫자·token·기간 formatter 연결 | 순수 helper API와 카드/share locale 계약 유지 |
-| `src/profile-ui/__tests__/*.test.js`, `src/profile-marketing/__tests__/*.test.js`, `tests/profile-ui.spec.js` | en/ko/fallback, catalog parity, formatter, 전체 활성 route와 동적 언어 변경 회귀 검증 | 단위·통합·접근성·E2E 안전망 |
+| `src/profile-ui/__tests__/*.test.js`, `src/profile-marketing/__tests__/*.test.js`, `tests/profile-ui.spec.js` | en/ko/fallback, catalog·placeholder·literal ID parity, formatter, 전체 활성 route와 동적 언어 변경 회귀 검증 | 단위·통합·접근성·E2E 안전망 |
 | `src/styles.css` | owner Profile 상태 안내를 기존 content 상단 기준선에 정렬 | anonymous/loading/unavailable/empty 상태의 시각 일관성 |
 | `mydocs/plans/`, `mydocs/working/`, `mydocs/report/`, `mydocs/orders/`의 Task #68 문서 | 승인 범위, 단계 결과, 통합 검증과 잔여 위험 기록 | Hyper-Waterfall 작업 추적 |
 
@@ -49,7 +49,7 @@ card renderer, package·lockfile, static asset과 `.openai/hosting.json`은 변�
 | React locale bootstrap | 없음 | product·Sites 2개 entry에서 mount 전 동기화 |
 | 동적 브라우저 언어 반영 | 없음 | `languagechange`에서 UI·formatter·`html lang` 동시 갱신 |
 | 전체 E2E | Task 시작 전 46건 | 56/56 통과 |
-| 전체 Node 검증 | Task 시작 전 540건 | 550건 중 544 통과·환경 의존 6 skip·실패 0 |
+| 전체 Node 검증 | Task 시작 전 540건 | 552건 중 546 통과·환경 의존 6 skip·실패 0 |
 | 변경량 | 해당 없음 | 43개 파일, +2,834/-507줄 |
 
 ## 검증 결과
@@ -58,7 +58,7 @@ card renderer, package·lockfile, static asset과 `.openai/hosting.json`은 변�
 |---|---|
 | `ko-KR`에서 활성 UI와 접근성 문자열이 한국어로 일치 | OK — Home, Sites onboarding, Settings, device approval, owner/public Profile, heatmap, Share Studio E2E 통과 |
 | `en-US`와 미지원 locale이 영어와 안전한 fallback 사용 | OK — `ja-JP`/`fr-FR`로 모든 활성 route를 순회하고 영어 문구·`html lang=en` 확인 |
-| message key 누락·빈 값·ID 직접 노출 방지 | OK — 영어·한국어 230 ID parity, 문자열·비어 있지 않음, unknown ID generic fallback 단위 테스트 통과 |
+| message key 누락·빈 값·ID 직접 노출 방지 | OK — 영어·한국어 230 ID parity, placeholder parity, `src/` literal ID 존재, 문자열·비어 있지 않음, unknown ID generic fallback 단위 테스트 통과 |
 | 브라우저 언어 변경 시 UI·formatter·문서 언어 동기화 | OK — Profile 문구, compact token, 날짜 tooltip, 카드 URL과 `<html lang>` 동시 변경 확인 |
 | heatmap·summary·Share Studio·card/share locale 일치 | OK — 영어 기본과 한국어 `?locale=ko`, exact token, 날짜·월, 공유 URL E2E 통과 |
 | 고유명사·사용자 데이터·CLI 명령 유지 | OK — Codex/GitHub/README/소셜 서비스명, owner identity, submit 명령 계약 유지 |
@@ -82,13 +82,25 @@ card renderer, package·lockfile, static asset과 `.openai/hosting.json`은 변�
 
 최종 통합 검증 결과:
 
-- `npm test`: 550건 중 544 통과, 환경 의존 6건 skip, 실패 0
+- `npm test -- --test-concurrency=1`: 552건 중 546 통과, 환경 의존 6건 skip, 실패 0
 - `npm run test:e2e`: 56/56 통과
 - `npm run build`: 1,819 modules transformed
 - `npm run build:sites`: 25 modules transformed
 - `npm run build:production`: server 48·client 1,819 modules transformed
 - `npm run verify:sites-fullstack`: `ok: true`
 - `npm run verify:sites-production`: `ok: true`, artifact 5,602,286 bytes
+
+### PR #70 리뷰 보정
+
+- `deviceApproval.js`의 locale helper import를 모듈 상단으로 정렬했다.
+- Profile identity 바로 앞의 아바타는 장식 요소이므로 `aria-hidden="true"`와 빈 `alt`를
+  복원해 display name 중복 낭독을 제거했다.
+- `ProfileStats`가 별도 `locale` prop 대신 공통 `LocaleProvider`의 `locale`과 `t`를 함께
+  사용하도록 통합해 비활성 호출 경로도 영어 기본값으로 되돌아가지 않게 했다.
+- 영어·한국어 placeholder 집합과 runtime source의 literal message ID를 자동 검사하는
+  단위 테스트를 추가했다.
+- 보정 후 변경 영역 단위 테스트 73/73, 전체 Node 546 pass·6 skip·0 fail,
+  Playwright 56/56과 `git diff --check`를 통과했다.
 
 ## 잔여 위험과 후속 작업
 
@@ -97,8 +109,9 @@ card renderer, package·lockfile, static asset과 `.openai/hosting.json`은 변�
 - 영어·한국어 외 browser locale은 승인된 정책에 따라 영어로 fallback한다.
 - PostgreSQL `TEST_DATABASE_URL` 미설정 5건과 S3 `TEST_S3_*` 미설정 1건은 외부
   통합 환경에서만 실행되며 이번 frontend locale 변경 경로와 무관하다.
-- 비활성 `src/profile-ui/ProfilePage.jsx`의 이전 raw 문구는 활성 import graph에 없어서
-  변경하지 않았다. 다시 사용하려면 공통 Provider·catalog 계약을 먼저 적용해야 한다.
+- 비활성 `src/profile-ui/ProfilePage.jsx`의 `ProfileStats`는 공통 locale 계약을 따르지만,
+  이전 raw 상태 문구는 활성 import graph에 없어서 변경하지 않았다. 다시 사용하려면 해당
+  상태 문구를 catalog에 먼저 이관해야 한다.
 - production Sites에 배포하지 않았으므로 실제 호스팅 반영은 별도 승인된 배포 절차가 필요하다.
 
 ### 후속 작업 후보

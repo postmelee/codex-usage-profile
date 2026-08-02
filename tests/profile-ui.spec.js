@@ -121,6 +121,8 @@ test.describe("Stage 3 locale surfaces", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "ko");
     await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
       .toBeVisible();
+    await expect(page.locator(".profile-header .avatar-shell"))
+      .toHaveAttribute("aria-hidden", "true");
     await expect(page.getByText("누적 토큰", { exact: true })).toBeVisible();
     await expect(page.getByText("2.5억", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "내 Codex 카드" }))
