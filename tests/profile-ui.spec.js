@@ -146,6 +146,12 @@ test.describe("Stage 3 locale surfaces", () => {
       .toBeVisible();
     await expect(page.getByText("Lifetime tokens", { exact: true })).toBeVisible();
     await expect(page.getByText("250M", { exact: true })).toBeVisible();
+    await page.getByRole("grid", { name: "Daily token activity" })
+      .locator('[data-date="2026-06-11"]')
+      .hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "June 11, 2026 · 100M tokens"
+    );
     const englishCard = page.getByRole("img", { name: "Your Codex usage card" });
     await expect(englishCard).not.toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
   });
@@ -199,6 +205,77 @@ test.describe("Stage 3 locale surfaces", () => {
     );
     await expect(dialog.getByRole("button", { name: "공유 스튜디오 닫기" }))
       .toBeVisible();
+  });
+});
+
+test.describe("Stage 4 locale contract", () => {
+  test("unsupported browser locale falls back to English across active routes", async ({ page }) => {
+    await useUnsupportedLocale(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { name: "Codex Usage Profile" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quickstart" })).toBeVisible();
+
+    await page.goto("/settings");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "GitHub account" }))
+      .toBeVisible();
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
+      .toBeVisible();
+    await expect(page.getByText(
+      "Only approve a code you requested from the Codex Usage Profile CLI."
+    )).toBeVisible();
+
+    await page.goto("/profile");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share", exact: true })
+      .click();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+
+    await mockPublicProfile(page);
+    await page.goto(PROFILE_ROUTE);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator('section[aria-label="Public Codex profile"]'))
+      .toBeVisible();
+    await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
+    await expect(page.getByText("Session cookie is required", { exact: true }))
+      .toHaveCount(0);
+  });
+
+  test("public profile uses the Korean catalog without mixed accessible labels", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
+      .toBeVisible();
+    await expect(page.locator('dl[aria-label="사용량 요약"]')).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "공유된 Codex 카드" }))
+      .toBeVisible();
+    await expect(page.getByText("Profile stats", { exact: true })).toHaveCount(0);
   });
 });
 
@@ -2737,6 +2814,19 @@ async function useKoreanLocale(page) {
     Object.defineProperty(navigator, "language", {
       configurable: true,
       get: () => "ko-KR"
+    });
+  });
+}
+
+async function useUnsupportedLocale(page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", {
+      configurable: true,
+      get: () => ["ja-JP", "fr-FR"]
+    });
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      get: () => "ja-JP"
     });
   });
 }

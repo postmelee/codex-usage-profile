@@ -46,6 +46,12 @@ test("browser locale uses the first supported language and safe fallbacks", () =
 test("message catalogs have matching ids and never expose unknown ids", () => {
   assert.deepEqual(getMessageIds("ko"), getMessageIds("en"));
   assert.ok(Object.isFrozen(MESSAGE_CATALOGS));
+  for (const [locale, catalog] of Object.entries(MESSAGE_CATALOGS)) {
+    for (const [id, message] of Object.entries(catalog)) {
+      assert.equal(typeof message, "string", `${locale}:${id} must be a string`);
+      assert.notEqual(message.trim(), "", `${locale}:${id} must not be empty`);
+    }
+  }
   assert.equal(
     formatMessage("ko-KR", "common.error.actionFailed", { action: "복사" }),
     "복사 작업을 완료하지 못했습니다."
