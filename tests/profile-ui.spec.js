@@ -2042,6 +2042,7 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
       .toBeVisible();
+    await expect(page.locator(".profile-heading")).toHaveCSS("text-align", "center");
     await expect(page.getByRole("heading", { level: 2, name: "Your Codex card" }))
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
@@ -2369,6 +2370,7 @@ test.describe("Public profile", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
     await expect(page.getByText("@postmelee", { exact: true })).toBeVisible();
+    await expect(page.locator(".profile-heading")).toHaveCSS("text-align", "center");
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
 

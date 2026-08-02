@@ -70,6 +70,20 @@ git status --short
 - OK — 제한 경로 diff 빈 출력
 - OK — 변경 파일은 승인된 Stage 5 계획·Profile UI·스타일·테스트·보고서 범위로 한정
 
+### Stage 5.1 후속 UI 확인 보정
+
+작업지시자의 local 화면 확인에 따라 공용 `.profile-heading`의 이름과 `@계정명`을
+프로필 이미지와 동일한 중앙축으로 정렬했다. owner/public 양쪽에서 같은 공용 헤더를
+사용하는지 다음 회귀 검증으로 확인했다.
+
+```bash
+npm run test:e2e -- --grep "owner Profile keeps Share Studio|public profile renders the API-backed"
+git diff --check
+```
+
+- OK — owner/public Profile 대표 E2E 2건 통과
+- OK — 두 화면 모두 `.profile-heading`의 computed `text-align: center` 확인
+
 ## 잔여 위험
 
 - PostgreSQL과 S3 외부 endpoint 검증은 `TEST_DATABASE_URL`, `TEST_S3_*`가 없어 기존
