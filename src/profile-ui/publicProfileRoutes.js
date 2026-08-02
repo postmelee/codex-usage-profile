@@ -1,3 +1,5 @@
+import { isAccountUsageReadResult } from "../profile-card/account-usage.js";
+
 export function resolvePublicProfileRoute(location) {
   const pathname = normalizePathname(location?.pathname);
   const rootHandle = pathname === "/"
@@ -71,8 +73,17 @@ function isPublicProfile(profile) {
     profile.publicCardUrl !== "" &&
     profile.owner &&
     typeof profile.owner.handle === "string" &&
-    profile.owner.handle !== ""
+    profile.owner.handle !== "" &&
+    profile.usage &&
+    isUtcTimestamp(profile.usage.capturedAt) &&
+    isAccountUsageReadResult(profile.usage.usage)
   );
+}
+
+function isUtcTimestamp(value) {
+  if (typeof value !== "string") return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.toISOString() === value;
 }
 
 function normalizePathname(pathname) {

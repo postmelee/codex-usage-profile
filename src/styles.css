@@ -407,7 +407,12 @@ button {
 
 .card-profile-stage {
   min-width: 0;
-  width: min(100%, 820px);
+  width: min(100%, 920px);
+}
+
+.account-usage-profile {
+  min-width: 0;
+  width: 100%;
 }
 
 .home-hero {
@@ -438,7 +443,7 @@ button {
 }
 
 .home-heading h1,
-.card-profile-heading h1,
+.card-profile-heading h2,
 .card-profile-message h1,
 .share-studio h2 {
   color: var(--text);
@@ -465,7 +470,6 @@ button {
 }
 
 .home-card-preview,
-.card-profile-preview,
 .public-profile-card,
 .share-card-preview {
   aspect-ratio: 499 / 306;
@@ -1044,11 +1048,17 @@ button {
   opacity: 0.58;
 }
 
-.card-profile-heading > div {
+.card-profile-heading {
   align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.profile-card-section {
+  border-top: 1px solid var(--line);
+  margin-top: 56px;
+  padding-top: 32px;
 }
 
 .visibility-status {
@@ -1061,20 +1071,10 @@ button {
   color: #91c4a4;
 }
 
-.card-profile-preview {
-  margin-top: 28px;
-}
-
-.card-profile-controls {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 22px;
-}
-
-.card-profile-error {
-  font-size: 13px;
-  margin: 12px 0 0;
-  text-align: right;
+.profile-card-preview-stage {
+  display: grid;
+  justify-items: center;
+  width: 100%;
 }
 
 .public-profile-view {
@@ -1090,7 +1090,7 @@ button {
 
 .public-profile-stage {
   min-width: 0;
-  width: min(100%, 820px);
+  width: min(100%, 920px);
 }
 
 .public-profile-heading {
@@ -2505,8 +2505,10 @@ button {
 
 .profile-heading {
   margin-top: 20px;
+  text-align: center;
 }
 
+.profile-heading h1,
 .profile-heading h2,
 .profile-stage h2 {
   font-size: 28px;
@@ -2600,7 +2602,7 @@ button {
   margin-bottom: 14px;
 }
 
-.token-activity h3,
+.token-activity h2,
 .activity-panel h3 {
   color: var(--text);
   font-size: 16px;
@@ -2650,11 +2652,40 @@ button {
   display: none;
 }
 
+.token-activity-options {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.exact-token-toggle {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 8px;
+  line-height: 18px;
+  user-select: none;
+}
+
+.exact-token-toggle input {
+  accent-color: var(--blue);
+  cursor: pointer;
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.exact-token-toggle:has(input:focus-visible) {
+  color: var(--text);
+  outline: 1px solid var(--blue);
+  outline-offset: 4px;
+}
+
 .token-grid {
   display: grid;
   gap: var(--heatmap-cell-gap, 3px);
-  grid-auto-columns: var(--heatmap-cell-size, 13px);
-  grid-auto-flow: column;
   grid-template-columns: repeat(var(--heatmap-columns), var(--heatmap-cell-size, 13px));
   grid-template-rows: repeat(7, var(--heatmap-cell-size, 13px));
   justify-content: start;
@@ -2664,15 +2695,22 @@ button {
 }
 
 .token-cell {
+  appearance: none;
   background: var(--cell-empty);
   border: 0;
   border-radius: 4px;
+  cursor: pointer;
   display: block;
-  height: var(--heatmap-cell-size, 13px);
+  height: 100%;
   min-width: 0;
   padding: 0;
   position: relative;
+  transition: background-color 100ms cubic-bezier(0.2, 0, 0, 1);
   width: var(--heatmap-cell-size, 13px);
+}
+
+.token-cell.is-future {
+  cursor: default;
 }
 
 .token-level-0 {
@@ -2697,6 +2735,7 @@ button {
 
 .token-tooltip {
   align-items: center;
+  animation: token-tooltip-enter 100ms cubic-bezier(0.2, 0, 0, 1);
   background: #3f4042;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
@@ -2718,12 +2757,30 @@ button {
 
 .month-labels {
   color: var(--faint);
-  display: flex;
   font-size: 13px;
-  justify-content: space-between;
+  height: 18px;
   line-height: 18px;
   margin-top: 8px;
+  position: relative;
   width: var(--heatmap-width);
+}
+
+.month-labels span {
+  left: calc(var(--month-label-column) * (var(--heatmap-cell-size) + var(--heatmap-cell-gap)));
+  position: absolute;
+  white-space: nowrap;
+}
+
+@keyframes token-tooltip-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 .activity-grid {
@@ -2890,6 +2947,14 @@ button {
 
   .home-card-skeleton {
     transition: none;
+  }
+
+  .token-cell {
+    transition: none;
+  }
+
+  .token-tooltip {
+    animation: none;
   }
 
   .home-card-skeleton::after {
@@ -3128,7 +3193,7 @@ button {
     line-height: 36px;
   }
 
-  .card-profile-heading h1,
+  .card-profile-heading h2,
   .card-profile-message h1,
   .public-profile-heading h1,
   .public-profile-state h1 {
@@ -3187,10 +3252,6 @@ button {
 
   .home-quickstart-steps {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .card-profile-controls > button {
-    width: 100%;
   }
 
   .card-profile-message {

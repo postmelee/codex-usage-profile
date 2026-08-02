@@ -15,9 +15,11 @@ export function formatStatValue(key, value) {
       return formatCompactNumber(value);
     case "longestTaskDurationMs":
       return formatDuration(value);
+    case "longestRunningTurnSec":
+      return formatDuration(value * 1_000);
     case "currentStreakDays":
     case "longestStreakDays":
-      return `${formatInteger(value)} days`;
+      return `${formatInteger(value)} ${value === 1 ? "day" : "days"}`;
     default:
       return formatInteger(value);
   }
