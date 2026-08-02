@@ -4,24 +4,26 @@ import {
   formatReasoningEffort
 } from "./formatters.js";
 import { PluginIcon } from "./PluginIcon.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 
 export function ActivityInsights({ insights }) {
+  const { locale, t } = useLocale();
   const rows = [
-    ["Fast Mode", insights.fastModePercent == null ? "Not used" : formatPercent(insights.fastModePercent)],
+    [t("profile.activity.fastMode"), insights.fastModePercent == null ? t("profile.activity.notUsed") : formatPercent(insights.fastModePercent, locale)],
     [
-      "Most used reasoning",
+      t("profile.activity.mostUsedReasoning"),
       insights.reasoningEffort == null || insights.reasoningEffortPercent == null
-        ? "Not used"
-        : `${formatReasoningEffort(insights.reasoningEffort)} · ${formatPercent(insights.reasoningEffortPercent)}`
+        ? t("profile.activity.notUsed")
+        : `${formatReasoningEffort(insights.reasoningEffort, locale)} · ${formatPercent(insights.reasoningEffortPercent, locale)}`
     ],
-    ["Skills explored", insights.skillsExplored == null ? "None" : formatInteger(insights.skillsExplored)],
-    ["Total skills used", insights.totalSkillsUsed == null ? "None" : formatInteger(insights.totalSkillsUsed)],
-    ["Total threads", insights.totalThreads == null ? "None" : formatInteger(insights.totalThreads)]
+    [t("profile.activity.skillsExplored"), insights.skillsExplored == null ? t("profile.activity.none") : formatInteger(insights.skillsExplored, locale)],
+    [t("profile.activity.totalSkillsUsed"), insights.totalSkillsUsed == null ? t("profile.activity.none") : formatInteger(insights.totalSkillsUsed, locale)],
+    [t("profile.activity.totalThreads"), insights.totalThreads == null ? t("profile.activity.none") : formatInteger(insights.totalThreads, locale)]
   ];
 
   return (
     <section className="activity-panel" aria-labelledby="activity-insights-title">
-      <h3 id="activity-insights-title">Activity insights</h3>
+      <h3 id="activity-insights-title">{t("profile.activity.title")}</h3>
       <dl className="activity-list">
         {rows.map(([label, value]) => (
           <div className="activity-row" key={label}>
@@ -35,9 +37,10 @@ export function ActivityInsights({ insights }) {
 }
 
 export function MostUsedPlugins({ invocations }) {
+  const { locale, t } = useLocale();
   return (
     <section className="activity-panel" aria-labelledby="most-used-plugins-title">
-      <h3 id="most-used-plugins-title">Most used plugins</h3>
+      <h3 id="most-used-plugins-title">{t("profile.activity.mostUsedPlugins")}</h3>
       {invocations.length > 0 ? (
         <ul className="plugin-list">
           {invocations.map((invocation) => (
@@ -46,12 +49,14 @@ export function MostUsedPlugins({ invocations }) {
                 <PluginIcon />
                 <span className="plugin-name">{getInvocationPrefix(invocation)}{getInvocationName(invocation)}</span>
               </span>
-              <span className="plugin-runs">{formatInteger(invocation.usageCount)} runs</span>
+              <span className="plugin-runs">{t("profile.activity.pluginRuns", {
+                count: formatInteger(invocation.usageCount, locale)
+              })}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="activity-empty">No plugins used yet</div>
+        <div className="activity-empty">{t("profile.activity.noPlugins")}</div>
       )}
     </section>
   );

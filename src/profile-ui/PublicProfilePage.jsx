@@ -1,8 +1,7 @@
-import { useMemo } from "react";
-
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
-import { resolveShareLocale } from "./cardShare.js";
+import { buildLocalizedCardUrl } from "./cardShare.js";
 
 export function PublicProfilePage({
   authState,
@@ -11,10 +10,7 @@ export function PublicProfilePage({
   profile,
   status
 }) {
-  const locale = useMemo(
-    () => resolveShareLocale(globalThis.navigator?.language),
-    []
-  );
+  const { t } = useLocale();
 
   return (
     <ProfileShell
@@ -24,11 +20,11 @@ export function PublicProfilePage({
       onAuthStateChange={onAuthStateChange}
       pageHeading={false}
       showShare={false}
-      title="Profile"
+      title={t("common.nav.profile")}
     >
-      <section className="public-profile-view" aria-label="Public Codex profile">
+      <section className="public-profile-view" aria-label={t("profile.public.ariaLabel")}>
         {status === "ready" && profile ? (
-          <ReadyPublicProfile locale={locale} profile={profile} />
+          <ReadyPublicProfile profile={profile} />
         ) : (
           <PublicProfileState status={status} />
         )}
@@ -37,7 +33,8 @@ export function PublicProfilePage({
   );
 }
 
-function ReadyPublicProfile({ locale, profile }) {
+function ReadyPublicProfile({ profile }) {
+  const { locale, t } = useLocale();
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
 
@@ -45,23 +42,24 @@ function ReadyPublicProfile({ locale, profile }) {
     <div className="public-profile-stage">
       <AccountUsageProfile
         headingId="public-profile-title"
-        locale={locale}
         owner={owner}
         usage={profile.usage}
       />
 
       <section className="profile-card-section" aria-labelledby="public-card-title">
         <header className="card-profile-heading">
-          <h2 id="public-card-title">Shared Codex card</h2>
-          <span className="visibility-status is-public">Public</span>
+          <h2 id="public-card-title">{t("profile.card.sharedTitle")}</h2>
+          <span className="visibility-status is-public">
+            {t("profile.visibility.public")}
+          </span>
         </header>
 
         <img
-          alt={`Codex usage card for ${displayName}`}
+          alt={t("profile.card.alt.public", { name: displayName })}
           aria-describedby="public-profile-title"
           className="public-profile-card"
           height="612"
-          src={profile.publicCardUrl}
+          src={buildLocalizedCardUrl(profile.publicCardUrl, locale)}
           width="998"
         />
       </section>
@@ -70,14 +68,15 @@ function ReadyPublicProfile({ locale, profile }) {
 }
 
 function PublicProfileState({ status }) {
+  const { t } = useLocale();
   const copy = status === "loading"
     ? {
-        title: "Loading public profile",
-        message: "Fetching the latest published card."
+        title: t("profile.public.loading"),
+        message: t("profile.public.fetching")
       }
     : {
-        title: "Profile unavailable",
-        message: "This public profile is not available."
+        title: t("profile.error.unavailable"),
+        message: t("profile.public.notAvailable")
       };
 
   return (

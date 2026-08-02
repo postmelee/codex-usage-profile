@@ -1,79 +1,84 @@
-const COMPACT_SUFFIXES = [
-  [1_000_000_000, "B"],
-  [1_000_000, "M"],
-  [1_000, "K"]
-];
+import {
+  formatLocalizedNumber,
+  formatMessage,
+  resolveLocale
+} from "./i18n.js";
 
-export function formatStatValue(key, value) {
+export function formatStatValue(key, value, locale = "en") {
   if (value == null) {
-    return "Unavailable";
+    return formatMessage(locale, "profile.stat.unavailable");
   }
 
   switch (key) {
     case "totalTextTokens":
     case "peakTokens":
-      return formatCompactNumber(value);
+      return formatCompactNumber(value, locale);
     case "longestTaskDurationMs":
-      return formatDuration(value);
+      return formatDuration(value, locale);
     case "longestRunningTurnSec":
-      return formatDuration(value * 1_000);
+      return formatDuration(value * 1_000, locale);
     case "currentStreakDays":
     case "longestStreakDays":
-      return `${formatInteger(value)} ${value === 1 ? "day" : "days"}`;
+      return formatMessage(
+        locale,
+        value === 1 ? "profile.stat.day.one" : "profile.stat.day.other",
+        { count: formatInteger(value, locale) }
+      );
     default:
-      return formatInteger(value);
+      return formatInteger(value, locale);
   }
 }
 
-export function formatCompactNumber(value) {
-  for (const [size, suffix] of COMPACT_SUFFIXES) {
-    if (value >= size) {
-      const scaled = value / size;
-      const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 1;
-      return `${trimTrailingZero(scaled.toFixed(digits))}${suffix}`;
-    }
-  }
-
-  return formatInteger(value);
+export function formatCompactNumber(value, locale = "en") {
+  return formatLocalizedNumber(value, resolveLocale(locale), {
+    maximumFractionDigits: 1,
+    notation: "compact"
+  });
 }
 
-export function formatDuration(milliseconds) {
+export function formatDuration(milliseconds, locale = "en") {
   const totalMinutes = Math.round(milliseconds / 60_000);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
   if (hours <= 0) {
-    return `${minutes}m`;
+    return formatMessage(locale, "profile.duration.minutes", {
+      count: formatInteger(minutes, locale)
+    });
   }
 
   if (minutes <= 0) {
-    return `${hours}h`;
+    return formatMessage(locale, "profile.duration.hours", {
+      count: formatInteger(hours, locale)
+    });
   }
 
-  return `${hours}h ${minutes}m`;
+  return `${formatMessage(locale, "profile.duration.hours", {
+    count: formatInteger(hours, locale)
+  })} ${formatMessage(locale, "profile.duration.minutes", {
+    count: formatInteger(minutes, locale)
+  })}`;
 }
 
-export function formatInteger(value) {
-  return new Intl.NumberFormat("en-US", {
+export function formatInteger(value, locale = "en") {
+  return formatLocalizedNumber(value, resolveLocale(locale), {
     maximumFractionDigits: 0
-  }).format(value);
+  });
 }
 
-export function formatPercent(value) {
-  return `${formatInteger(value)}%`;
+export function formatPercent(value, locale = "en") {
+  return `${formatInteger(value, locale)}%`;
 }
 
-export function formatReasoningEffort(effort) {
-  return {
-    none: "None",
-    minimal: "Minimal",
-    low: "Low",
-    medium: "Medium",
-    high: "High",
-    xhigh: "Extra High"
-  }[effort] ?? effort;
-}
+export function formatReasoningEffort(effort, locale = "en") {
+  const id = {
+    none: "profile.reasoning.none",
+    minimal: "profile.reasoning.minimal",
+    low: "profile.reasoning.low",
+    medium: "profile.reasoning.medium",
+    high: "profile.reasoning.high",
+    xhigh: "profile.reasoning.xhigh"
+  }[effort];
 
-function trimTrailingZero(value) {
-  return value.endsWith(".0") ? value.slice(0, -2) : value;
+  return id ? formatMessage(locale, id) : effort;
 }

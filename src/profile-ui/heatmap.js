@@ -1,3 +1,10 @@
+import {
+  formatLocalizedDate,
+  formatLocalizedNumber,
+  formatMessage,
+  resolveLocale
+} from "./i18n.js";
+
 export const HEATMAP_COLUMN_COUNT = 52;
 export const HEATMAP_ROW_COUNT = 7;
 export const HEATMAP_CELL_COUNT = HEATMAP_COLUMN_COUNT * HEATMAP_ROW_COUNT;
@@ -88,7 +95,7 @@ export function getHeatmapLevel(value, maxValue) {
 
 export function formatHeatmapTooltip(target, locale = "en", options = {}) {
   requireHeatmapTarget(target);
-  const normalizedLocale = normalizeLocale(locale);
+  const normalizedLocale = resolveLocale(locale);
   const tokenLabel = formatTokenLabel(
     target.tokens,
     normalizedLocale,
@@ -97,9 +104,10 @@ export function formatHeatmapTooltip(target, locale = "en", options = {}) {
 
   if (target.mode === "cumulative") {
     const date = formatFullDate(target.endDateIso, normalizedLocale);
-    return normalizedLocale === "ko"
-      ? `${date}까지 · ${tokenLabel}`
-      : `Through ${date} · ${tokenLabel}`;
+    return formatMessage(normalizedLocale, "profile.heatmap.through", {
+      date,
+      tokens: tokenLabel
+    });
   }
 
   if (target.mode === "weekly") {
@@ -116,7 +124,7 @@ export function formatHeatmapTooltip(target, locale = "en", options = {}) {
 
 export function formatTokenCount(value, locale = "en") {
   requireTokenCount(value, "value");
-  const normalizedLocale = normalizeLocale(locale);
+  const normalizedLocale = resolveLocale(locale);
   const units = normalizedLocale === "ko"
     ? [
         [1_000_000_000_000, "조"],
@@ -136,9 +144,7 @@ export function formatTokenCount(value, locale = "en") {
     }
   }
 
-  return new Intl.NumberFormat(
-    normalizedLocale === "ko" ? "ko-KR" : "en-US"
-  ).format(value);
+  return formatLocalizedNumber(value, normalizedLocale);
 }
 
 export function normalizeDailyUsageBuckets(value) {
@@ -277,43 +283,40 @@ function normalizeMode(value) {
   return HEATMAP_MODES.includes(value) ? value : "daily";
 }
 
-function normalizeLocale(value) {
-  return String(value ?? "en").toLowerCase().startsWith("ko") ? "ko" : "en";
-}
-
 function formatTokenLabel(tokens, locale, includeExact) {
   const compact = formatTokenCount(tokens, locale);
-  const compactLabel = locale === "ko"
-    ? `${compact} 토큰`
-    : `${compact} ${tokens === 1 ? "token" : "tokens"}`;
+  const compactLabel = formatMessage(
+    locale,
+    tokens === 1 ? "profile.heatmap.token.one" : "profile.heatmap.token.other",
+    { count: compact }
+  );
 
   if (!includeExact) return compactLabel;
 
-  const exact = new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US")
-    .format(tokens);
+  const exact = formatLocalizedNumber(tokens, locale);
 
   return `${compactLabel} (${exact})`;
 }
 
 function formatFullDate(dateIso, locale) {
-  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+  return formatLocalizedDate(new Date(`${dateIso}T00:00:00.000Z`), locale, {
     day: "numeric",
     month: "long",
     timeZone: "UTC",
     year: "numeric"
-  }).format(new Date(`${dateIso}T00:00:00.000Z`));
+  });
 }
 
 function formatDateRange(startDateIso, endDateIso, locale) {
   const start = new Date(`${startDateIso}T00:00:00.000Z`);
   const end = new Date(`${endDateIso}T00:00:00.000Z`);
-  const formatter = new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+  const options = {
     day: "numeric",
     month: "short",
     timeZone: "UTC",
     year: "numeric"
-  });
-  return `${formatter.format(start)}–${formatter.format(end)}`;
+  };
+  return `${formatLocalizedDate(start, locale, options)}–${formatLocalizedDate(end, locale, options)}`;
 }
 
 function requireHeatmapTarget(value) {

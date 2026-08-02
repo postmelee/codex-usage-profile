@@ -107,6 +107,101 @@ test.describe("Stage 2 locale surfaces", () => {
   });
 });
 
+test.describe("Stage 3 locale surfaces", () => {
+  test("locale profile keeps owner data while localizing summary and card", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
+      .toBeVisible();
+    await expect(page.getByText("누적 토큰", { exact: true })).toBeVisible();
+    await expect(page.getByText("2.5억", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "내 Codex 카드" }))
+      .toBeVisible();
+    await expect(page.getByText("공개", { exact: true })).toBeVisible();
+    const card = page.getByRole("img", { name: "내 Codex 사용량 카드" });
+    await expect(card).toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "languages", {
+        configurable: true,
+        get: () => ["en-US"]
+      });
+      Object.defineProperty(navigator, "language", {
+        configurable: true,
+        get: () => "en-US"
+      });
+      globalThis.dispatchEvent(new Event("languagechange"));
+    });
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
+      .toBeVisible();
+    await expect(page.getByText("Lifetime tokens", { exact: true })).toBeVisible();
+    await expect(page.getByText("250M", { exact: true })).toBeVisible();
+    const englishCard = page.getByRole("img", { name: "Your Codex usage card" });
+    await expect(englishCard).not.toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+  });
+
+  test("locale heatmap localizes modes, tooltips, exact count, and month labels", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    const dailyGrid = page.getByRole("grid", { name: "일별 토큰 활동" });
+    const latest = dailyGrid.locator('[data-date="2026-06-11"]');
+    await latest.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "2026년 6월 11일 · 1억 토큰"
+    );
+    const exactToggle = page.getByRole("checkbox", {
+      name: "정확한 토큰 수 표시"
+    });
+    await exactToggle.check();
+    await latest.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "2026년 6월 11일 · 1억 토큰 (100,000,000)"
+    );
+
+    await page.getByRole("button", { name: "주간" }).click();
+    await expect(page.getByRole("grid", { name: "주간 토큰 활동" })
+      .getByRole("gridcell")).toHaveCount(52);
+    await expect(page.locator(".month-labels")).toContainText("6월");
+  });
+
+  test("locale share uses the global Korean copy and localized card URL", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "공유", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "활동 공유하기" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("공유 대상")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "이미지 URL 복사" })).toHaveAttribute(
+      "title",
+      /[?&]locale=ko(?:&|$)/
+    );
+    await expect(dialog.getByRole("button", { name: "공유 스튜디오 닫기" }))
+      .toBeVisible();
+  });
+});
+
 test.describe("Marketing mirror", () => {
   test("Marketing stays sample-only and matches the landing layout", async ({ page }, testInfo) => {
     const apiRequests = [];

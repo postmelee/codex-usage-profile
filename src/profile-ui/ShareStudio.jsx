@@ -484,7 +484,7 @@ export function ShareStudio({
           )}
         </div>
 
-        <div aria-label="Share destinations" className="share-studio-primary-actions">
+        <div aria-label={copy.destinations} className="share-studio-primary-actions">
           {shareTargets.map((target, index) => (
             <ShareDestination
               active={selectedSocialPlatform === target.id}

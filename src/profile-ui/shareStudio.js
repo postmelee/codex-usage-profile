@@ -1,78 +1,49 @@
 import { resolveShareLocale } from "./cardShare.js";
+import { formatMessage } from "./i18n.js";
 
-const SHARE_STUDIO_COPY = Object.freeze({
-  en: Object.freeze({
-    close: "Close Share Studio",
-    copyImageUrl: "Copy Image URL",
-    copyReadme: "Copy README Markdown",
-    imageUrl: "Image URL",
-    imageUrlCopied: "Image URL copied",
-    imageUrlCopyFailed: "Could not copy image URL",
-    imageCopied: "Copied image",
-    imageCopyFailed: "Failed to copy image",
-    imageSaved: "Image saved",
-    linkedin: "LinkedIn",
-    makePrivate: "Make private",
-    makingPrivate: "Making private",
-    previewAlt: "Codex usage card preview",
-    previewUnavailable: "Card preview is unavailable. Sharing options are still available.",
-    reddit: "Reddit",
-    readme: "README Markdown",
-    readmeCopied: "README Markdown copied",
-    readmeCopyFailed: "Could not copy README Markdown",
-    save: "Save",
-    saveAriaLabel: "Save PNG",
-    copyImage: "Copy image",
-    dismissInstructions: "Dismiss share instructions",
-    dismissToast: "Dismiss notification",
-    openComposer: "Open {platform} composer",
-    pasteImage: "Paste image into the post",
-    shareInstructionsTitle: "Share to {platform}",
-    shareLinkedIn: "Share on LinkedIn",
-    shareReddit: "Share on Reddit",
-    shareX: "Share on X",
-    socialText: "See my Codex usage activity.",
-    title: "Share activity",
-    x: "X"
-  }),
-  ko: Object.freeze({
-    close: "공유 스튜디오 닫기",
-    copyImageUrl: "이미지 URL 복사",
-    copyReadme: "README Markdown 복사",
-    imageUrl: "이미지 URL",
-    imageUrlCopied: "이미지 URL을 복사했습니다",
-    imageUrlCopyFailed: "이미지 URL을 복사하지 못했습니다",
-    imageCopied: "이미지를 복사했습니다",
-    imageCopyFailed: "이미지를 복사하지 못했습니다",
-    imageSaved: "이미지가 저장되었습니다",
-    linkedin: "LinkedIn",
-    makePrivate: "비공개로 전환",
-    makingPrivate: "비공개로 전환 중",
-    previewAlt: "Codex 사용량 카드 미리보기",
-    previewUnavailable: "카드 미리보기를 불러오지 못했습니다. 공유 기능은 계속 사용할 수 있습니다.",
-    reddit: "Reddit",
-    readme: "README Markdown",
-    readmeCopied: "README Markdown을 복사했습니다",
-    readmeCopyFailed: "README Markdown을 복사하지 못했습니다",
-    save: "저장",
-    saveAriaLabel: "PNG 저장",
-    copyImage: "이미지 복사",
-    dismissInstructions: "공유 안내 닫기",
-    dismissToast: "알림 닫기",
-    openComposer: "{platform} 작성 창 열기",
-    pasteImage: "게시물에 이미지를 붙여넣으세요",
-    shareInstructionsTitle: "{platform}에 공유",
-    shareLinkedIn: "LinkedIn에 공유",
-    shareReddit: "Reddit에 공유",
-    shareX: "X에 공유",
-    socialText: "나의 Codex 사용량 활동을 확인해 보세요.",
-    title: "활동 공유하기",
-    x: "X"
-  })
+const SHARE_MESSAGE_IDS = Object.freeze({
+  close: "share.close",
+  copyImage: "share.copyImage",
+  copyImageUrl: "share.copyImageUrl",
+  copyReadme: "share.copyReadme",
+  destinations: "share.destinations",
+  dismissInstructions: "share.dismissInstructions",
+  dismissToast: "share.dismissToast",
+  imageCopied: "share.imageCopied",
+  imageCopyFailed: "share.imageCopyFailed",
+  imageSaved: "share.imageSaved",
+  imageUrl: "share.imageUrl",
+  imageUrlCopied: "share.imageUrlCopied",
+  imageUrlCopyFailed: "share.imageUrlCopyFailed",
+  makePrivate: "share.makePrivate",
+  makingPrivate: "share.makingPrivate",
+  openComposer: "share.openComposer",
+  pasteImage: "share.pasteImage",
+  previewAlt: "share.previewAlt",
+  previewUnavailable: "share.previewUnavailable",
+  readme: "share.readme",
+  readmeCopied: "share.readmeCopied",
+  readmeCopyFailed: "share.readmeCopyFailed",
+  save: "share.save",
+  saveAriaLabel: "share.saveAriaLabel",
+  shareInstructionsTitle: "share.shareInstructionsTitle",
+  shareLinkedIn: "share.shareLinkedIn",
+  shareReddit: "share.shareReddit",
+  shareX: "share.shareX",
+  socialText: "share.socialText",
+  title: "share.title"
 });
 
 export function getShareStudioCopy(locale = "en") {
-  return SHARE_STUDIO_COPY[resolveShareLocale(locale)] ?? SHARE_STUDIO_COPY.en;
+  const normalizedLocale = resolveShareLocale(locale);
+  return Object.freeze({
+    ...Object.fromEntries(Object.entries(SHARE_MESSAGE_IDS).map(([key, id]) => (
+      [key, formatMessage(normalizedLocale, id, { platform: "{platform}" })]
+    ))),
+    linkedin: "LinkedIn",
+    reddit: "Reddit",
+    x: "X"
+  });
 }
 
 export function buildPublicProfileShareUrl(origin, handle) {

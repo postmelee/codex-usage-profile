@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx";
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { Icon } from "./Icons.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import {
   getAccountAvatar,
   getAccountDisplayName,
   getAccountLogin
 } from "./accountUi.js";
-import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
+import { buildProfileLoginHref } from "./cardShare.js";
 import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
+  const { locale, t } = useLocale();
   const authStatus = authState?.status ?? "loading";
   const [profileState, setProfileState] = useState({
     error: null,
@@ -25,11 +27,6 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const [shareOpen, setShareOpen] = useState(false);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
-  const locale = useMemo(
-    () => resolveShareLocale(globalThis.navigator?.language),
-    []
-  );
-
   useEffect(() => {
     let isCurrent = true;
 
@@ -44,7 +41,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     }).catch((error) => {
       if (isCurrent) {
         setProfileState({
-          error: error instanceof Error ? error.message : "Profile unavailable",
+          error: "profile.error.unavailable",
           profile: null,
           status: "error"
         });
@@ -93,7 +90,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       }
     } catch (error) {
       setMutationState({
-        error: error instanceof Error ? error.message : "Profile update failed",
+        error: "home.updateFailed",
         status: "error"
       });
     }
@@ -107,7 +104,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       onAuthStateChange={onAuthStateChange}
       pageHeading={false}
       showShare={false}
-      title="Profile"
+      title={t("common.nav.profile")}
     >
       <section className="card-profile-view" aria-labelledby="card-profile-title">
         <CardProfileContent
@@ -115,7 +112,6 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
           client={client}
           hasUsage={hasUsage}
           isPublic={isPublic}
-          locale={locale}
           mutationState={mutationState}
           onShare={openShare}
           onVisibilityChange={updateVisibility}
@@ -145,22 +141,28 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
 }
 
 function CardProfileContent(props) {
+  const { t } = useLocale();
   const { authStatus, profileState } = props;
 
   if (authStatus === "anonymous") {
     return (
-      <ProfileMessage title="Sign in required">
+      <ProfileMessage title={t("settings.state.anonymous.title")}>
         <a className="primary-command" href={buildProfileLoginHref(props.client)}>
-          Sign in with GitHub
+          {t("account.loginWithGitHub")}
         </a>
       </ProfileMessage>
     );
   }
   if (authStatus === "loading" || profileState.status === "loading") {
-    return <ProfileMessage title="Loading profile" />;
+    return <ProfileMessage title={t("profile.loading.title")} />;
   }
   if (authStatus === "unavailable" || profileState.status === "error") {
-    return <ProfileMessage title="Profile unavailable" message={profileState.error} />;
+    return (
+      <ProfileMessage
+        title={t("profile.error.unavailable")}
+        message={profileState.error ? t(profileState.error) : null}
+      />
+    );
   }
   if (!props.hasUsage) {
     return <EmptyProfileState />;
@@ -170,22 +172,23 @@ function CardProfileContent(props) {
     <div className="card-profile-stage">
       <AccountUsageProfile
         headingId="card-profile-title"
-        locale={props.locale}
         owner={props.profile.owner}
         usage={props.profile.usage}
       />
 
       <section className="profile-card-section" aria-labelledby="owner-card-title">
         <header className="card-profile-heading">
-          <h2 id="owner-card-title">Your Codex card</h2>
+          <h2 id="owner-card-title">{t("profile.card.title")}</h2>
           <span className={`visibility-status is-${props.isPublic ? "public" : "private"}`}>
-            {props.isPublic ? "Public" : "Private"}
+            {props.isPublic
+              ? t("profile.visibility.public")
+              : t("profile.visibility.private")}
           </span>
         </header>
 
         <div className="profile-card-preview-stage">
           <MarketingCardPreview
-            alt="Your Codex usage card"
+            alt={t("profile.card.alt.owner")}
             cardRef={props.sourceCardRef}
             sourceKind="owner"
             src={props.previewUrl}
@@ -205,6 +208,7 @@ function CardProfileContent(props) {
 }
 
 function EmptyProfileState() {
+  const { t } = useLocale();
   const [copyState, setCopyState] = useState("idle");
 
   async function handleCopyCommand() {
@@ -221,21 +225,20 @@ function EmptyProfileState() {
 
   return (
     <div className="card-profile-message card-profile-empty">
-      <h1 id="card-profile-title">No usage submitted yet</h1>
+      <h1 id="card-profile-title">{t("profile.empty.title")}</h1>
       <p className="card-profile-empty-description">
-        Submit your local Codex usage once to create your card. Run the same command
-        whenever you want to update it.
+        {t("profile.empty.description")}
       </p>
 
       <div className="card-profile-empty-command">
-        <span className="home-command-label">Run in your terminal</span>
+        <span className="home-command-label">{t("quickstart.runInTerminal")}</span>
         <div className="home-command-row">
           <code>{HOME_SUBMIT_COMMAND}</code>
           <button
-            aria-label="Copy submit command"
+            aria-label={t("quickstart.copyCommand")}
             className="icon-command home-command-copy"
             onClick={handleCopyCommand}
-            title="Copy submit command"
+            title={t("quickstart.copyCommand")}
             type="button"
           >
             <Icon name="copy" />
@@ -246,19 +249,18 @@ function EmptyProfileState() {
           className={`home-copy-status is-${copyState}`}
           role="status"
         >
-          {getEmptyProfileCopyStatus(copyState)}
+          {getEmptyProfileCopyStatus(copyState, t)}
         </p>
       </div>
 
       <div className="card-profile-empty-actions">
         <a className="secondary-command" href="/#quickstart">
-          View setup guide
+          {t("profile.setup.viewGuide")}
         </a>
       </div>
 
       <p className="card-profile-empty-privacy">
-        Only aggregated usage is submitted. Prompts, responses, credentials, and local
-        session files stay on your device.
+        {t("profile.empty.privacy")}
       </p>
     </div>
   );
@@ -274,19 +276,20 @@ function ProfileMessage({ children, message, title }) {
   );
 }
 
-function getEmptyProfileCopyStatus(status) {
+function getEmptyProfileCopyStatus(status, t) {
   if (status === "copied") {
-    return "Command copied.";
+    return t("quickstart.commandCopied");
   }
   if (status === "error") {
-    return "Copy failed. Select the command and copy it manually.";
+    return t("quickstart.copyFailed");
   }
   return "";
 }
 
 function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner }) {
-  const avatar = getAccountAvatar(owner);
-  const displayName = getAccountDisplayName(owner);
+  const { locale, t } = useLocale();
+  const avatar = getAccountAvatar(owner, locale);
+  const displayName = getAccountDisplayName(owner, locale);
   const login = getAccountLogin(owner);
   const isSubmitting = mutationState.status === "submitting";
 
@@ -310,11 +313,15 @@ function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner 
           onClick={isPublic ? onShare : onPublish}
           type="button"
         >
-          {isPublic ? "Share" : isSubmitting ? "Publishing" : "Publish card"}
+          {isPublic
+            ? t("common.share")
+            : isSubmitting
+              ? t("profile.card.publishing")
+              : t("profile.card.publish")}
         </button>
         {mutationState.error ? (
           <p className="home-status is-error" role="status">
-            {mutationState.error}
+            {t(mutationState.error)}
           </p>
         ) : null}
       </div>
