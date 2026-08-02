@@ -118,6 +118,12 @@ card renderer, package·lockfile, static asset과 `.openai/hosting.json`은 변�
 
 - [#69](https://github.com/postmelee/codex-usage-profile/issues/69) — system·light·dark
   테마 토큰과 전환 구현
+- [#71](https://github.com/postmelee/codex-usage-profile/issues/71) — Codex 앱의 현재 동작을
+  기준으로 Profile 통계·히트맵 숫자 축약 포맷 계약 일치
+- [#72](https://github.com/postmelee/codex-usage-profile/issues/72) — Marketing locale custom
+  copy 계약 명시화와 사용되지 않는 Quickstart copy 정리
+- [#73](https://github.com/postmelee/codex-usage-profile/issues/73) — Share Studio message 단일
+  보간 계약과 공유 접근성 이름 정리
 
 ## 작업지시자 승인 요청
 
