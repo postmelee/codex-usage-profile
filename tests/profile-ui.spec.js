@@ -25,6 +25,267 @@ const AUTH_OWNER = Object.freeze({
   visibility: "private"
 });
 
+test.describe("Stage 2 locale surfaces", () => {
+  test("locale shell follows Korean browser preferences", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.locator(".profile-actions")).toHaveAttribute(
+      "aria-label",
+      "페이지 작업"
+    );
+    await expect(page.getByRole("link", { name: "로그인", exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "GitHub로 로그인" }))
+      .toBeVisible();
+  });
+
+  test("locale onboarding localizes product and sample-only Sites copy", async ({ page }) => {
+    await useKoreanLocale(page);
+    const apiRequests = [];
+    await page.route("**/api/**", (route) => {
+      apiRequests.push(route.request().url());
+      return route.abort();
+    });
+    await page.goto("/sites.html");
+
+    await expect(page.getByRole("heading", { name: "빠른 시작" })).toBeVisible();
+    await expect(page.getByText("터미널에서 실행", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "기기 승인" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "내 카드 만들기" })).toBeVisible();
+    expect(apiRequests).toEqual([]);
+  });
+
+  test("locale device keeps approval state and guidance in Korean", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/auth/device/authorize", (route) => fulfillJson(route, {
+      data: {
+        approvedAt: "2026-07-31T00:00:00.000Z",
+        exchangedAt: null,
+        intent: "submit",
+        status: "approved"
+      },
+      ok: true
+    }));
+    await page.goto("/?view=device&user_code=ABCD-1234");
+
+    await expect(page.getByRole("heading", { level: 1, name: "기기 승인" }))
+      .toBeVisible();
+    await expect(page.getByLabel("사용자 코드")).toHaveValue("ABCD-1234");
+    await page.getByRole("button", { name: "기기 승인", exact: true }).click();
+    await expect(page.getByRole("button", { name: "기기 승인 완료" })).toBeDisabled();
+    await expect(page.getByText(
+      "인증이 완료되었습니다. 터미널로 돌아가 계속 진행하고 최종 제출 결과를 확인하세요.",
+      { exact: true }
+    )).toBeVisible();
+  });
+
+  test("locale settings localizes account and empty management states", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await page.goto("/settings");
+
+    await expect(page.getByRole("heading", { level: 1, name: "설정" }))
+      .toBeVisible();
+    for (const sectionName of ["GitHub 계정", "API 토큰", "기기"]) {
+      await expect(page.getByRole("heading", { level: 2, name: sectionName }))
+        .toBeVisible();
+    }
+    await expect(page.getByText("API 토큰이 없습니다.", { exact: true })).toBeVisible();
+    await expect(page.getByText("등록된 기기가 없습니다.", { exact: true })).toBeVisible();
+  });
+});
+
+test.describe("Stage 3 locale surfaces", () => {
+  test("locale profile keeps owner data while localizing summary and card", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
+      .toBeVisible();
+    await expect(page.locator(".profile-header .avatar-shell"))
+      .toHaveAttribute("aria-hidden", "true");
+    await expect(page.getByText("누적 토큰", { exact: true })).toBeVisible();
+    await expect(page.getByText("2.5억", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "내 Codex 카드" }))
+      .toBeVisible();
+    await expect(page.getByText("공개", { exact: true })).toBeVisible();
+    const card = page.getByRole("img", { name: "내 Codex 사용량 카드" });
+    await expect(card).toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "languages", {
+        configurable: true,
+        get: () => ["en-US"]
+      });
+      Object.defineProperty(navigator, "language", {
+        configurable: true,
+        get: () => "en-US"
+      });
+      globalThis.dispatchEvent(new Event("languagechange"));
+    });
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "postmelee" }))
+      .toBeVisible();
+    await expect(page.getByText("Lifetime tokens", { exact: true })).toBeVisible();
+    await expect(page.getByText("250M", { exact: true })).toBeVisible();
+    await page.getByRole("grid", { name: "Daily token activity" })
+      .locator('[data-date="2026-06-11"]')
+      .hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "June 11, 2026 · 100M tokens"
+    );
+    const englishCard = page.getByRole("img", { name: "Your Codex usage card" });
+    await expect(englishCard).not.toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+  });
+
+  test("locale heatmap localizes modes, tooltips, exact count, and month labels", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    const dailyGrid = page.getByRole("grid", { name: "일별 토큰 활동" });
+    const latest = dailyGrid.locator('[data-date="2026-06-11"]');
+    await latest.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "2026년 6월 11일 · 1억 토큰"
+    );
+    const exactToggle = page.getByRole("checkbox", {
+      name: "정확한 토큰 수 표시"
+    });
+    await exactToggle.check();
+    await latest.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "2026년 6월 11일 · 1억 토큰 (100,000,000)"
+    );
+
+    await page.getByRole("button", { name: "주간" }).click();
+    await expect(page.getByRole("grid", { name: "주간 토큰 활동" })
+      .getByRole("gridcell")).toHaveCount(52);
+    await expect(page.locator(".month-labels")).toContainText("6월");
+  });
+
+  test("locale share uses the global Korean copy and localized card URL", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "공유", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "활동 공유하기" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("공유 대상")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "이미지 URL 복사" })).toHaveAttribute(
+      "title",
+      /[?&]locale=ko(?:&|$)/
+    );
+    await expect(dialog.getByRole("button", { name: "공유 스튜디오 닫기" }))
+      .toBeVisible();
+  });
+});
+
+test.describe("Stage 4 locale contract", () => {
+  test("unsupported browser locale falls back to English across active routes", async ({ page }) => {
+    await useUnsupportedLocale(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { name: "Codex Usage Profile" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quickstart" })).toBeVisible();
+
+    await page.goto("/settings");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" }))
+      .toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "GitHub account" }))
+      .toBeVisible();
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
+      .toBeVisible();
+    await expect(page.getByText(
+      "Only approve a code you requested from the Codex Usage Profile CLI."
+    )).toBeVisible();
+
+    await page.unroute("**/api/profile");
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.goto("/profile");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share", exact: true })
+      .click();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+
+    await mockPublicProfile(page);
+    await page.goto(PROFILE_ROUTE);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator('section[aria-label="Public Codex profile"]'))
+      .toBeVisible();
+    await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
+    await expect(page.getByText("Session cookie is required", { exact: true }))
+      .toHaveCount(0);
+  });
+
+  test("public profile uses the Korean catalog without mixed accessible labels", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
+      .toBeVisible();
+    await expect(page.locator('dl[aria-label="사용량 요약"]')).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "공유된 Codex 카드" }))
+      .toBeVisible();
+    await expect(page.getByText("Profile stats", { exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("Marketing mirror", () => {
   test("Marketing stays sample-only and matches the landing layout", async ({ page }, testInfo) => {
     const apiRequests = [];
@@ -1206,7 +1467,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     await page.getByRole("button", { name: "Approve device" }).click();
     await expect(page.getByRole("alert")).toHaveText(
-      "Approval temporarily unavailable"
+      "Device approval is temporarily unavailable. Try again."
     );
     await expect(page.locator('[aria-live] [role="alert"]')).toHaveCount(0);
     await expect(page.getByLabel("User code")).toHaveAttribute("aria-invalid", "true");
@@ -1445,12 +1706,7 @@ test.describe("Home and share card flow", () => {
   });
 
   test("Share Studio renders the Korean third instruction step", async ({ page }, testInfo) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "language", {
-        configurable: true,
-        get: () => "ko-KR"
-      });
-    });
+    await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -1460,7 +1716,7 @@ test.describe("Home and share card flow", () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
-    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await page.getByRole("button", { name: "공유", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "활동 공유하기" })).toBeVisible();
     const redditButton = page.getByRole("button", { name: "Reddit에 공유" });
@@ -2142,6 +2398,31 @@ test.describe("Profile and Settings canvases", () => {
     );
   });
 
+  test("anonymous owner Profile aligns sign-in state with profile content start", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.goto("/profile");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in required" }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
+      .toBeVisible();
+
+    const desktopTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(desktopTopOffset).toBe(72);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(mobileTopOffset).toBe(48);
+  });
+
   test("owner Profile loading, empty, and error states keep one visual heading", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(globalThis.navigator, "clipboard", {
@@ -2170,6 +2451,12 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Loading profile" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    const loadingTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(loadingTopOffset).toBe(72);
 
     releaseProfile();
     await expect(page.getByRole("heading", {
@@ -2232,6 +2519,12 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Profile unavailable" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    const unavailableTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(unavailableTopOffset).toBe(48);
   });
 
   test("Settings keeps semantic sections and representative mutations", async ({ page }) => {
@@ -2517,6 +2810,32 @@ async function mockAuthenticatedAccount(page) {
     data: ownerProfile("private"),
     ok: true
   }));
+}
+
+async function useKoreanLocale(page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", {
+      configurable: true,
+      get: () => ["ko-KR", "en-US"]
+    });
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      get: () => "ko-KR"
+    });
+  });
+}
+
+async function useUnsupportedLocale(page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "languages", {
+      configurable: true,
+      get: () => ["ja-JP", "fr-FR"]
+    });
+    Object.defineProperty(navigator, "language", {
+      configurable: true,
+      get: () => "ja-JP"
+    });
+  });
 }
 
 function expectRectNear(actual, expected, tolerance) {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { buildTokenHeatmap, HEATMAP_MODES } from "./heatmap.js";
+import { formatLocalizedDate } from "./i18n.js";
+import { useLocale } from "./LocaleProvider.jsx";
 
 const TOOLTIP_GAP = 8;
 const TOOLTIP_MARGIN = 8;
@@ -8,10 +10,10 @@ const HEATMAP_CELL_GAP = 3;
 const HEATMAP_MIN_CELL_SIZE = 13;
 const HEATMAP_MAX_CELL_SIZE = 16;
 
-const MODE_LABELS = {
-  cumulative: "Cumulative",
-  daily: "Daily",
-  weekly: "Weekly"
+const MODE_MESSAGE_IDS = {
+  cumulative: "profile.heatmap.cumulative",
+  daily: "profile.heatmap.daily",
+  weekly: "profile.heatmap.weekly"
 };
 
 function calculateHeatmapWidth(columnCount, cellSize) {
@@ -33,7 +35,8 @@ function calculateHeatmapCellSize(containerWidth, columnCount) {
   return Math.round(clampedCellSize * 100) / 100;
 }
 
-export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en" }) {
+export function TokenActivityChart({ capturedAt, dailyUsageBuckets }) {
+  const { locale, t } = useLocale();
   const [mode, setMode] = useState("daily");
   const [showExactTokens, setShowExactTokens] = useState(false);
   const [heatmapCellSize, setHeatmapCellSize] = useState(HEATMAP_MIN_CELL_SIZE);
@@ -49,7 +52,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
     [capturedAt, dailyUsageBuckets, locale, mode]
   );
   const heatmapWidth = calculateHeatmapWidth(heatmap.columnCount, heatmapCellSize);
-  const sourceKey = `${capturedAt ?? ""}:${heatmap.startDateIso}:${heatmap.todayIso}`;
+  const sourceKey = `${capturedAt ?? ""}:${heatmap.startDateIso}:${heatmap.todayIso}:${locale}`;
 
   const hideTooltip = useCallback(() => {
     setTooltip(null);
@@ -239,10 +242,10 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
   }
 
   return (
-    <section className="token-activity" aria-label="Token activity" ref={chartRef}>
+    <section className="token-activity" aria-label={t("profile.heatmap.title")} ref={chartRef}>
       <div className="token-activity-header">
-        <h2>Token activity</h2>
-        <div className="token-tabs" aria-label="Token activity mode">
+        <h2>{t("profile.heatmap.title")}</h2>
+        <div className="token-tabs" aria-label={t("profile.heatmap.modeLabel")}>
           {HEATMAP_MODES.map((modeName) => (
             <button
               aria-pressed={mode === modeName}
@@ -251,7 +254,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
               onClick={() => setMode(modeName)}
               type="button"
             >
-              {MODE_LABELS[modeName]}
+              {t(MODE_MESSAGE_IDS[modeName])}
             </button>
           ))}
         </div>
@@ -267,7 +270,9 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
         }}
       >
         <div
-          aria-label={`${MODE_LABELS[mode]} token activity`}
+          aria-label={t("profile.heatmap.gridLabel", {
+            mode: t(MODE_MESSAGE_IDS[mode])
+          })}
           aria-rowcount={heatmap.rowCount}
           className="token-grid"
           data-heatmap-mode={mode}
@@ -325,7 +330,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
             onChange={(event) => setShowExactTokens(event.currentTarget.checked)}
             type="checkbox"
           />
-          <span>Show exact token count</span>
+          <span>{t("profile.heatmap.exactTokens")}</span>
         </label>
       </div>
       {tooltip ? (
@@ -431,8 +436,9 @@ function findKeyboardTarget(cells, current, key, mode) {
 }
 
 function formatMonthLabel(label, locale) {
-  return new Intl.DateTimeFormat(
-    String(locale).toLowerCase().startsWith("ko") ? "ko-KR" : "en-US",
+  return formatLocalizedDate(
+    new Date(`${label.dateIso}T00:00:00.000Z`),
+    locale,
     { month: "short", timeZone: "UTC" }
-  ).format(new Date(`${label.dateIso}T00:00:00.000Z`));
+  );
 }

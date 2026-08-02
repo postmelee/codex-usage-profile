@@ -9,6 +9,7 @@ import {
   classifyDeviceApprovalError,
   createDeviceApprovalGuidance,
   getDeviceApprovalErrorMessage,
+  getDeviceApprovalErrorMessageId,
   isTerminalDeviceApprovalStatus,
   normalizeDeviceApprovalIntent,
   normalizeDeviceApprovalResult
@@ -86,7 +87,19 @@ test("turns invalid or expired challenges into actionable guidance", () => {
   retryable.status = 503;
   assert.equal(
     getDeviceApprovalErrorMessage(retryable, DEVICE_APPROVAL_ERROR_KIND.RETRYABLE),
-    "Approval temporarily unavailable"
+    "Device approval is temporarily unavailable. Try again."
+  );
+  assert.equal(
+    getDeviceApprovalErrorMessageId(retryable, DEVICE_APPROVAL_ERROR_KIND.RETRYABLE),
+    "device.error.temporary"
+  );
+  assert.equal(
+    getDeviceApprovalErrorMessage(
+      retryable,
+      DEVICE_APPROVAL_ERROR_KIND.RETRYABLE,
+      "ko"
+    ),
+    "현재 기기를 승인할 수 없습니다. 다시 시도해 주세요."
   );
 });
 
@@ -129,6 +142,14 @@ test("builds intent-specific guidance without embedding response metadata", () =
       "Authorization is complete. Return to your terminal to continue."
     );
   }
+
+  assert.deepEqual(
+    createDeviceApprovalGuidance("submit", "http://127.0.0.1:5177", "ko"),
+    {
+      command: null,
+      message: "인증이 완료되었습니다. 터미널로 돌아가 계속 진행하고 최종 제출 결과를 확인하세요."
+    }
+  );
 });
 
 test("uses the default command on production and a normalized local origin elsewhere", () => {

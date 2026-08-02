@@ -1,4 +1,5 @@
 import { AccountMenu } from "./AccountMenu.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 
 export function ProfileShell({
   authState,
@@ -10,8 +11,9 @@ export function ProfileShell({
   pageHeading = true,
   shareDisabled = false,
   showShare = true,
-  title = "Profile"
+  title
 }) {
+  const { t } = useLocale();
   const authStatus = authState?.status ?? "unknown";
   const isFullscreen = layout === "fullscreen";
 
@@ -23,17 +25,17 @@ export function ProfileShell({
       >
         <header className="profile-topbar">
           <div className="profile-topbar-leading">
-            <a className="profile-topbar-title" href="/">Codex Usage</a>
+            <a className="profile-topbar-title" href="/">{t("app.brand")}</a>
           </div>
-          <div className="profile-actions" aria-label="Page actions">
+          <div className="profile-actions" aria-label={t("common.nav.pageActions")}>
             {showShare ? (
               <button
-                aria-label="Share profile"
+                aria-label={t("common.share")}
                 disabled={shareDisabled}
                 onClick={onShare}
                 type="button"
               >
-                Share
+                {t("common.share")}
               </button>
             ) : null}
             <AccountMenu
@@ -44,20 +46,22 @@ export function ProfileShell({
           </div>
         </header>
         <p className="sr-only" aria-live="polite">
-          {getSessionStatusLabel(authStatus)}
+          {getSessionStatusLabel(authStatus, t)}
         </p>
-        {pageHeading ? <h1 className="sr-only">{title}</h1> : null}
+        {pageHeading ? (
+          <h1 className="sr-only">{title ?? t("common.nav.profile")}</h1>
+        ) : null}
         {children}
       </main>
     </div>
   );
 }
 
-function getSessionStatusLabel(status) {
+function getSessionStatusLabel(status, t) {
   return {
-    anonymous: "No signed-in account",
-    authenticated: "Signed-in account loaded",
-    loading: "Checking signed-in account",
-    unavailable: "Signed-in account unavailable"
-  }[status] ?? "Signed-in account status unknown";
+    anonymous: t("session.anonymous"),
+    authenticated: t("session.authenticated"),
+    loading: t("session.loading"),
+    unavailable: t("session.unavailable")
+  }[status] ?? t("session.unknown");
 }

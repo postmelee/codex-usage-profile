@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Icon } from "./Icons.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 import {
   HOME_QUICKSTART_STEPS,
   HOME_SUBMIT_COMMAND
@@ -8,6 +9,7 @@ import {
 
 export function HomeQuickstart({ authenticated, loginHref, status }) {
   const [copyState, setCopyState] = useState("idle");
+  const { t } = useLocale();
 
   async function handleCopyCommand() {
     try {
@@ -30,22 +32,20 @@ export function HomeQuickstart({ authenticated, loginHref, status }) {
     >
       <div className="home-quickstart-inner">
         <header className="home-quickstart-heading">
-          <h2 id="quickstart-title">Quickstart</h2>
-          <p>
-            Connect the CLI once, review your card, and reuse the same image link.
-          </p>
+          <h2 id="quickstart-title">{t("quickstart.title")}</h2>
+          <p>{t("quickstart.description")}</p>
         </header>
 
         {authenticated ? (
           <div className="home-command-tool">
-            <span className="home-command-label">Run in your terminal</span>
+            <span className="home-command-label">{t("quickstart.runInTerminal")}</span>
             <div className="home-command-row">
               <code>{HOME_SUBMIT_COMMAND}</code>
               <button
-                aria-label="Copy submit command"
+                aria-label={t("quickstart.copyCommand")}
                 className="icon-command home-command-copy"
                 onClick={handleCopyCommand}
-                title="Copy submit command"
+                title={t("quickstart.copyCommand")}
                 type="button"
               >
                 <Icon name="copy" />
@@ -56,7 +56,7 @@ export function HomeQuickstart({ authenticated, loginHref, status }) {
               className={`home-copy-status is-${copyState}`}
               role="status"
             >
-              {getCopyStatus(copyState)}
+              {getCopyStatus(copyState, t)}
             </p>
           </div>
         ) : (
@@ -70,8 +70,8 @@ export function HomeQuickstart({ authenticated, loginHref, status }) {
                 {String(index + 1).padStart(2, "0")}
               </span>
               <div>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
+                <h3>{t(`quickstart.step.${step.id}.title`)}</h3>
+                <p>{t(`quickstart.step.${step.id}.description`)}</p>
               </div>
             </li>
           ))}
@@ -82,10 +82,12 @@ export function HomeQuickstart({ authenticated, loginHref, status }) {
 }
 
 function QuickstartAccess({ loginHref, status }) {
+  const { t } = useLocale();
+
   if (status === "loading") {
     return (
       <p className="home-quickstart-status" role="status">
-        Checking your GitHub session
+        {t("quickstart.sessionChecking")}
       </p>
     );
   }
@@ -93,25 +95,25 @@ function QuickstartAccess({ loginHref, status }) {
   if (status === "unavailable") {
     return (
       <p className="home-quickstart-status is-error" role="status">
-        Sign in is temporarily unavailable.
+        {t("quickstart.sessionUnavailable")}
       </p>
     );
   }
 
   return (
     <div className="home-quickstart-access">
-      <p>Sign in to connect this browser session and reveal the CLI command.</p>
+      <p>{t("quickstart.sessionDescription")}</p>
       <a className="secondary-command" href={loginHref}>
-        Sign in to view command
+        {t("quickstart.signInToView")}
       </a>
     </div>
   );
 }
 
-function getCopyStatus(status) {
+function getCopyStatus(status, t) {
   return {
-    copied: "Command copied.",
-    error: "Copy failed. Select the command and copy it manually.",
+    copied: t("quickstart.commandCopied"),
+    error: t("quickstart.copyFailed"),
     idle: ""
   }[status] ?? "";
 }

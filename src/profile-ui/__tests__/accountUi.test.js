@@ -71,6 +71,10 @@ test("maps account status labels", () => {
     label: "Account status unknown",
     status: "custom"
   });
+  assert.deepEqual(getAccountStatus({ status: "anonymous" }, "ko"), {
+    label: "로그인되지 않음",
+    status: "anonymous"
+  });
 });
 
 test("builds account login redirect URLs", () => {
@@ -129,4 +133,24 @@ test("maps account auth error query parameters to user-facing copy", () => {
     }
   );
   assert.equal(getAccountAuthError({ search: "" }), null);
+  assert.deepEqual(
+    getAccountAuthError({
+      search: "?auth_error=github_login_failed"
+    }, "ko"),
+    {
+      action: "GitHub로 로그인",
+      code: "github_login_failed",
+      message: "GitHub 로그인을 완료하지 못했습니다.",
+      title: "로그인 실패"
+    }
+  );
+});
+
+test("localizes account fallbacks and avatar accessibility copy", () => {
+  assert.equal(getAccountDisplayName(null, "ko"), "GitHub 사용자");
+  assert.deepEqual(getAccountAvatar({ githubLogin: "postmelee" }, "ko"), {
+    alt: "postmelee 프로필 이미지",
+    initial: "P",
+    url: null
+  });
 });

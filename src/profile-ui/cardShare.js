@@ -1,6 +1,7 @@
+import { resolveLocale } from "./i18n.js";
+
 export function resolveShareLocale(value) {
-  const locale = String(value ?? "en").trim().toLowerCase();
-  return locale === "ko" || locale.startsWith("ko-") ? "ko" : "en";
+  return resolveLocale(value);
 }
 
 export function buildLocalizedCardUrl(value, locale = "en") {

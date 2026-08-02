@@ -10,6 +10,7 @@ import {
 
 test("resolves supported share locales", () => {
   assert.equal(resolveShareLocale("ko-KR"), "ko");
+  assert.equal(resolveShareLocale("KO_kr"), "ko");
   assert.equal(resolveShareLocale("en-US"), "en");
   assert.equal(resolveShareLocale("ja-JP"), "en");
 });

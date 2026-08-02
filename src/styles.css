@@ -1140,11 +1140,11 @@ button {
 }
 
 .card-profile-message {
-  align-self: center;
+  align-self: flex-start;
   display: grid;
   gap: 20px;
   justify-items: start;
-  margin-top: 90px;
+  margin-top: 0;
   width: min(100%, 520px);
 }
 
@@ -1155,9 +1155,7 @@ button {
 }
 
 .card-profile-message.card-profile-empty {
-  align-self: flex-start;
   gap: 0;
-  margin-top: 0;
   width: min(100%, 560px);
 }
 
@@ -3252,10 +3250,6 @@ button {
 
   .home-quickstart-steps {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .card-profile-message {
-    margin-top: 60px;
   }
 
   .card-profile-empty-actions {

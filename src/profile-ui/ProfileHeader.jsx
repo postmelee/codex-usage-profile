@@ -1,17 +1,21 @@
 import { useState } from "react";
+import { useLocale } from "./LocaleProvider.jsx";
 
 export function ProfileHeader({
   header,
   headingId,
   headingLevel = 2
 }) {
-  const displayName = header.displayName ?? "Codex user";
-  const username = header.username ? `@${header.username}` : "@profile";
+  const { t } = useLocale();
+  const displayName = header.displayName ?? t("profile.header.defaultUser");
+  const username = header.username
+    ? `@${header.username}`
+    : `@${t("profile.header.defaultHandle")}`;
   const Heading = headingLevel === 1 ? "h1" : "h2";
 
   return (
     <header className="profile-header">
-      <ProfileAvatar asset={header.avatarAsset} displayName={displayName} />
+      <ProfileAvatar asset={header.avatarAsset} />
       <div className="profile-heading">
         <Heading id={headingId}>{displayName}</Heading>
         <p>
@@ -23,14 +27,18 @@ export function ProfileHeader({
   );
 }
 
-function ProfileAvatar({ asset, displayName }) {
+function ProfileAvatar({ asset }) {
   const [hasImageError, setHasImageError] = useState(false);
   const shouldUseImage = Boolean(asset?.url) && !hasImageError;
 
   return (
-    <div className="avatar-shell" aria-hidden="true">
+    <div aria-hidden="true" className="avatar-shell">
       {shouldUseImage ? (
-        <img alt="" onError={() => setHasImageError(true)} src={asset.url} />
+        <img
+          alt=""
+          onError={() => setHasImageError(true)}
+          src={asset.url}
+        />
       ) : (
         <div className="avatar-fallback">
           <span className="avatar-face avatar-face-top" />

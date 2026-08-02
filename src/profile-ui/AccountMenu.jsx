@@ -9,6 +9,7 @@ import {
   buildAccountLoginHref,
   getAccountMenuSummary
 } from "./accountUi.js";
+import { useLocale } from "./LocaleProvider.jsx";
 
 export function AccountMenu({
   authState,
@@ -18,6 +19,7 @@ export function AccountMenu({
   profileHref = "/profile",
   settingsHref = "/?view=settings"
 }) {
+  const { locale, t } = useLocale();
   const menuRef = useRef(null);
   const menuItemRefs = useRef([]);
   const triggerRef = useRef(null);
@@ -29,7 +31,7 @@ export function AccountMenu({
   const authStatus = authState?.status ?? "loading";
   const isAuthenticated = authStatus === "authenticated";
   const isLoggingOut = logoutState.status === "submitting";
-  const summary = getAccountMenuSummary(authState);
+  const summary = getAccountMenuSummary(authState, locale);
 
   useEffect(() => {
     if (isOpen) {
@@ -119,9 +121,9 @@ export function AccountMenu({
       });
       setIsOpen(false);
       setLogoutState({ error: null, status: "idle" });
-    } catch (error) {
+    } catch {
       setLogoutState({
-        error: error instanceof Error ? error.message : "Logout failed",
+        error: "account.logoutFailed",
         status: "error"
       });
     }
@@ -131,7 +133,7 @@ export function AccountMenu({
     return (
       <a className="account-login-link" href={buildAccountLoginHref(client, location)}>
         <AccountIcon name="signIn" size={14} />
-        <span>Sign in</span>
+        <span>{t("account.login")}</span>
       </a>
     );
   }
@@ -140,7 +142,7 @@ export function AccountMenu({
     return (
       <button className="account-status-button" disabled type="button">
         <span className="account-status-dot" />
-        <span>Account</span>
+        <span>{t("account.title")}</span>
       </button>
     );
   }
@@ -148,14 +150,14 @@ export function AccountMenu({
   if (authStatus === "unavailable" || !isAuthenticated) {
     return (
       <button
-        aria-label="Sign in unavailable"
+        aria-label={t("account.loginUnavailable.label")}
         className="account-status-button is-unavailable"
         disabled
-        title="Sign in is temporarily unavailable"
+        title={t("account.loginUnavailable.temporary")}
         type="button"
       >
         <AccountIcon name="signIn" size={14} />
-        <span>Sign in</span>
+        <span>{t("account.login")}</span>
       </button>
     );
   }
@@ -166,7 +168,7 @@ export function AccountMenu({
         aria-controls={isOpen ? "account-menu-popover" : undefined}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        aria-label={`Account menu for ${summary.displayName}`}
+        aria-label={t("account.menuLabel", { name: summary.displayName })}
         className="account-avatar-button"
         onClick={handleToggleMenu}
         ref={triggerRef}
@@ -200,7 +202,7 @@ export function AccountMenu({
               role="menuitem"
             >
               <AccountIcon name="profile" />
-              <span>Profile</span>
+              <span>{t("common.nav.profile")}</span>
             </a>
             <a
               className="account-menu-item"
@@ -210,7 +212,7 @@ export function AccountMenu({
               role="menuitem"
             >
               <AccountIcon name="settings" />
-              <span>Settings</span>
+              <span>{t("common.nav.settings")}</span>
             </a>
             <button
               className="account-menu-item"
@@ -221,12 +223,12 @@ export function AccountMenu({
               type="button"
             >
               <AccountIcon name="logOut" />
-              <span>{isLoggingOut ? "Logging out" : "Log out"}</span>
+              <span>{isLoggingOut ? t("account.loggingOut") : t("account.logout")}</span>
             </button>
           </div>
 
           {logoutState.status === "error" ? (
-            <p className="account-menu-error">{logoutState.error}</p>
+            <p className="account-menu-error">{t(logoutState.error)}</p>
           ) : null}
         </div>
       ) : null}

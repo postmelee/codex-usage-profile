@@ -1,8 +1,10 @@
 import { ProfileHeader } from "./ProfileHeader.jsx";
 import { ProfileStats } from "./ProfileStats.jsx";
 import { TokenActivityChart } from "./TokenActivityChart.jsx";
+import { useLocale } from "./LocaleProvider.jsx";
 
-export function AccountUsageProfile({ headingId, locale, owner, usage }) {
+export function AccountUsageProfile({ headingId, owner, usage }) {
+  const { t } = useLocale();
   const summary = usage.usage.summary;
 
   return (
@@ -19,34 +21,33 @@ export function AccountUsageProfile({ headingId, locale, owner, usage }) {
       <ProfileStats stats={[
         {
           key: "totalTextTokens",
-          label: "Lifetime tokens",
+          label: t("profile.stat.lifetimeTokens"),
           value: summary.lifetimeTokens
         },
         {
           key: "peakTokens",
-          label: "Peak day",
+          label: t("profile.stat.peakDay"),
           value: summary.peakDailyTokens
         },
         {
           key: "longestRunningTurnSec",
-          label: "Longest turn",
+          label: t("profile.stat.longestTurn"),
           value: summary.longestRunningTurnSec
         },
         {
           key: "currentStreakDays",
-          label: "Current streak",
+          label: t("profile.stat.currentStreak"),
           value: summary.currentStreakDays
         },
         {
           key: "longestStreakDays",
-          label: "Longest streak",
+          label: t("profile.stat.longestStreak"),
           value: summary.longestStreakDays
         }
       ]} />
       <TokenActivityChart
         capturedAt={usage.capturedAt}
         dailyUsageBuckets={usage.usage.dailyUsageBuckets}
-        locale={locale}
       />
     </div>
   );
