@@ -229,6 +229,42 @@ git diff --check
 Task #68 Stage 3: Profile과 공유 흐름 locale 통합
 ```
 
+## Stage 3.1 — Profile 상태 안내 위치 보정
+
+Stage 3 로컬 시각 검토에서 anonymous owner Profile의 `로그인 필요` 안내가 화면
+중앙보다 아래에 떠 보이는 문제가 확인되었다. 원인은 공통 `.card-profile-message`가
+세로 중앙 정렬과 추가 상단 margin을 사용하고, Task #61의 상단 정렬 보정은 usage
+empty state에만 적용된 데 있다.
+
+### 산출물
+
+수정:
+
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/working/task_m100_68_stage3_1.md`
+
+### 변경 내용
+
+- anonymous, loading, unavailable Profile 상태 안내를 usage empty state와 같은 header
+  하단 content 시작점에 배치한다.
+- desktop 72px, mobile 48px의 기존 Profile content top offset을 재사용한다.
+- 인증 상태 판정, 로그인 URL, Profile payload와 ready/empty card UI는 변경하지 않는다.
+
+### 검증
+
+```bash
+npm run test:e2e -- --grep "anonymous owner Profile|owner Profile loading"
+npm run build
+git diff --check
+```
+
+### 커밋
+
+```text
+Task #68 [Stage 3.1]: Profile 상태 안내 상단 정렬
+```
+
 ## Stage 4 — 전역 locale 정합성·Sites artifact QA
 
 ### 산출물
@@ -300,6 +336,7 @@ Task #68 Stage 4: 전역 locale과 Sites artifact 검증
 - Stage 1: `Task #68 Stage 1: 전역 locale 기반과 메시지 계약 구현`
 - Stage 2: `Task #68 Stage 2: 공통 화면과 온보딩 문구 이관`
 - Stage 3: `Task #68 Stage 3: Profile과 공유 흐름 locale 통합`
+- Stage 3.1: `Task #68 [Stage 3.1]: Profile 상태 안내 상단 정렬`
 - Stage 4: `Task #68 Stage 4: 전역 locale과 Sites artifact 검증`
 
 각 커밋은 제품 변경과 `mydocs/working/task_m100_68_stage{N}.md`를 함께 포함한다.

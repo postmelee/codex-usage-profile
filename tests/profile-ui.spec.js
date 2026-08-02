@@ -2314,6 +2314,31 @@ test.describe("Profile and Settings canvases", () => {
     );
   });
 
+  test("anonymous owner Profile aligns sign-in state with profile content start", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await page.goto("/profile");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in required" }))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
+      .toBeVisible();
+
+    const desktopTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(desktopTopOffset).toBe(72);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(mobileTopOffset).toBe(48);
+  });
+
   test("owner Profile loading, empty, and error states keep one visual heading", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(globalThis.navigator, "clipboard", {
@@ -2342,6 +2367,12 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Loading profile" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    const loadingTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(loadingTopOffset).toBe(72);
 
     releaseProfile();
     await expect(page.getByRole("heading", {
@@ -2404,6 +2435,12 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Profile unavailable" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    const unavailableTopOffset = await page.evaluate(() => {
+      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
+      return Math.round(message.top - topbar.bottom);
+    });
+    expect(unavailableTopOffset).toBe(48);
   });
 
   test("Settings keeps semantic sections and representative mutations", async ({ page }) => {
