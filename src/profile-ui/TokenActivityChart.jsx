@@ -35,6 +35,7 @@ function calculateHeatmapCellSize(containerWidth, columnCount) {
 
 export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en" }) {
   const [mode, setMode] = useState("daily");
+  const [showExactTokens, setShowExactTokens] = useState(false);
   const [heatmapCellSize, setHeatmapCellSize] = useState(HEATMAP_MIN_CELL_SIZE);
   const [heatmapContainerWidth, setHeatmapContainerWidth] = useState(0);
   const [focusKey, setFocusKey] = useState(null);
@@ -69,15 +70,19 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
       left: rect.left + rect.width / 2,
       measured: false,
       placement: "top",
-      text: cell.tooltip,
+      text: getCellTooltip(cell, showExactTokens),
       top: rect.top
     });
-  }, []);
+  }, [showExactTokens]);
 
   useEffect(() => {
     setFocusKey(heatmap.latestTargetKey);
     hideTooltip();
   }, [heatmap.latestTargetKey, hideTooltip, mode, sourceKey]);
+
+  useEffect(() => {
+    hideTooltip();
+  }, [hideTooltip, showExactTokens]);
 
   useLayoutEffect(() => {
     if (!tooltip || !tooltipRef.current) {
@@ -227,7 +232,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
         left: rect.left + rect.width / 2,
         measured: false,
         placement: "top",
-        text: cell.tooltip,
+        text: getCellTooltip(cell, showExactTokens),
         top: rect.top
       };
     });
@@ -273,6 +278,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
               cell={cell}
               focusKey={focusKey}
               key={cell.key}
+              label={getCellTooltip(cell, showExactTokens)}
               mode={mode}
               onBlur={() => setTooltip((current) => (
                 current?.interaction === "keyboard" ? null : current
@@ -312,6 +318,16 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
           ))}
         </div>
       </div>
+      <div className="token-activity-options">
+        <label className="exact-token-toggle">
+          <input
+            checked={showExactTokens}
+            onChange={(event) => setShowExactTokens(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          <span>Show exact token count</span>
+        </label>
+      </div>
       {tooltip ? (
         <span
           className="token-tooltip"
@@ -335,6 +351,7 @@ export function TokenActivityChart({ capturedAt, dailyUsageBuckets, locale = "en
 function HeatmapCell({
   cell,
   focusKey,
+  label,
   mode,
   onBlur,
   onFocus,
@@ -362,7 +379,7 @@ function HeatmapCell({
     return (
       <span
         aria-disabled="true"
-        aria-label={cell.tooltip}
+        aria-label={label}
         className={`${className} is-future`}
         role="gridcell"
         style={style}
@@ -373,7 +390,7 @@ function HeatmapCell({
 
   return (
     <button
-      aria-label={cell.tooltip}
+      aria-label={label}
       className={className}
       onBlur={onBlur}
       onFocus={onFocus}
@@ -390,6 +407,10 @@ function HeatmapCell({
       {...data}
     />
   );
+}
+
+function getCellTooltip(cell, showExactTokens) {
+  return showExactTokens ? cell.tooltip : cell.compactTooltip;
 }
 
 function findKeyboardTarget(cells, current, key, mode) {

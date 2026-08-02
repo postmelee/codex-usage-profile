@@ -40,6 +40,11 @@ export function buildTokenHeatmap(dailyUsageBuckets, options = {}) {
   const maxTokens = Math.max(0, ...targets.map((target) => target.tokens));
   const cells = targets.map((target) => Object.freeze({
     ...target,
+    compactTooltip: formatHeatmapTooltip(
+      { ...target, mode },
+      options.locale,
+      { includeExact: false }
+    ),
     interactive: target.isFuture !== true,
     key: `${mode}:${target.key}`,
     level: getHeatmapLevel(target.tokens, maxTokens),
@@ -81,10 +86,14 @@ export function getHeatmapLevel(value, maxValue) {
   return 1;
 }
 
-export function formatHeatmapTooltip(target, locale = "en") {
+export function formatHeatmapTooltip(target, locale = "en", options = {}) {
   requireHeatmapTarget(target);
   const normalizedLocale = normalizeLocale(locale);
-  const tokenLabel = formatTokenLabel(target.tokens, normalizedLocale);
+  const tokenLabel = formatTokenLabel(
+    target.tokens,
+    normalizedLocale,
+    options.includeExact !== false
+  );
 
   if (target.mode === "cumulative") {
     const date = formatFullDate(target.endDateIso, normalizedLocale);
@@ -272,13 +281,18 @@ function normalizeLocale(value) {
   return String(value ?? "en").toLowerCase().startsWith("ko") ? "ko" : "en";
 }
 
-function formatTokenLabel(tokens, locale) {
+function formatTokenLabel(tokens, locale, includeExact) {
   const compact = formatTokenCount(tokens, locale);
+  const compactLabel = locale === "ko"
+    ? `${compact} 토큰`
+    : `${compact} ${tokens === 1 ? "token" : "tokens"}`;
+
+  if (!includeExact) return compactLabel;
+
   const exact = new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US")
     .format(tokens);
 
-  if (locale === "ko") return `${compact} 토큰 (${exact})`;
-  return `${compact} ${tokens === 1 ? "token" : "tokens"} (${exact})`;
+  return `${compactLabel} (${exact})`;
 }
 
 function formatFullDate(dateIso, locale) {

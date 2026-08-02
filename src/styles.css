@@ -470,7 +470,6 @@ button {
 }
 
 .home-card-preview,
-.card-profile-preview,
 .public-profile-card,
 .share-card-preview {
   aspect-ratio: 499 / 306;
@@ -1072,20 +1071,10 @@ button {
   color: #91c4a4;
 }
 
-.card-profile-preview {
-  margin-top: 28px;
-}
-
-.card-profile-controls {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 22px;
-}
-
-.card-profile-error {
-  font-size: 13px;
-  margin: 12px 0 0;
-  text-align: right;
+.profile-card-preview-stage {
+  display: grid;
+  justify-items: center;
+  width: 100%;
 }
 
 .public-profile-view {
@@ -2662,6 +2651,37 @@ button {
   display: none;
 }
 
+.token-activity-options {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.exact-token-toggle {
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 8px;
+  line-height: 18px;
+  user-select: none;
+}
+
+.exact-token-toggle input {
+  accent-color: var(--blue);
+  cursor: pointer;
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.exact-token-toggle:has(input:focus-visible) {
+  color: var(--text);
+  outline: 1px solid var(--blue);
+  outline-offset: 4px;
+}
+
 .token-grid {
   display: grid;
   gap: var(--heatmap-cell-gap, 3px);
@@ -3231,10 +3251,6 @@ button {
 
   .home-quickstart-steps {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .card-profile-controls > button {
-    width: 100%;
   }
 
   .card-profile-message {

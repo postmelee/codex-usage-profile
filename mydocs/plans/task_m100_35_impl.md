@@ -11,9 +11,9 @@ GitHub Issue: [#35](https://github.com/postmelee/codex-usage-profile/issues/35)
 |---|---|---|---|
 | 1 | 공유 card geometry와 tooltip contract | 완료 기록 보존·방향 대체 | 기존 Stage 1 보고서 |
 | 2 | Home/public card overlay 통합 | 완료 기록 보존·방향 대체 | 기존 Stage 2 보고서 |
-| 3 | 방향 전환 정리와 Profile heatmap data contract | 승인 대기 | card overlay 제거, 52주 mode builder |
-| 4 | owner/public Profile 통합 | Stage 3 후 승인 | Profile token activity UI·interaction |
-| 5 | browser·Sites artifact QA | Stage 4 후 승인 | 전체 회귀·build·artifact 검증 |
+| 3 | 방향 전환 정리와 Profile heatmap data contract | 완료 | card overlay 제거, 52주 mode builder |
+| 4 | owner/public Profile 통합 | 완료 | Profile token activity UI·interaction |
+| 5 | Profile 설정·홈 카드 parity 보정 및 QA | 완료 | exact token 설정, 공유 card 표현 통일, 전체 artifact 검증 |
 
 ## 계획 변경 처리 원칙
 
@@ -167,22 +167,45 @@ git diff --check
 - `mydocs/working/task_m100_35_stage4.md`
 - 커밋: `Task #35 Stage 4: owner와 public Profile heatmap 통합`
 
-## Stage 5 — browser·Sites artifact QA
+## Stage 5 — Profile 설정·홈 카드 parity 보정 및 browser·Sites artifact QA
 
 ### 목적
 
-변경된 Profile interaction과 기존 card/share/visibility 흐름을 전체 환경에서 검증하고
+작업지시자 UI 확인에서 발견된 tooltip 정보 밀도와 owner card 표현 차이를 보정하고,
+변경된 Profile interaction과 기존 card/share/visibility 흐름을 전체 환경에서 검증해
 production 배포 전 local artifact 수용 기준을 확정한다.
+
+### 구현 보정
+
+- heatmap 우측 아래에 `Show exact token count` checkbox를 제공한다.
+- 기본값은 OFF이며 tooltip은 locale compact token만 표시한다. ON일 때만 locale
+  grouping을 적용한 반올림하지 않은 raw token을 괄호로 함께 표시한다.
+- 설정은 owner/public Profile의 공유 component에 동일하게 적용하고 원격·browser
+  storage에는 저장하지 않는다.
+- checkbox 변경 시 열려 있던 tooltip을 닫아 이전 표현이 남지 않게 한다.
+- owner의 `Your Codex card`는 Home의 `MarketingCardPreview`를 직접 재사용해 동일한
+  600px 최대 크기, BorderBeam, hover tilt, glare, shadow와 reduced-motion을 적용한다.
+- owner card 아래에 Home과 동일한 identity/action 계층을 적용한다. private은
+  `Publish card`, public은 `Share`를 표시한다.
+- 중복 action을 피하기 위해 owner Profile topbar Share를 제거하고 card 아래 action을
+  단일 진입점으로 사용한다.
+- Share Studio에는 Home과 동일한 source element ref·snapshot rect·suspended 상태를
+  전달해 card-origin 전환을 사용한다.
+- 기존 visibility mutation, preview revision, Share Studio의 make-private 흐름은
+  그대로 유지한다.
 
 ### 검증 시나리오
 
 - owner/public daily, weekly, cumulative 합계와 exact token tooltip
+- exact token checkbox 기본 OFF, ON/OFF tooltip 전환과 mode 변경 뒤 상태
 - `en`/`ko` locale과 UTC month/year 경계
 - desktop hover/leave, keyboard focus/Arrow/Escape
 - touch tap/전환/outside 닫기와 emulated mouse 중복 방지
 - mode 변경, logout, owner/public source 변경 뒤 stale tooltip 부재
 - mobile/reduced-motion/short viewport와 chart-only horizontal scroll
 - identity/stats, no-usage CTA, publish/unpublish, Share Studio와 public card 회귀
+- owner card와 Home card의 component, 600px geometry, tilt/beam/glare/reduced-motion
+  parity 및 card-origin Share Studio 전환
 - Home/static/README card에 tooltip overlay가 없는지 확인
 - API, backend, D1/R2, CLI, package, hosting manifest와 static asset 비변경 확인
 

@@ -167,6 +167,10 @@ test("formats English and Korean compact plus exact token tooltips", () => {
     "August 2, 2026 · 123.5M tokens (123,456,789)"
   );
   assert.equal(
+    formatHeatmapTooltip(daily, "en", { includeExact: false }),
+    "August 2, 2026 · 123.5M tokens"
+  );
+  assert.equal(
     formatHeatmapTooltip(daily, "ko-KR"),
     "2026년 8월 2일 · 1.2억 토큰 (123,456,789)"
   );

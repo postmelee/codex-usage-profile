@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx";
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { Icon } from "./Icons.jsx";
+import {
+  getAccountAvatar,
+  getAccountDisplayName,
+  getAccountLogin
+} from "./accountUi.js";
 import { buildProfileLoginHref, resolveShareLocale } from "./cardShare.js";
 import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
@@ -17,6 +23,8 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const [mutationState, setMutationState] = useState({ error: null, status: "idle" });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
+  const shareSourceCardRef = useRef(null);
+  const shareSourceRectRef = useRef(null);
   const locale = useMemo(
     () => resolveShareLocale(globalThis.navigator?.language),
     []
@@ -54,7 +62,17 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     ? client.buildOwnerCardPreviewUrl({ locale, revision: previewRevision })
     : null;
 
-  const closeShare = useCallback(() => setShareOpen(false), []);
+  const closeShare = useCallback(() => {
+    setShareOpen(false);
+    shareSourceRectRef.current = null;
+  }, []);
+
+  function openShare() {
+    shareSourceRectRef.current = snapshotRect(
+      shareSourceCardRef.current?.getBoundingClientRect()
+    );
+    setShareOpen(true);
+  }
 
   async function updateVisibility(visibility) {
     if (mutationState.status === "submitting") return;
@@ -65,6 +83,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       setProfileState({ error: null, profile: nextProfile, status: "ready" });
       setPreviewRevision((value) => value + 1);
       setShareOpen(false);
+      shareSourceRectRef.current = null;
       setMutationState({ error: null, status: "idle" });
       if (authState?.account?.owner && nextProfile.owner) {
         onAuthStateChange?.({
@@ -86,9 +105,8 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       client={client}
       layout="fullscreen"
       onAuthStateChange={onAuthStateChange}
-      onShare={() => setShareOpen(true)}
       pageHeading={false}
-      shareDisabled={!canShare}
+      showShare={false}
       title="Profile"
     >
       <section className="card-profile-view" aria-labelledby="card-profile-title">
@@ -99,21 +117,28 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
           isPublic={isPublic}
           locale={locale}
           mutationState={mutationState}
+          onShare={openShare}
           onVisibilityChange={updateVisibility}
           previewUrl={previewUrl}
           profile={profile}
           profileState={profileState}
+          shareOpen={shareOpen}
+          sourceCardRef={shareSourceCardRef}
         />
       </section>
 
       <ShareStudio
         locale={locale}
         locationOrigin={globalThis.location?.origin}
+        makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
+        onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
         previewUrl={previewUrl}
         publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
+        sourceCardRef={shareSourceCardRef}
+        sourceRect={shareSourceRectRef.current}
       />
     </ProfileShell>
   );
@@ -158,27 +183,22 @@ function CardProfileContent(props) {
           </span>
         </header>
 
-        <img
-          alt="Your Codex usage card"
-          className="card-profile-preview"
-          height="612"
-          src={props.previewUrl}
-          width="998"
-        />
-
-        <div className="card-profile-controls">
-          <button
-            className={props.isPublic ? "secondary-command" : "primary-command"}
-            disabled={props.mutationState.status === "submitting"}
-            onClick={() => props.onVisibilityChange(props.isPublic ? "private" : "public")}
-            type="button"
-          >
-            {getVisibilityActionLabel(props.isPublic, props.mutationState.status)}
-          </button>
+        <div className="profile-card-preview-stage">
+          <MarketingCardPreview
+            alt="Your Codex usage card"
+            cardRef={props.sourceCardRef}
+            sourceKind="owner"
+            src={props.previewUrl}
+            transitionSuspended={props.shareOpen}
+          />
+          <ProfileCardAction
+            isPublic={props.isPublic}
+            mutationState={props.mutationState}
+            onPublish={() => props.onVisibilityChange("public")}
+            onShare={props.onShare}
+            owner={props.profile.owner}
+          />
         </div>
-        {props.mutationState.error ? (
-          <p className="card-profile-error">{props.mutationState.error}</p>
-        ) : null}
       </section>
     </div>
   );
@@ -264,7 +284,51 @@ function getEmptyProfileCopyStatus(status) {
   return "";
 }
 
-function getVisibilityActionLabel(isPublic, status) {
-  if (status === "submitting") return isPublic ? "Making private" : "Publishing";
-  return isPublic ? "Make private" : "Publish card";
+function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner }) {
+  const avatar = getAccountAvatar(owner);
+  const displayName = getAccountDisplayName(owner);
+  const login = getAccountLogin(owner);
+  const isSubmitting = mutationState.status === "submitting";
+
+  return (
+    <div className="home-account-state profile-card-account-state">
+      <div className="home-account-identity">
+        {avatar.url ? (
+          <img alt={avatar.alt} height="40" src={avatar.url} width="40" />
+        ) : (
+          <span aria-hidden="true">{avatar.initial}</span>
+        )}
+        <div>
+          <strong>{displayName}</strong>
+          {login ? <small>@{login}</small> : null}
+        </div>
+      </div>
+      <div className="home-account-actions">
+        <button
+          className="primary-command"
+          disabled={isSubmitting}
+          onClick={isPublic ? onShare : onPublish}
+          type="button"
+        >
+          {isPublic ? "Share" : isSubmitting ? "Publishing" : "Publish card"}
+        </button>
+        {mutationState.error ? (
+          <p className="home-status is-error" role="status">
+            {mutationState.error}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function snapshotRect(rect) {
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+
+  return {
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width
+  };
 }

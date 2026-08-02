@@ -2046,11 +2046,27 @@ test.describe("Profile and Settings canvases", () => {
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
 
-    const shareButton = page.getByRole("button", { name: "Share profile" });
+    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    const sourceCard = page.locator(
+      '.profile-card-section [data-card-source="true"]'
+    );
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    await expect(sourceCard.locator(".home-card-beam")).toBeVisible();
+    await expect(sourceCard.locator(".home-card-glare")).toBeVisible();
+    await expect(page.locator(".card-profile-preview")).toHaveCount(0);
+    const sourceCardBox = await sourceCard.boundingBox();
+    expect(sourceCardBox).not.toBeNull();
+    expect(Math.round(sourceCardBox.width)).toBe(600);
+
+    const shareButton = page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
     await shareButton.click();
     const dialog = page.getByRole("dialog", { name: "Share activity" });
     await expect(dialog).toBeVisible();
+    await expect(page.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-motion-origin", "source");
+    await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
     await expect(page.locator(".app-frame")).toHaveAttribute("inert", "");
     await page.getByRole("button", { name: "Close Share Studio" }).click();
     await expect(dialog).toBeHidden();
@@ -2072,9 +2088,17 @@ test.describe("Profile and Settings canvases", () => {
     await expect(grid.locator(".token-cell")).toHaveCount(364);
 
     const latest = grid.locator('[data-date="2026-06-11"]');
+    const exactToggle = page.getByRole("checkbox", {
+      name: "Show exact token count"
+    });
+    await expect(exactToggle).not.toBeChecked();
     await expect(latest).toHaveAttribute("tabindex", "0");
     await latest.hover();
     const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toHaveText("June 11, 2026 · 100M tokens");
+    await exactToggle.check();
+    await expect(tooltip).toHaveCount(0);
+    await latest.hover();
     await expect(tooltip).toHaveText(
       "June 11, 2026 · 100M tokens (100,000,000)"
     );
@@ -2102,7 +2126,7 @@ test.describe("Profile and Settings canvases", () => {
     const currentWeek = weeklyGrid.locator('[data-start-date="2026-06-07"]');
     await currentWeek.hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Jun 7, 2026–Jun 11, 2026 · 125M tokens (125,000,000)"
+      "Jun 7, 2026–Jun 11, 2026 · 125M tokens"
     );
 
     await page.getByRole("button", { name: "Cumulative" }).click();
@@ -2113,7 +2137,7 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("tooltip")).toHaveCount(0);
     await cumulativeGrid.locator('[data-start-date="2026-06-07"]').hover();
     await expect(page.getByRole("tooltip")).toHaveText(
-      "Through June 11, 2026 · 225M tokens (225,000,000)"
+      "Through June 11, 2026 · 225M tokens"
     );
   });
 
@@ -2408,7 +2432,7 @@ test.describe("Public profile", () => {
     await target.dispatchEvent("pointerdown", { pointerType: "touch" });
     await target.dispatchEvent("pointerup", { pointerType: "touch" });
     await expect(page.getByRole("tooltip")).toHaveText(
-      "June 11, 2026 · 100M tokens (100,000,000)"
+      "June 11, 2026 · 100M tokens"
     );
 
     await page.locator(".profile-topbar").dispatchEvent("pointerdown", {
