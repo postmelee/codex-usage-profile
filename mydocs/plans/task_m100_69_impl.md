@@ -11,6 +11,7 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
 | 1 | Appearance 계약 조사와 runtime 기반 | `theme.js`, `ThemeProvider.jsx`, 두 HTML bootstrap | resolver·storage·listener·bootstrap unit, product/Sites build |
 | 2 | Semantic token과 전체 surface 이관 | `styles.css`, light/dark route mapping | CSS color audit, 대표 route computed style·Playwright |
 | 3 | Settings Appearance control과 접근성 | `SettingsPage.jsx`, `messages.js`, UI tests | radio semantics, en/ko, persistence·system change E2E |
+| 3.5 | 비공개 카드 미리보기 theme parity | owner card renderer·preview URL·tests | native/Worker light/dark parity, private cache 분리, public dark 불변 |
 | 4 | 전체 route·Sites artifact 회귀 검증 | 회귀 보정, Stage 4 보고서 | 전체 Node·Playwright·build·Sites verifier·제한 diff |
 
 ## 문서 위치 확인
@@ -22,7 +23,7 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
 | 수행·구현계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_69.md`, `task_m100_69_impl.md` | OK | 승인 범위와 실행 계약 |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_69_stage1.md`~`stage4.md` | OK | 단계별 구현·검증 근거 |
+| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_69_stage1.md`~`stage4.md`, `task_m100_69_stage3_5.md` | OK | 단계별 구현·검증 근거 |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_69_report.md` | OK | 전체 수용 기준과 잔여 위험 |
 | 공식 제품 문서 | 변경 없음 | 해당 없음 | OK | 새 명령·API·배포 절차가 없고 Settings에서 발견 가능 |
 
@@ -65,8 +66,14 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
 - theme별 token 선언에서만 light/dark 값을 분기한다. 색상 literal은 token 선언, gradient의
   구조적 stop, 카드 이미지 고유 효과 등 사전에 목록화한 예외에만 허용한다.
 - 기존 dark 시각 결과를 기준선으로 유지하고 light theme를 추가한다.
-- card PNG/SVG 자체, backend/runtime/storage schema, CLI, package·lockfile,
-  `.openai/hosting.json`, static asset은 변경하지 않는다.
+- Stage 1~3은 card PNG/SVG, backend/runtime/storage schema, CLI, package·lockfile,
+  `.openai/hosting.json`, static asset을 변경하지 않는다. 승인된 Stage 3.5에서는 owner-only
+  on-demand 카드의 light/dark 렌더링과 private preview query 전달에 필요한 renderer·HTTP client/
+  endpoint만 변경한다.
+- 공개 `/u/{handle}/card.png`, query 없는 `publicCardUrl`, R2 stable object key·binary 기본 theme는
+  계속 dark로 유지한다. D1/R2 schema, publish/unpublish, cleanup/retention 계약은 변경하지 않는다.
+- Profile 카드 커스터마이징, 선택 저장, light/dark R2 이중 객체와 public query URL 복사는
+  후속 Issue [#74](https://github.com/postmelee/codex-usage-profile/issues/74)로 분리한다.
 - production Sites deploy와 hosting handoff는 이 task에서 수행하지 않는다.
 
 ## Stage 1 — Appearance 계약 조사와 runtime 기반
@@ -221,6 +228,76 @@ git diff --check
 Task #69 Stage 3: Settings appearance control과 접근성 추가
 ```
 
+## Stage 3.5 — 비공개 카드 미리보기 theme parity
+
+### 산출물
+
+신규:
+
+- `src/profile-card/theme.js`
+- `mydocs/working/task_m100_69_stage3_5.md`
+
+수정:
+
+- `src/profile-card/renderer.js`
+- `src/profile-card/worker-renderer.js`
+- `src/profile-card/heatmap.js`
+- `src/profile-card/view-model.js`
+- `src/profile-card/service-core.js`
+- `src/profile-card/index.js`
+- `src/profile-backend/http.js`
+- `src/profile-api/client.js`
+- `src/profile-ui/HomePage.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- 관련 renderer·service·HTTP·client·UI 테스트
+
+### 변경 내용
+
+- 공개적으로 관찰 가능한 Codex light/dark 카드의 semantic 역할을 참고하되 내부 source·고유
+  asset을 복사하거나 정확한 내부 token이라고 주장하지 않는다. dark palette는 현재 pixel 기준을
+  유지하고 light palette는 white surface, dark text, light divider/empty heatmap과 같은 역할로
+  명시한다.
+- owner-only `/api/profile/card.png`가 `theme=light|dark`를 받아 native와 Worker renderer에
+  동일하게 전달한다. 알 수 없는 값과 값 부재는 호환 기본값 `dark`로 정규화한다.
+- renderer는 배경·text·divider·avatar fallback·5단계 heatmap을 하나의 공유 palette 계약으로
+  선택한다. view model의 사용량·레이아웃·motion 효과는 theme와 무관하게 유지한다.
+- private render source digest/cache는 light와 dark를 분리한다. dark 기본 digest와 pixel 결과는
+  기존 public card와 호환되도록 유지하고 light만 theme discriminator를 추가한다.
+- 로그인한 owner의 Home 카드, owner Profile 카드와 Share Studio 미리보기 URL에 현재
+  `resolvedTheme`를 넣는다. system preference는 이미 해석된 `light|dark`만 전달한다.
+- 공개 card route, R2 stable object, `publicCardUrl`, Share/README 복사 값은 theme query를
+  추가하지 않고 기존 dark 결과를 유지한다.
+- 저장 가능한 카드 preference, customization UI, D1 migration, light/dark R2 이중 object,
+  `?theme=` 공개 URL은 #74 범위이므로 구현하지 않는다.
+
+### 검증
+
+```bash
+node --test \
+  src/profile-card/__tests__/*.test.js \
+  src/profile-api/__tests__/client.test.js \
+  src/profile-backend/__tests__/http.test.js
+npx playwright test tests/profile-ui.spec.js --grep "themed card preview"
+npm run build
+npm run build:sites
+git diff --check
+```
+
+추가 확인:
+
+- 동일 owner/revision의 light와 dark private URL·source digest가 분리되고 각 palette가 native와
+  Worker에서 같은 역할·heatmap level로 렌더링되는지 검증한다.
+- theme query가 없는 private 카드와 모든 public 카드 요청은 기존 dark 결과를 유지한다.
+- Settings에서 appearance를 바꾼 뒤 Home·Profile·Share Studio private preview만 새 URL로
+  전환되고 공개 복사 URL은 바뀌지 않는지 확인한다.
+- `.openai/hosting.json`, package·lockfile, CLI, D1/R2 migration, publish/cleanup 경로 diff가 없다.
+
+### 커밋
+
+```text
+Task #69 [Stage 3.5]: theme-aware private card preview 추가
+```
+
 ## Stage 4 — 전체 route·Sites artifact 회귀 검증
 
 ### 산출물
@@ -239,8 +316,8 @@ Task #69 Stage 3: Settings appearance control과 접근성 추가
 - light/dark/system과 storage 부재·손상·접근 실패 조합을 전체 E2E로 마감한다.
 - product와 Sites entry의 첫 script 실행 직후부터 첫 화면까지 반대 theme가 노출되지 않는지
   attribute와 computed style 시점으로 검증한다.
-- Home, Marketing, owner/public Profile, Settings, device, Share Studio의 대표 route/dialog를
-  light/dark에서 순회한다.
+- Home, Marketing, owner/public Profile, Settings, device, Share Studio의 대표 route/dialog와
+  Stage 3.5 owner-only 카드 미리보기를 light/dark에서 순회한다.
 - mobile viewport, keyboard focus, reduced-motion, system runtime change를 회귀 검증한다.
 - full-stack·production artifact를 만들고 Sites verifier를 통과시킨다.
 - 수행계획의 변경 금지 경로와 package·lockfile·static asset diff를 최종 감사한다.
@@ -298,7 +375,9 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Stage 1은 Codex 앱 참고 범위와 theme runtime 계약을 확정한다.
 - Stage 2는 Stage 1의 data attribute, Provider와 bootstrap 계약을 기준으로 CSS를 이관한다.
 - Stage 3은 Stage 1 Provider와 Stage 2 token을 사용해 Settings control을 노출한다.
-- Stage 4는 Stage 1~3 승인 후 전체 회귀와 artifact 검증만 수행한다.
+- Stage 3.5는 Stage 1~3의 resolved theme를 owner-only on-demand card preview에만 연결하고,
+  공개 R2 card는 dark 호환 결과로 고정한다.
+- Stage 4는 Stage 1~3.5 승인 후 전체 회귀와 artifact 검증만 수행한다.
 - 각 Stage 종료 시 `task-stage-report`로 보고서·검증·커밋을 완료하고 다음 Stage 승인을 받는다.
 
 ## 위험과 대응
@@ -316,10 +395,12 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - **Codex 앱 참고 범위**: 관찰 가능한 동작과 일반 semantic 역할만 기록한다. 라이선스가
   확인되지 않은 source나 제품 고유 자산은 복사하지 않는다.
 - **Sites 범위 팽창**: 기존 Vite·Worker·hosting manifest를 유지하고 artifact 검증까지만 한다.
+- **공개 카드 URL·cache 호환성**: theme discriminator는 light private render에만 추가하고 public
+  route·R2 key·queryless URL·dark pixel 기준을 고정한다. 영속 customization은 #74로 격리한다.
 
 ## 승인 요청 사항
 
-- 위 4개 Stage 분할과 각 Stage 산출물·검증·커밋 메시지
+- 위 4개 정규 Stage와 승인된 Stage 3.5 분할, 각 Stage 산출물·검증·커밋 메시지
 - storage `null=system`, 저장 허용값 `light|dark`, key
   `codex-usage-profile:appearance` 계약
 - `data-theme-preference`와 resolved `data-theme`을 분리하는 document 계약
@@ -327,5 +408,8 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Appearance panel을 인증과 무관하게 Settings에 노출하고 header quick toggle을 만들지 않는 방향
 - Stage 1에서 Codex 앱을 읽기 전용으로 분석하고 관찰 가능한 동작·semantic mapping만 참고하는 경계
 - Stage 4까지 production deploy 없이 local·artifact 검증만 수행하는 Gate
+- Stage 3.5에서 owner-only 미리보기만 resolved theme를 따르고 공개 R2 card는 dark로 유지하는 경계
+- 영속 카드 customization과 light/dark R2 이중 객체는 #74로 분리하는 경계
 
-승인되면 Stage 1만 구현하고 검증·단계 보고서·커밋까지 완료한 뒤 다음 Stage 승인을 요청한다.
+Stage 3.5 변경안은 승인되었으며, 구현·검증·단계 보고서·커밋을 완료한 뒤 Stage 4 진입 승인을
+별도로 요청한다.

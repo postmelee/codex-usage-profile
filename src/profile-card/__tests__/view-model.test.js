@@ -69,3 +69,26 @@ test("normalizes supported locales and falls back to English", () => {
   assert.equal(resolveCardLocale("en-US"), "en");
   assert.equal(resolveCardLocale("de-DE"), "en");
 });
+
+test("normalizes the card theme without changing usage content", () => {
+  const light = buildCardViewModel({
+    owner: sampleCardOwner,
+    theme: "light",
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+  const fallback = buildCardViewModel({
+    owner: sampleCardOwner,
+    theme: "unsupported",
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+
+  assert.equal(light.theme, "light");
+  assert.equal(light.heatmap.theme, "light");
+  assert.equal(fallback.theme, "dark");
+  assert.deepEqual(
+    light.heatmap.cells.map((cell) => cell.level),
+    fallback.heatmap.cells.map((cell) => cell.level)
+  );
+});

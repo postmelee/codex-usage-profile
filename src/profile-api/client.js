@@ -300,9 +300,13 @@ export function buildOwnerCardPreviewUrl(baseUrl = "", options = {}) {
     "http://localhost"
   );
   const locale = normalizeOptionalString(options.locale, "locale");
+  const theme = normalizeCardPreviewTheme(options.theme);
 
   if (locale) {
     url.searchParams.set("locale", locale);
+  }
+  if (theme) {
+    url.searchParams.set("theme", theme);
   }
   if (options.revision !== undefined && options.revision !== null) {
     url.searchParams.set("v", String(options.revision));
@@ -310,6 +314,15 @@ export function buildOwnerCardPreviewUrl(baseUrl = "", options = {}) {
 
   if (baseUrl) return url.toString();
   return `${url.pathname}${url.search}`;
+}
+
+function normalizeCardPreviewTheme(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const theme = normalizeOptionalString(value, "theme").toLowerCase();
+  if (theme !== "light" && theme !== "dark") {
+    throw new TypeError("theme must be light or dark");
+  }
+  return theme;
 }
 
 async function readApiEnvelope(response) {

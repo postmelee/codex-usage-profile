@@ -18,6 +18,7 @@ import {
 import {
   createProfileCardSourceDigest
 } from "../service-core.js";
+import { CARD_THEME_PALETTES } from "../theme.js";
 import { buildCardViewModel } from "../view-model.js";
 import {
   SAMPLE_CARD_TODAY_ISO,
@@ -122,6 +123,28 @@ test("embeds supported avatar bytes and falls back for invalid image bytes", () 
   assert.match(embedded, /href="data:image\/png;base64,/);
   assert.doesNotMatch(fallback, /href="data:image/);
   assert.match(fallback, />p<\/text>/i);
+});
+
+test("uses the same semantic light palette in Worker SVG", () => {
+  const viewModel = buildCardViewModel({
+    locale: "en",
+    owner: sampleCardOwner,
+    theme: "light",
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+  const svg = createWorkerProfileCardSvg(viewModel);
+
+  for (const color of [
+    CARD_THEME_PALETTES.light.background,
+    CARD_THEME_PALETTES.light.primary,
+    CARD_THEME_PALETTES.light.secondary,
+    CARD_THEME_PALETTES.light.divider,
+    ...CARD_THEME_PALETTES.light.heatmap
+  ]) {
+    assert.match(svg, new RegExp(escapeRegExp(color)));
+  }
+  assert.doesNotMatch(svg, /#181818|#2f2f2f/);
 });
 
 function createViewModel(locale) {

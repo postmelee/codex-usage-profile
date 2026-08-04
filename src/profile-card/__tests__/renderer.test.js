@@ -11,6 +11,7 @@ import {
   CARD_OUTPUT_WIDTH,
   renderProfileCardPng
 } from "../renderer.js";
+import { CARD_THEME_PALETTES } from "../theme.js";
 import { buildCardViewModel } from "../view-model.js";
 import {
   SAMPLE_CARD_TODAY_ISO,
@@ -72,6 +73,34 @@ test("keeps long translated labels inside fixed stat columns", async () => {
 
   assert.equal(image.width, CARD_OUTPUT_WIDTH);
   assert.equal(image.height, CARD_OUTPUT_HEIGHT);
+});
+
+test("renders the owner preview with the selected light palette", async () => {
+  const viewModel = buildCardViewModel({
+    locale: "en",
+    owner: sampleCardOwner,
+    theme: "light",
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+  const png = await renderProfileCardPng(viewModel);
+  const image = await loadImage(png);
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+
+  assert.deepEqual(
+    readLogicalPixel(context, 249.5, 153),
+    rgba(CARD_THEME_PALETTES.light.background)
+  );
+  assert.deepEqual(
+    readLogicalPixel(context, 39, 103),
+    rgba(CARD_THEME_PALETTES.light.heatmap[0])
+  );
+  assert.deepEqual(
+    readLogicalPixel(context, 140.5, 250),
+    rgba(CARD_THEME_PALETTES.light.divider)
+  );
 });
 
 function readPixel(context, x, y) {

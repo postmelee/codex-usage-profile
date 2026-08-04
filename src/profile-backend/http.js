@@ -250,7 +250,8 @@ export function createProfileBackendHttpHandler(options = {}) {
         );
         const card = await cardService.renderOwnerCard({
           ownerId: owner.id,
-          locale: url.searchParams.get("locale")
+          locale: url.searchParams.get("locale"),
+          theme: url.searchParams.get("theme")
         });
         return cardPngResponse(card, { cacheControl: PRIVATE_CARD_CACHE_CONTROL });
       }

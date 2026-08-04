@@ -1,18 +1,13 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
+import { getCardThemePalette } from "./theme.js";
+
 export const WORKER_CARD_RENDERER_VERSION =
   "codex-share-card-2-resvg-wasm-1";
 
 const CARD_LOGICAL_WIDTH = 499;
 const CARD_LOGICAL_HEIGHT = 306;
 const CARD_OUTPUT_SCALE = 3;
-const CARD_COLORS = Object.freeze({
-  background: "#181818",
-  divider: "#242424",
-  primary: "#ffffff",
-  secondary: "#aeaeae"
-});
-
 const AVATAR_X = 36;
 const AVATAR_Y = 36;
 const AVATAR_SIZE = 44;
@@ -69,10 +64,15 @@ export function createWorkerProfileCardRenderer(options = {}) {
 
 export function createWorkerProfileCardSvg(viewModel, options = {}) {
   assertViewModel(viewModel);
+  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
 
-  const avatar = createAvatarMarkup(viewModel.header, options.avatarSource);
-  const heatmap = createHeatmapMarkup(viewModel.heatmap);
-  const stats = createStatsMarkup(viewModel.stats);
+  const avatar = createAvatarMarkup(
+    viewModel.header,
+    options.avatarSource,
+    palette
+  );
+  const heatmap = createHeatmapMarkup(viewModel.heatmap, palette);
+  const stats = createStatsMarkup(viewModel.stats, palette);
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_LOGICAL_WIDTH}"`,
@@ -82,10 +82,10 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
     '<clipPath id="avatar-clip"><circle cx="58" cy="58" r="22"/></clipPath>',
     "</defs>",
     `<rect width="${CARD_LOGICAL_WIDTH}" height="${CARD_LOGICAL_HEIGHT}"`,
-    ` rx="32" fill="${CARD_COLORS.background}"/>`,
+    ` rx="32" fill="${palette.background}"/>`,
     avatar,
     createFittedText(viewModel.header.displayName, {
-      color: CARD_COLORS.primary,
+      color: palette.primary,
       fontSize: 19,
       maxWidth: 260,
       minFontSize: 14,
@@ -94,7 +94,7 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
       y: 56
     }),
     createFittedText(viewModel.header.username, {
-      color: CARD_COLORS.secondary,
+      color: palette.secondary,
       fontSize: 13,
       maxWidth: 260,
       minFontSize: 10,
@@ -104,7 +104,7 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
     }),
     createFittedText("Codex", {
       anchor: "middle",
-      color: CARD_COLORS.secondary,
+      color: palette.secondary,
       fontSize: 20,
       maxWidth: 57,
       minFontSize: 18,
@@ -129,7 +129,7 @@ async function initializeWorkerRendererWasm(wasmModule) {
   await wasmInitialization;
 }
 
-function createAvatarMarkup(header, source) {
+function createAvatarMarkup(header, source, palette) {
   const avatarUri = createAvatarDataUri(source);
   if (avatarUri) {
     return [
@@ -141,10 +141,10 @@ function createAvatarMarkup(header, source) {
   }
 
   return [
-    `<circle cx="58" cy="58" r="22" fill="#2f2f2f"/>`,
+    `<circle cx="58" cy="58" r="22" fill="${palette.avatarFallback}"/>`,
     createFittedText(getAvatarFallback(header.displayName), {
       anchor: "middle",
-      color: CARD_COLORS.secondary,
+      color: palette.secondary,
       fontSize: 18,
       maxWidth: 32,
       minFontSize: 14,
@@ -155,7 +155,7 @@ function createAvatarMarkup(header, source) {
   ].join("");
 }
 
-function createHeatmapMarkup(heatmap) {
+function createHeatmapMarkup(heatmap, palette) {
   const columnStep = (HEATMAP_WIDTH - HEATMAP_CELL_SIZE) /
     Math.max(heatmap.columnCount - 1, 1);
   const rowStep = (HEATMAP_HEIGHT - HEATMAP_CELL_SIZE) /
@@ -166,21 +166,21 @@ function createHeatmapMarkup(heatmap) {
     const y = HEATMAP_Y + cell.row * rowStep;
     return `<rect x="${formatNumber(x)}" y="${formatNumber(y)}"` +
       ` width="${HEATMAP_CELL_SIZE}" height="${HEATMAP_CELL_SIZE}"` +
-      ` rx="4" fill="${escapeXml(cell.color)}"/>`;
+      ` rx="4" fill="${escapeXml(palette.heatmap[cell.level] ?? cell.color)}"/>`;
   }).join("");
 }
 
-function createStatsMarkup(stats) {
+function createStatsMarkup(stats, palette) {
   const dividers = STAT_DIVIDERS.map((x) => (
     `<rect x="${x}" y="234" width="1" height="40"` +
-    ` fill="${CARD_COLORS.divider}"/>`
+    ` fill="${palette.divider}"/>`
   )).join("");
   const labels = stats.slice(0, 4).map((stat, index) => {
     const x = STAT_CENTERS[index];
     return [
       createFittedText(stat.value, {
         anchor: "middle",
-        color: CARD_COLORS.primary,
+        color: palette.primary,
         fontSize: 18,
         maxWidth: 96,
         minFontSize: 14,
@@ -190,7 +190,7 @@ function createStatsMarkup(stats) {
       }),
       createFittedText(stat.label, {
         anchor: "middle",
-        color: CARD_COLORS.secondary,
+        color: palette.secondary,
         fontSize: 13,
         maxWidth: 98,
         minFontSize: 9,

@@ -522,14 +522,22 @@ test("validates required client inputs", async () => {
   );
 });
 
-test("builds locale-aware owner card preview URLs", () => {
+test("builds locale and theme-aware owner card preview URLs", () => {
   assert.equal(
-    buildOwnerCardPreviewUrl("", { locale: "ko", revision: 3 }),
-    "/api/profile/card.png?locale=ko&v=3"
+    buildOwnerCardPreviewUrl("", {
+      locale: "ko",
+      revision: 3,
+      theme: "light"
+    }),
+    "/api/profile/card.png?locale=ko&theme=light&v=3"
   );
   assert.equal(
     buildOwnerCardPreviewUrl("https://profiles.example.test/app", { locale: "en" }),
     "https://profiles.example.test/api/profile/card.png?locale=en"
+  );
+  assert.throws(
+    () => buildOwnerCardPreviewUrl("", { theme: "system" }),
+    /theme must be light or dark/
   );
 });
 

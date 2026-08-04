@@ -2878,6 +2878,49 @@ test.describe("Settings appearance control", () => {
     await expect(dark).toBeChecked();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
+
+  test("themed card preview follows the resolved owner theme", async ({ page }) => {
+    await page.addInitScript((storageKey) => {
+      if (localStorage.getItem(storageKey) === null) {
+        localStorage.setItem(storageKey, "light");
+      }
+    }, THEME_STORAGE_KEY);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-preview")).toHaveAttribute(
+      "src",
+      /\/api\/profile\/card\.png\?locale=en&theme=light/
+    );
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(page.locator(".share-studio-card")).toHaveAttribute(
+      "src",
+      /\/api\/profile\/card\.png\?locale=en&theme=light/
+    );
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+
+    await page.goto("/profile");
+    await expect(page.locator(".profile-card-section .home-card-preview"))
+      .toHaveAttribute(
+        "src",
+        /\/api\/profile\/card\.png\?locale=en&theme=light/
+      );
+
+    await page.goto("/settings");
+    await mockSettingsData(page);
+    await page.getByRole("radio", { name: /Dark/ }).check();
+    await page.goto("/profile");
+    await expect(page.locator(".profile-card-section .home-card-preview"))
+      .toHaveAttribute(
+        "src",
+        /\/api\/profile\/card\.png\?locale=en&theme=dark/
+      );
+  });
 });
 
 test.describe("Public profile", () => {

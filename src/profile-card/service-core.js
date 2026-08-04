@@ -8,6 +8,10 @@ import {
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
 import {
+  DEFAULT_CARD_THEME,
+  normalizeCardTheme
+} from "./theme.js";
+import {
   buildCardViewModel,
   resolveCardLocale
 } from "./view-model.js";
@@ -77,6 +81,7 @@ export function createProfileCardServiceCore(options = {}) {
         owner,
         usageRecord,
         locale: renderOptions.locale,
+        theme: renderOptions.theme,
         includeBody: renderOptions.includeBody !== false,
         ifNoneMatch: renderOptions.ifNoneMatch
       });
@@ -92,6 +97,7 @@ export function createProfileCardServiceCore(options = {}) {
         owner,
         usageRecord,
         locale: renderOptions.locale,
+        theme: DEFAULT_CARD_THEME,
         includeBody: renderOptions.includeBody !== false,
         ifNoneMatch: renderOptions.ifNoneMatch
       });
@@ -100,11 +106,13 @@ export function createProfileCardServiceCore(options = {}) {
 
   async function renderCard(renderOptions) {
     const locale = resolveCardLocale(renderOptions.locale);
+    const theme = normalizeCardTheme(renderOptions.theme);
     const usage = normalizeAccountUsageReadResult(renderOptions.usageRecord.usage);
     const sourceDigest = createProfileCardSourceDigest({
       locale,
       owner: renderOptions.owner,
       rendererVersion,
+      theme,
       usage,
       usageRecord: renderOptions.usageRecord
     });
@@ -118,9 +126,10 @@ export function createProfileCardServiceCore(options = {}) {
       const viewModel = buildCardViewModel({
         locale,
         owner: renderOptions.owner,
+        theme,
         usage
       });
-      body = Buffer.from(await renderPng(viewModel, { avatarSource }));
+      body = Buffer.from(await renderPng(viewModel, { avatarSource, theme }));
       pngCache.set(sourceDigest, body);
     }
 
@@ -135,7 +144,8 @@ export function createProfileCardServiceCore(options = {}) {
       locale,
       notModified,
       revision,
-      sourceDigest
+      sourceDigest,
+      theme
     };
   }
 
@@ -184,10 +194,12 @@ function nextOwnerRevisionTimestamp(currentValue, nextValue) {
 }
 
 export function createProfileCardSourceDigest(options = {}) {
+  const theme = normalizeCardTheme(options.theme);
   const payload = JSON.stringify({
     rendererVersion: options.rendererVersion ??
       DEFAULT_PROFILE_CARD_RENDERER_VERSION,
     locale: resolveCardLocale(options.locale),
+    ...(theme === DEFAULT_CARD_THEME ? {} : { theme }),
     owner: {
       id: options.owner?.id ?? null,
       handle: options.owner?.handle ?? null,
