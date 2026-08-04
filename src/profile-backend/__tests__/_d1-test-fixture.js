@@ -102,6 +102,11 @@ export function ownerFixture(overrides = {}) {
     profileUrl: "https://github.com/postmelee",
     handle: "postmelee",
     visibility: "private",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "dark",
+      effect: { preset: "none", version: 1 }
+    },
     createdAt: "2026-07-23T00:00:00.000Z",
     updatedAt: "2026-07-23T00:00:00.000Z",
     ...overrides

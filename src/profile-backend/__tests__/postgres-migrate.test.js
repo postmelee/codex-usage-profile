@@ -49,7 +49,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
 test("loads the packaged migrations with paired up/down files", async () => {
   const migrations = await loadMigrations();
 
-  assert.equal(migrations.length, 2);
+  assert.equal(migrations.length, 3);
   assert.equal(migrations[0].version, 1);
   assert.equal(migrations[0].name, "init");
   assert.match(migrations[0].upSql, /CREATE TABLE owners/);
@@ -58,6 +58,10 @@ test("loads the packaged migrations with paired up/down files", async () => {
   assert.equal(migrations[1].name, "cli_login_intent");
   assert.match(migrations[1].upSql, /ADD COLUMN intent/);
   assert.match(migrations[1].downSql, /DROP COLUMN IF EXISTS intent/);
+  assert.equal(migrations[2].version, 3);
+  assert.equal(migrations[2].name, "card_style");
+  assert.match(migrations[2].upSql, /ADD COLUMN card_style jsonb/);
+  assert.match(migrations[2].downSql, /DROP COLUMN IF EXISTS card_style/);
 });
 
 test("rejects unpaired and misnamed migration files", async () => {
@@ -91,7 +95,7 @@ test(
 
       // Clean database bootstrap.
       const firstUp = await migrateUp({ client, migrations });
-      assert.deepEqual(firstUp.applied, [1, 2]);
+      assert.deepEqual(firstUp.applied, [1, 2, 3]);
       assert.deepEqual(await listTables(client, schema), EXPECTED_TABLES);
       assert.deepEqual(
         await listUniqueConstraints(client, schema),
@@ -103,7 +107,7 @@ test(
       );
       assert.deepEqual(
         (await getAppliedMigrations(client)).map((migration) => migration.version),
-        [1, 2]
+        [1, 2, 3]
       );
 
       // Re-running up with nothing pending applies nothing.
@@ -111,19 +115,20 @@ test(
       assert.deepEqual(secondUp.applied, []);
 
       // Down reverts the schema but keeps the runner-owned bookkeeping table.
-      const down = await migrateDown({ client, migrations, steps: 2 });
-      assert.deepEqual(down.reverted, [2, 1]);
+      const down = await migrateDown({ client, migrations, steps: 3 });
+      assert.deepEqual(down.reverted, [3, 2, 1]);
       assert.deepEqual(await listTables(client, schema), ["schema_migrations"]);
       const status = await migrationStatus({ client, migrations });
       assert.deepEqual(status.applied, []);
       assert.deepEqual(status.pending, [
         { version: 1, name: "init" },
-        { version: 2, name: "cli_login_intent" }
+        { version: 2, name: "cli_login_intent" },
+        { version: 3, name: "card_style" }
       ]);
 
       // Up again reproduces the same schema.
       const thirdUp = await migrateUp({ client, migrations });
-      assert.deepEqual(thirdUp.applied, [1, 2]);
+      assert.deepEqual(thirdUp.applied, [1, 2, 3]);
       assert.deepEqual(await listTables(client, schema), EXPECTED_TABLES);
       assert.deepEqual(
         await listUniqueConstraints(client, schema),

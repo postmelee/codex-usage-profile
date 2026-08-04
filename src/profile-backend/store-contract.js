@@ -115,6 +115,12 @@ export const PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS = deepFreeze({
     invariant: "capturedAt and contentDigest provide stale, conflict, and idempotent outcomes",
     failurePolicy: "rollback"
   },
+  updateCardSettings: {
+    records: ["owner"],
+    serializationKey: "owner.id",
+    invariant: "one normalized card presentation replaces one owner revision",
+    failurePolicy: "rollback"
+  },
   updateVisibility: {
     records: ["owner", "latestUsage", "latestSnapshot"],
     serializationKey: "owner.id",

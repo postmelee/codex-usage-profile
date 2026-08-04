@@ -18,6 +18,10 @@ import {
 import {
   D1_MIGRATION_VERSIONS
 } from "./migration-manifest.js";
+import {
+  normalizeCardStyle,
+  serializeCardStyle
+} from "../../profile-card/presentation.js";
 
 const D1_MIGRATION_TABLE_QUERY =
   "SELECT name FROM sqlite_master " +
@@ -35,6 +39,7 @@ const OWNER = spec("owner", "owners", ["id"], [
   ["profileUrl", "profile_url"],
   ["handle", "handle"],
   ["visibility", "visibility"],
+  ["cardStyle", "card_style", { json: true, serialize: serializeCardStyle }],
   ["createdAt", "created_at"],
   ["updatedAt", "updated_at"]
 ], ["id", "authProvider", "providerUserId", "handle"]);
@@ -298,7 +303,10 @@ export function createD1ProfileBackendStore(options = {}) {
       return upsert(OAUTH_STATE, record);
     },
     saveOwner(record) {
-      return upsert(OWNER, record);
+      return upsert(OWNER, {
+        ...record,
+        cardStyle: normalizeCardStyle(record.cardStyle)
+      });
     },
     saveSession(record) {
       return upsert(SESSION, record);
@@ -723,6 +731,65 @@ function createD1AtomicOperations(context) {
       }
     },
 
+    async updateCardSettings(command) {
+      assertProfileBackendAtomicCommand("updateCardSettings", command);
+      const operation = "updateCardSettings";
+      const nonce = createNonce();
+      try {
+        const cardStyle = normalizeCardStyle(command.cardStyle, {
+          defaultWhenMissing: false
+        });
+        const results = await database.batch([
+          prepare(
+            "INSERT INTO atomic_operation_claims " +
+              "(operation, claim_key, nonce, outcome, created_at) " +
+            "SELECT ?, id, ?, 'ok', ? FROM owners " +
+            "WHERE id = ? AND updated_at IS ?",
+            [
+              operation,
+              nonce,
+              command.updatedAt,
+              command.ownerId,
+              command.expectedOwnerUpdatedAt
+            ]
+          ),
+          claimAssertion(operation, command.ownerId, nonce),
+          prepare(
+            "UPDATE owners SET card_style = ?, updated_at = ? " +
+            "WHERE id = ? AND updated_at IS ?",
+            [
+              serializeCardStyle(cardStyle),
+              command.updatedAt,
+              command.ownerId,
+              command.expectedOwnerUpdatedAt
+            ]
+          ),
+          selectOneStatement(prepare, OWNER, "id = ?", [command.ownerId]),
+          ...cleanupStatements(operation, command.ownerId, nonce)
+        ]);
+        const owner = rowFromBatch(OWNER, results[3]);
+        return assertProfileBackendAtomicResult("updateCardSettings", {
+          owner,
+          cardStyle: owner.cardStyle
+        });
+      } catch (error) {
+        const owner = await store.getOwnerById(command.ownerId);
+        if (!owner) {
+          throw new ProfileBackendError(
+            PROFILE_BACKEND_ERROR_CODES.NOT_FOUND,
+            "Owner not found"
+          );
+        }
+        if ((owner.updatedAt ?? null) !== command.expectedOwnerUpdatedAt) {
+          throw new ProfileBackendError(
+            PROFILE_BACKEND_ERROR_CODES.CONFLICT,
+            "Owner card settings revision changed; retry the update"
+          );
+        }
+        throw mapD1Error(error);
+      }
+    },
+
     async updateVisibility(command) {
       assertProfileBackendAtomicCommand("updateVisibility", command);
       const operation = "updateVisibility";
@@ -832,6 +899,7 @@ function toParams(recordSpec, record) {
   return recordSpec.columns.map(([key, , options]) => {
     const value = record[key];
     if (value === undefined || value === null) return null;
+    if (options?.serialize) return options.serialize(value);
     return options?.json ? JSON.stringify(value) : value;
   });
 }

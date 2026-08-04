@@ -41,7 +41,7 @@ test("D1 store readiness rejects missing versions but permits higher versions", 
     migrations: [
       ...migrations,
       {
-        version: 4,
+        version: 5,
         name: "future_rollback_compatibility",
         sql: "CREATE TABLE future_rollback_compatibility (id TEXT PRIMARY KEY)"
       }
@@ -49,7 +49,7 @@ test("D1 store readiness rejects missing versions but permits higher versions", 
     now: "2026-07-23T00:02:00.000Z"
   });
   assert.deepEqual(await fixture.rpc("verifyReadiness"), {
-    appliedVersions: [1, 2, 3, 4]
+    appliedVersions: [1, 2, 3, 4, 5]
   });
 });
 
@@ -125,6 +125,40 @@ test("D1 challenge intent constraint rejects unknown values", async (t) => {
       intent: "publish"
     }),
     /CHECK constraint failed/
+  );
+});
+
+test("D1 atomically updates normalized owner card settings", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await fixture.rpc("saveOwner", ownerFixture());
+  const cardStyle = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+
+  const result = await fixture.atomic("updateCardSettings", {
+    ownerId: "owner_1",
+    expectedOwnerUpdatedAt: "2026-07-23T00:00:00.000Z",
+    cardStyle,
+    updatedAt: "2026-07-23T00:00:01.000Z"
+  });
+
+  assert.deepEqual(result.cardStyle, cardStyle);
+  assert.deepEqual(
+    (await fixture.rpc("getOwnerById", "owner_1")).cardStyle,
+    cardStyle
+  );
+  await assert.rejects(
+    () => fixture.atomic("updateCardSettings", {
+      ownerId: "owner_1",
+      expectedOwnerUpdatedAt: "2026-07-23T00:00:00.000Z",
+      cardStyle: { ...cardStyle, theme: "dark" },
+      updatedAt: "2026-07-23T00:00:02.000Z"
+    }),
+    (error) => error.code === "conflict"
   );
 });
 

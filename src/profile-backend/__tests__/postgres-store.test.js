@@ -37,6 +37,11 @@ const OWNER = Object.freeze({
   profileUrl: null,
   handle: "postmelee",
   visibility: PROFILE_VISIBILITY.PRIVATE,
+  cardStyle: {
+    schemaVersion: 1,
+    theme: "dark",
+    effect: { preset: "none", version: 1 }
+  },
   createdAt: "2026-07-11T00:00:00.000Z",
   updatedAt: "2026-07-11T00:00:00.000Z"
 });
@@ -67,7 +72,7 @@ test("postgres adapter", { skip: skipWithoutDatabase }, async (t) => {
 
     await t.test("satisfies the store contract surface and readiness", async () => {
       assert.equal(assertProfileBackendStoreContract(store), store);
-      assert.deepEqual(await store.verifyReadiness(), { appliedVersions: [1, 2] });
+      assert.deepEqual(await store.verifyReadiness(), { appliedVersions: [1, 2, 3] });
     });
 
     await t.test("round-trips owners with validation and unique conflicts", async () => {

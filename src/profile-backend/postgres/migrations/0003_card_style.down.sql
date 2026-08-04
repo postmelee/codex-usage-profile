@@ -1,0 +1,1 @@
+ALTER TABLE owners DROP COLUMN IF EXISTS card_style;

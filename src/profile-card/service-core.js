@@ -7,6 +7,7 @@ import {
 } from "../profile-backend/errors.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
+import { normalizeCardStyle } from "./presentation.js";
 import {
   DEFAULT_CARD_THEME,
   normalizeCardTheme
@@ -40,6 +41,7 @@ export function createProfileCardServiceCore(options = {}) {
     avatarMaxBytes = DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES,
     cacheEntries = DEFAULT_PROFILE_CARD_CACHE_ENTRIES
   } = options;
+  const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (async () => {});
 
   if (!store) {
     throw new TypeError("store is required");
@@ -67,6 +69,34 @@ export function createProfileCardServiceCore(options = {}) {
         visibility: normalizeVisibility(updateOptions.visibility),
         updatedAt: nextOwnerRevisionTimestamp(owner.updatedAt, now())
       });
+    },
+
+    async updateCardSettings(updateOptions = {}) {
+      const current = await requireOwnerById(store, updateOptions.ownerId);
+      const cardStyle = normalizeCardStyle(updateOptions.cardStyle, {
+        defaultWhenMissing: false
+      });
+      const usageRecord = await store.getLatestUsageByOwnerId(current.id);
+
+      if (current.visibility === PROFILE_VISIBILITY.PUBLIC) {
+        await ensureCardStyleMedia({
+          owner: current,
+          usageRecord,
+          cardStyle
+        });
+      }
+
+      const result = await store.atomic.updateCardSettings({
+        ownerId: current.id,
+        expectedOwnerUpdatedAt: current.updatedAt ?? null,
+        cardStyle,
+        updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
+      });
+      return {
+        owner: result.owner,
+        usageRecord,
+        visibility: result.owner.visibility
+      };
     },
 
     async getPublicProfile(profileOptions = {}) {

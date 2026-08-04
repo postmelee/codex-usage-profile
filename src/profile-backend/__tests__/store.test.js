@@ -16,7 +16,12 @@ const owner = Object.freeze({
   providerUserId: "12345",
   githubLogin: "postmelee",
   handle: "postmelee",
-  visibility: PROFILE_VISIBILITY.PUBLIC
+  visibility: PROFILE_VISIBILITY.PUBLIC,
+  cardStyle: {
+    schemaVersion: 1,
+    theme: "dark",
+    effect: { preset: "none", version: 1 }
+  }
 });
 
 test("saves and reads owners by id, handle, and provider identity", () => {

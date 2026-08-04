@@ -234,11 +234,33 @@ test("rejects cross-site session mutation and accepts same-origin mutation", asy
       "sec-fetch-site": "same-origin"
     }
   );
+  const crossSiteCardSettings = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    {
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    },
+    {
+      cookie,
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site"
+    }
+  );
 
   assert.equal(crossSite.status, 403);
   assert.equal(crossSite.body.error.code, PROFILE_BACKEND_ERROR_CODES.FORBIDDEN);
   assert.equal(sameOrigin.status, 200);
   assert.equal(sameOrigin.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(crossSiteCardSettings.status, 403);
+  assert.equal(
+    crossSiteCardSettings.body.error.code,
+    PROFILE_BACKEND_ERROR_CODES.FORBIDDEN
+  );
 });
 
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
@@ -796,6 +818,11 @@ test("returns the session owner's card profile metadata", async () => {
   assert.equal(profile.body.data.visibility, PROFILE_VISIBILITY.PRIVATE);
   assert.deepEqual(profile.body.data.usage.usage, sampleAccountUsageReadResult);
   assert.equal(profile.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
+  assert.equal(profile.body.data.cardStyle.theme, "dark");
+  assert.equal(
+    profile.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=dark`
+  );
 });
 
 test("serves a public Account Usage profile with an explicit response allowlist", async () => {
@@ -837,7 +864,18 @@ test("serves a public Account Usage profile with an explicit response allowlist"
       usage: sampleAccountUsageReadResult
     },
     visibility: PROFILE_VISIBILITY.PUBLIC,
-    publicCardUrl: `${BASE_URL}/u/postmelee/card.png`
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "dark",
+      effect: { preset: "none", version: 1 }
+    },
+    presentationDigest: "4Pu_ghjqNSMCxM4CfBZvubJIeSIdlJmR_H71FnHYb5U",
+    publicCardUrl: `${BASE_URL}/u/postmelee/card.png`,
+    selectedPublicCardUrl: `${BASE_URL}/u/postmelee/card.png?theme=dark`,
+    publicCardUrls: {
+      light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
+      dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
+    }
   });
 
   const serialized = JSON.stringify(response.body.data);
@@ -858,6 +896,59 @@ test("serves a public Account Usage profile with an explicit response allowlist"
   ]) {
     assert.equal(serialized.includes(`\"${internalKey}\"`), false);
   }
+});
+
+test("updates versioned owner card settings and validates the exact payload", async () => {
+  const ensureCalls = [];
+  const fixture = createFixture({
+    ensureCardStyleMedia(options) {
+      ensureCalls.push(options);
+    }
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  fixture.saveLatestUsage({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const cookie = fixture.saveSession();
+  const light = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light },
+    { cookie }
+  );
+  const injected = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { ownerId: "owner_2", cardStyle: light },
+    { cookie }
+  );
+  const unknown = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: { ...light, effect: { preset: "beam.rotate", version: 1 } } },
+    { cookie }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.data.cardStyle, light);
+  assert.equal(
+    response.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=light`
+  );
+  assert.deepEqual(fixture.store.getOwnerById("owner_1").cardStyle, light);
+  assert.equal(ensureCalls.length, 1);
+  assert.equal(ensureCalls[0].owner.id, "owner_1");
+  assert.equal(injected.status, 400);
+  assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+  assert.equal(unknown.status, 400);
+  assert.equal(unknown.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
 });
 
 test("hides non-public, missing, malformed, and mismatched public profiles", async () => {
@@ -1902,6 +1993,7 @@ function createFixture(options = {}) {
         Buffer.from(`:${viewModel.locale}:${viewModel.theme}`)
       ])),
     profileCardRendererVersion: "http-test-renderer-1",
+    ensureCardStyleMedia: options.ensureCardStyleMedia,
     publicationService
   });
 

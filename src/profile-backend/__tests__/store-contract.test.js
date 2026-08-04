@@ -48,6 +48,7 @@ test("contract records owner scope and all multi-record atomic operations", () =
     "completeOAuthCallback",
     "exchangeCliLogin",
     "submitAccountUsage",
+    "updateCardSettings",
     "updateVisibility"
   ]);
   assert.deepEqual(PROFILE_BACKEND_STORE_RECORDS.oauthState.secretFields, ["id"]);
@@ -55,7 +56,7 @@ test("contract records owner scope and all multi-record atomic operations", () =
 
   for (const operation of Object.values(PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS)) {
     assert.equal(operation.failurePolicy, "rollback");
-    assert.equal(operation.records.length > 1, true);
+    assert.equal(operation.records.length >= 1, true);
     assert.equal(typeof operation.serializationKey, "string");
     assert.equal(typeof operation.invariant, "string");
   }

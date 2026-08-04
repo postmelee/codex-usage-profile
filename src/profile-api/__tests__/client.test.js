@@ -84,6 +84,35 @@ test("loads and updates the session owner's card profile", async () => {
   assert.equal(updated.visibility, "public");
 });
 
+test("updates the owner's versioned card settings", async () => {
+  const requests = [];
+  const client = createProfileApiClient({
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return jsonResponse({
+        ok: true,
+        data: {
+          cardStyle: JSON.parse(options.body).cardStyle,
+          selectedPublicCardUrl: "/u/postmelee/card.png?theme=light"
+        }
+      });
+    }
+  });
+  const cardStyle = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+
+  const result = await client.updateCardSettings(cardStyle);
+
+  assert.equal(requests[0].url, "/api/profile/card-settings");
+  assert.equal(requests[0].options.method, "PATCH");
+  assert.equal(requests[0].options.credentials, "same-origin");
+  assert.deepEqual(JSON.parse(requests[0].options.body), { cardStyle });
+  assert.deepEqual(result.cardStyle, cardStyle);
+});
+
 test("loads a public Account Usage profile from the allowlisted endpoint", async () => {
   const requests = [];
   const publicProfile = {
