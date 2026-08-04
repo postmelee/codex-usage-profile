@@ -7,31 +7,11 @@ const MARKETING_OPERATOR_HANDLE_PATTERN =
   /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const MARKETING_QUICKSTART_STEPS = Object.freeze([
-  createStep(
-    "approve-device",
-    "Approve your device",
-    "Open the link from the CLI and approve the device with your signed-in account."
-  ),
-  createStep(
-    "submit-usage",
-    "Submit Codex usage",
-    "Let the CLI read your Codex usage and send the supported usage fields."
-  ),
-  createStep(
-    "review-card",
-    "Review your card",
-    "Confirm the updated private card on the home page."
-  ),
-  createStep(
-    "publish-card",
-    "Publish your card",
-    "Make the card public when it is ready to share."
-  ),
-  createStep(
-    "copy-readme",
-    "Copy README Markdown",
-    "Copy the stable image link or Markdown for your GitHub README."
-  )
+  createStep("approve-device"),
+  createStep("submit-usage"),
+  createStep("review-card"),
+  createStep("publish-card"),
+  createStep("copy-readme")
 ]);
 
 export const DEFAULT_MARKETING_COPY = Object.freeze({
@@ -45,7 +25,10 @@ export const DEFAULT_MARKETING_COPY = Object.freeze({
 });
 
 export function createMarketingConfig(options = {}) {
-  const copy = normalizeCopy(options.copy);
+  const copyOverrides = normalizeCopyOverrides(options.copy);
+  const copy = Object.keys(copyOverrides).length === 0
+    ? DEFAULT_MARKETING_COPY
+    : Object.freeze({ ...DEFAULT_MARKETING_COPY, ...copyOverrides });
   const canonicalAppUrl = normalizeOptionalCanonicalAppUrl(
     options.canonicalAppUrl
   );
@@ -57,6 +40,7 @@ export function createMarketingConfig(options = {}) {
     appHref: canonicalAppUrl ? new URL("/", canonicalAppUrl).toString() : null,
     canonicalAppUrl,
     copy,
+    copyOverrides,
     operatorCardHandle,
     sampleCardUrl: normalizeNonEmptyString(
       options.sampleCardUrl ?? MARKETING_SAMPLE_CARD_URL,
@@ -68,6 +52,12 @@ export function createMarketingConfig(options = {}) {
     ),
     quickstartSteps: MARKETING_QUICKSTART_STEPS
   });
+}
+
+export function resolveMarketingCopy(config, key, localizedValue) {
+  return Object.hasOwn(config.copyOverrides, key)
+    ? config.copyOverrides[key]
+    : localizedValue;
 }
 
 export function buildMarketingOperatorCardUrl(config, locale = "en") {
@@ -132,18 +122,18 @@ function normalizeOperatorCardHandle(value) {
   return normalized;
 }
 
-function normalizeCopy(value) {
-  if (value === undefined) return DEFAULT_MARKETING_COPY;
+function normalizeCopyOverrides(value) {
+  if (value === undefined) return Object.freeze({});
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("copy must be an object");
   }
 
-  return Object.freeze(Object.fromEntries(
-    Object.entries(DEFAULT_MARKETING_COPY).map(([key, defaultValue]) => [
+  return Object.freeze(Object.fromEntries(Object.keys(DEFAULT_MARKETING_COPY)
+    .filter((key) => value[key] !== undefined && value[key] !== null)
+    .map((key) => [
       key,
-      normalizeNonEmptyString(value[key] ?? defaultValue, `copy.${key}`)
-    ])
-  ));
+      normalizeNonEmptyString(value[key], `copy.${key}`)
+    ])));
 }
 
 function normalizeNonEmptyString(value, label) {
@@ -154,8 +144,8 @@ function normalizeNonEmptyString(value, label) {
   return value.trim();
 }
 
-function createStep(id, title, description) {
-  return Object.freeze({ description, id, title });
+function createStep(id) {
+  return Object.freeze({ id });
 }
 
 function isLoopbackHostname(hostname) {
