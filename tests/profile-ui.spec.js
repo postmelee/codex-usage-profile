@@ -2290,29 +2290,18 @@ test.describe("Home and share card flow", () => {
       data: ownerProfile("public"),
       ok: true
     }));
-    await page.route("**/api/profile/card.png*", async (route) => {
-      const url = new URL(route.request().url());
-      if (url.searchParams.has("v")) {
-        await route.fulfill({
-          body: JSON.stringify({
-            error: { code: "unavailable", message: "Preview unavailable" },
-            ok: false
-          }),
-          contentType: "application/json",
-          status: 503
-        });
-        return;
-      }
-      await route.fulfill({
-        body: CARD_PNG,
-        contentType: "image/png",
-        status: 200
-      });
-    });
-    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+    await page.route("**/api/profile/card.png*", (route) => route.fulfill({
       body: CARD_PNG,
       contentType: "image/png",
       status: 200
+    }));
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: JSON.stringify({
+        error: { code: "unavailable", message: "Preview unavailable" },
+        ok: false
+      }),
+      contentType: "application/json",
+      status: 503
     }));
 
     await page.goto("/");
@@ -2922,7 +2911,7 @@ test.describe("Settings appearance control", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
-  test("card appearance saves owner theme and language independently from site appearance", async ({ page }) => {
+  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ page }) => {
     await page.addInitScript((storageKey) => {
       if (localStorage.getItem(storageKey) === null) {
         localStorage.setItem(storageKey, "light");
@@ -3011,6 +3000,11 @@ test.describe("Settings appearance control", () => {
     });
     const shareStudio = page.getByRole("dialog", { name: "Share activity" });
     await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
+      .toHaveAttribute(
+        "src",
+        "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+      );
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
       .toHaveAttribute("title", /[?&]theme=dark(?:&|$)/);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
@@ -3046,7 +3040,7 @@ test.describe("Settings appearance control", () => {
 });
 
 test.describe("Public profile", () => {
-  test("public profile renders the API-backed GitHub identity and stable card", async ({ page }, testInfo) => {
+  test("public profile renders the API-backed GitHub identity and selected public card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
     await mockPublicProfile(page);
     await mockCardImages(page);
@@ -3068,7 +3062,7 @@ test.describe("Public profile", () => {
     const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
     await expect(card).toHaveAttribute(
       "src",
-      "http://127.0.0.1:5173/u/postmelee/card.png"
+      "http://127.0.0.1:5173/u/postmelee/card.png?theme=light&locale=ko"
     );
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
     await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(1497);
@@ -3513,6 +3507,12 @@ async function mockPublicProfile(page) {
 
 function publicProfile() {
   return {
+    cardLocale: "ko",
+    cardStyle: {
+      effect: { preset: "none", version: 1 },
+      schemaVersion: 1,
+      theme: "light"
+    },
     owner: {
       avatarUrl: "https://avatars.githubusercontent.com/u/12345",
       displayName: "Post Melee",
@@ -3520,6 +3520,7 @@ function publicProfile() {
       handle: "postmelee"
     },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light",
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",

@@ -69,8 +69,11 @@ function isPublicProfile(profile) {
   return Boolean(
     profile &&
     profile.visibility === "public" &&
-    typeof profile.publicCardUrl === "string" &&
-    profile.publicCardUrl !== "" &&
+    isShareableCardUrl(profile.publicCardUrl) &&
+    (
+      profile.selectedPublicCardUrl === undefined ||
+      isShareableCardUrl(profile.selectedPublicCardUrl)
+    ) &&
     profile.owner &&
     typeof profile.owner.handle === "string" &&
     profile.owner.handle !== "" &&
@@ -78,6 +81,21 @@ function isPublicProfile(profile) {
     isUtcTimestamp(profile.usage.capturedAt) &&
     isAccountUsageReadResult(profile.usage.usage)
   );
+}
+
+function isShareableCardUrl(value) {
+  if (typeof value !== "string") return false;
+
+  const url = value.trim();
+  if (!url) return false;
+  if (url.startsWith("/")) return true;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function isUtcTimestamp(value) {

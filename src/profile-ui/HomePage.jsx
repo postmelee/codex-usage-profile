@@ -214,13 +214,6 @@ export function HomePage({
     isPublic &&
     ownerCardReady
   );
-  const sharePreviewUrl = hasUsage
-    ? client.buildOwnerCardPreviewUrl({
-      locale: cardLocale,
-      revision: previewRevision,
-      theme: cardTheme
-    })
-    : null;
 
   function handleVisibleCardError() {
     setCardTransition((current) => {
@@ -321,13 +314,13 @@ export function HomePage({
 
       <ShareStudio
         cardLocale={cardLocale}
+        cardTheme={profile?.cardStyle?.theme}
         locale={locale}
         locationOrigin={location?.origin}
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
-        previewUrl={sharePreviewUrl}
         publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
         sourceCardRef={shareSourceCardRef}

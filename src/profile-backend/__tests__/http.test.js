@@ -1287,6 +1287,9 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const themeResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?theme=light"
   );
+  const localizedThemeResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?theme=light&locale=ko"
+  );
   const invalidThemeResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?theme=unsupported"
   );
@@ -1315,6 +1318,12 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   assert.notEqual(
     themeResponse.headers.get("etag"),
     englishResponse.headers.get("etag")
+  );
+  assert.equal(localizedThemeResponse.status, 200);
+  assert.notEqual(localizedThemeResponse.headers.get("etag"), etag);
+  assert.notEqual(
+    localizedThemeResponse.headers.get("etag"),
+    themeResponse.headers.get("etag")
   );
   assert.equal(invalidThemeResponse.status, 404);
   assert.notEqual(englishResponse.headers.get("etag"), etag);

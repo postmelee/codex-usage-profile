@@ -112,6 +112,9 @@ test("maps missing, private, invalid, and failed responses to one unavailable st
     null,
     { ...PUBLIC_PROFILE, visibility: "private" },
     { ...PUBLIC_PROFILE, publicCardUrl: null },
+    { ...PUBLIC_PROFILE, publicCardUrl: "javascript:alert(1)" },
+    { ...PUBLIC_PROFILE, selectedPublicCardUrl: "not-a-url" },
+    { ...PUBLIC_PROFILE, selectedPublicCardUrl: "data:image/png;base64,AAAA" },
     {
       ...PUBLIC_PROFILE,
       usage: {

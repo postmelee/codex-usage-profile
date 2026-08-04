@@ -50,5 +50,5 @@ test("share studio keeps product copy locale separate from saved card locale", a
   const source = await readFile(join(SOURCE_ROOT, "ShareStudio.jsx"), "utf8");
 
   assert.match(source, /getShareStudioCopy\(locale\)/u);
-  assert.match(source, /buildLocalizedCardUrl\(publicCardUrl, cardLocale \?\? locale\)/u);
+  assert.match(source, /publicCardUrl,[\s\S]*cardLocale \?\? locale,[\s\S]*cardTheme/u);
 });

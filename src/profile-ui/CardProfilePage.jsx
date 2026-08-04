@@ -204,13 +204,13 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
 
       <ShareStudio
         cardLocale={profile?.cardLocale ?? "en"}
+        cardTheme={profile?.cardStyle?.theme}
         locale={locale}
         locationOrigin={globalThis.location?.origin}
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
-        previewUrl={previewUrl}
         publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
         sourceCardRef={shareSourceCardRef}

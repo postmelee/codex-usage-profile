@@ -16,13 +16,13 @@ import {
 
 export function ShareStudio({
   cardLocale,
+  cardTheme,
   locale,
   locationOrigin = globalThis.location?.origin,
   makingPrivate = false,
   onClose,
   onMakePrivate,
   open,
-  previewUrl,
   publicCardUrl,
   publicOwnerHandle,
   sourceCardRef,
@@ -49,8 +49,12 @@ export function ShareStudio({
   const [transitionPhase, setTransitionPhase] = useState("preparing");
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
-    () => buildLocalizedCardUrl(publicCardUrl, cardLocale ?? locale),
-    [cardLocale, locale, publicCardUrl]
+    () => buildLocalizedCardUrl(
+      publicCardUrl,
+      cardLocale ?? locale,
+      cardTheme
+    ),
+    [cardLocale, cardTheme, locale, publicCardUrl]
   );
   const markdown = useMemo(() => buildReadmeCardSnippet(imageUrl), [imageUrl]);
   const publicProfileUrl = useMemo(
@@ -65,7 +69,6 @@ export function ShareStudio({
     open
     && imageUrl
     && markdown
-    && previewUrl
     && typeof document !== "undefined"
   );
 
@@ -221,7 +224,7 @@ export function ShareStudio({
         motionAnimationRef.current = null;
       }
     };
-  }, [canRender, previewUrl, sourceCardRef, sourceRect]);
+  }, [canRender, imageUrl, sourceCardRef, sourceRect]);
 
   useLayoutEffect(() => {
     if (!canRender) return undefined;
@@ -274,7 +277,7 @@ export function ShareStudio({
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
         throw new Error("Image clipboard unavailable");
       }
-      const response = await fetch(previewUrl, { credentials: "same-origin" });
+      const response = await fetch(imageUrl, { credentials: "same-origin" });
       if (!response.ok) throw new Error("Could not load image");
       const blob = await response.blob();
       const png = blob.type === "image/png"
@@ -480,7 +483,7 @@ export function ShareStudio({
               height="612"
               onError={handlePreviewError}
               ref={previewImageRef}
-              src={previewUrl}
+              src={imageUrl}
               width="998"
             />
           )}
