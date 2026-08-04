@@ -66,12 +66,12 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 - media contract version은 4로 올리고 metadata에는 `theme`, nested theme/locale pointer, publication id를 검증 가능한 형태로 기록한다. legacy v3 dark publication은 dark serving과 query 없는 URL에 한해 읽을 수 있게 한다.
 - `theme` query 부재와 `theme=dark`는 dark, `theme=light`는 light다. 다른 값은 public route에서 일반 404/invalid request 기존 정책 중 HTTP contract test로 확정한 한 가지 결과만 사용한다. private preview의 기존 fallback은 별도 owner-only 계약으로 유지한다.
 
-### future effect·animated export 확장 경계
+### #39 effect·animated export 확장 경계
 
-- 브라우저 preview는 카드 내용 `<img>`와 장식 effect wrapper를 분리한다. future Beam adapter는 기존 `border-beam` dependency를 wrapper 내부에서만 사용하고 `pointer-events: none`, offscreen pause와 `prefers-reduced-motion` static fallback을 강제한다.
+- 브라우저 preview는 카드 내용 `<img>`와 장식 effect wrapper를 분리한다. [#39](https://github.com/postmelee/codex-usage-profile/issues/39)의 Beam adapter는 기존 `border-beam` dependency를 wrapper 내부에서만 사용하고 `pointer-events: none`, offscreen pause와 `prefers-reduced-motion` static fallback을 강제한다.
 - static card renderer는 presentation registry의 theme/static fallback만 받는다. DOM/CSS animation 구현을 native/Worker PNG renderer에 직접 import하지 않는다.
 - optional animated adapter contract는 normalized presentation, logical dimensions, duration/fps/frame-count bounds를 받아 timestamp별 RGBA/PNG frame을 결정적으로 생성하는 `sampleFrame(time)` capability로 둔다. encoder와 R2 publication은 이 frame contract에만 의존한다.
-- future GIF/WebP 등 animated output은 save/publish 시 pre-generation하고 immutable digest object를 R2에 쓴 뒤 authority pointer commit 후에만 공개한다. public GET에서 생성하거나 external CSS/JS를 실행하지 않는다.
+- #39의 GIF/WebP 등 animated output은 save/publish 시 pre-generation하고 immutable digest object를 R2에 쓴 뒤 authority pointer commit 후에만 공개한다. public GET에서 생성하거나 external CSS/JS를 실행하지 않는다.
 - animated asset 실패·초과 시간·초과 크기는 PNG stable object와 기존 saved style을 손상시키지 않는 별도 commit domain으로 둔다. exact limits, encoder 선택, Sites CPU 적합성과 format별 retention은 후속 task의 수행계획 승인 사항이다.
 - future selected URL은 기존 `theme` query를 유지하면서 opaque `style={presentationDigest 또는 stable style id}`를 additive하게 도입할 수 있다. 이번 task는 response/metadata에 digest를 제공하되 `style` query와 animated URL은 노출하지 않는다.
 
@@ -105,6 +105,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 - `buildLocalizedCardUrl`을 theme-aware helper로 확장하되 locale과 theme query를 각각 정규화한다. 선택 URL은 theme query를 항상 명시하고 영어 locale은 기존처럼 locale query를 생략한다.
 - Share Studio의 PNG preview/download, URL 복사, README Markdown, X/LinkedIn/Reddit 흐름은 동일한 selected theme URL을 사용한다.
 - 기존 `publicCardUrl` consumer와 query 없는 README는 dark를 계속 받는다. 사용자 저장값 때문에 기존 URL bytes가 암묵적으로 light로 바뀌지 않는다.
+- 이번 MVP의 URL 기반 PNG 공유는 #39 이후에도 필수 호환 경로다. #39의 GIF 선택·저장·Web Share는 별도 format capability로 추가하며 PNG endpoint, PNG Share Studio UI와 기존 복사 URL을 대체하거나 GIF 실패에 연동해 비활성화하지 않는다.
 - private/unpublished owner의 query 없음, light, dark, locale 조합은 모두 동일하게 404다. provider/bucket 오류는 storage 상세 없이 generic 503과 `Retry-After`를 유지한다.
 
 ## Stage 1 — owner 카드 설정·migration·API 계약
@@ -427,7 +428,7 @@ Task #74 Stage 6: card theme 통합 검증과 공식 문서 정리
 - **UI와 사이트 theme 혼동**: 카드 설정을 `Card appearance`로 별도 표기하고 site Appearance 변경과 무관한 서버 저장 상태로 검증한다.
 - **arbitrary JSON/외부 prop 주입**: versioned allowlist registry, canonical serializer와 byte-size bound를 API/store 앞에서 공통 적용한다.
 - **effect preview와 export 불일치**: preview adapter와 frame sampler가 같은 normalized preset/options를 사용하게 하고, third-party CSS는 persistence/renderer contract 밖에 둔다.
-- **animated media 비용·부분 실패**: 이번 task에서는 PNG/none만 materialize하며 후속 GIF는 bounded pre-generation과 독립 authority/retention gate 없이는 활성화하지 않는다.
+- **animated media 비용·부분 실패**: 이번 task에서는 PNG/none만 materialize하며 #39의 GIF는 bounded pre-generation과 독립 authority/retention gate 없이는 활성화하지 않는다. GIF 생성·serving 실패는 기존 PNG public URL과 PNG Share Studio 동작에 영향을 주지 않아야 한다.
 - **task 크기**: 여섯 Stage를 store/API, media, consistency, UI, share, integration으로 분리하고 단계 승인 없이 다음 영역으로 넘어가지 않는다.
 
 ## 승인 요청 사항
@@ -435,7 +436,8 @@ Task #74 Stage 6: card theme 통합 검증과 공식 문서 정리
 - 위 여섯 Stage 분할과 각 검증·커밋 경계를 승인 요청한다.
 - Profile `Your Codex card` 아래 light/dark 전환·실제 preview·저장 CTA를 Stage 4 필수 범위로 승인 요청한다.
 - `cardTheme` 단일 column 대신 versioned canonical `cardStyle`과 preset registry를 Stage 1에 구현하고, 이번 task의 활성 effect는 none으로 제한하는 확장 구조를 승인 요청한다.
-- future Rotate/Pulse adapter와 GIF pre-generation을 migration 없이 추가할 수 있는 presentation digest/format/frame capability seam을 두되, 실제 효과 UI·GIF encoder/R2 객체는 후속 task로 유지하는 것을 승인 요청한다.
+- future Rotate/Pulse adapter와 GIF pre-generation을 migration 없이 추가할 수 있는 presentation digest/format/frame capability seam을 두되, 실제 효과 UI·GIF encoder/R2 객체는 [#39](https://github.com/postmelee/codex-usage-profile/issues/39) 범위로 유지하는 것을 승인 요청한다.
+- #39가 GIF를 additive format으로 구현하더라도 현재 URL 기반 PNG endpoint, PNG Share Studio와 README/URL 복사 계약을 회귀 없이 유지하는 것을 승인 요청한다.
 - legacy public owner가 light를 저장할 때 settings 요청 안에서 dual publication을 먼저 보완하고 저장을 commit하는 계약을 승인 요청한다.
 - `publicCardUrl`은 query 없는 dark 호환으로 유지하고 `selectedPublicCardUrl`과 `publicCardUrls`를 additive하게 제공하는 API shape를 승인 요청한다.
 - dark stable authority와 light stable staged object의 publication id 검증 구조를 승인 요청한다.
