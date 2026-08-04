@@ -8,7 +8,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 | Stage | 제목 | 주요 산출 | 검증 |
 |---|---|---|---|
-| 1 | owner 카드 설정·migration·API 계약 | `cardTheme`, ordered D1/Postgres migration, settings mutation | store/migration/HTTP/CSRF focused tests |
+| 1 | owner 카드 설정·migration·API 계약 | versioned `cardStyle`, preset registry, ordered D1/Postgres migration, settings mutation | registry/store/migration/HTTP/CSRF focused tests |
 | 2 | media theme 축과 dual stable serving | media contract v4, theme-aware R2/S3 adapter | contract·GET/HEAD/304·failure/concurrency tests |
 | 3 | publication·maintenance·cleanup 일관성 | 4 representation publish, authority commit, export/cleanup 보정 | compensation·maintenance·orphan exact-count tests |
 | 4 | Profile light/dark 전환·미리보기·저장 | accessible card theme settings UI와 persisted draft/save flow | component/unit·Playwright save/reload/error tests |
@@ -32,20 +32,24 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 ### 카드 설정과 저장 모델
 
-- 공개 입력은 `light | dark` 두 값만 허용하고 owner 기본값은 `dark`다. 사이트 전역 `system | light | dark` Appearance와 별도 상태로 관리한다.
-- owner record에 `cardTheme`을 추가한다. 기존 memory/file store record와 신규 D1/Postgres row는 값이 없을 때 `dark`로 normalize해 구버전 export와 fixture를 읽을 수 있게 한다.
-- D1 `0004_card_theme.sql`, Postgres `0003_card_theme.up/down.sql`을 ordered migration에 추가한다. D1 migration은 additive `NOT NULL DEFAULT 'dark' CHECK` column을 사용하고 이전 saved version이 새 column을 무시할 수 있는 rollback 구간을 검증한다.
-- store contract에는 owner CAS 기반 `updateCardSettings` atomic operation을 추가한다. serialization key는 `owner.id`, 허용 변경은 `cardTheme`, 결과는 갱신된 owner다.
-- maintenance export/restore는 `cardTheme`을 포함한다. legacy backup의 누락값은 dark로 복원하고 알 수 없는 값은 fail-closed validation error다.
+- 공개 입력은 versioned `cardStyle`만 허용한다. v1은 `{ schemaVersion: 1, theme: "light" | "dark", effect: { preset: "none", version: 1 } }`이며 owner 기본값은 dark/none이다. 사이트 전역 `system | light | dark` Appearance와 별도 상태로 관리한다.
+- `src/profile-card/presentation.js`에 canonical schema, byte-size bound, preset registry, stable-key-order serialization과 `presentationDigest`를 둔다. UI, API, store, renderer와 media가 이 모듈의 normalized value만 사용하고 특정 third-party component prop은 저장하지 않는다.
+- 초기 registry는 theme `light@1`, `dark@1`과 effect `none@1`만 활성화한다. registry entry는 `id`, `version`, allowed options/default, static renderer capability, optional preview adapter ID, optional animated frame/export capability를 선언한다. 알 수 없는 schema version, preset, version, option과 non-finite/범위 밖 값은 fail-closed다.
+- future `beam.rotate@1`과 `beam.pulse@1`은 별도 registry entry로 추가하며, Border Beam의 `size`, `colorVariant`, `strength`, `duration`을 제품 소유의 bounded option으로 번역한다. package prop이나 CSS 문자열을 API/DB에 직접 저장하지 않는다.
+- owner record에 `cardStyle`을 추가한다. 기존 memory/file store record와 신규 D1/Postgres row는 값이 없을 때 canonical dark/none으로 normalize해 구버전 export와 fixture를 읽을 수 있게 한다.
+- D1 `0004_card_style.sql`, Postgres `0003_card_style.up/down.sql`을 ordered migration에 추가한다. D1은 bounded canonical JSON text, Postgres는 동등 JSONB를 additive default로 사용하며 이전 saved version이 새 column을 무시할 수 있는 rollback 구간을 검증한다.
+- store contract에는 owner CAS 기반 `updateCardSettings` atomic operation을 추가한다. serialization key는 `owner.id`, 허용 변경은 normalized `cardStyle`, 결과는 갱신된 owner다.
+- maintenance export/restore는 `cardStyle`과 `presentationDigest`를 포함한다. legacy backup의 누락값은 canonical dark/none으로 복원하고 알 수 없는 값은 fail-closed validation error다.
 
 ### owner API와 공개 response
 
-- owner-only `PATCH /api/profile/card-settings`를 추가한다. body는 `{ "cardTheme": "light" | "dark" }`만 허용하며 unknown field, invalid value, 비 JSON, anonymous, CSRF failure를 기존 error envelope로 거부한다.
+- owner-only `PATCH /api/profile/card-settings`를 추가한다. body는 `{ "cardStyle": { ...versioned schema... } }`만 허용하며 unknown field, invalid schema/preset/option, oversized JSON, 비 JSON, anonymous, CSRF failure를 기존 error envelope로 거부한다.
 - `GET /api/profile`과 settings mutation response는 기존 `publicCardUrl`을 query 없는 dark 호환 URL로 유지하면서 다음 additive field를 반환한다.
-  - `cardTheme`: 저장된 owner 기본값
+  - `cardStyle`: 저장된 canonical owner 카드 설정
+  - `presentationDigest`: canonical 설정 digest
   - `selectedPublicCardUrl`: 저장값을 명시한 `?theme=light|dark` URL
   - `publicCardUrls`: `light`, `dark` 명시 URL map
-- public profile JSON은 owner가 공개된 경우 같은 URL field를 제공할 수 있지만, card theme preference 외 private 설정은 노출하지 않는다.
+- public profile JSON은 owner가 공개된 경우 같은 URL field를 제공할 수 있지만, 공개 media 재현에 필요한 allowlisted card style 외 private 설정은 노출하지 않는다.
 - 공개 owner가 legacy dark-only publication 상태에서 light를 저장하면 settings service가 저장된 latest usage로 dual variant publication을 먼저 idempotent 보완한다. 성공 후에만 owner preference를 commit한다. 따라서 새 CLI submit 없이 선택 URL이 유효하고, media 보완 실패 시 preference와 Share URL은 바뀌지 않는다.
 - private owner는 media write 없이 preference만 저장하며 다음 publish에서 네 representation을 만든다.
 
@@ -53,6 +57,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 - `src/profile-card/theme.js`의 기존 palette와 native/Worker renderer를 재사용한다. dark baseline, logical/output dimension, avatar/heatmap/stat layout과 application ETag=digest 계약은 변경하지 않는다.
 - theme은 media identity의 한 축이다. publication은 `light | dark` × `en | ko` 네 representation을 요구하고 각 PNG bytes digest를 독립 revision/ETag로 사용한다.
+- 모든 representation metadata에는 `presentationDigest`와 `format: "png"`를 기록한다. media contract type은 `presentation × locale × format`을 표현할 수 있게 하지만 이번 task에서 materialize/serve하는 format은 PNG, effect preset은 none뿐이다.
 - 기존 object 호환을 위해 dark key는 유지한다.
   - dark stable: `cards/v2/public/{handle}/card.png`
   - light stable: `cards/v2/public/{handle}/themes/light/card.png`
@@ -60,6 +65,15 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
   - light revision: `cards/v2/owners/{ownerId}/revisions/light/{locale}/{revision}.png`
 - media contract version은 4로 올리고 metadata에는 `theme`, nested theme/locale pointer, publication id를 검증 가능한 형태로 기록한다. legacy v3 dark publication은 dark serving과 query 없는 URL에 한해 읽을 수 있게 한다.
 - `theme` query 부재와 `theme=dark`는 dark, `theme=light`는 light다. 다른 값은 public route에서 일반 404/invalid request 기존 정책 중 HTTP contract test로 확정한 한 가지 결과만 사용한다. private preview의 기존 fallback은 별도 owner-only 계약으로 유지한다.
+
+### future effect·animated export 확장 경계
+
+- 브라우저 preview는 카드 내용 `<img>`와 장식 effect wrapper를 분리한다. future Beam adapter는 기존 `border-beam` dependency를 wrapper 내부에서만 사용하고 `pointer-events: none`, offscreen pause와 `prefers-reduced-motion` static fallback을 강제한다.
+- static card renderer는 presentation registry의 theme/static fallback만 받는다. DOM/CSS animation 구현을 native/Worker PNG renderer에 직접 import하지 않는다.
+- optional animated adapter contract는 normalized presentation, logical dimensions, duration/fps/frame-count bounds를 받아 timestamp별 RGBA/PNG frame을 결정적으로 생성하는 `sampleFrame(time)` capability로 둔다. encoder와 R2 publication은 이 frame contract에만 의존한다.
+- future GIF/WebP 등 animated output은 save/publish 시 pre-generation하고 immutable digest object를 R2에 쓴 뒤 authority pointer commit 후에만 공개한다. public GET에서 생성하거나 external CSS/JS를 실행하지 않는다.
+- animated asset 실패·초과 시간·초과 크기는 PNG stable object와 기존 saved style을 손상시키지 않는 별도 commit domain으로 둔다. exact limits, encoder 선택, Sites CPU 적합성과 format별 retention은 후속 task의 수행계획 승인 사항이다.
+- future selected URL은 기존 `theme` query를 유지하면서 opaque `style={presentationDigest 또는 stable style id}`를 additive하게 도입할 수 있다. 이번 task는 response/metadata에 digest를 제공하되 `style` query와 animated URL은 노출하지 않는다.
 
 ### dual stable authority와 부분 실패
 
@@ -99,9 +113,11 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 신규:
 
-- `db/migrations/0004_card_theme.sql`
-- `src/profile-backend/postgres/migrations/0003_card_theme.up.sql`
-- `src/profile-backend/postgres/migrations/0003_card_theme.down.sql`
+- `db/migrations/0004_card_style.sql`
+- `src/profile-backend/postgres/migrations/0003_card_style.up.sql`
+- `src/profile-backend/postgres/migrations/0003_card_style.down.sql`
+- `src/profile-card/presentation.js`
+- `src/profile-card/__tests__/presentation.test.js`
 - `mydocs/working/task_m100_74_stage1.md`
 
 수정:
@@ -119,7 +135,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 ### 변경 내용
 
-- owner `cardTheme` normalize/validation, 기본 dark와 atomic `updateCardSettings`를 구현한다.
+- versioned owner `cardStyle`, preset registry/canonicalization/presentation digest, 기본 dark/none과 atomic `updateCardSettings`를 구현한다.
 - D1/Postgres additive migration과 memory/file adapter parity를 구현한다.
 - owner profile serialization, 테마별/선택 URL builder와 `PATCH /api/profile/card-settings`를 추가한다.
 - 이 Stage의 public owner settings save는 media ensure hook을 호출할 seam까지만 정의하고, 실제 v4 publication은 Stage 3에서 연결한다. Stage 1 test fixture에서는 injected no-op/contract double로 경계를 고정한다.
@@ -129,6 +145,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 
 ```bash
 node --test \
+  src/profile-card/__tests__/presentation.test.js \
   src/profile-backend/__tests__/store-contract.test.js \
   src/profile-backend/__tests__/store.test.js \
   src/profile-backend/__tests__/durable-store.test.js \
@@ -167,7 +184,7 @@ Task #74 Stage 1: owner 카드 설정과 migration API 계약
 
 ### 변경 내용
 
-- contract v4의 theme-aware revision/stable key, nested representation과 legacy v3 dark reader를 구현한다.
+- contract v4의 presentation/theme-aware revision/stable key, format capability, nested representation과 legacy v3 dark reader를 구현한다.
 - memory, native R2와 S3-compatible adapter에 light stage, dark authority inspect/read, theme/locale selected body와 conditional GET을 구현한다.
 - public GET/HEAD route가 `theme` query를 strict normalize하고 light 요청에서 authority/publication id를 검증하게 한다.
 - native R2 fake와 S3 integration fixture에 metadata drift, missing light, stale publication id, HEAD→GET race를 추가한다.
@@ -212,7 +229,7 @@ Task #74 Stage 2: public card media theme 변형과 authority serving
 
 ### 변경 내용
 
-- publish/refresh가 native/Worker renderer로 네 representation을 만들고 light stage 후 dark authority를 commit하게 한다.
+- publish/refresh가 normalized cardStyle의 static fallback으로 네 PNG representation을 만들고 light stage 후 dark authority를 commit하게 한다.
 - settings save의 `ensurePublishedCardVariants`를 연결해 legacy public owner가 submit 없이 v4 dual publication으로 수렴한 뒤 preference를 저장하게 한다.
 - unpublish·structured visibility/preference failure compensation과 concurrent loser 수렴을 publication id/storage ETag matrix로 고정한다.
 - maintenance export/restore/delete와 orphan cleanup을 theme-aware count/digest/recheck 계약으로 확장한다.
@@ -245,7 +262,7 @@ Task #74 Stage 3: card theme publication과 exact cleanup 일관성
 신규:
 
 - 필요 시 `src/profile-ui/CardThemeSettings.jsx`
-- `src/profile-ui/__tests__/cardThemeSettings.test.js`
+- `src/profile-ui/__tests__/cardStyleSettings.test.js`
 - `mydocs/working/task_m100_74_stage4.md`
 
 수정:
@@ -259,18 +276,19 @@ Task #74 Stage 3: card theme publication과 exact cleanup 일관성
 
 ### 변경 내용
 
-- `Your Codex card` preview 아래에 light/dark radio group과 저장 CTA를 추가한다.
+- `Your Codex card` preview 아래에 light/dark radio group과 저장 CTA를 추가한다. UI state는 전체 canonical `cardStyle` draft를 보유하고 이번 화면은 theme field만 변경하며 effect none을 보존한다.
 - server saved theme, draft theme, mutation status와 error를 분리하고 draft 선택 즉시 private preview URL을 전환한다.
 - 저장 성공 시 profile response와 preview를 갱신하고, 실패 시 저장값과 공개 URL을 보존한 채 재시도 가능한 draft/error를 유지한다.
 - 한국어/영어 title, 설명, option, 저장/저장 중/성공·오류 문구와 catalog parity를 추가한다.
 - keyboard, focus, checked, disabled/busy/live status와 mobile layout을 검증한다.
 - reload, 재로그인에 해당하는 새 browser context, 사이트 Appearance 변경 후에도 서버 저장 카드 theme가 유지되는 시나리오를 추가한다.
+- component boundary는 future effect preset selector/option panel을 같은 registry metadata에서 추가할 수 있게 `CardStyleSettings` composition으로 두고 Beam-specific prop/state를 page에 두지 않는다.
 
 ### 검증
 
 ```bash
 node --test \
-  src/profile-ui/__tests__/cardThemeSettings.test.js \
+  src/profile-ui/__tests__/cardStyleSettings.test.js \
   src/profile-ui/__tests__/i18n.test.js \
   src/profile-api/__tests__/client.test.js
 npx playwright test tests/profile-ui.spec.js --grep "card appearance|card theme|카드 모양"
@@ -407,12 +425,17 @@ Task #74 Stage 6: card theme 통합 검증과 공식 문서 정리
 - **rollback 비대칭**: schema는 additive, query 없는 dark key는 그대로 유지해 이전 saved version이 핵심 공개 경로를 계속 읽게 한다.
 - **cleanup 오삭제**: authority-first scan과 apply 직전 pointer 재검증, digest/count mismatch fail-close를 유지한다.
 - **UI와 사이트 theme 혼동**: 카드 설정을 `Card appearance`로 별도 표기하고 site Appearance 변경과 무관한 서버 저장 상태로 검증한다.
+- **arbitrary JSON/외부 prop 주입**: versioned allowlist registry, canonical serializer와 byte-size bound를 API/store 앞에서 공통 적용한다.
+- **effect preview와 export 불일치**: preview adapter와 frame sampler가 같은 normalized preset/options를 사용하게 하고, third-party CSS는 persistence/renderer contract 밖에 둔다.
+- **animated media 비용·부분 실패**: 이번 task에서는 PNG/none만 materialize하며 후속 GIF는 bounded pre-generation과 독립 authority/retention gate 없이는 활성화하지 않는다.
 - **task 크기**: 여섯 Stage를 store/API, media, consistency, UI, share, integration으로 분리하고 단계 승인 없이 다음 영역으로 넘어가지 않는다.
 
 ## 승인 요청 사항
 
 - 위 여섯 Stage 분할과 각 검증·커밋 경계를 승인 요청한다.
 - Profile `Your Codex card` 아래 light/dark 전환·실제 preview·저장 CTA를 Stage 4 필수 범위로 승인 요청한다.
+- `cardTheme` 단일 column 대신 versioned canonical `cardStyle`과 preset registry를 Stage 1에 구현하고, 이번 task의 활성 effect는 none으로 제한하는 확장 구조를 승인 요청한다.
+- future Rotate/Pulse adapter와 GIF pre-generation을 migration 없이 추가할 수 있는 presentation digest/format/frame capability seam을 두되, 실제 효과 UI·GIF encoder/R2 객체는 후속 task로 유지하는 것을 승인 요청한다.
 - legacy public owner가 light를 저장할 때 settings 요청 안에서 dual publication을 먼저 보완하고 저장을 commit하는 계약을 승인 요청한다.
 - `publicCardUrl`은 query 없는 dark 호환으로 유지하고 `selectedPublicCardUrl`과 `publicCardUrls`를 additive하게 제공하는 API shape를 승인 요청한다.
 - dark stable authority와 light stable staged object의 publication id 검증 구조를 승인 요청한다.
