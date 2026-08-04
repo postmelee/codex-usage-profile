@@ -14,6 +14,7 @@
   --surface-elevated: light-dark(#ffffff, #1d1d1d);
   --surface-input: light-dark(#ffffff, #101010);
   --surface-code: light-dark(#f4f4f3, #111111);
+  --home-command-background: light-dark(#ffffff, #111111);
   --surface-hover: light-dark(rgba(17, 17, 17, 0.06), rgba(255, 255, 255, 0.06));
   --surface-hover-subtle: light-dark(rgba(17, 17, 17, 0.04), rgba(255, 255, 255, 0.05));
   --surface-active: light-dark(rgba(17, 17, 17, 0.1), rgba(255, 255, 255, 0.12));
@@ -980,7 +981,7 @@ button {
 
 .home-command-row {
   align-items: center;
-  background: var(--surface-code);
+  background: var(--home-command-background);
   border: 1px solid var(--border-strong);
   border-radius: 7px;
   display: flex;
@@ -1916,7 +1917,13 @@ button {
 
 .settings-appearance {
   margin: 0;
+}
+
+.settings-appearance-fieldset {
+  border: 0;
+  margin: 0;
   min-inline-size: 0;
+  padding: 0;
 }
 
 .settings-appearance-title {

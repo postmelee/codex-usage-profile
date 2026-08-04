@@ -88,6 +88,10 @@ test.describe("theme surfaces", () => {
       "background-color",
       "rgba(255, 255, 255, 0.94)"
     );
+    await expect(page.locator(".home-quickstart"))
+      .toHaveCSS("background-color", "rgb(243, 243, 242)");
+    await expect(page.locator(".home-command-row"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
 
     await page.goto("/settings");
     await expect(page.locator(".settings-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
@@ -146,6 +150,10 @@ test.describe("theme surfaces", () => {
       "background-color",
       "rgba(23, 23, 23, 0.94)"
     );
+    await expect(page.locator(".home-quickstart"))
+      .toHaveCSS("background-color", "rgb(21, 21, 21)");
+    await expect(page.locator(".home-command-row"))
+      .toHaveCSS("background-color", "rgb(17, 17, 17)");
 
     await page.goto("/settings");
     await expect(page.locator(".settings-view")).toHaveCSS("background-color", "rgb(13, 13, 13)");
@@ -2793,6 +2801,27 @@ test.describe("Profile and Settings canvases", () => {
 });
 
 test.describe("Settings appearance control", () => {
+  test("appearance panel layout keeps its legend inside the bordered panel", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockSettingsData(page);
+    await page.goto("/settings");
+
+    const panel = page.locator(".settings-appearance");
+    const fieldset = panel.locator(".settings-appearance-fieldset");
+    const title = panel.locator(".settings-appearance-title");
+    await expect(page.getByRole("group", { name: "Appearance" })).toBeVisible();
+    await expect(fieldset).toHaveCSS("border-top-width", "0px");
+
+    const panelBox = await panel.boundingBox();
+    const titleBox = await title.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(titleBox).not.toBeNull();
+    expect(titleBox.x).toBeGreaterThan(panelBox.x + 10);
+    expect(titleBox.y).toBeGreaterThan(panelBox.y + 10);
+    expect(titleBox.x + titleBox.width).toBeLessThan(panelBox.x + panelBox.width);
+    expect(titleBox.y + titleBox.height).toBeLessThan(panelBox.y + panelBox.height);
+  });
+
   test("appearance control remains available across account states and locales", async ({ page }) => {
     await useKoreanLocale(page);
     await mockAnonymousAccount(page);

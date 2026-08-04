@@ -13,6 +13,7 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
 | 3 | Settings Appearance control과 접근성 | `SettingsPage.jsx`, `messages.js`, UI tests | radio semantics, en/ko, persistence·system change E2E |
 | 3.5 | 비공개 카드 미리보기 theme parity | owner card renderer·preview URL·tests | native/Worker light/dark parity, private cache 분리, public dark 불변 |
 | 3.6 | 라이트 툴팁 surface 보정 | tooltip semantic token·computed style tests | light surface/text/border, dark 기준선 불변 |
+| 3.7 | Settings panel·Home command surface 보정 | appearance fieldset 구조·home command token·tests | group semantics, panel 내부 제목, light/dark 대비 |
 | 4 | 전체 route·Sites artifact 회귀 검증 | 회귀 보정, Stage 4 보고서 | 전체 Node·Playwright·build·Sites verifier·제한 diff |
 
 ## 문서 위치 확인
@@ -77,6 +78,8 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
   후속 Issue [#74](https://github.com/postmelee/codex-usage-profile/issues/74)로 분리한다.
 - Stage 3.6은 Profile heatmap 툴팁의 semantic color token과 해당 computed style test만 보정한다.
   툴팁의 내용·위치·크기·motion, heatmap 데이터와 카드 renderer 계약은 변경하지 않는다.
+- Stage 3.7은 Appearance의 native fieldset/radio semantics를 유지하면서 제목을 settings panel 내부에
+  배치하고, Home 명령어 박스에 주변 Quickstart보다 명확히 구분되는 전용 surface token을 적용한다.
 - production Sites deploy와 hosting handoff는 이 task에서 수행하지 않는다.
 
 ## Stage 1 — Appearance 계약 조사와 runtime 기반
@@ -352,6 +355,60 @@ git diff a55895d -- \
 Task #69 [Stage 3.6]: light tooltip surface 보정
 ```
 
+## Stage 3.7 — Settings panel·Home command surface 보정
+
+### 산출물
+
+수정:
+
+- `src/profile-ui/SettingsPage.jsx`
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_69_impl.md`
+
+신규:
+
+- `mydocs/working/task_m100_69_stage3_7.md`
+
+### 변경 내용
+
+- Appearance의 시각 panel wrapper와 native fieldset을 분리한다. visible legend는 border 없는
+  fieldset 내부에 두어 아래 Settings panel의 `h2`와 같은 content inset에서 시작하게 한다.
+- `fieldset`/`legend`, radio name, description 연결과 keyboard 선택 semantics는 유지한다.
+- Home Quickstart의 command row는 home 전용 semantic token을 사용한다. light에서는 주변
+  `content-background-subtle`보다 밝은 white surface, dark에서는 현행 `#111111` surface를 유지한다.
+- Profile empty state 등 다른 `surface-code` 소비자는 변경하지 않는다.
+- E2E에서 Appearance legend가 panel border 안쪽에 위치하는지, light/dark command row surface가
+  주변 Quickstart와 구분되는지 computed layout/style로 검증한다.
+- backend, card renderer, public/R2 object, package·lockfile, `.openai/hosting.json`은 변경하지 않는다.
+
+### 검증
+
+```bash
+node --test src/profile-ui/__tests__/theme.test.js
+npx playwright test tests/profile-ui.spec.js --grep "theme surfaces|appearance panel layout"
+npm run build
+npm run build:sites
+git diff --check
+```
+
+제한 경로 확인:
+
+```bash
+git diff 16bce41 -- \
+  .openai/hosting.json \
+  package.json package-lock.json \
+  packages/codex-usage-profile-cli \
+  src/profile-backend src/profile-runtime src/profile-media \
+  src/profile-card public
+```
+
+### 커밋
+
+```text
+Task #69 [Stage 3.7]: settings와 command surface 보정
+```
+
 ## Stage 4 — 전체 route·Sites artifact 회귀 검증
 
 ### 산출물
@@ -431,7 +488,7 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Stage 3은 Stage 1 Provider와 Stage 2 token을 사용해 Settings control을 노출한다.
 - Stage 3.5는 Stage 1~3의 resolved theme를 owner-only on-demand card preview에만 연결하고,
   공개 R2 card는 dark 호환 결과로 고정한다.
-- Stage 4는 Stage 1~3.6 승인 후 전체 회귀와 artifact 검증만 수행한다.
+- Stage 4는 Stage 1~3.7 승인 후 전체 회귀와 artifact 검증만 수행한다.
 - 각 Stage 종료 시 `task-stage-report`로 보고서·검증·커밋을 완료하고 다음 Stage 승인을 받는다.
 
 ## 위험과 대응
@@ -453,6 +510,10 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
   route·R2 key·queryless URL·dark pixel 기준을 고정한다. 영속 customization은 #74로 격리한다.
 - **라이트 툴팁 대비 회귀**: tooltip semantic token의 light/dark computed surface·text·border를
   같은 E2E에서 검증하고 dark 기준선을 함께 고정한다.
+- **fieldset 시각 보정의 접근성 회귀**: panel wrapper와 fieldset을 분리하되 native legend/radio
+  group을 유지하고 keyboard·accessible name 기존 테스트와 panel 내부 위치 검증을 함께 실행한다.
+- **명령어 surface 범위 팽창**: Home 전용 token으로 제한해 다른 code surface와 public card에는
+  영향을 주지 않는다.
 
 ## 승인 요청 사항
 
@@ -466,7 +527,8 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Stage 4까지 production deploy 없이 local·artifact 검증만 수행하는 Gate
 - Stage 3.5에서 owner-only 미리보기만 resolved theme를 따르고 공개 R2 card는 dark로 유지하는 경계
 - Stage 3.6에서 툴팁 semantic color만 보정하고 내용·layout·motion은 유지하는 경계
+- Stage 3.7에서 Appearance group semantics를 유지하고 Home command surface만 분리하는 경계
 - 영속 카드 customization과 light/dark R2 이중 객체는 #74로 분리하는 경계
 
-Stage 3.6 변경안은 작업지시자의 라이트 모드 툴팁 보정 지시로 승인되었으며, 구현·검증·단계
+Stage 3.7 변경안은 작업지시자의 Settings panel과 Home command surface 보정 지시로 승인되었으며, 구현·검증·단계
 보고서·커밋을 완료한 뒤 Stage 4 진입 승인을 별도로 요청한다.

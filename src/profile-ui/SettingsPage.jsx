@@ -65,38 +65,40 @@ function SettingsAppearancePanel() {
   const { t } = useLocale();
 
   return (
-    <fieldset
-      aria-describedby="settings-appearance-description"
-      className="settings-appearance settings-panel"
-    >
-      <legend className="settings-appearance-title">
-        {t("settings.appearance.title")}
-      </legend>
-      <p
-        className="settings-appearance-description"
-        id="settings-appearance-description"
+    <section className="settings-appearance settings-panel">
+      <fieldset
+        aria-describedby="settings-appearance-description"
+        className="settings-appearance-fieldset"
       >
-        {t("settings.appearance.description")}
-      </p>
+        <legend className="settings-appearance-title">
+          {t("settings.appearance.title")}
+        </legend>
+        <p
+          className="settings-appearance-description"
+          id="settings-appearance-description"
+        >
+          {t("settings.appearance.description")}
+        </p>
 
-      <div className="settings-appearance-options">
-        {THEME_PREFERENCES.map((option) => (
-          <label className="settings-appearance-option" key={option}>
-            <input
-              checked={preference === option}
-              name="settings-appearance"
-              onChange={() => setPreference(option)}
-              type="radio"
-              value={option}
-            />
-            <span className="settings-appearance-copy">
-              <strong>{t(`settings.appearance.${option}.title`)}</strong>
-              <small>{t(`settings.appearance.${option}.description`)}</small>
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
+        <div className="settings-appearance-options">
+          {THEME_PREFERENCES.map((option) => (
+            <label className="settings-appearance-option" key={option}>
+              <input
+                checked={preference === option}
+                name="settings-appearance"
+                onChange={() => setPreference(option)}
+                type="radio"
+                value={option}
+              />
+              <span className="settings-appearance-copy">
+                <strong>{t(`settings.appearance.${option}.title`)}</strong>
+                <small>{t(`settings.appearance.${option}.description`)}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </section>
   );
 }
 
