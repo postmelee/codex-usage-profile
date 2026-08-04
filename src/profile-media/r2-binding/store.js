@@ -693,13 +693,21 @@ function assertCoherentRevision(revision, publication, expected, theme) {
   if (
     revision.etag !== expected.etag ||
     revision.theme !== theme ||
-    revision.presentationDigest !== publication.presentationDigest
+    !isPublicationRevisionPresentationCompatible(revision, publication, theme)
   ) {
     throw createProfileMediaStoreError(
       PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
       "media revision metadata does not match publication metadata"
     );
   }
+}
+
+function isPublicationRevisionPresentationCompatible(revision, publication, theme) {
+  if (revision.presentationDigest === publication.presentationDigest) return true;
+  return publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
+    theme === PROFILE_MEDIA_DEFAULT_THEME &&
+    revision.contractVersion === PROFILE_MEDIA_LEGACY_CONTRACT_VERSION &&
+    revision.presentationDigest === null;
 }
 
 function samePublicationAuthority(left, right) {

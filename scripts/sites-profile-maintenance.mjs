@@ -187,6 +187,7 @@ export function sitesProfileMaintenanceHelpText() {
     "",
     "Owner commands require --owner-id and --handle.",
     "Mutations require --apply, --expected-digest, --expected-count, and exact owner options.",
+    "Repair additionally requires dark/light en/ko application ETags and the stable ETag.",
     "The maintenance token is read only from PROFILE_MAINTENANCE_TOKEN.",
     "Export requires --output outside the repository and writes a new 0600 file."
   ].join("\n");
@@ -294,8 +295,26 @@ async function createOperationPayload(parsed, options) {
         "expectedStorageEtag"
       );
     payload.expectedApplicationEtags = {
-      en: requireApplicationEtag(parsed.expectedEnEtag, "expectedEnEtag"),
-      ko: requireApplicationEtag(parsed.expectedKoEtag, "expectedKoEtag")
+      dark: {
+        en: requireApplicationEtag(
+          parsed.expectedDarkEnEtag,
+          "expectedDarkEnEtag"
+        ),
+        ko: requireApplicationEtag(
+          parsed.expectedDarkKoEtag,
+          "expectedDarkKoEtag"
+        )
+      },
+      light: {
+        en: requireApplicationEtag(
+          parsed.expectedLightEnEtag,
+          "expectedLightEnEtag"
+        ),
+        ko: requireApplicationEtag(
+          parsed.expectedLightKoEtag,
+          "expectedLightKoEtag"
+        )
+      }
     };
   }
   return payload;
@@ -516,8 +535,10 @@ function cliError(code) {
 const OPTION_KEYS = Object.freeze({
   "--expected-count": "expectedObjectCount",
   "--expected-digest": "expectedContentDigest",
-  "--expected-en-etag": "expectedEnEtag",
-  "--expected-ko-etag": "expectedKoEtag",
+  "--expected-dark-en-etag": "expectedDarkEnEtag",
+  "--expected-dark-ko-etag": "expectedDarkKoEtag",
+  "--expected-light-en-etag": "expectedLightEnEtag",
+  "--expected-light-ko-etag": "expectedLightKoEtag",
   "--expected-storage-etag": "expectedStorageEtag",
   "--handle": "handle",
   "--input": "input",

@@ -5,7 +5,7 @@ export const PROFILE_MEDIA_STABLE_PREFIX = "cards/v2/public/";
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000;
 const REVISION_KEY_PATTERN =
-  /^cards\/v2\/owners\/([^/]+)\/revisions\/(en|ko)\/([A-Za-z0-9_-]{43})\.png$/;
+  /^cards\/v2\/owners\/([^/]+)\/revisions\/(?:(light)\/)?(en|ko)\/([A-Za-z0-9_-]{43})\.png$/;
 
 export function parseProfileMediaRevisionObject(object = {}) {
   const key = object.key ?? object.Key;
@@ -19,13 +19,14 @@ export function parseProfileMediaRevisionObject(object = {}) {
   return Object.freeze({
     key,
     lastModified,
-    locale: match[2],
+    locale: match[3],
     ownerId: match[1],
-    revision: match[3],
+    revision: match[4],
     size: normalizeOptionalSize(object.size ?? object.Size),
     storageEtag: normalizeOptionalString(
       object.storageEtag ?? object.etag ?? object.ETag
-    )
+    ),
+    theme: match[2] ?? "dark"
   });
 }
 
@@ -48,7 +49,7 @@ export function selectProfileMediaCleanupCandidates(revisions, options = {}) {
   for (const object of revisions) {
     const parsed = parseProfileMediaRevisionObject(object);
     if (!parsed) continue;
-    const groupKey = `${parsed.ownerId}\u0000${parsed.locale}`;
+    const groupKey = `${parsed.ownerId}\u0000${parsed.theme}\u0000${parsed.locale}`;
     const group = groups.get(groupKey) ?? [];
     group.push(parsed);
     groups.set(groupKey, group);
@@ -79,7 +80,8 @@ export function selectProfileMediaCleanupCandidates(revisions, options = {}) {
         reason:
           `older_than_${retentionDays}_days_and_beyond_latest_${recentRevisions}`,
         revision: object.revision,
-        storageEtag: object.storageEtag
+        storageEtag: object.storageEtag,
+        theme: object.theme
       }));
     });
   }
@@ -88,7 +90,7 @@ export function selectProfileMediaCleanupCandidates(revisions, options = {}) {
 }
 
 export function isProfileMediaStableKey(key) {
-  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/card\.png$/.test(key);
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key);
 }
 
 function normalizeDate(value) {

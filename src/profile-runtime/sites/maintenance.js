@@ -13,8 +13,16 @@ import {
 } from "../../profile-backend/d1/store.js";
 import { createProfileCardServiceCore } from "../../profile-card/service-core.js";
 import {
+  createPresentationDigest,
+  normalizeCardStyle
+} from "../../profile-card/presentation.js";
+import {
+  PROFILE_MEDIA_FORMAT,
+  PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
+  PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STABLE_STATE_KINDS,
-  PROFILE_MEDIA_SUPPORTED_LOCALES
+  PROFILE_MEDIA_SUPPORTED_LOCALES,
+  PROFILE_MEDIA_SUPPORTED_THEMES
 } from "../../profile-media/media-store-contract.js";
 import {
   createProfilePublicationService
@@ -336,30 +344,44 @@ export function createProfileSitesMaintenanceService(options = {}) {
     const expectedApplicationEtags = normalizeApplicationEtags(
       operationOptions.expectedApplicationEtags
     );
+    const cardStyle = normalizeCardStyle(owner.cardStyle);
+    const presentationDigest = await createPresentationDigest({
+      ...cardStyle,
+      effect: { preset: "none", version: 1 },
+      theme: "dark"
+    });
     const representations = {};
-    for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
-      const card = await cardService.renderOwnerCard({
-        ownerId: scope.ownerId,
-        locale
-      });
-      if (!safeEqualText(card.etag, expectedApplicationEtags[locale])) {
-        throw maintenanceError(
-          "conflict",
-          "rendered card ETag no longer matches the repair request"
-        );
+    for (const theme of ["light", "dark"]) {
+      representations[theme] = {};
+      for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
+        const card = await cardService.renderOwnerCard({
+          ownerId: scope.ownerId,
+          locale,
+          theme
+        });
+        if (!safeEqualText(card.etag, expectedApplicationEtags[theme][locale])) {
+          throw maintenanceError(
+            "conflict",
+            "rendered card ETag no longer matches the repair request"
+          );
+        }
+        await putRepairRevision(mediaStore, {
+          body: card.body,
+          contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
+          createdAt: now(),
+          etag: card.etag,
+          format: PROFILE_MEDIA_FORMAT,
+          locale,
+          ownerId: scope.ownerId,
+          presentationDigest,
+          revision: card.revision,
+          theme
+        });
+        representations[theme][locale] = {
+          etag: card.etag,
+          revision: card.revision
+        };
       }
-      await mediaStore.putRevision({
-        body: card.body,
-        createdAt: now(),
-        etag: card.etag,
-        locale,
-        ownerId: scope.ownerId,
-        revision: card.revision
-      });
-      representations[locale] = {
-        etag: card.etag,
-        revision: card.revision
-      };
     }
 
     const repaired = await r2.repairPublication({
@@ -367,8 +389,11 @@ export function createProfileSitesMaintenanceService(options = {}) {
       apply: true,
       expectedStorageEtag,
       publication: {
+        contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
+        format: PROFILE_MEDIA_FORMAT,
         handle: scope.handle,
         ownerId: scope.ownerId,
+        presentationDigest,
         publicationId: createId("profile_media_repair"),
         publishedAt: normalizeIsoDate(now()),
         representations
@@ -404,11 +429,37 @@ export function createProfileSitesMaintenanceService(options = {}) {
       summary: createProfileMaintenanceSummary({
         contentDigest: digest,
         createdAt: now(),
-        objectCount: PROFILE_MEDIA_SUPPORTED_LOCALES.length + 1,
+        objectCount:
+          PROFILE_MEDIA_SUPPORTED_THEMES.length *
+          PROFILE_MEDIA_SUPPORTED_LOCALES.length + 2,
         operation: "repair-publication",
         ownerCount: 1
       })
     };
+  }
+}
+
+async function putRepairRevision(mediaStore, revision) {
+  try {
+    return await mediaStore.putRevision(revision);
+  } catch (error) {
+    if (
+      error?.code !== "conflict" ||
+      revision.theme !== "dark"
+    ) {
+      throw error;
+    }
+    const existing = await mediaStore.getRevision?.({
+      contractVersion: PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
+      locale: revision.locale,
+      ownerId: revision.ownerId,
+      revision: revision.revision,
+      theme: "dark"
+    });
+    if (!existing || !safeEqualText(existing.etag, revision.etag)) {
+      throw error;
+    }
+    return existing;
   }
 }
 
@@ -530,9 +581,14 @@ function countBackupObjects(profile) {
       profile.publication.kind ===
         PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION
     ) {
-      count += Object.keys(
-        profile.publication.publication?.representations ?? {}
-      ).length;
+      const publication = profile.publication.publication;
+      const representations = publication?.representations ?? {};
+      count += publication?.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION
+        ? PROFILE_MEDIA_SUPPORTED_THEMES.reduce(
+          (total, theme) => total + Object.keys(representations[theme] ?? {}).length,
+          0
+        ) + Math.max(Object.keys(publication.stableKeys ?? {}).length - 1, 0)
+        : Object.keys(representations).length;
     }
   }
   return count;
@@ -591,16 +647,23 @@ function normalizeApplicationEtags(value) {
     throw new TypeError("expectedApplicationEtags is required");
   }
   return Object.freeze(Object.fromEntries(
-    PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
-      const etag = value[locale];
-      if (
-        typeof etag !== "string" ||
-        !/^"[A-Za-z0-9_-]{43}"$/.test(etag)
-      ) {
-        throw new TypeError(`expectedApplicationEtags.${locale} is invalid`);
-      }
-      return [locale, etag];
-    })
+    PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
+      theme,
+      Object.freeze(Object.fromEntries(
+        PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
+          const etag = value[theme]?.[locale];
+          if (
+            typeof etag !== "string" ||
+            !/^"[A-Za-z0-9_-]{43}"$/.test(etag)
+          ) {
+            throw new TypeError(
+              `expectedApplicationEtags.${theme}.${locale} is invalid`
+            );
+          }
+          return [locale, etag];
+        })
+      ))
+    ])
   ));
 }
 

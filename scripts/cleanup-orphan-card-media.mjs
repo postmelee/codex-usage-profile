@@ -22,7 +22,7 @@ export const DEFAULT_CARD_MEDIA_RECENT_REVISIONS =
 export { PROFILE_MEDIA_REVISION_PREFIX, PROFILE_MEDIA_STABLE_PREFIX };
 
 const REVISION_KEY_PATTERN =
-  /^cards\/v2\/owners\/([^/]+)\/revisions\/(en|ko)\/([A-Za-z0-9_-]{43})\.png$/;
+  /^cards\/v2\/owners\/([^/]+)\/revisions\/(?:(light)\/)?(en|ko)\/([A-Za-z0-9_-]{43})\.png$/;
 
 export async function cleanupOrphanCardMedia(options = {}) {
   const client = requireClient(options.client);
@@ -116,7 +116,7 @@ export function cleanupHelpText() {
     "Usage: npm run cleanup:card-media -- [--apply]",
     "",
     "Defaults to dry-run. Candidates must be unreferenced, older than 90 days,",
-    "and outside the latest 5 revisions for the same owner and locale.",
+    "and outside the latest 5 revisions for the same owner, theme, and locale.",
     "--apply rechecks stable publication metadata before each irreversible delete."
   ].join("\n");
 }
@@ -131,6 +131,10 @@ async function readStableReferences(options) {
 
   for (const object of stableObjects) {
     if (!isStableKey(object.Key)) continue;
+    if (!isAuthorityStableKey(object.Key)) {
+      stableCount += 1;
+      continue;
+    }
     let response;
     try {
       response = await options.client.send(new HeadObjectCommand({
@@ -152,15 +156,23 @@ async function readStableReferences(options) {
     if (metadata.kind !== undefined && metadata.kind !== "publication") {
       throw new Error("stable media metadata kind is invalid");
     }
-    for (const locale of ["en", "ko"]) {
-      const revisionKey = metadata[`${locale}-key`];
-      if (
-        typeof revisionKey !== "string" ||
-        !REVISION_KEY_PATTERN.test(revisionKey)
-      ) {
-        throw new Error("stable publication metadata is incomplete");
+    const contractVersion = Number(metadata["contract-version"] ?? 3);
+    if (![3, 4].includes(contractVersion)) {
+      throw new Error("stable publication contract version is invalid");
+    }
+    const themes = contractVersion === 4 ? ["dark", "light"] : [null];
+    for (const theme of themes) {
+      for (const locale of ["en", "ko"]) {
+        const prefix = theme ? `${theme}-` : "";
+        const revisionKey = metadata[`${prefix}${locale}-key`];
+        if (
+          typeof revisionKey !== "string" ||
+          !REVISION_KEY_PATTERN.test(revisionKey)
+        ) {
+          throw new Error("stable publication metadata is incomplete");
+        }
+        revisionKeys.add(revisionKey);
       }
-      revisionKeys.add(revisionKey);
     }
     stableCount += 1;
   }
@@ -196,6 +208,10 @@ async function listObjects(options) {
 }
 
 function isStableKey(key) {
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key);
+}
+
+function isAuthorityStableKey(key) {
   return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/card\.png$/.test(key);
 }
 

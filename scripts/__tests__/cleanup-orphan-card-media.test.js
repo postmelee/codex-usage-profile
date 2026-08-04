@@ -98,6 +98,78 @@ test("stable tombstones are retained without protecting immutable revisions", as
   );
 });
 
+test("v4 cleanup protects all theme revisions and counts the light stable object", async () => {
+  const stableKey = "cards/v2/public/owner-a/card.png";
+  const lightStableKey = "cards/v2/public/owner-a/themes/light/card.png";
+  const protectedKeys = {
+    darkEn: revisionKey("owner_a", "en", 20),
+    darkKo: revisionKey("owner_a", "ko", 21),
+    lightEn: themeRevisionKey("owner_a", "light", "en", 22),
+    lightKo: themeRevisionKey("owner_a", "light", "ko", 23)
+  };
+  const candidateKey = themeRevisionKey("owner_a", "light", "en", 24);
+  const objects = [
+    { Key: stableKey, LastModified: daysAgo(1) },
+    { Key: lightStableKey, LastModified: daysAgo(1) },
+    ...Object.values(protectedKeys).map((Key) => ({
+      Key,
+      LastModified: daysAgo(120)
+    })),
+    { Key: candidateKey, LastModified: daysAgo(200) }
+  ];
+  const client = new CleanupFakeS3Client({
+    objects,
+    pageSize: 10,
+    stableMetadata: new Map([[stableKey, {
+      "contract-version": "4",
+      "dark-en-key": protectedKeys.darkEn,
+      "dark-ko-key": protectedKeys.darkKo,
+      "light-en-key": protectedKeys.lightEn,
+      "light-ko-key": protectedKeys.lightKo,
+      kind: "publication",
+      "owner-id": "owner_a"
+    }]])
+  });
+
+  const result = await cleanupOrphanCardMedia({
+    bucket: "cards",
+    client,
+    log: () => {},
+    now: NOW,
+    recentRevisions: 1
+  });
+
+  assert.equal(result.summary.scannedStable, 2);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.key),
+    [candidateKey]
+  );
+});
+
+test("cleanup fails closed on an unknown stable publication contract", async () => {
+  const stableKey = "cards/v2/public/owner-a/card.png";
+  const client = new CleanupFakeS3Client({
+    objects: [{ Key: stableKey, LastModified: daysAgo(1) }],
+    pageSize: 10,
+    stableMetadata: new Map([[stableKey, {
+      "contract-version": "5",
+      kind: "publication",
+      "owner-id": "owner_a"
+    }]])
+  });
+
+  await assert.rejects(
+    cleanupOrphanCardMedia({
+      bucket: "cards",
+      client,
+      log: () => {},
+      now: NOW
+    }),
+    /contract version is invalid/
+  );
+  assert.deepEqual(client.deletedKeys, []);
+});
+
 test("CLI accepts only help and explicit apply", () => {
   assert.deepEqual(parseCleanupArgs([]), { apply: false, help: false });
   assert.deepEqual(parseCleanupArgs(["--apply"]), { apply: true, help: false });
@@ -224,6 +296,12 @@ function revisionKey(ownerId, locale, index) {
   const suffix = String(index).padStart(2, "0");
   const revision = `${"A".repeat(41)}${suffix}`;
   return `cards/v2/owners/${ownerId}/revisions/${locale}/${revision}.png`;
+}
+
+function themeRevisionKey(ownerId, theme, locale, index) {
+  const suffix = String(index).padStart(2, "0");
+  const revision = `${"B".repeat(41)}${suffix}`;
+  return `cards/v2/owners/${ownerId}/revisions/${theme}/${locale}/${revision}.png`;
 }
 
 function daysAgo(days) {

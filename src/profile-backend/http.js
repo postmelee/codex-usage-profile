@@ -111,6 +111,14 @@ export function createProfileBackendHttpHandler(options = {}) {
     deviceService,
     createId
   });
+  let publicationService = options.publicationService ?? null;
+  const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (
+    async (ensureOptions) => publicationService?.ensurePublishedCardVariants?.({
+      ownerId: ensureOptions.owner.id,
+      owner: ensureOptions.owner,
+      cardStyle: ensureOptions.cardStyle
+    })
+  );
   const cardService = options.cardService ?? createProfileCardServiceCore({
     store,
     accountService,
@@ -121,20 +129,18 @@ export function createProfileBackendHttpHandler(options = {}) {
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
     cacheEntries: options.profileCardCacheEntries,
-    ensureCardStyleMedia: options.ensureCardStyleMedia
+    ensureCardStyleMedia
   });
   const mediaStore = options.mediaStore ?? null;
-  const publicationService = options.publicationService ?? (
-    mediaStore
-      ? createProfilePublicationService({
-        store,
-        mediaStore,
-        cardService,
-        now,
-        createId
-      })
-      : null
-  );
+  if (!publicationService && mediaStore) {
+    publicationService = createProfilePublicationService({
+      store,
+      mediaStore,
+      cardService,
+      now,
+      createId
+    });
+  }
   const accountUsageService = options.accountUsageService ??
     createAccountUsageSubmitService({
       store,

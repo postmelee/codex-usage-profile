@@ -1102,6 +1102,49 @@ test("creates the publication service when a media store is configured", async (
   assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
 });
 
+test("saves a public card preference only after v4 theme variants converge", async () => {
+  const mediaStore = createMemoryProfileMediaStore();
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(
+      `card:${viewModel.theme}:${viewModel.locale}`
+    )
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  const light = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light },
+    { cookie }
+  );
+  const published = await mediaStore.getPublishedCard({
+    handle: "postmelee",
+    locale: "ko",
+    theme: "light"
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.data.cardStyle, light);
+  assert.equal(published.contractVersion, 4);
+  assert.deepEqual(published.body, Buffer.from("card:light:ko"));
+});
+
 test("returns a generic 503 when profile publication is unavailable", async () => {
   const fixture = createFixture({
     createPublicationService() {
@@ -1234,7 +1277,11 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   );
   assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
   assert.equal(fallbackResponse.headers.get("etag"), englishResponse.headers.get("etag"));
-  assert.equal(themeResponse.status, 404);
+  assert.equal(themeResponse.status, 200);
+  assert.notEqual(
+    themeResponse.headers.get("etag"),
+    englishResponse.headers.get("etag")
+  );
   assert.equal(invalidThemeResponse.status, 404);
   assert.notEqual(englishResponse.headers.get("etag"), etag);
   assert.equal(headResponse.status, 200);

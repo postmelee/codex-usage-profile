@@ -8,9 +8,17 @@ import {
 import { normalizeVisibility } from "../profile-backend/accounts.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import {
+  createPresentationDigest,
+  normalizeCardStyle
+} from "../profile-card/presentation.js";
+import {
+  PROFILE_MEDIA_FORMAT,
+  PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
+  PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
+  PROFILE_MEDIA_SUPPORTED_THEMES,
   assertProfileMediaStoreContract,
   createProfileMediaStoreError
 } from "./media-store-contract.js";
@@ -31,6 +39,8 @@ export function createProfilePublicationService(options = {}) {
     },
 
     publishOwnerCard,
+
+    ensurePublishedCardVariants,
 
     refreshPublishedCard(refreshOptions = {}) {
       return publishOwnerCard({
@@ -72,17 +82,22 @@ export function createProfilePublicationService(options = {}) {
         );
       }
 
-      const cards = {};
-      for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
-        cards[locale] = await cardService.renderOwnerCard({
-          ownerId: owner.id,
-          locale
-        });
-      }
+      const cardStyle = normalizeCardStyle(
+        publishOptions.cardStyle ?? owner.cardStyle
+      );
+      const presentationDigest = await createPresentationDigest(
+        createStaticFallbackStyle(cardStyle, "dark")
+      );
+      const cards = await renderCardVariants(owner, cardStyle);
 
       const publicationMatches =
         owner.visibility === PROFILE_VISIBILITY.PUBLIC &&
-        publicationMatchesCards(current.publication, owner, cards);
+        publicationMatchesCards(
+          current.publication,
+          owner,
+          cards,
+          presentationDigest
+        );
       if (publicationMatches) {
         return {
           owner,
@@ -97,29 +112,17 @@ export function createProfilePublicationService(options = {}) {
       }
 
       const createdAt = toIsoString(now());
-      await Promise.all(PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
-        const card = cards[locale];
-        return mediaStore.putRevision({
-          body: card.body,
-          createdAt,
-          etag: card.etag,
-          locale,
-          ownerId: owner.id,
-          revision: card.revision
-        });
-      }));
+      await writeCardVariants({ cards, createdAt, owner, presentationDigest });
 
       const publicationInput = {
+        contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
+        format: PROFILE_MEDIA_FORMAT,
         handle: owner.handle,
         ownerId: owner.id,
+        presentationDigest,
         publicationId: createId("profile_media"),
         publishedAt: toIsoString(now()),
-        representations: Object.fromEntries(
-          PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [locale, {
-            etag: cards[locale].etag,
-            revision: cards[locale].revision
-          }])
-        )
+        representations: createVariantRepresentations(cards)
       };
       if (!current.incomplete) {
         publicationInput.expectedStorageEtag = current.storageEtag;
@@ -134,6 +137,17 @@ export function createProfilePublicationService(options = {}) {
 
       const publication = await mediaStore.publishRevision(publicationInput);
       mediaMutation.writtenStorageEtag = publication.storageEtag;
+      if (publishOptions.prepareOnly === true) {
+        return {
+          owner,
+          usageRecord,
+          visibility: owner.visibility,
+          idempotent: false,
+          operation: "prepare",
+          publication,
+          mediaMutation
+        };
+      }
       const profile = await updateStructuredVisibility(
         owner,
         PROFILE_VISIBILITY.PUBLIC
@@ -148,6 +162,103 @@ export function createProfilePublicationService(options = {}) {
       };
     } catch (error) {
       throw await normalizePublicationFailure(error, mediaMutation);
+    }
+  }
+
+  async function ensurePublishedCardVariants(ensureOptions = {}) {
+    const ownerId = requireOwnerId(
+      ensureOptions.ownerId ?? ensureOptions.owner?.id
+    );
+    const owner = ensureOptions.owner ?? await requireOwner(store, ownerId);
+    if (owner.id !== ownerId) {
+      throw new TypeError("owner does not match ownerId");
+    }
+    if (owner.visibility !== PROFILE_VISIBILITY.PUBLIC) {
+      return { idempotent: true, rollback: async () => "not_needed" };
+    }
+
+    const result = await publishOwnerCard({
+      cardStyle: ensureOptions.cardStyle,
+      ownerId,
+      onlyIfAlreadyPublic: true,
+      prepareOnly: true
+    });
+    return {
+      ...result,
+      rollback: result.mediaMutation
+        ? async () => compensateMediaMutation(result.mediaMutation)
+        : async () => "not_needed"
+    };
+  }
+
+  async function renderCardVariants(owner, cardStyle) {
+    const cards = {};
+    for (const theme of PROFILE_MEDIA_SUPPORTED_THEMES) {
+      cards[theme] = {};
+      for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
+        const staticStyle = createStaticFallbackStyle(cardStyle, theme);
+        cards[theme][locale] = await cardService.renderOwnerCard({
+          ownerId: owner.id,
+          locale,
+          theme: staticStyle.theme
+        });
+      }
+    }
+    return cards;
+  }
+
+  async function writeCardVariants(options) {
+    // The non-authoritative light stable object must be ready before the dark
+    // queryless object is allowed to become the v4 authority.
+    for (const theme of ["light", "dark"]) {
+      await Promise.all(PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
+        const card = options.cards[theme][locale];
+        return putVariantRevision({
+          card,
+          createdAt: options.createdAt,
+          locale,
+          owner: options.owner,
+          presentationDigest: options.presentationDigest,
+          theme
+        });
+      }));
+    }
+  }
+
+  async function putVariantRevision(options) {
+    try {
+      return await mediaStore.putRevision({
+        body: options.card.body,
+        contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
+        createdAt: options.createdAt,
+        etag: options.card.etag,
+        format: PROFILE_MEDIA_FORMAT,
+        locale: options.locale,
+        ownerId: options.owner.id,
+        presentationDigest: options.presentationDigest,
+        revision: options.card.revision,
+        theme: options.theme
+      });
+    } catch (error) {
+      if (
+        error?.code !== PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT ||
+        options.theme !== "dark"
+      ) {
+        throw error;
+      }
+      const legacy = await mediaStore.getRevision({
+        locale: options.locale,
+        ownerId: options.owner.id,
+        revision: options.card.revision,
+        theme: "dark"
+      });
+      if (
+        legacy?.contractVersion !== PROFILE_MEDIA_LEGACY_CONTRACT_VERSION ||
+        legacy.etag !== options.card.etag
+      ) {
+        throw error;
+      }
+      return { idempotent: true, record: legacy };
     }
   }
 
@@ -272,11 +383,7 @@ export function createProfilePublicationService(options = {}) {
         if (!written) return "superseded";
         if (mutation.previousPublication) {
           await mediaStore.publishRevision({
-            handle: mutation.previousPublication.handle,
-            ownerId: mutation.previousPublication.ownerId,
-            publicationId: mutation.previousPublication.publicationId,
-            publishedAt: mutation.previousPublication.publishedAt,
-            representations: mutation.previousPublication.representations,
+            ...createPublicationRestoreInput(mutation.previousPublication),
             expectedStorageEtag: written.storageEtag
           });
         } else {
@@ -294,11 +401,7 @@ export function createProfilePublicationService(options = {}) {
       const tombstone = await findOwnTombstone(mutation);
       if (!tombstone) return "superseded";
       await mediaStore.publishRevision({
-        handle: mutation.previousPublication.handle,
-        ownerId: mutation.previousPublication.ownerId,
-        publicationId: mutation.previousPublication.publicationId,
-        publishedAt: mutation.previousPublication.publishedAt,
-        representations: mutation.previousPublication.representations,
+        ...createPublicationRestoreInput(mutation.previousPublication),
         expectedStorageEtag: tombstone.storageEtag
       });
       return "succeeded";
@@ -342,17 +445,63 @@ export function createProfilePublicationService(options = {}) {
   }
 }
 
-function publicationMatchesCards(publication, owner, cards) {
+function publicationMatchesCards(
+  publication,
+  owner,
+  cards,
+  presentationDigest
+) {
   return Boolean(
     publication &&
+    publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
     publication.ownerId === owner.id &&
     publication.handle === owner.handle &&
-    PROFILE_MEDIA_SUPPORTED_LOCALES.every((locale) => {
-      const representation = publication.representations?.[locale];
-      return representation?.revision === cards[locale].revision &&
-        representation?.etag === cards[locale].etag;
-    })
+    publication.presentationDigest === presentationDigest &&
+    PROFILE_MEDIA_SUPPORTED_THEMES.every((theme) =>
+      PROFILE_MEDIA_SUPPORTED_LOCALES.every((locale) => {
+        const representation = publication.representations?.[theme]?.[locale];
+        return representation?.revision === cards[theme][locale].revision &&
+          representation?.etag === cards[theme][locale].etag;
+      })
+    )
   );
+}
+
+function createStaticFallbackStyle(cardStyle, theme) {
+  return normalizeCardStyle({
+    ...cardStyle,
+    effect: { preset: "none", version: 1 },
+    theme
+  });
+}
+
+function createVariantRepresentations(cards) {
+  return Object.fromEntries(PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
+    theme,
+    Object.fromEntries(PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [
+      locale,
+      {
+        etag: cards[theme][locale].etag,
+        revision: cards[theme][locale].revision
+      }
+    ]))
+  ]));
+}
+
+function createPublicationRestoreInput(publication) {
+  const input = {
+    handle: publication.handle,
+    ownerId: publication.ownerId,
+    publicationId: publication.publicationId,
+    publishedAt: publication.publishedAt,
+    representations: publication.representations
+  };
+  if (publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
+    input.contractVersion = publication.contractVersion;
+    input.format = publication.format;
+    input.presentationDigest = publication.presentationDigest;
+  }
+  return input;
 }
 
 async function requireOwner(store, ownerId) {

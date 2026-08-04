@@ -272,6 +272,41 @@ test("retention defaults to dry-run and requires confirmation only for apply", a
   assert.equal(payloads.length, 1);
 });
 
+test("repair CLI requires and sends all four application ETags", async () => {
+  const payloads = [];
+  const applicationEtag = `"${"C".repeat(43)}"`;
+  await runSitesProfileMaintenanceCli([
+    "repair-publication",
+    "--origin", ORIGIN,
+    "--owner-id", OWNER_ID,
+    "--handle", HANDLE,
+    "--expected-digest", DIGEST,
+    "--expected-count", "7",
+    "--expected-storage-etag", "legacy-storage-etag",
+    "--expected-dark-en-etag", applicationEtag,
+    "--expected-dark-ko-etag", applicationEtag,
+    "--expected-light-en-etag", applicationEtag,
+    "--expected-light-ko-etag", applicationEtag,
+    "--apply"
+  ], {
+    environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+    fetchImpl: async (_url, init) => {
+      payloads.push(JSON.parse(init.body));
+      return jsonResponse({
+        ok: true,
+        summary: summary("repair-publication", 6)
+      });
+    },
+    stdout: () => {}
+  });
+
+  assert.deepEqual(payloads[0].expectedApplicationEtags, {
+    dark: { en: applicationEtag, ko: applicationEtag },
+    light: { en: applicationEtag, ko: applicationEtag }
+  });
+  assert.equal(payloads[0].expectedStorageEtag, "legacy-storage-etag");
+});
+
 test("export writes a new atomic 0600 backup outside the repository", async (t) => {
   const directory = await mkdtemp(resolve(tmpdir(), "profile-maintenance-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

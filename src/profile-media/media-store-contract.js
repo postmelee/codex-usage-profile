@@ -443,7 +443,11 @@ function collectRevisionRecords(input, revisions) {
       }
       if (revision.etag !== expected.etag ||
         revision.theme !== theme ||
-        revision.presentationDigest !== input.presentationDigest) {
+        !isPublicationRevisionPresentationCompatible(
+          revision,
+          input,
+          theme
+        )) {
         throw createProfileMediaStoreError(
           "conflict",
           "media revision metadata does not match publication metadata"
@@ -453,6 +457,14 @@ function collectRevisionRecords(input, revisions) {
     }
   }
   return records;
+}
+
+function isPublicationRevisionPresentationCompatible(revision, publication, theme) {
+  if (revision.presentationDigest === publication.presentationDigest) return true;
+  return publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
+    theme === PROFILE_MEDIA_DEFAULT_THEME &&
+    revision.contractVersion === PROFILE_MEDIA_LEGACY_CONTRACT_VERSION &&
+    revision.presentationDigest === null;
 }
 
 function createPublishedRecord(input, records) {

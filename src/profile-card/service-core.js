@@ -78,20 +78,29 @@ export function createProfileCardServiceCore(options = {}) {
       });
       const usageRecord = await store.getLatestUsageByOwnerId(current.id);
 
+      let mediaPreparation = null;
       if (current.visibility === PROFILE_VISIBILITY.PUBLIC) {
-        await ensureCardStyleMedia({
+        mediaPreparation = await ensureCardStyleMedia({
           owner: current,
           usageRecord,
           cardStyle
         });
       }
 
-      const result = await store.atomic.updateCardSettings({
-        ownerId: current.id,
-        expectedOwnerUpdatedAt: current.updatedAt ?? null,
-        cardStyle,
-        updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
-      });
+      let result;
+      try {
+        result = await store.atomic.updateCardSettings({
+          ownerId: current.id,
+          expectedOwnerUpdatedAt: current.updatedAt ?? null,
+          cardStyle,
+          updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
+        });
+      } catch (error) {
+        if (typeof mediaPreparation?.rollback === "function") {
+          await mediaPreparation.rollback();
+        }
+        throw error;
+      }
       return {
         owner: result.owner,
         usageRecord,
