@@ -2456,7 +2456,11 @@ test.describe("Profile and Settings canvases", () => {
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
 
-    const shareButton = page.getByRole("button", { name: "Share profile" });
+    await expect(page.locator(".profile-topbar")
+      .getByRole("button", { name: "Share profile" }))
+      .toHaveCount(0);
+    const shareButton = page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share profile" });
     await expect(shareButton).toHaveText("Share");
     const sourceCard = page.locator(
       '.profile-card-section [data-card-source="true"]'

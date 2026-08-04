@@ -27,7 +27,8 @@ GitHub Issue: [#71](https://github.com/postmelee/codex-usage-profile/issues/71)
 | `src/profile-marketing/MarketingLanding.jsx` | 문자열 값 동등성 sentinel을 제거하고 key별 override/catalog resolver를 사용했다. | Marketing 영어·한국어 표시 문구 |
 | `src/profile-marketing/__tests__/marketing-config.test.js`, `src/profile-marketing/__tests__/sites-config.test.js`, `src/profile-ui/__tests__/homeOnboarding.test.js` | 기본·partial·동일값 custom, Sites config와 Quickstart 순서를 검증했다. | Marketing·Sites config 회귀 계약 |
 | `src/profile-ui/shareStudio.js`, `src/profile-ui/ShareStudio.jsx` | platform 포함 두 문구를 전용 helper에서 locale·target label로 한 번만 보간했다. | X·LinkedIn·Reddit instruction·composer 문구 |
-| `src/profile-ui/messages.js`, `src/profile-ui/ProfileShell.jsx`, `src/profile-ui/CardProfilePage.jsx` | `Share profile`/`프로필 공유` 접근성 이름을 추가하고 표시 문구는 유지했다. | Profile Share 버튼 접근성 |
+| `src/profile-ui/messages.js`, `src/profile-ui/CardProfilePage.jsx` | 현재 `/profile`에서 실행되는 카드 Share 버튼에 `Share profile`/`프로필 공유` 접근성 이름을 추가하고 표시 문구는 유지했다. | 활성 Profile Share 버튼 접근성 |
+| `src/profile-ui/ProfileShell.jsx` | 공통 shell의 잠재적 topbar Share 경로도 같은 접근성 이름으로 정렬했다. 현재 App route는 모두 `showShare={false}`를 사용하거나 미사용 `ProfilePage` 경로이므로 활성 화면 효과는 없다. | 비활성 공통 경로의 향후 일관성 |
 | `src/profile-ui/__tests__/shareStudio.test.js`, `src/profile-ui/__tests__/i18n.test.js`, `tests/profile-ui.spec.js` | 단일 보간, catalog parity, Profile 접근성 이름과 전체 locale 화면을 검증했다. | unit·browser E2E 회귀 계약 |
 | `mydocs/plans/task_m100_71.md`, `mydocs/plans/task_m100_71_impl.md` | 세 이슈의 통합 범위, 단계, 문서 위치와 검증 계약을 기록했다. | 내부 수행·승인 근거 |
 | `mydocs/working/task_m100_71_stage1.md`~`task_m100_71_stage5.md` | 단계별 조사·구현·검증·잔여 위험을 기록했다. | 내부 단계 추적 |
@@ -55,7 +56,7 @@ GitHub Issue: [#71](https://github.com/postmelee/codex-usage-profile/issues/71)
 | Share Studio platform 보간 | placeholder 자기 치환 후 React 수동 치환 | 전용 formatter 1회 |
 | Profile Share 접근성 이름 | 표시 문구 `Share`/`공유`와 동일 | `Share profile`/`프로필 공유`, 표시 문구 유지 |
 | 전체 자동 검증 | 작업 전 기준 | Node 575건 중 569 통과·6 환경 skip, E2E 64/64 통과 |
-| 변경 규모 | 해당 없음 | 25 files, 1,316 insertions, 104 deletions(계획·단계·최종 보고서 포함) |
+| 변경 규모 | 해당 없음 | 25 files, 1,323 insertions, 104 deletions(계획·단계·최종 보고서 포함) |
 
 ## 검증 결과
 
@@ -66,7 +67,7 @@ GitHub Issue: [#71](https://github.com/postmelee/codex-usage-profile/issues/71)
 | Marketing은 명시 custom key만 override하고 누락 key는 현재 locale catalog를 사용한다. | OK — 기본·partial·전 key·기본값 동일 custom·invalid input unit 및 한국어 E2E 통과 |
 | Quickstart는 id·순서·CTA와 sample-only/API 요청 없음 동작을 유지한다. | OK — id-only frozen record unit 및 Marketing E2E 통과 |
 | Share Studio platform 문구는 영어·한국어에서 target label로 한 번만 보간된다. | OK — X·LinkedIn·Reddit instruction/composer 결과와 placeholder 부재 unit 통과 |
-| Profile Share는 표시 문구·동작을 유지하면서 문맥이 분명한 접근성 이름을 제공한다. | OK — 영어·한국어 E2E와 keyboard·dialog·destination 회귀 통과 |
+| 활성 Profile 카드 Share는 표시 문구·동작을 유지하면서 문맥이 분명한 접근성 이름을 제공한다. | OK — 영어·한국어 E2E와 keyboard·dialog·destination 회귀 통과. topbar Share 부재는 별도 scoped assertion으로 유지 |
 | production Sites artifact와 승인된 배포 형태가 유지된다. | OK — production build, full-stack verifier, production verifier 통과 |
 | 승인된 제외 범위에 변경이 없다. | OK — package·lockfile, backend/API, CLI, card renderer, `.openai/hosting.json`, 배포 설정 diff 없음 |
 
@@ -90,6 +91,8 @@ GitHub Issue: [#71](https://github.com/postmelee/codex-usage-profile/issues/71)
 - `TEST_DATABASE_URL`과 test S3 환경이 없어 기존 PostgreSQL·S3 integration 6건은
   skip되었다. 이번 작업은 데이터 저장소·API·배포 설정을 변경하지 않았다.
 - 원격 CI는 PR 게시 후 별도로 확인해야 한다.
+- 미사용 `ProfilePage`와 공통 `ProfileShell`의 기본 `showShare` 경로 정리는 이번 활성
+  접근성 수정과 분리된 코드 정리 후보이다.
 
 ### 후속 작업 후보
 
