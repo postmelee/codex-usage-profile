@@ -1210,6 +1210,9 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const themeResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?theme=light"
   );
+  const invalidThemeResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?theme=unsupported"
+  );
   const etag = getResponse.headers.get("etag");
   const headResponse = await requestResponse(
     fixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"
@@ -1231,7 +1234,8 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   );
   assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
   assert.equal(fallbackResponse.headers.get("etag"), englishResponse.headers.get("etag"));
-  assert.equal(themeResponse.headers.get("etag"), englishResponse.headers.get("etag"));
+  assert.equal(themeResponse.status, 404);
+  assert.equal(invalidThemeResponse.status, 404);
   assert.notEqual(englishResponse.headers.get("etag"), etag);
   assert.equal(headResponse.status, 200);
   assert.equal(headResponse.headers.get("etag"), etag);
@@ -1254,7 +1258,7 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
 
 test("serves public cards without reading the structured store or renderer", async () => {
   const baseMediaStore = createMemoryProfileMediaStore();
-  await publishMediaFixture(baseMediaStore, { handle: "media-only" });
+  await publishThemeMediaFixture(baseMediaStore, { handle: "media-only" });
   const mediaCalls = [];
   const mediaStore = wrapMediaStore(baseMediaStore, {}, mediaCalls);
   const forbiddenStore = new Proxy(createMemoryProfileBackendStore(), {
@@ -1282,14 +1286,18 @@ test("serves public cards without reading the structured store or renderer", asy
   const response = await requestResponse(
     handler,
     "GET",
-    "/u/media-only/card.png?locale=ko"
+    "/u/media-only/card.png?locale=ko&theme=light"
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from("media:ko"));
+  assert.deepEqual(
+    Buffer.from(await response.arrayBuffer()),
+    Buffer.from("media:light:ko")
+  );
   assert.deepEqual(mediaCalls, [["getPublishedCard", {
     handle: "media-only",
     locale: "ko",
+    theme: "light",
     ifNoneMatch: null,
     includeBody: true
   }]]);
@@ -2068,6 +2076,44 @@ async function publishMediaFixture(mediaStore, options = {}) {
     handle,
     ownerId,
     publicationId: "profile_media_fixture",
+    publishedAt: "2026-07-22T00:01:00.000Z",
+    representations
+  });
+}
+
+async function publishThemeMediaFixture(mediaStore, options = {}) {
+  const ownerId = options.ownerId ?? "owner_media";
+  const handle = options.handle ?? "postmelee";
+  const presentationDigest = createProfileMediaRevisionDigest(
+    Buffer.from("presentation-v1")
+  );
+  const representations = {};
+  for (const theme of ["dark", "light"]) {
+    representations[theme] = {};
+    for (const locale of ["en", "ko"]) {
+      const body = Buffer.from(`media:${theme}:${locale}`);
+      const revision = createProfileMediaRevisionDigest(body);
+      const etag = `"${revision}"`;
+      await mediaStore.putRevision({
+        body,
+        contractVersion: 4,
+        createdAt: "2026-07-22T00:00:00.000Z",
+        etag,
+        locale,
+        ownerId,
+        presentationDigest,
+        revision,
+        theme
+      });
+      representations[theme][locale] = { etag, revision };
+    }
+  }
+  return mediaStore.publishRevision({
+    contractVersion: 4,
+    handle,
+    ownerId,
+    presentationDigest,
+    publicationId: "profile_media_theme_fixture",
     publishedAt: "2026-07-22T00:01:00.000Z",
     representations
   });

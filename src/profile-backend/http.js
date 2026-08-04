@@ -12,7 +12,8 @@ import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_STORE_ERROR_CODES,
-  createProfileMediaStableKey
+  createProfileMediaStableKey,
+  normalizeProfileMediaTheme
 } from "../profile-media/media-store-contract.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
@@ -567,6 +568,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           mediaStore,
           handle: decodePublicCardHandle(publicCardMatch[1]),
           locale: url.searchParams.get("locale"),
+          theme: readPublicCardTheme(url.searchParams.get("theme")),
           ifNoneMatch: request.headers.get("if-none-match"),
           includeBody: method === "GET"
         });
@@ -1263,6 +1265,7 @@ async function readPublishedMediaCard(options) {
     card = await options.mediaStore.getPublishedCard({
       handle: options.handle,
       locale: options.locale,
+      theme: options.theme,
       ifNoneMatch: options.ifNoneMatch,
       includeBody: options.includeBody
     });
@@ -1281,6 +1284,15 @@ async function readPublishedMediaCard(options) {
     throw publicCardNotFoundError();
   }
   return card;
+}
+
+function readPublicCardTheme(value) {
+  if (value === null) return "dark";
+  try {
+    return normalizeProfileMediaTheme(value, { fallback: false });
+  } catch {
+    throw publicCardNotFoundError();
+  }
 }
 
 function publicCardNotFoundError() {

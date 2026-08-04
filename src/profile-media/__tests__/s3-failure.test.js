@@ -115,6 +115,34 @@ test("stable GET maps a repeated conditional read race to unavailable", async ()
   );
 });
 
+test("light stable HEAD to GET race retries one coherent S3 variant", async () => {
+  const client = new FailureS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: BUCKET,
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const representations = createThemeRepresentations("light-race");
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(representations[theme].en);
+    await store.putRevision(representations[theme].ko);
+  }
+  const input = themePublicationInput(representations, "publication_light");
+  await store.publishRevision(input);
+  const lightKey = createProfileMediaStableKey({ handle: HANDLE, theme: "light" });
+  const priorLight = client.snapshotObject(lightKey);
+  await store.publishRevision(input);
+  client.replaceBeforeNextGets(lightKey, [priorLight]);
+
+  const current = await store.getPublishedCard({
+    handle: HANDLE,
+    theme: "light"
+  });
+
+  assert.equal(current.publicationId, "publication_light");
+  assert.deepEqual(current.body, representations.light.en.body);
+});
+
 test("missing media bucket is unavailable rather than an unpublished object", async () => {
   const fixture = await createPublishedFixture();
   fixture.client.failNext("HeadObjectCommand", {
@@ -192,7 +220,21 @@ function createRepresentations(label) {
   };
 }
 
-function createRevision(locale, value) {
+function createThemeRepresentations(label) {
+  return Object.fromEntries(["dark", "light"].map((theme) => [
+    theme,
+    Object.fromEntries(["en", "ko"].map((locale) => [
+      locale,
+      createRevision(locale, `${label}:${theme}:${locale}`, {
+        contractVersion: 4,
+        presentationDigest: PRESENTATION_DIGEST,
+        theme
+      })
+    ]))
+  ]));
+}
+
+function createRevision(locale, value, overrides = {}) {
   const body = Buffer.from(value);
   const revision = createHash("sha256").update(body).digest("base64url");
   return {
@@ -201,7 +243,8 @@ function createRevision(locale, value) {
     etag: `"${revision}"`,
     locale,
     ownerId: OWNER_ID,
-    revision
+    revision,
+    ...overrides
   };
 }
 
@@ -221,6 +264,26 @@ function publicationInput(representations, publicationId) {
         revision: representations.ko.revision
       }
     }
+  };
+}
+
+function themePublicationInput(representations, publicationId) {
+  return {
+    contractVersion: 4,
+    handle: HANDLE,
+    ownerId: OWNER_ID,
+    presentationDigest: PRESENTATION_DIGEST,
+    publicationId,
+    publishedAt: "2026-07-23T00:01:00.000Z",
+    representations: Object.fromEntries(
+      Object.entries(representations).map(([theme, locales]) => [
+        theme,
+        Object.fromEntries(Object.entries(locales).map(([locale, revision]) => [
+          locale,
+          { etag: revision.etag, revision: revision.revision }
+        ]))
+      ])
+    )
   };
 }
 
@@ -381,4 +444,7 @@ function s3Error(name, status) {
 const BUCKET = "cards";
 const HANDLE = "failure-user";
 const OWNER_ID = "owner_failure";
+const PRESENTATION_DIGEST = createHash("sha256")
+  .update("presentation-v1")
+  .digest("base64url");
 const PREVIOUS_PUBLICATION_ID = "publication_previous";
