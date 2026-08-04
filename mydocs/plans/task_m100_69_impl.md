@@ -456,7 +456,19 @@ git diff origin/devel...HEAD -- \
   packages/codex-usage-profile-cli \
   src/profile-backend src/profile-runtime src/profile-media \
   src/profile-card public
+
+# Stage 4 자체 제한 경로 무변경 확인
+git diff a6fcff8 -- \
+  .openai/hosting.json \
+  package.json package-lock.json \
+  packages/codex-usage-profile-cli \
+  src/profile-backend src/profile-runtime src/profile-media \
+  src/profile-card public
 ```
+
+`origin/devel...HEAD` 결과의 `src/profile-backend`·`src/profile-card` diff는 승인된 Stage 3.5
+theme-aware owner preview 범위와 일치해야 한다. Stage 4 기준선 `a6fcff8` 이후에는 모든 제한
+경로가 비어 있어야 한다.
 
 ### 커밋
 

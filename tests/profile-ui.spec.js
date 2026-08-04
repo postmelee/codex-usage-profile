@@ -660,7 +660,7 @@ test.describe("Home and share card flow", () => {
     const ownerPreview = page.getByRole("img", { name: "Your Codex usage card" });
     await expect(ownerPreview).toHaveAttribute(
       "src",
-      "/api/profile/card.png?locale=en"
+      "/api/profile/card.png?locale=en&theme=dark"
     );
     await expect.poll(() => ownerPreview.evaluate((image) => image.naturalWidth)).toBe(1497);
 
@@ -891,7 +891,7 @@ test.describe("Home and share card flow", () => {
     });
     await expect(ownerCard).toHaveAttribute(
       "src",
-      "/api/profile/card.png?locale=en"
+      "/api/profile/card.png?locale=en&theme=dark"
     );
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
     await expect(media).toHaveAttribute("data-card-status", "ready");
