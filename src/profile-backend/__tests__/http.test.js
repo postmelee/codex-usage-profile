@@ -1066,12 +1066,31 @@ test("serves a private owner preview without public caching", async () => {
   const response = await requestResponse(
     fixture.handler, "GET", "/api/profile/card.png?locale=ko", "", { cookie }
   );
+  const lightResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/profile/card.png?locale=ko&theme=light",
+    "",
+    { cookie }
+  );
+  const fallbackResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/api/profile/card.png?locale=ko&theme=unsupported",
+    "",
+    { cookie }
+  );
   const body = Buffer.from(await response.arrayBuffer());
+  const lightBody = Buffer.from(await lightResponse.arrayBuffer());
+  const fallbackBody = Buffer.from(await fallbackResponse.arrayBuffer());
   assert.equal(unauthorized.status, 401);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "image/png");
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.equal(body.subarray(1, 4).toString(), "PNG");
+  assert.equal(lightResponse.headers.get("cache-control"), "private, no-store");
+  assert.notDeepEqual(lightBody, body);
+  assert.deepEqual(fallbackBody, body);
   assert.deepEqual(mediaCalls, []);
 });
 
@@ -1097,6 +1116,9 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const fallbackResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?locale=unsupported"
   );
+  const themeResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?theme=light"
+  );
   const etag = getResponse.headers.get("etag");
   const headResponse = await requestResponse(
     fixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"
@@ -1118,6 +1140,7 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   );
   assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
   assert.equal(fallbackResponse.headers.get("etag"), englishResponse.headers.get("etag"));
+  assert.equal(themeResponse.headers.get("etag"), englishResponse.headers.get("etag"));
   assert.notEqual(englishResponse.headers.get("etag"), etag);
   assert.equal(headResponse.status, 200);
   assert.equal(headResponse.headers.get("etag"), etag);
@@ -1876,7 +1899,7 @@ function createFixture(options = {}) {
     profileCardRenderPng: options.profileCardRenderPng ??
       (async (viewModel) => Buffer.concat([
         Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-        Buffer.from(`:${viewModel.locale}`)
+        Buffer.from(`:${viewModel.locale}:${viewModel.theme}`)
       ])),
     profileCardRendererVersion: "http-test-renderer-1",
     publicationService

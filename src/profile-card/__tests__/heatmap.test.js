@@ -8,6 +8,7 @@ import {
   buildCardHeatmap,
   getCardHeatmapLevel
 } from "../heatmap.js";
+import { CARD_THEME_PALETTES } from "../theme.js";
 import {
   SAMPLE_CARD_TODAY_ISO,
   sampleAccountUsageReadResult
@@ -47,4 +48,23 @@ test("renders null daily buckets as an empty heatmap", () => {
   const heatmap = buildCardHeatmap([], { todayIso: "2026-06-11" });
 
   assert.equal(heatmap.cells.every((cell) => cell.level === 0), true);
+});
+
+test("maps the same usage levels through the selected card palette", () => {
+  const dark = buildCardHeatmap(
+    sampleAccountUsageReadResult.dailyUsageBuckets,
+    { theme: "dark", todayIso: SAMPLE_CARD_TODAY_ISO }
+  );
+  const light = buildCardHeatmap(
+    sampleAccountUsageReadResult.dailyUsageBuckets,
+    { theme: "light", todayIso: SAMPLE_CARD_TODAY_ISO }
+  );
+
+  assert.deepEqual(
+    dark.cells.map((cell) => cell.level),
+    light.cells.map((cell) => cell.level)
+  );
+  assert.equal(dark.cells[0].color, CARD_THEME_PALETTES.dark.heatmap[0]);
+  assert.equal(light.cells[0].color, CARD_THEME_PALETTES.light.heatmap[0]);
+  assert.equal(light.theme, "light");
 });

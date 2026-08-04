@@ -3,6 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script data-theme-bootstrap>
+      (() => {
+        const storageKey = "codex-usage-profile:appearance";
+        const preferenceAttribute = "data-theme-preference";
+        const themeAttribute = "data-theme";
+        const mediaQuery = "(prefers-color-scheme: dark)";
+        let preference = "system";
+
+        try {
+          const storedPreference = globalThis.localStorage?.getItem(storageKey);
+          if (storedPreference === "light" || storedPreference === "dark") {
+            preference = storedPreference;
+          }
+        } catch {}
+
+        let resolvedTheme = preference;
+        if (preference === "system") {
+          try {
+            resolvedTheme = globalThis.matchMedia?.(mediaQuery)?.matches
+              ? "dark"
+              : "light";
+          } catch {
+            resolvedTheme = "light";
+          }
+        }
+
+        const documentElement = globalThis.document?.documentElement;
+        documentElement?.setAttribute(preferenceAttribute, preference);
+        documentElement?.setAttribute(themeAttribute, resolvedTheme);
+        if (documentElement?.style) {
+          documentElement.style.colorScheme = resolvedTheme;
+        }
+      })();
+    </script>
     <title>Codex Usage Profile</title>
   </head>
   <body>

@@ -128,6 +128,49 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
   assert.equal(renderCount, 1);
 });
 
+test("separates private light previews while keeping public cards dark", async () => {
+  const renderedThemes = [];
+  const fixture = createFixture({
+    renderPng: async (viewModel, options) => {
+      renderedThemes.push([viewModel.theme, options.theme]);
+      return Buffer.from(`png-${options.theme}`);
+    }
+  });
+
+  const ownerDark = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  const ownerLight = await fixture.service.renderOwnerCard({
+    ownerId: OWNER.id,
+    theme: "light"
+  });
+  const ownerLightCached = await fixture.service.renderOwnerCard({
+    ownerId: OWNER.id,
+    theme: "light"
+  });
+  const ownerFallback = await fixture.service.renderOwnerCard({
+    ownerId: OWNER.id,
+    theme: "unsupported"
+  });
+
+  assert.equal(ownerDark.theme, "dark");
+  assert.equal(ownerLight.theme, "light");
+  assert.notEqual(ownerDark.sourceDigest, ownerLight.sourceDigest);
+  assert.equal(ownerLight.sourceDigest, ownerLightCached.sourceDigest);
+  assert.equal(ownerFallback.sourceDigest, ownerDark.sourceDigest);
+  assert.deepEqual(renderedThemes, [["dark", "dark"], ["light", "light"]]);
+
+  await fixture.service.updateVisibility({
+    ownerId: OWNER.id,
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+  const publicCard = await fixture.service.renderPublicCard({
+    handle: OWNER.handle,
+    theme: "light"
+  });
+
+  assert.equal(publicCard.theme, "dark");
+  assert.deepEqual(renderedThemes.at(-1), ["dark", "dark"]);
+});
+
 test("separates renderer source digests from final PNG revisions", async () => {
   const fixture = createFixture({ renderPng: async () => Buffer.from("png") });
   await fixture.service.updateVisibility({
@@ -196,6 +239,14 @@ test("validates profile card digest helper inputs", () => {
     usageRecord: { uploadedAt: "2026-06-11T00:01:00.000Z" }
   };
   assert.match(createProfileCardSourceDigest(options), /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(
+    createProfileCardSourceDigest(options),
+    createProfileCardSourceDigest({ ...options, theme: "dark" })
+  );
+  assert.notEqual(
+    createProfileCardSourceDigest(options),
+    createProfileCardSourceDigest({ ...options, theme: "light" })
+  );
   assert.throws(() => createProfileCardRevision(Buffer.alloc(0)), /must not be empty/);
   assert.throws(() => createProfileCardEtag("png"), /Buffer or Uint8Array/);
 });

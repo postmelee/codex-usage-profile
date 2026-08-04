@@ -4,6 +4,7 @@ import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx"
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
+import { useTheme } from "./ThemeProvider.jsx";
 import { Icon } from "./Icons.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import {
@@ -16,6 +17,7 @@ import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const { locale, t } = useLocale();
+  const { resolvedTheme } = useTheme();
   const authStatus = authState?.status ?? "loading";
   const [profileState, setProfileState] = useState({
     error: null,
@@ -56,7 +58,11 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const isPublic = profile?.visibility === "public";
   const canShare = profileState.status === "ready" && hasUsage && isPublic;
   const previewUrl = hasUsage
-    ? client.buildOwnerCardPreviewUrl({ locale, revision: previewRevision })
+    ? client.buildOwnerCardPreviewUrl({
+      locale,
+      revision: previewRevision,
+      theme: resolvedTheme
+    })
     : null;
 
   const closeShare = useCallback(() => {

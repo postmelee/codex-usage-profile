@@ -4,15 +4,11 @@ export const CARD_HEATMAP_CELL_COUNT = (
   CARD_HEATMAP_COLUMN_COUNT * CARD_HEATMAP_ROW_COUNT
 );
 
-export const CARD_HEATMAP_LEVEL_COLORS = Object.freeze([
-  "#2f2f2f",
-  "#203d59",
-  "#245380",
-  "#2a72b5",
-  "#339cff"
-]);
+export const CARD_HEATMAP_LEVEL_COLORS = CARD_THEME_PALETTES.dark.heatmap;
 
 export function buildCardHeatmap(dailyUsageBuckets, options = {}) {
+  const theme = normalizeCardTheme(options.theme);
+  const levelColors = CARD_THEME_PALETTES[theme].heatmap;
   const todayIso = normalizeIsoDate(
     options.todayIso ?? getLatestBucketDate(dailyUsageBuckets) ?? new Date()
   );
@@ -43,12 +39,13 @@ export function buildCardHeatmap(dailyUsageBuckets, options = {}) {
   return {
     cells: values.map((cell) => ({
       ...cell,
-      color: CARD_HEATMAP_LEVEL_COLORS[getCardHeatmapLevel(cell.tokens, maxTokens)],
+      color: levelColors[getCardHeatmapLevel(cell.tokens, maxTokens)],
       level: getCardHeatmapLevel(cell.tokens, maxTokens)
     })),
     columnCount: CARD_HEATMAP_COLUMN_COUNT,
     rowCount: CARD_HEATMAP_ROW_COUNT,
     startDateIso,
+    theme,
     todayIso
   };
 }
@@ -96,3 +93,7 @@ function addDays(dateIso, days) {
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
+import {
+  CARD_THEME_PALETTES,
+  normalizeCardTheme
+} from "./theme.js";

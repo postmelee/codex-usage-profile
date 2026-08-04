@@ -21,6 +21,14 @@ export {
 } from "./heatmap.js";
 
 export {
+  CARD_THEMES,
+  CARD_THEME_PALETTES,
+  DEFAULT_CARD_THEME,
+  getCardThemePalette,
+  normalizeCardTheme
+} from "./theme.js";
+
+export {
   CARD_COLORS,
   CARD_LOGICAL_HEIGHT,
   CARD_LOGICAL_WIDTH,

@@ -1,5 +1,6 @@
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
 import { buildCardHeatmap } from "./heatmap.js";
+import { normalizeCardTheme } from "./theme.js";
 
 export const CARD_LOCALES = Object.freeze(["en", "ko"]);
 
@@ -22,6 +23,7 @@ export function buildCardViewModel(options = {}) {
   const owner = normalizeCardOwner(options.owner);
   const usage = normalizeAccountUsageReadResult(options.usage);
   const locale = resolveCardLocale(options.locale);
+  const theme = normalizeCardTheme(options.theme);
   const copy = CARD_COPY[locale];
   const summary = usage.summary;
 
@@ -32,6 +34,7 @@ export function buildCardViewModel(options = {}) {
       username: `@${owner.githubLogin}`
     },
     heatmap: buildCardHeatmap(usage.dailyUsageBuckets, {
+      theme,
       todayIso: options.todayIso
     }),
     locale,
@@ -61,6 +64,7 @@ export function buildCardViewModel(options = {}) {
         locale
       )
     ],
+    theme,
     usage
   };
 }

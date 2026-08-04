@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { LocaleProvider } from "../profile-ui/LocaleProvider.jsx";
+import { ThemeProvider } from "../profile-ui/ThemeProvider.jsx";
 import { initializeDocumentLocale } from "../profile-ui/i18n.js";
 import { MarketingLanding } from "./MarketingLanding.jsx";
 import { createSitesMarketingConfig } from "./sites-config.js";
@@ -17,9 +18,11 @@ if (rootElement) {
 
   createRoot(rootElement).render(
     <StrictMode>
-      <LocaleProvider initialLocale={initialLocale}>
-        <MarketingLanding config={config} />
-      </LocaleProvider>
+      <ThemeProvider>
+        <LocaleProvider initialLocale={initialLocale}>
+          <MarketingLanding config={config} />
+        </LocaleProvider>
+      </ThemeProvider>
     </StrictMode>
   );
 }

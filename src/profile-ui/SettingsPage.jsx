@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { ProfileShell } from "./ProfileShell.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
+import { useTheme } from "./ThemeProvider.jsx";
+import { THEME_PREFERENCES } from "./theme.js";
 import {
   buildAccountLoginHref,
   getAccountAuthError,
@@ -39,18 +41,64 @@ export function SettingsPage({
             <h1 id="settings-title">{t("settings.title")}</h1>
           </header>
 
-          {authStatus === "authenticated" ? (
-            <AuthenticatedSettings authState={authState} client={client} />
-          ) : (
-            <SettingsState
-              authStatus={authStatus}
-              client={client}
-              location={location}
-            />
-          )}
+          <div className="settings-page-stack">
+            <SettingsAppearancePanel />
+
+            {authStatus === "authenticated" ? (
+              <AuthenticatedSettings authState={authState} client={client} />
+            ) : (
+              <SettingsState
+                authStatus={authStatus}
+                client={client}
+                location={location}
+              />
+            )}
+          </div>
         </div>
       </section>
     </ProfileShell>
+  );
+}
+
+function SettingsAppearancePanel() {
+  const { preference, setPreference } = useTheme();
+  const { t } = useLocale();
+
+  return (
+    <section className="settings-appearance settings-panel">
+      <fieldset
+        aria-describedby="settings-appearance-description"
+        className="settings-appearance-fieldset"
+      >
+        <legend className="settings-appearance-title">
+          {t("settings.appearance.title")}
+        </legend>
+        <p
+          className="settings-appearance-description"
+          id="settings-appearance-description"
+        >
+          {t("settings.appearance.description")}
+        </p>
+
+        <div className="settings-appearance-options">
+          {THEME_PREFERENCES.map((option) => (
+            <label className="settings-appearance-option" key={option}>
+              <input
+                checked={preference === option}
+                name="settings-appearance"
+                onChange={() => setPreference(option)}
+                type="radio"
+                value={option}
+              />
+              <span className="settings-appearance-copy">
+                <strong>{t(`settings.appearance.${option}.title`)}</strong>
+                <small>{t(`settings.appearance.${option}.description`)}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </section>
   );
 }
 

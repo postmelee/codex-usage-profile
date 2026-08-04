@@ -8,6 +8,11 @@ import {
   loadImage
 } from "@napi-rs/canvas";
 
+import {
+  CARD_THEME_PALETTES,
+  getCardThemePalette
+} from "./theme.js";
+
 export const CARD_LOGICAL_WIDTH = 499;
 export const CARD_LOGICAL_HEIGHT = 306;
 export const CARD_OUTPUT_SCALE = 3;
@@ -15,12 +20,7 @@ export const CARD_OUTPUT_WIDTH = CARD_LOGICAL_WIDTH * CARD_OUTPUT_SCALE;
 export const CARD_OUTPUT_HEIGHT = CARD_LOGICAL_HEIGHT * CARD_OUTPUT_SCALE;
 export const CARD_RENDERER_VERSION = "codex-share-card-2";
 
-export const CARD_COLORS = Object.freeze({
-  background: "#181818",
-  divider: "#242424",
-  primary: "#ffffff",
-  secondary: "#aeaeae"
-});
+export const CARD_COLORS = CARD_THEME_PALETTES.dark;
 
 const CARD_FONT_FILES_DIRECTORY = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -44,6 +44,7 @@ let fontsRegistered = false;
 
 export async function renderProfileCardPng(viewModel, options = {}) {
   registerCardFonts();
+  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
 
   const canvas = createCanvas(CARD_OUTPUT_WIDTH, CARD_OUTPUT_HEIGHT);
   const context = canvas.getContext("2d");
@@ -51,11 +52,11 @@ export async function renderProfileCardPng(viewModel, options = {}) {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
-  drawCardBackground(context);
-  await drawHeader(context, viewModel.header, options);
-  drawCodexLabel(context);
-  drawHeatmap(context, viewModel.heatmap);
-  drawStats(context, viewModel.stats);
+  drawCardBackground(context, palette);
+  await drawHeader(context, viewModel.header, options, palette);
+  drawCodexLabel(context, palette);
+  drawHeatmap(context, viewModel.heatmap, palette);
+  drawStats(context, viewModel.stats, palette);
 
   return canvas.encode("png");
 }
@@ -95,14 +96,14 @@ export function registerCardFonts() {
   fontsRegistered = true;
 }
 
-function drawCardBackground(context) {
-  context.fillStyle = CARD_COLORS.background;
+function drawCardBackground(context, palette) {
+  context.fillStyle = palette.background;
   context.beginPath();
   context.roundRect(0, 0, CARD_LOGICAL_WIDTH, CARD_LOGICAL_HEIGHT, 32);
   context.fill();
 }
 
-async function drawHeader(context, header, options) {
+async function drawHeader(context, header, options, palette) {
   const avatarImage = await resolveAvatarImage(options.avatarSource);
 
   context.save();
@@ -126,11 +127,11 @@ async function drawHeader(context, header, options) {
       AVATAR_SIZE
     );
   } else {
-    context.fillStyle = "#2f2f2f";
+    context.fillStyle = palette.avatarFallback;
     context.fillRect(AVATAR_X, AVATAR_Y, AVATAR_SIZE, AVATAR_SIZE);
     drawCenteredFittedText(context, getAvatarFallback(header.displayName), {
       centerX: AVATAR_X + AVATAR_RADIUS,
-      color: CARD_COLORS.secondary,
+      color: palette.secondary,
       maxFontSize: 18,
       maxWidth: 32,
       minFontSize: 14,
@@ -141,7 +142,7 @@ async function drawHeader(context, header, options) {
   context.restore();
 
   drawFittedText(context, header.displayName, {
-    color: CARD_COLORS.primary,
+    color: palette.primary,
     maxFontSize: 19,
     maxWidth: 260,
     minFontSize: 14,
@@ -150,7 +151,7 @@ async function drawHeader(context, header, options) {
     y: 56
   });
   drawFittedText(context, header.username, {
-    color: CARD_COLORS.secondary,
+    color: palette.secondary,
     maxFontSize: 13,
     maxWidth: 260,
     minFontSize: 10,
@@ -160,9 +161,9 @@ async function drawHeader(context, header, options) {
   });
 }
 
-function drawCodexLabel(context) {
+function drawCodexLabel(context, palette) {
   drawFittedText(context, "Codex", {
-    color: CARD_COLORS.secondary,
+    color: palette.secondary,
     maxFontSize: 20,
     maxWidth: 57,
     minFontSize: 18,
@@ -172,7 +173,7 @@ function drawCodexLabel(context) {
   });
 }
 
-function drawHeatmap(context, heatmap) {
+function drawHeatmap(context, heatmap, palette) {
   const columnStep = (HEATMAP_WIDTH - HEATMAP_CELL_SIZE) /
     Math.max(heatmap.columnCount - 1, 1);
   const rowStep = (HEATMAP_HEIGHT - HEATMAP_CELL_SIZE) /
@@ -182,15 +183,15 @@ function drawHeatmap(context, heatmap) {
     const x = HEATMAP_X + cell.column * columnStep;
     const y = HEATMAP_Y + cell.row * rowStep;
 
-    context.fillStyle = cell.color;
+    context.fillStyle = palette.heatmap[cell.level] ?? cell.color;
     context.beginPath();
     context.roundRect(x, y, HEATMAP_CELL_SIZE, HEATMAP_CELL_SIZE, 4);
     context.fill();
   }
 }
 
-function drawStats(context, stats) {
-  context.fillStyle = CARD_COLORS.divider;
+function drawStats(context, stats, palette) {
+  context.fillStyle = palette.divider;
   for (const dividerX of STAT_DIVIDERS) {
     context.fillRect(dividerX, 234, 1, 40);
   }
@@ -200,7 +201,7 @@ function drawStats(context, stats) {
 
     drawCenteredFittedText(context, stat.value, {
       centerX,
-      color: CARD_COLORS.primary,
+      color: palette.primary,
       maxFontSize: 18,
       maxWidth: 96,
       minFontSize: 14,
@@ -209,7 +210,7 @@ function drawStats(context, stats) {
     });
     drawCenteredFittedText(context, stat.label, {
       centerX,
-      color: CARD_COLORS.secondary,
+      color: palette.secondary,
       maxFontSize: 13,
       maxWidth: 98,
       minFontSize: 9,
