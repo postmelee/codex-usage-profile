@@ -85,6 +85,29 @@ test("message catalogs keep placeholder tokens aligned", () => {
   }
 });
 
+test("appearance messages localize every supported theme preference", () => {
+  assert.deepEqual(
+    ["system", "light", "dark"].map((preference) => (
+      MESSAGE_CATALOGS.en[`settings.appearance.${preference}.title`]
+    )),
+    ["System", "Light", "Dark"]
+  );
+  assert.deepEqual(
+    ["system", "light", "dark"].map((preference) => (
+      MESSAGE_CATALOGS.ko[`settings.appearance.${preference}.title`]
+    )),
+    ["시스템", "라이트", "다크"]
+  );
+  assert.match(
+    MESSAGE_CATALOGS.en["settings.appearance.system.description"],
+    /device appearance/
+  );
+  assert.match(
+    MESSAGE_CATALOGS.ko["settings.appearance.system.description"],
+    /기기의 화면 모드/
+  );
+});
+
 test("literal message ids referenced by source files exist in the catalog", async () => {
   const knownIds = new Set(getMessageIds("en"));
   const missingReferences = [];

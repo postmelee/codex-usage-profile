@@ -2785,6 +2785,101 @@ test.describe("Profile and Settings canvases", () => {
   });
 });
 
+test.describe("Settings appearance control", () => {
+  test("appearance control remains available across account states and locales", async ({ page }) => {
+    await useKoreanLocale(page);
+    await mockAnonymousAccount(page);
+    await page.goto("/settings");
+
+    const appearance = page.getByRole("group", { name: "화면 모드" });
+    await expect(appearance).toBeVisible();
+    await expect(appearance.getByRole("radio", { name: /시스템/ }))
+      .toBeChecked();
+    await expect(appearance.getByRole("radio")).toHaveCount(3);
+    for (const radio of await appearance.getByRole("radio").all()) {
+      await expect(radio).toBeEnabled();
+    }
+    await expect(page.getByRole("heading", { name: "로그인 필요" }))
+      .toBeVisible();
+
+    await page.unroute("**/api/auth/me");
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      error: { code: "service_unavailable", message: "Account unavailable" },
+      ok: false
+    }, 503));
+    await page.reload();
+    await expect(page.getByRole("group", { name: "화면 모드" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "계정을 사용할 수 없음" }))
+      .toBeVisible();
+  });
+
+  test("theme preference applies immediately and persists across contexts", async ({ browser, page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockSettingsData(page);
+    await page.goto("/settings");
+
+    const appearance = page.getByRole("group", { name: "Appearance" });
+    const light = appearance.getByRole("radio", { name: /Light/ });
+    await light.check();
+    await expect(light).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-preference", "light");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
+      .toBe("light");
+
+    await page.reload();
+    await expect(page.getByRole("radio", { name: /Light/ })).toBeChecked();
+
+    const storageState = await page.context().storageState();
+    const restoredContext = await browser.newContext({
+      colorScheme: "dark",
+      storageState
+    });
+    const restoredPage = await restoredContext.newPage();
+    await mockAuthenticatedAccount(restoredPage);
+    await mockSettingsData(restoredPage);
+    await restoredPage.goto("http://127.0.0.1:5173/settings");
+    await expect(restoredPage.getByRole("radio", { name: /Light/ }))
+      .toBeChecked();
+    await expect(restoredPage.locator("html")).toHaveAttribute("data-theme", "light");
+    await restoredContext.close();
+
+    const system = page.getByRole("radio", { name: /System/ });
+    await system.check();
+    await expect(system).toBeChecked();
+    expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
+      .toBeNull();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(system).toBeChecked();
+  });
+
+  test("appearance control supports keyboard theme preference selection", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockSettingsData(page);
+    await page.goto("/settings");
+
+    const system = page.getByRole("radio", { name: /System/ });
+    const light = page.getByRole("radio", { name: /Light/ });
+    const dark = page.getByRole("radio", { name: /Dark/ });
+    await system.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(light).toBeFocused();
+    await expect(light).toBeChecked();
+    await expect(page.locator('.settings-appearance-option:has(input[value="light"])'))
+      .toHaveCSS("outline-style", "solid");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(dark).toBeFocused();
+    await expect(dark).toBeChecked();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+});
+
 test.describe("Public profile", () => {
   test("public profile renders the API-backed GitHub identity and stable card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
@@ -2946,6 +3041,17 @@ async function mockAuthenticatedAccount(page) {
   }));
   await page.route("**/api/profile", (route) => fulfillJson(route, {
     data: ownerProfile("private"),
+    ok: true
+  }));
+}
+
+async function mockSettingsData(page) {
+  await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+    data: { tokens: [] },
+    ok: true
+  }));
+  await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+    data: { devices: [] },
     ok: true
   }));
 }

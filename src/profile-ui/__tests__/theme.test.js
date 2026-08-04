@@ -257,6 +257,20 @@ test("bootstrap handles explicit, system, corrupt, and blocked storage states", 
   });
 });
 
+test("Settings appearance control uses the shared provider and native radios", async () => {
+  const source = await readFile(
+    join(PROJECT_ROOT, "src/profile-ui/SettingsPage.jsx"),
+    "utf8"
+  );
+
+  assert.match(source, /useTheme\(\)/);
+  assert.match(source, /THEME_PREFERENCES\.map/);
+  assert.match(source, /setPreference\(option\)/);
+  assert.match(source, /<fieldset/);
+  assert.match(source, /type="radio"/);
+  assert.doesNotMatch(source, /settings-appearance[\s\S]{0,1200}\bdisabled=/);
+});
+
 function createStorage(initialValues = {}) {
   const values = new Map(Object.entries(initialValues));
 

@@ -1909,6 +1909,89 @@ button {
   margin: 0;
 }
 
+.settings-page-stack {
+  display: grid;
+  gap: 30px;
+}
+
+.settings-appearance {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.settings-appearance-title {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+  padding: 0;
+}
+
+.settings-appearance-description {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.settings-appearance-options {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.settings-appearance-option {
+  align-items: flex-start;
+  background: var(--surface-input-tint);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.settings-appearance-option:hover {
+  background: var(--surface-hover);
+}
+
+.settings-appearance-option:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--focus-ring);
+}
+
+.settings-appearance-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-appearance-option input {
+  accent-color: var(--focus-ring);
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+}
+
+.settings-appearance-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-appearance-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.settings-appearance-copy small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .settings-state-heading p {
   color: var(--text-secondary);
   font-size: 15px;
@@ -3476,6 +3559,10 @@ button {
 
   .settings-panel {
     padding: 18px;
+  }
+
+  .settings-appearance-options {
+    grid-template-columns: 1fr;
   }
 
   .settings-action-row,
