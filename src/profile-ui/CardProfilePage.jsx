@@ -89,7 +89,12 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     shareSourceRectRef.current = null;
   }, []);
 
-  function openShare() {
+  async function openShare() {
+    if (cardSettingsDirty) {
+      const nextProfile = await saveCardSettings();
+      if (!nextProfile) return;
+    }
+
     shareSourceRectRef.current = snapshotRect(
       shareSourceCardRef.current?.getBoundingClientRect()
     );
@@ -141,7 +146,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
 
   async function saveCardSettings() {
     if (!draftStyle || !cardSettingsDirty || cardSettingsState.status === "saving") {
-      return;
+      return null;
     }
     setCardSettingsState((current) => ({ ...current, error: null, status: "saving" }));
     try {
@@ -154,12 +159,14 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         status: "saved"
       });
       setPreviewRevision((value) => value + 1);
+      return nextProfile;
     } catch {
       setCardSettingsState((current) => ({
         ...current,
         error: "profile.card.settings.error",
         status: "error"
       }));
+      return null;
     }
   }
 
@@ -268,6 +275,8 @@ function CardProfileContent(props) {
             transitionSuspended={props.shareOpen}
           />
           <ProfileCardAction
+            cardSettingsDirty={props.cardSettingsDirty}
+            cardSettingsSaving={props.cardSettingsState.status === "saving"}
             isPublic={props.isPublic}
             mutationState={props.mutationState}
             onPublish={() => props.onVisibilityChange("public")}
@@ -371,7 +380,15 @@ function getEmptyProfileCopyStatus(status, t) {
   return "";
 }
 
-function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner }) {
+function ProfileCardAction({
+  cardSettingsDirty,
+  cardSettingsSaving,
+  isPublic,
+  mutationState,
+  onPublish,
+  onShare,
+  owner
+}) {
   const { locale, t } = useLocale();
   const avatar = getAccountAvatar(owner, locale);
   const displayName = getAccountDisplayName(owner, locale);
@@ -393,14 +410,25 @@ function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner 
       </div>
       <div className="home-account-actions">
         <button
-          aria-label={isPublic ? t("common.shareProfile") : undefined}
+          aria-busy={isPublic && cardSettingsSaving ? true : undefined}
+          aria-label={isPublic
+            ? cardSettingsSaving
+              ? t("profile.card.settings.savingBeforeShare")
+              : cardSettingsDirty
+                ? t("profile.card.settings.saveAndShare")
+                : t("common.shareProfile")
+            : undefined}
           className="primary-command"
-          disabled={isSubmitting}
+          disabled={isSubmitting || cardSettingsSaving}
           onClick={isPublic ? onShare : onPublish}
           type="button"
         >
           {isPublic
-            ? t("common.share")
+            ? cardSettingsSaving
+              ? t("profile.card.settings.savingBeforeShare")
+              : cardSettingsDirty
+                ? t("profile.card.settings.saveAndShare")
+                : t("common.share")
             : isSubmitting
               ? t("profile.card.publishing")
               : t("profile.card.publish")}

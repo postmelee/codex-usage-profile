@@ -20,7 +20,11 @@ export function CardStyleSettings({
     <section className="card-style-settings" aria-labelledby="card-style-title">
       <div className="card-style-settings-heading">
         <h3 id="card-style-title">{t("profile.card.settings.title")}</h3>
-        <p>{t("profile.card.settings.description")}</p>
+        <p>
+          {t("profile.card.settings.description")} {t("profile.card.settings.siteThemePrefix")}
+          <a href="/?view=settings">{t("profile.card.settings.siteThemeLink")}</a>
+          {t("profile.card.settings.siteThemeSuffix")}
+        </p>
       </div>
 
       <OptionGroup

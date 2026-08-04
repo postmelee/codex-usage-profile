@@ -15,6 +15,7 @@ test("card appearance exposes independent native theme and language controls", a
   assert.match(source, /name="card-theme"/u);
   assert.match(source, /name="card-locale"/u);
   assert.match(source, /type="radio"/u);
+  assert.match(source, /href="\/\?view=settings"/u);
 });
 
 test("profile preview and save use draft card settings without site theme coupling", async () => {
@@ -24,6 +25,16 @@ test("profile preview and save use draft card settings without site theme coupli
   assert.match(source, /theme: draftStyle\?\.theme \?\? "dark"/u);
   assert.match(source, /client\.updateCardSettings\(draftStyle, draftLocale\)/u);
   assert.doesNotMatch(source, /useTheme/u);
+});
+
+test("profile share saves dirty card settings before opening Share Studio", async () => {
+  const source = await readFile(join(SOURCE_ROOT, "CardProfilePage.jsx"), "utf8");
+
+  assert.match(source, /async function openShare\(\)/u);
+  assert.match(source, /const nextProfile = await saveCardSettings\(\)/u);
+  assert.match(source, /if \(!nextProfile\) return/u);
+  assert.match(source, /profile\.card\.settings\.saveAndShare/u);
+  assert.match(source, /disabled=\{isSubmitting \|\| cardSettingsSaving\}/u);
 });
 
 test("home owner card and share studio use the saved card selection", async () => {

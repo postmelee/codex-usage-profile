@@ -1192,6 +1192,21 @@ button {
   margin: 0;
 }
 
+.card-style-settings-heading a {
+  color: var(--text-link);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.card-style-settings-heading a:hover {
+  text-decoration: underline;
+}
+
+.card-style-settings-heading a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
 .card-style-option-group {
   border: 0;
   display: grid;

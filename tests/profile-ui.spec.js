@@ -2995,12 +2995,32 @@ test.describe("Settings appearance control", () => {
         "src",
         /\/api\/profile\/card\.png\?locale=ko&theme=light/
       );
+
+    await darkCard.check();
+    await englishCard.check();
+    await expect(page.getByRole("button", { name: "Save & share" }))
+      .toBeEnabled();
+    await page.getByRole("button", { name: "Save & share" }).click();
+    await expect.poll(() => savedPayload).toEqual({
+      cardLocale: "en",
+      cardStyle: {
+        effect: { preset: "none", version: 1 },
+        schemaVersion: 1,
+        theme: "dark"
+      }
+    });
+    const shareStudio = page.getByRole("dialog", { name: "Share activity" });
+    await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
+      .toHaveAttribute("title", /[?&]theme=dark(?:&|$)/);
+    await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
+      .not.toHaveAttribute("title", /[?&]locale=/);
   });
 
   test("card appearance keeps the draft available after a save failure", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
-      data: ownerProfile("private"),
+      data: ownerProfile("public"),
       ok: true
     }));
     await page.route("**/api/profile/card-settings", (route) => fulfillJson(route, {
@@ -3012,14 +3032,16 @@ test.describe("Settings appearance control", () => {
 
     const lightCard = page.locator('input[name="card-theme"][value="light"]');
     await lightCard.check();
-    const save = page.getByRole("button", { name: "Save card settings" });
-    await save.click();
+    const saveAndShare = page.getByRole("button", { name: "Save & share" });
+    await saveAndShare.click();
 
     await expect(page.locator(".card-style-settings-status")).toHaveText(
       "Could not save card settings. Try again."
     );
+    await expect(page.getByRole("dialog", { name: "Share activity" }))
+      .toHaveCount(0);
     await expect(lightCard).toBeChecked();
-    await expect(save).toBeEnabled();
+    await expect(saveAndShare).toBeEnabled();
   });
 });
 
