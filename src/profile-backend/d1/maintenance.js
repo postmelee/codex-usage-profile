@@ -7,6 +7,7 @@ import {
 import { createD1ProfileBackendStore } from "./store.js";
 import {
   createPresentationDigest,
+  normalizeCardLocale,
   normalizeCardStyle,
   serializeCardStyle
 } from "../../profile-card/presentation.js";
@@ -593,6 +594,7 @@ async function normalizeDurableProfile(value) {
     throw new TypeError("restore submittedDevices must be an array");
   }
   profile.owner.cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  profile.owner.cardLocale = normalizeCardLocale(profile.owner.cardLocale);
   const presentationDigest = await createPresentationDigest(
     profile.owner.cardStyle
   );
@@ -635,8 +637,8 @@ function isSafeQuiescedRestoreState(current, staged) {
 function insertOwnerSql() {
   return "INSERT INTO owners (" +
     "id, auth_provider, provider_user_id, github_login, display_name, " +
-    "avatar_url, profile_url, handle, visibility, card_style, created_at, updated_at" +
-  ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    "avatar_url, profile_url, handle, visibility, card_locale, card_style, created_at, updated_at" +
+  ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 }
 
 function ownerParams(owner) {
@@ -650,6 +652,7 @@ function ownerParams(owner) {
     owner.profileUrl ?? null,
     owner.handle,
     owner.visibility,
+    normalizeCardLocale(owner.cardLocale),
     serializeCardStyle(owner.cardStyle),
     owner.createdAt ?? null,
     owner.updatedAt ?? null

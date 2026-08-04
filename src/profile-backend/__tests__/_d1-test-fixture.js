@@ -102,6 +102,7 @@ export function ownerFixture(overrides = {}) {
     profileUrl: "https://github.com/postmelee",
     handle: "postmelee",
     visibility: "private",
+    cardLocale: "en",
     cardStyle: {
       schemaVersion: 1,
       theme: "dark",

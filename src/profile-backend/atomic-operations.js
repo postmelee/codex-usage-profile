@@ -33,6 +33,7 @@ const REQUIRED_COMMAND_FIELDS = Object.freeze({
   updateCardSettings: [
     "ownerId",
     "expectedOwnerUpdatedAt",
+    "cardLocale",
     "cardStyle",
     "updatedAt"
   ],
@@ -95,7 +96,7 @@ export function assertProfileBackendAtomicResult(name, result) {
     completeOAuthCallback: ["oauthState", "owner", "session"],
     exchangeCliLogin: ["challenge", "token", "tokenRecord"],
     submitAccountUsage: ["device", "idempotent", "owner", "usageRecord"],
-    updateCardSettings: ["cardStyle", "owner"],
+    updateCardSettings: ["cardLocale", "cardStyle", "owner"],
     updateVisibility: ["owner", "usageRecord", "visibility"]
   }[name];
 
@@ -254,11 +255,13 @@ export function createTransactionalProfileBackendAtomicOperations(store) {
 
         const owner = await tx.saveOwner({
           ...current,
+          cardLocale: command.cardLocale,
           cardStyle: command.cardStyle,
           updatedAt: command.updatedAt
         });
         return assertProfileBackendAtomicResult("updateCardSettings", {
           owner,
+          cardLocale: owner.cardLocale,
           cardStyle: owner.cardStyle
         });
       });

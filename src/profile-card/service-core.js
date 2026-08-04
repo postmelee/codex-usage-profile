@@ -7,7 +7,11 @@ import {
 } from "../profile-backend/errors.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
-import { normalizeCardStyle } from "./presentation.js";
+import {
+  normalizeCardLocale,
+  normalizeCardStyle,
+  serializeCardStyle
+} from "./presentation.js";
 import {
   DEFAULT_CARD_THEME,
   normalizeCardTheme
@@ -76,10 +80,15 @@ export function createProfileCardServiceCore(options = {}) {
       const cardStyle = normalizeCardStyle(updateOptions.cardStyle, {
         defaultWhenMissing: false
       });
+      const cardLocale = normalizeCardLocale(updateOptions.cardLocale, {
+        defaultWhenMissing: false
+      });
       const usageRecord = await store.getLatestUsageByOwnerId(current.id);
 
       let mediaPreparation = null;
-      if (current.visibility === PROFILE_VISIBILITY.PUBLIC) {
+      const presentationChanged = serializeCardStyle(current.cardStyle) !==
+        serializeCardStyle(cardStyle);
+      if (current.visibility === PROFILE_VISIBILITY.PUBLIC && presentationChanged) {
         mediaPreparation = await ensureCardStyleMedia({
           owner: current,
           usageRecord,
@@ -92,6 +101,7 @@ export function createProfileCardServiceCore(options = {}) {
         result = await store.atomic.updateCardSettings({
           ownerId: current.id,
           expectedOwnerUpdatedAt: current.updatedAt ?? null,
+          cardLocale,
           cardStyle,
           updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
         });

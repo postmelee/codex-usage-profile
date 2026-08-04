@@ -104,12 +104,15 @@ test("updates the owner's versioned card settings", async () => {
     effect: { preset: "none", version: 1 }
   };
 
-  const result = await client.updateCardSettings(cardStyle);
+  const result = await client.updateCardSettings(cardStyle, "ko");
 
   assert.equal(requests[0].url, "/api/profile/card-settings");
   assert.equal(requests[0].options.method, "PATCH");
   assert.equal(requests[0].options.credentials, "same-origin");
-  assert.deepEqual(JSON.parse(requests[0].options.body), { cardStyle });
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    cardStyle,
+    cardLocale: "ko"
+  });
   assert.deepEqual(result.cardStyle, cardStyle);
 });
 

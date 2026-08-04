@@ -5,6 +5,7 @@ import { createProfileCardServiceCore } from "../profile-card/service-core.js";
 import {
   CARD_STYLE_MAX_BYTES,
   createPresentationDigest,
+  normalizeCardLocale,
   normalizeCardStyle
 } from "../profile-card/presentation.js";
 import { createProfilePublicationService } from "../profile-media/publication-service.js";
@@ -273,9 +274,10 @@ export function createProfileBackendHttpHandler(options = {}) {
           requireJson: true,
           maxBytes: CARD_STYLE_MAX_BYTES + 128
         });
+        const settings = readProfileCardSettings(body);
         const profile = await cardService.updateCardSettings({
           ownerId: owner.id,
-          cardStyle: readProfileCardStyle(body)
+          ...settings
         });
         return okResponse(await serializeOwnerProfile(
           profile,
@@ -717,22 +719,26 @@ function readProfileVisibility(body) {
   return body.visibility;
 }
 
-function readProfileCardStyle(body) {
+function readProfileCardSettings(body) {
   if (
     !body || typeof body !== "object" || Array.isArray(body) ||
-    Object.keys(body).length !== 1 || !Object.hasOwn(body, "cardStyle")
+    Object.keys(body).length !== 2 || !Object.hasOwn(body, "cardStyle") ||
+    !Object.hasOwn(body, "cardLocale")
   ) {
     throw new ProfileBackendError(
       PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
-      "Profile card settings payload must contain only cardStyle"
+      "Profile card settings payload must contain only cardStyle and cardLocale"
     );
   }
   try {
-    return normalizeCardStyle(body.cardStyle, { defaultWhenMissing: false });
+    return {
+      cardLocale: normalizeCardLocale(body.cardLocale, { defaultWhenMissing: false }),
+      cardStyle: normalizeCardStyle(body.cardStyle, { defaultWhenMissing: false })
+    };
   } catch (error) {
     throw new ProfileBackendError(
       PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
-      error instanceof Error ? error.message : "cardStyle is invalid"
+      error instanceof Error ? error.message : "card settings are invalid"
     );
   }
 }
@@ -871,6 +877,7 @@ function serializeOwner(owner) {
     profileUrl: owner.profileUrl ?? null,
     handle: owner.handle,
     visibility: owner.visibility,
+    cardLocale: normalizeCardLocale(owner.cardLocale),
     cardStyle: normalizeCardStyle(owner.cardStyle),
     createdAt: owner.createdAt ?? null,
     updatedAt: owner.updatedAt ?? null
@@ -1008,7 +1015,13 @@ function serializeLatestSnapshot(record) {
 
 async function serializeOwnerProfile(profile, request, publicBaseUrl) {
   const cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  const cardLocale = normalizeCardLocale(profile.owner.cardLocale);
   const publicCardUrls = buildPublicCardUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
+  const publicCardVariantUrls = buildPublicCardVariantUrls(
     profile.owner.handle,
     request,
     publicBaseUrl
@@ -1017,18 +1030,26 @@ async function serializeOwnerProfile(profile, request, publicBaseUrl) {
     owner: serializeOwner(profile.owner),
     usage: serializeLatestUsage(profile.usageRecord),
     visibility: profile.visibility,
+    cardLocale,
     cardStyle,
     presentationDigest: await createPresentationDigest(cardStyle),
     publicCardUrl: buildPublicCardUrl(profile.owner.handle, request, publicBaseUrl),
-    selectedPublicCardUrl: publicCardUrls[cardStyle.theme],
-    publicCardUrls
+    selectedPublicCardUrl: publicCardVariantUrls[cardLocale][cardStyle.theme],
+    publicCardUrls,
+    publicCardVariantUrls
   };
 }
 
 async function serializePublicProfile(profile, request, publicBaseUrl) {
   const usage = normalizeAccountUsageReadResult(profile.usageRecord.usage);
   const cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  const cardLocale = normalizeCardLocale(profile.owner.cardLocale);
   const publicCardUrls = buildPublicCardUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
+  const publicCardVariantUrls = buildPublicCardVariantUrls(
     profile.owner.handle,
     request,
     publicBaseUrl
@@ -1050,6 +1071,7 @@ async function serializePublicProfile(profile, request, publicBaseUrl) {
       }
     },
     visibility: PROFILE_VISIBILITY.PUBLIC,
+    cardLocale,
     cardStyle,
     presentationDigest: await createPresentationDigest(cardStyle),
     publicCardUrl: buildPublicCardUrl(
@@ -1057,8 +1079,9 @@ async function serializePublicProfile(profile, request, publicBaseUrl) {
       request,
       publicBaseUrl
     ),
-    selectedPublicCardUrl: publicCardUrls[cardStyle.theme],
-    publicCardUrls
+    selectedPublicCardUrl: publicCardVariantUrls[cardLocale][cardStyle.theme],
+    publicCardUrls,
+    publicCardVariantUrls
   };
 }
 
@@ -1196,9 +1219,31 @@ function buildPublicCardUrls(handle, request, publicBaseUrl) {
   });
 }
 
+function buildPublicCardVariantUrls(handle, request, publicBaseUrl) {
+  const base = buildPublicCardUrl(handle, request, publicBaseUrl);
+  return Object.freeze(Object.fromEntries(["en", "ko"].map((locale) => [
+    locale,
+    Object.freeze(Object.fromEntries(["light", "dark"].map((theme) => [
+      theme,
+      withCardVariant(base, { locale, theme })
+    ])))
+  ])));
+}
+
 function withTheme(value, theme) {
   const url = new URL(value);
   url.searchParams.set("theme", theme);
+  return url.toString();
+}
+
+function withCardVariant(value, options) {
+  const url = new URL(value);
+  url.searchParams.set("theme", options.theme);
+  if (options.locale === "ko") {
+    url.searchParams.set("locale", "ko");
+  } else {
+    url.searchParams.delete("locale");
+  }
   return url.toString();
 }
 

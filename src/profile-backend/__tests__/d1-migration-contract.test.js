@@ -31,9 +31,14 @@ test("D1 migration manifest is exact, contiguous, and deeply frozen", () => {
       version: 4,
       name: "card_style",
       file: "db/migrations/0004_card_style.sql"
+    },
+    {
+      version: 5,
+      name: "card_locale",
+      file: "db/migrations/0005_card_locale.sql"
     }
   ]);
-  assert.deepEqual(D1_MIGRATION_VERSIONS, [1, 2, 3, 4]);
+  assert.deepEqual(D1_MIGRATION_VERSIONS, [1, 2, 3, 4, 5]);
   assert.equal(Object.isFrozen(D1_MIGRATION_MANIFEST), true);
   assert.equal(D1_MIGRATION_MANIFEST.every(Object.isFrozen), true);
   assert.equal(Object.isFrozen(D1_MIGRATION_VERSIONS), true);
@@ -72,24 +77,24 @@ test("D1 migration manifest rejects gaps and filename drift", () => {
 });
 
 test("D1 readiness inspector reports exact, missing, and unexpected versions", async () => {
-  const exactDatabase = readinessDatabase([1, 2, 3, 4]);
+  const exactDatabase = readinessDatabase([1, 2, 3, 4, 5]);
   assert.deepEqual(await inspectD1MigrationReadiness(exactDatabase), {
-    appliedVersions: [1, 2, 3, 4],
-    expectedVersions: [1, 2, 3, 4],
+    appliedVersions: [1, 2, 3, 4, 5],
+    expectedVersions: [1, 2, 3, 4, 5],
     missingVersions: [],
     readyExact: true,
     unexpectedVersions: []
   });
   assert.equal(exactDatabase.batchCalls, 0);
 
-  const driftedDatabase = readinessDatabase([1, 3, 5]);
+  const driftedDatabase = readinessDatabase([1, 3, 6]);
   const drifted = await inspectD1MigrationReadiness(driftedDatabase);
   assert.deepEqual(drifted, {
-    appliedVersions: [1, 3, 5],
-    expectedVersions: [1, 2, 3, 4],
-    missingVersions: [2, 4],
+    appliedVersions: [1, 3, 6],
+    expectedVersions: [1, 2, 3, 4, 5],
+    missingVersions: [2, 4, 5],
     readyExact: false,
-    unexpectedVersions: [5]
+    unexpectedVersions: [6]
   });
   assert.equal(Object.isFrozen(drifted), true);
   assert.equal(Object.isFrozen(drifted.appliedVersions), true);
@@ -101,8 +106,8 @@ test("D1 readiness reports every migration missing when metadata is absent", asy
 
   assert.deepEqual(await inspectD1MigrationReadiness(database), {
     appliedVersions: [],
-    expectedVersions: [1, 2, 3, 4],
-    missingVersions: [1, 2, 3, 4],
+    expectedVersions: [1, 2, 3, 4, 5],
+    missingVersions: [1, 2, 3, 4, 5],
     readyExact: false,
     unexpectedVersions: []
   });

@@ -17,6 +17,7 @@ const owner = Object.freeze({
   githubLogin: "postmelee",
   handle: "postmelee",
   visibility: PROFILE_VISIBILITY.PUBLIC,
+  cardLocale: "en",
   cardStyle: {
     schemaVersion: 1,
     theme: "dark",

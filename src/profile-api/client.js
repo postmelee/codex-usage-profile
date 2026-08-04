@@ -98,11 +98,14 @@ export function createProfileApiClient(options = {}) {
       return envelope.data;
     },
 
-    async updateCardSettings(cardStyle) {
+    async updateCardSettings(cardStyle, cardLocale) {
       const response = await fetchImpl(
         buildApiUrl(baseUrl, "/api/profile/card-settings"),
         {
-          body: JSON.stringify({ cardStyle: requireCardStyle(cardStyle) }),
+          body: JSON.stringify({
+            cardStyle: requireCardStyle(cardStyle),
+            cardLocale: requireCardLocale(cardLocale)
+          }),
           credentials: "same-origin",
           headers: {
             accept: "application/json",
@@ -452,6 +455,15 @@ function requireCardStyle(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProfileApiError("cardStyle must be an object", {
       code: "validation_failed"
+    });
+  }
+  return value;
+}
+
+function requireCardLocale(value) {
+  if (value !== "en" && value !== "ko") {
+    throw new ProfileApiError("cardLocale must be en or ko", {
+      code: "invalid_request"
     });
   }
   return value;

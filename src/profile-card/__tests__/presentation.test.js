@@ -3,12 +3,31 @@ import test from "node:test";
 
 import {
   CARD_PRESENTATION_REGISTRY,
+  CARD_LOCALES,
   CARD_STYLE_MAX_BYTES,
+  DEFAULT_CARD_LOCALE,
   DEFAULT_CARD_STYLE,
   createPresentationDigest,
+  normalizeCardLocale,
   normalizeCardStyle,
   serializeCardStyle
 } from "../presentation.js";
+
+test("cardLocale defaults legacy records to English and accepts both variants", () => {
+  assert.deepEqual(CARD_LOCALES, ["en", "ko"]);
+  assert.equal(DEFAULT_CARD_LOCALE, "en");
+  assert.equal(normalizeCardLocale(undefined), "en");
+  assert.equal(normalizeCardLocale("en"), "en");
+  assert.equal(normalizeCardLocale("ko"), "ko");
+  assert.throws(
+    () => normalizeCardLocale("ja"),
+    /must be en or ko/u
+  );
+  assert.throws(
+    () => normalizeCardLocale(undefined, { defaultWhenMissing: false }),
+    /required/u
+  );
+});
 
 test("cardStyle defaults legacy records to canonical dark/none", () => {
   assert.deepEqual(normalizeCardStyle(undefined), DEFAULT_CARD_STYLE);

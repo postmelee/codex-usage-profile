@@ -3,6 +3,8 @@ const EFFECT_KEYS = Object.freeze(["preset", "version"]);
 
 export const CARD_STYLE_SCHEMA_VERSION = 1;
 export const CARD_STYLE_MAX_BYTES = 1_024;
+export const CARD_LOCALES = Object.freeze(["en", "ko"]);
+export const DEFAULT_CARD_LOCALE = "en";
 
 export const CARD_PRESENTATION_REGISTRY = deepFreeze({
   themes: {
@@ -86,6 +88,18 @@ export function normalizeCardStyle(value, options = {}) {
 
 export function serializeCardStyle(value) {
   return stableStringify(normalizeCardStyle(value));
+}
+
+export function normalizeCardLocale(value, options = {}) {
+  const defaultWhenMissing = options.defaultWhenMissing ?? true;
+  if (value === undefined || value === null || value === "") {
+    if (defaultWhenMissing) return DEFAULT_CARD_LOCALE;
+    throw new TypeError("cardLocale is required");
+  }
+  if (typeof value !== "string" || !CARD_LOCALES.includes(value)) {
+    throw new TypeError("cardLocale must be en or ko");
+  }
+  return value;
 }
 
 export async function createPresentationDigest(value) {

@@ -118,7 +118,7 @@ export const PROFILE_BACKEND_STORE_ATOMIC_OPERATIONS = deepFreeze({
   updateCardSettings: {
     records: ["owner"],
     serializationKey: "owner.id",
-    invariant: "one normalized card presentation replaces one owner revision",
+    invariant: "one normalized card presentation and locale replace one owner revision",
     failurePolicy: "rollback"
   },
   updateVisibility: {

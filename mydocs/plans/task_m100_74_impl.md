@@ -11,7 +11,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 | 1 | owner 카드 설정·migration·API 계약 | versioned `cardStyle`, preset registry, ordered D1/Postgres migration, settings mutation | registry/store/migration/HTTP/CSRF focused tests |
 | 2 | media theme 축과 dual stable serving | media contract v4, theme-aware R2/S3 adapter | contract·GET/HEAD/304·failure/concurrency tests |
 | 3 | publication·maintenance·cleanup 일관성 | 4 representation publish, authority commit, export/cleanup 보정 | compensation·maintenance·orphan exact-count tests |
-| 4 | Profile light/dark 전환·미리보기·저장 | accessible card theme settings UI와 persisted draft/save flow | component/unit·Playwright save/reload/error tests |
+| 4 | Profile theme·language 전환·미리보기·저장 | accessible card delivery settings UI와 persisted draft/save flow | migration/API/component/unit·Playwright save/reload/error tests |
 | 5 | Share Studio·공개 URL 하위 호환 | selected theme URL/README와 public response | URL normalization·public/private E2E |
 | 6 | 통합 검증·공식 문서·배포 준비 | product/Sites artifact, migration/ops 문서와 최종 보고 근거 | 전체 Node/E2E/build/verifier |
 
@@ -99,6 +99,9 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 - 저장 성공 시 profile response, preview, Share Studio와 selected URL을 한 번에 갱신한다. 실패 시 draft는 사용자가 다시 시도할 수 있게 유지하되 저장값·공개 URL·visibility는 바꾸지 않고 locale별 오류를 표시한다.
 - reload, 재로그인과 새 browser context에서 서버 저장값을 다시 읽는다. 사이트 Appearance 변경은 저장된 카드 선택을 덮어쓰지 않는다.
 - 공개 여부와 카드 테마 저장은 독립 mutation이다. private owner도 테마를 저장할 수 있고, publish button/share availability의 기존 조건을 유지한다.
+- 카드 언어는 presentation digest에 포함되는 `cardStyle`이 아니라 별도 owner delivery preference `cardLocale: "en" | "ko"`로 저장한다. 기존 owner 기본값은 `en`이며 D1/Postgres additive migration으로 보존한다.
+- 언어 설정은 이미 게시된 `en | ko` PNG 중 대표 URL과 owner preview URL의 `locale` query만 전환한다. 언어 변경만으로 renderer 또는 R2 publication을 다시 실행하지 않는다.
+- Profile의 카드 설정은 theme radio group과 language radio group을 함께 제공한다. 하나의 저장 동작이 owner CAS 아래 `cardStyle`과 `cardLocale`을 원자적으로 갱신하며, reload·재로그인 후 두 선택을 복원한다.
 
 ### Share·URL·locale 조합
 
@@ -107,6 +110,7 @@ GitHub Issue: [#74](https://github.com/postmelee/codex-usage-profile/issues/74)
 - 기존 `publicCardUrl` consumer와 query 없는 README는 dark를 계속 받는다. 사용자 저장값 때문에 기존 URL bytes가 암묵적으로 light로 바뀌지 않는다.
 - 이번 MVP의 URL 기반 PNG 공유는 #39 이후에도 필수 호환 경로다. #39의 GIF 선택·저장·Web Share는 별도 format capability로 추가하며 PNG endpoint, PNG Share Studio UI와 기존 복사 URL을 대체하거나 GIF 실패에 연동해 비활성화하지 않는다.
 - private/unpublished owner의 query 없음, light, dark, locale 조합은 모두 동일하게 404다. provider/bucket 오류는 storage 상세 없이 generic 503과 `Retry-After`를 유지한다.
+- owner/public profile response는 기존 `publicCardUrl`과 영어 기준 `publicCardUrls.light|dark`를 유지하고, additive `cardLocale`과 `publicCardVariantUrls.{en|ko}.{light|dark}`를 제공한다. `selectedPublicCardUrl`은 저장된 theme·locale 조합을 가리킨다.
 
 ## Stage 1 — owner 카드 설정·migration·API 계약
 
@@ -256,18 +260,22 @@ git diff --check
 Task #74 Stage 3: card theme publication과 exact cleanup 일관성
 ```
 
-## Stage 4 — Profile light/dark 전환·미리보기·저장
+## Stage 4 — Profile theme·language 전환·미리보기·저장
 
 ### 산출물
 
 신규:
 
-- 필요 시 `src/profile-ui/CardThemeSettings.jsx`
+- `db/migrations/0005_card_locale.sql`
+- `src/profile-backend/postgres/migrations/0004_card_locale.up.sql`
+- `src/profile-backend/postgres/migrations/0004_card_locale.down.sql`
+- `src/profile-ui/CardStyleSettings.jsx`
 - `src/profile-ui/__tests__/cardStyleSettings.test.js`
 - `mydocs/working/task_m100_74_stage4.md`
 
 수정:
 
+- owner store/migration/maintenance/API/client 관련 파일과 focused tests
 - `src/profile-ui/CardProfilePage.jsx`
 - `src/profile-ui/AccountUsageProfile.jsx` 또는 owner card section composition
 - `src/profile-ui/messages.js`
@@ -278,8 +286,9 @@ Task #74 Stage 3: card theme publication과 exact cleanup 일관성
 ### 변경 내용
 
 - `Your Codex card` preview 아래에 light/dark radio group과 저장 CTA를 추가한다. UI state는 전체 canonical `cardStyle` draft를 보유하고 이번 화면은 theme field만 변경하며 effect none을 보존한다.
+- 같은 설정 영역에 English/한국어 radio group을 추가한다. `cardLocale`은 `cardStyle`과 별도 상태로 보존하고 선택 즉시 preview의 locale query만 전환한다.
 - server saved theme, draft theme, mutation status와 error를 분리하고 draft 선택 즉시 private preview URL을 전환한다.
-- 저장 성공 시 profile response와 preview를 갱신하고, 실패 시 저장값과 공개 URL을 보존한 채 재시도 가능한 draft/error를 유지한다.
+- 저장은 `{ cardStyle, cardLocale }` exact payload를 owner CAS로 원자 처리한다. 성공 시 profile response와 preview·선택 URL을 갱신하고, 실패 시 저장값과 공개 URL을 보존한 채 재시도 가능한 draft/error를 유지한다. locale-only 변경은 media ensure를 호출하지 않는다.
 - 한국어/영어 title, 설명, option, 저장/저장 중/성공·오류 문구와 catalog parity를 추가한다.
 - keyboard, focus, checked, disabled/busy/live status와 mobile layout을 검증한다.
 - reload, 재로그인에 해당하는 새 browser context, 사이트 Appearance 변경 후에도 서버 저장 카드 theme가 유지되는 시나리오를 추가한다.
@@ -289,6 +298,11 @@ Task #74 Stage 3: card theme publication과 exact cleanup 일관성
 
 ```bash
 node --test \
+  src/profile-backend/__tests__/d1-migration-contract.test.js \
+  src/profile-backend/__tests__/d1-migrate.test.js \
+  src/profile-backend/__tests__/d1-store.test.js \
+  src/profile-backend/__tests__/postgres-migrate.test.js \
+  src/profile-backend/__tests__/http.test.js \
   src/profile-ui/__tests__/cardStyleSettings.test.js \
   src/profile-ui/__tests__/i18n.test.js \
   src/profile-api/__tests__/client.test.js
@@ -299,7 +313,7 @@ git diff --check
 ### 커밋
 
 ```text
-Task #74 Stage 4: Profile 카드 light dark 설정과 저장 UI
+Task #74 Stage 4: Profile 카드 theme language 설정과 저장 UI
 ```
 
 ## Stage 5 — Share Studio·공개 URL 하위 호환

@@ -243,7 +243,8 @@ test("rejects cross-site session mutation and accepts same-origin mutation", asy
         schemaVersion: 1,
         theme: "light",
         effect: { preset: "none", version: 1 }
-      }
+      },
+      cardLocale: "en"
     },
     {
       cookie,
@@ -819,6 +820,7 @@ test("returns the session owner's card profile metadata", async () => {
   assert.deepEqual(profile.body.data.usage.usage, sampleAccountUsageReadResult);
   assert.equal(profile.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
   assert.equal(profile.body.data.cardStyle.theme, "dark");
+  assert.equal(profile.body.data.cardLocale, "en");
   assert.equal(
     profile.body.data.selectedPublicCardUrl,
     `${BASE_URL}/u/postmelee/card.png?theme=dark`
@@ -864,6 +866,7 @@ test("serves a public Account Usage profile with an explicit response allowlist"
       usage: sampleAccountUsageReadResult
     },
     visibility: PROFILE_VISIBILITY.PUBLIC,
+    cardLocale: "en",
     cardStyle: {
       schemaVersion: 1,
       theme: "dark",
@@ -875,6 +878,16 @@ test("serves a public Account Usage profile with an explicit response allowlist"
     publicCardUrls: {
       light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
       dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
+    },
+    publicCardVariantUrls: {
+      en: {
+        light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
+        dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
+      },
+      ko: {
+        light: `${BASE_URL}/u/postmelee/card.png?theme=light&locale=ko`,
+        dark: `${BASE_URL}/u/postmelee/card.png?theme=dark&locale=ko`
+      }
     }
   });
 
@@ -918,33 +931,54 @@ test("updates versioned owner card settings and validates the exact payload", as
     fixture.handler,
     "PATCH",
     "/api/profile/card-settings",
-    { cardStyle: light },
+    { cardStyle: light, cardLocale: "ko" },
     { cookie }
   );
   const injected = await requestJson(
     fixture.handler,
     "PATCH",
     "/api/profile/card-settings",
-    { ownerId: "owner_2", cardStyle: light },
+    { ownerId: "owner_2", cardStyle: light, cardLocale: "ko" },
     { cookie }
   );
   const unknown = await requestJson(
     fixture.handler,
     "PATCH",
     "/api/profile/card-settings",
-    { cardStyle: { ...light, effect: { preset: "beam.rotate", version: 1 } } },
+    {
+      cardStyle: { ...light, effect: { preset: "beam.rotate", version: 1 } },
+      cardLocale: "ko"
+    },
     { cookie }
   );
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.data.cardStyle, light);
+  assert.equal(response.body.data.cardLocale, "ko");
   assert.equal(
     response.body.data.selectedPublicCardUrl,
-    `${BASE_URL}/u/postmelee/card.png?theme=light`
+    `${BASE_URL}/u/postmelee/card.png?theme=light&locale=ko`
   );
   assert.deepEqual(fixture.store.getOwnerById("owner_1").cardStyle, light);
+  assert.equal(fixture.store.getOwnerById("owner_1").cardLocale, "ko");
   assert.equal(ensureCalls.length, 1);
   assert.equal(ensureCalls[0].owner.id, "owner_1");
+
+  const localeOnly = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "en" },
+    { cookie }
+  );
+  assert.equal(localeOnly.status, 200);
+  assert.equal(localeOnly.body.data.cardLocale, "en");
+  assert.equal(
+    localeOnly.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=light`
+  );
+  assert.equal(ensureCalls.length, 1);
+
   assert.equal(injected.status, 400);
   assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
   assert.equal(unknown.status, 400);
@@ -1130,7 +1164,7 @@ test("saves a public card preference only after v4 theme variants converge", asy
     fixture.handler,
     "PATCH",
     "/api/profile/card-settings",
-    { cardStyle: light },
+    { cardStyle: light, cardLocale: "ko" },
     { cookie }
   );
   const published = await mediaStore.getPublishedCard({

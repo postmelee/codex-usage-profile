@@ -11,6 +11,7 @@ import { PROFILE_BACKEND_STORE_SCHEMA_VERSION } from "../store-values.js";
 import { loadMigrations } from "./migrate.js";
 import { createPostgresPool } from "./pool.js";
 import {
+  normalizeCardLocale,
   normalizeCardStyle,
   serializeCardStyle
 } from "../../profile-card/presentation.js";
@@ -52,6 +53,7 @@ const OWNER = {
     ["profileUrl", "profile_url"],
     ["handle", "handle"],
     ["visibility", "visibility"],
+    ["cardLocale", "card_locale"],
     ["cardStyle", "card_style", { json: true, serialize: serializeCardStyle }],
     ["createdAt", "created_at"],
     ["updatedAt", "updated_at"]
@@ -387,6 +389,7 @@ export function createPostgresProfileBackendStore(options = {}) {
     saveOwner(owner) {
       return upsert(OWNER, {
         ...owner,
+        cardLocale: normalizeCardLocale(owner.cardLocale),
         cardStyle: normalizeCardStyle(owner.cardStyle)
       });
     },

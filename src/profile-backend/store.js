@@ -11,7 +11,10 @@ import {
   PROFILE_BACKEND_STORE_SCHEMA_VERSION,
   PROFILE_VISIBILITY
 } from "./store-values.js";
-import { normalizeCardStyle } from "../profile-card/presentation.js";
+import {
+  normalizeCardLocale,
+  normalizeCardStyle
+} from "../profile-card/presentation.js";
 
 export {
   PROFILE_BACKEND_STORE_SCHEMA_VERSION,
@@ -335,6 +338,7 @@ export function createMemoryProfileBackendStore(initialState = {}) {
 
       const normalizedOwner = {
         ...owner,
+        cardLocale: normalizeCardLocale(owner.cardLocale),
         cardStyle: normalizeCardStyle(owner.cardStyle)
       };
       const previousOwner = ownersById.get(normalizedOwner.id);

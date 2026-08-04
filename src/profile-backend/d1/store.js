@@ -19,6 +19,7 @@ import {
   D1_MIGRATION_VERSIONS
 } from "./migration-manifest.js";
 import {
+  normalizeCardLocale,
   normalizeCardStyle,
   serializeCardStyle
 } from "../../profile-card/presentation.js";
@@ -39,6 +40,7 @@ const OWNER = spec("owner", "owners", ["id"], [
   ["profileUrl", "profile_url"],
   ["handle", "handle"],
   ["visibility", "visibility"],
+  ["cardLocale", "card_locale"],
   ["cardStyle", "card_style", { json: true, serialize: serializeCardStyle }],
   ["createdAt", "created_at"],
   ["updatedAt", "updated_at"]
@@ -305,6 +307,7 @@ export function createD1ProfileBackendStore(options = {}) {
     saveOwner(record) {
       return upsert(OWNER, {
         ...record,
+        cardLocale: normalizeCardLocale(record.cardLocale),
         cardStyle: normalizeCardStyle(record.cardStyle)
       });
     },
@@ -739,6 +742,9 @@ function createD1AtomicOperations(context) {
         const cardStyle = normalizeCardStyle(command.cardStyle, {
           defaultWhenMissing: false
         });
+        const cardLocale = normalizeCardLocale(command.cardLocale, {
+          defaultWhenMissing: false
+        });
         const results = await database.batch([
           prepare(
             "INSERT INTO atomic_operation_claims " +
@@ -755,10 +761,11 @@ function createD1AtomicOperations(context) {
           ),
           claimAssertion(operation, command.ownerId, nonce),
           prepare(
-            "UPDATE owners SET card_style = ?, updated_at = ? " +
+            "UPDATE owners SET card_style = ?, card_locale = ?, updated_at = ? " +
             "WHERE id = ? AND updated_at IS ?",
             [
               serializeCardStyle(cardStyle),
+              cardLocale,
               command.updatedAt,
               command.ownerId,
               command.expectedOwnerUpdatedAt
@@ -770,6 +777,7 @@ function createD1AtomicOperations(context) {
         const owner = rowFromBatch(OWNER, results[3]);
         return assertProfileBackendAtomicResult("updateCardSettings", {
           owner,
+          cardLocale: owner.cardLocale,
           cardStyle: owner.cardStyle
         });
       } catch (error) {

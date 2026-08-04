@@ -15,6 +15,7 @@ import {
 } from "./shareStudio.js";
 
 export function ShareStudio({
+  cardLocale,
   locale,
   locationOrigin = globalThis.location?.origin,
   makingPrivate = false,
@@ -48,8 +49,8 @@ export function ShareStudio({
   const [transitionPhase, setTransitionPhase] = useState("preparing");
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
-    () => buildLocalizedCardUrl(publicCardUrl, locale),
-    [locale, publicCardUrl]
+    () => buildLocalizedCardUrl(publicCardUrl, cardLocale ?? locale),
+    [cardLocale, locale, publicCardUrl]
   );
   const markdown = useMemo(() => buildReadmeCardSnippet(imageUrl), [imageUrl]);
   const publicProfileUrl = useMemo(

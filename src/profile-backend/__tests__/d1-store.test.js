@@ -41,7 +41,7 @@ test("D1 store readiness rejects missing versions but permits higher versions", 
     migrations: [
       ...migrations,
       {
-        version: 5,
+        version: 6,
         name: "future_rollback_compatibility",
         sql: "CREATE TABLE future_rollback_compatibility (id TEXT PRIMARY KEY)"
       }
@@ -49,7 +49,7 @@ test("D1 store readiness rejects missing versions but permits higher versions", 
     now: "2026-07-23T00:02:00.000Z"
   });
   assert.deepEqual(await fixture.rpc("verifyReadiness"), {
-    appliedVersions: [1, 2, 3, 4, 5]
+    appliedVersions: [1, 2, 3, 4, 5, 6]
   });
 });
 
@@ -142,19 +142,23 @@ test("D1 atomically updates normalized owner card settings", async (t) => {
   const result = await fixture.atomic("updateCardSettings", {
     ownerId: "owner_1",
     expectedOwnerUpdatedAt: "2026-07-23T00:00:00.000Z",
+    cardLocale: "ko",
     cardStyle,
     updatedAt: "2026-07-23T00:00:01.000Z"
   });
 
   assert.deepEqual(result.cardStyle, cardStyle);
+  assert.equal(result.cardLocale, "ko");
   assert.deepEqual(
     (await fixture.rpc("getOwnerById", "owner_1")).cardStyle,
     cardStyle
   );
+  assert.equal((await fixture.rpc("getOwnerById", "owner_1")).cardLocale, "ko");
   await assert.rejects(
     () => fixture.atomic("updateCardSettings", {
       ownerId: "owner_1",
       expectedOwnerUpdatedAt: "2026-07-23T00:00:00.000Z",
+      cardLocale: "en",
       cardStyle: { ...cardStyle, theme: "dark" },
       updatedAt: "2026-07-23T00:00:02.000Z"
     }),
