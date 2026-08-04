@@ -12,6 +12,7 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
 | 2 | Semantic token과 전체 surface 이관 | `styles.css`, light/dark route mapping | CSS color audit, 대표 route computed style·Playwright |
 | 3 | Settings Appearance control과 접근성 | `SettingsPage.jsx`, `messages.js`, UI tests | radio semantics, en/ko, persistence·system change E2E |
 | 3.5 | 비공개 카드 미리보기 theme parity | owner card renderer·preview URL·tests | native/Worker light/dark parity, private cache 분리, public dark 불변 |
+| 3.6 | 라이트 툴팁 surface 보정 | tooltip semantic token·computed style tests | light surface/text/border, dark 기준선 불변 |
 | 4 | 전체 route·Sites artifact 회귀 검증 | 회귀 보정, Stage 4 보고서 | 전체 Node·Playwright·build·Sites verifier·제한 diff |
 
 ## 문서 위치 확인
@@ -74,6 +75,8 @@ GitHub Issue: [#69](https://github.com/postmelee/codex-usage-profile/issues/69)
   계속 dark로 유지한다. D1/R2 schema, publish/unpublish, cleanup/retention 계약은 변경하지 않는다.
 - Profile 카드 커스터마이징, 선택 저장, light/dark R2 이중 객체와 public query URL 복사는
   후속 Issue [#74](https://github.com/postmelee/codex-usage-profile/issues/74)로 분리한다.
+- Stage 3.6은 Profile heatmap 툴팁의 semantic color token과 해당 computed style test만 보정한다.
+  툴팁의 내용·위치·크기·motion, heatmap 데이터와 카드 renderer 계약은 변경하지 않는다.
 - production Sites deploy와 hosting handoff는 이 task에서 수행하지 않는다.
 
 ## Stage 1 — Appearance 계약 조사와 runtime 기반
@@ -298,6 +301,57 @@ git diff --check
 Task #69 [Stage 3.5]: theme-aware private card preview 추가
 ```
 
+## Stage 3.6 — 라이트 툴팁 surface 보정
+
+### 산출물
+
+수정:
+
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_69_impl.md`
+
+신규:
+
+- `mydocs/working/task_m100_69_stage3_6.md`
+
+### 변경 내용
+
+- Profile heatmap 툴팁의 light theme를 밝은 elevated surface, 어두운 primary text, 얕은 border와
+  기존 floating shadow 조합으로 보정한다.
+- dark theme의 현행 `#3f4042` surface와 밝은 text 기준선은 유지한다.
+- component에는 theme 분기나 색상 literal을 추가하지 않고 기존 `--tooltip-*` semantic token만
+  사용한다.
+- 툴팁의 날짜·축약/정확 토큰 문구, 위치 계산, 32px 높이, enter motion은 변경하지 않는다.
+- light/dark computed background, text, border를 Playwright에서 검증한다.
+- backend, card renderer, public/R2 object, package·lockfile, `.openai/hosting.json`은 변경하지 않는다.
+
+### 검증
+
+```bash
+npx playwright test tests/profile-ui.spec.js --grep "theme surfaces"
+npm run build
+npm run build:sites
+git diff --check
+```
+
+제한 경로 확인:
+
+```bash
+git diff a55895d -- \
+  .openai/hosting.json \
+  package.json package-lock.json \
+  packages/codex-usage-profile-cli \
+  src/profile-backend src/profile-runtime src/profile-media \
+  src/profile-card public
+```
+
+### 커밋
+
+```text
+Task #69 [Stage 3.6]: light tooltip surface 보정
+```
+
 ## Stage 4 — 전체 route·Sites artifact 회귀 검증
 
 ### 산출물
@@ -377,7 +431,7 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Stage 3은 Stage 1 Provider와 Stage 2 token을 사용해 Settings control을 노출한다.
 - Stage 3.5는 Stage 1~3의 resolved theme를 owner-only on-demand card preview에만 연결하고,
   공개 R2 card는 dark 호환 결과로 고정한다.
-- Stage 4는 Stage 1~3.5 승인 후 전체 회귀와 artifact 검증만 수행한다.
+- Stage 4는 Stage 1~3.6 승인 후 전체 회귀와 artifact 검증만 수행한다.
 - 각 Stage 종료 시 `task-stage-report`로 보고서·검증·커밋을 완료하고 다음 Stage 승인을 받는다.
 
 ## 위험과 대응
@@ -397,6 +451,8 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - **Sites 범위 팽창**: 기존 Vite·Worker·hosting manifest를 유지하고 artifact 검증까지만 한다.
 - **공개 카드 URL·cache 호환성**: theme discriminator는 light private render에만 추가하고 public
   route·R2 key·queryless URL·dark pixel 기준을 고정한다. 영속 customization은 #74로 격리한다.
+- **라이트 툴팁 대비 회귀**: tooltip semantic token의 light/dark computed surface·text·border를
+  같은 E2E에서 검증하고 dark 기준선을 함께 고정한다.
 
 ## 승인 요청 사항
 
@@ -409,7 +465,8 @@ Task #69 Stage 4: 전체 theme 회귀와 Sites artifact 검증
 - Stage 1에서 Codex 앱을 읽기 전용으로 분석하고 관찰 가능한 동작·semantic mapping만 참고하는 경계
 - Stage 4까지 production deploy 없이 local·artifact 검증만 수행하는 Gate
 - Stage 3.5에서 owner-only 미리보기만 resolved theme를 따르고 공개 R2 card는 dark로 유지하는 경계
+- Stage 3.6에서 툴팁 semantic color만 보정하고 내용·layout·motion은 유지하는 경계
 - 영속 카드 customization과 light/dark R2 이중 객체는 #74로 분리하는 경계
 
-Stage 3.5 변경안은 승인되었으며, 구현·검증·단계 보고서·커밋을 완료한 뒤 Stage 4 진입 승인을
-별도로 요청한다.
+Stage 3.6 변경안은 작업지시자의 라이트 모드 툴팁 보정 지시로 승인되었으며, 구현·검증·단계
+보고서·커밋을 완료한 뒤 Stage 4 진입 승인을 별도로 요청한다.

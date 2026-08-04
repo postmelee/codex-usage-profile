@@ -104,7 +104,9 @@ test.describe("theme surfaces", () => {
     await page.getByRole("grid", { name: "Daily token activity" })
       .locator('[data-date="2026-06-11"]')
       .hover();
-    await expect(page.getByRole("tooltip")).toHaveCSS("background-color", "rgb(37, 37, 37)");
+    await expect(page.getByRole("tooltip")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.getByRole("tooltip")).toHaveCSS("color", "rgb(48, 48, 48)");
+    await expect(page.getByRole("tooltip")).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0.12)");
     await page.locator(".profile-card-account-state")
       .getByRole("button", { name: "Share", exact: true })
       .click();
@@ -155,6 +157,11 @@ test.describe("theme surfaces", () => {
       .locator('[data-date="2026-06-11"]')
       .hover();
     await expect(page.getByRole("tooltip")).toHaveCSS("background-color", "rgb(63, 64, 66)");
+    await expect(page.getByRole("tooltip")).toHaveCSS("color", "rgb(242, 242, 242)");
+    await expect(page.getByRole("tooltip")).toHaveCSS(
+      "border-top-color",
+      "rgba(255, 255, 255, 0.14)"
+    );
     await page.locator(".profile-card-account-state")
       .getByRole("button", { name: "Share", exact: true })
       .click();

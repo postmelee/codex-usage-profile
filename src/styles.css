@@ -56,9 +56,9 @@
   --heatmap-level-2: light-dark(#91b8da, #446894);
   --heatmap-level-3: light-dark(#5b94c6, #5f8dc5);
   --heatmap-level-4: light-dark(#2874b3, #8cc3ff);
-  --tooltip-background: light-dark(#252525, #3f4042);
-  --tooltip-border: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.14));
-  --tooltip-text: #f2f2f2;
+  --tooltip-background: light-dark(#ffffff, #3f4042);
+  --tooltip-border: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.14));
+  --tooltip-text: light-dark(#303030, #f2f2f2);
   --share-panel-background: light-dark(rgba(255, 255, 255, 0.97), rgba(47, 47, 47, 0.96));
   --share-panel-text: light-dark(#202020, #f1f1f1);
   --share-panel-muted: light-dark(#68696c, #a8a8aa);
