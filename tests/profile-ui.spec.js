@@ -8,8 +8,10 @@ const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
 ));
+const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
+const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
   Object.freeze({ startDate: "2026-06-01", tokens: 50_000_000 }),
   Object.freeze({ startDate: "2026-06-04", tokens: 50_000_000 }),
@@ -23,6 +25,142 @@ const AUTH_OWNER = Object.freeze({
   handle: "postmelee",
   id: "owner_1",
   visibility: "private"
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+});
+
+test.describe("theme surfaces", () => {
+  test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
+    const approvedArtworkSelectors = [
+      ".avatar-fallback",
+      ".avatar-face-top",
+      ".avatar-face-mouth",
+      ".avatar-face-teeth",
+      ".plugin-icon",
+      ".plugin-icon-face-top",
+      ".plugin-icon-face-left",
+      ".plugin-icon-face-right"
+    ];
+    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let componentCss = STYLESHEET.replace(/:root\s*\{[\s\S]*?\n\}/, "");
+    for (const selector of approvedArtworkSelectors) {
+      componentCss = componentCss.replace(
+        new RegExp(`${escapeRegExp(selector)}\\s*\\{[^}]*\\}`, "g"),
+        ""
+      );
+    }
+
+    expect(STYLESHEET).toContain("--page-background:");
+    expect(STYLESHEET).toContain("--surface-primary:");
+    expect(STYLESHEET).toContain("--heatmap-level-4:");
+    expect(STYLESHEET).toContain("--overlay-scrim:");
+    expect(componentCss).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
+    expect(componentCss).not.toMatch(
+      /var\(--(?:bg|surface|frame-border|text|muted|faint|line|line-strong|blue|cell-(?:empty|[1-4]))\)/
+    );
+  });
+
+  test("theme surfaces resolve light colors across product routes", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await mockCardImages(page);
+    await mockPublicProfile(page);
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(247, 247, 246)");
+    await expect(page.locator(".home-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator(".profile-topbar")).toHaveCSS(
+      "background-color",
+      "rgba(255, 255, 255, 0.94)"
+    );
+
+    await page.goto("/settings");
+    await expect(page.locator(".settings-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator(".settings-panel").first()).toHaveCSS("background-color", "rgb(255, 255, 255)");
+
+    await page.goto("/?view=device&user_code=ABCD-1234");
+    await expect(page.locator(".device-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator(".device-panel")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator(".device-form input")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+
+    await page.goto("/profile");
+    await expect(page.locator(".card-profile-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(page.locator(".token-level-0").first()).toHaveCSS("background-color", "rgb(229, 229, 227)");
+    await page.getByRole("grid", { name: "Daily token activity" })
+      .locator('[data-date="2026-06-11"]')
+      .hover();
+    await expect(page.getByRole("tooltip")).toHaveCSS("background-color", "rgb(37, 37, 37)");
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share", exact: true })
+      .click();
+    await expect(page.locator(".share-studio-action-icon").first())
+      .toHaveCSS("background-color", "rgb(23, 23, 23)");
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+
+    await page.goto(SITES_PROFILE_ROUTE);
+    await expect(page.locator(".public-profile-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+
+    await page.goto("/sites.html");
+    await expect(page.locator(".home-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  });
+
+  test("theme surfaces preserve the existing dark baseline", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/settings/tokens", (route) => fulfillJson(route, {
+      data: { tokens: [] },
+      ok: true
+    }));
+    await page.route("**/api/settings/devices", (route) => fulfillJson(route, {
+      data: { devices: [] },
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(page.locator(".home-view")).toHaveCSS("background-color", "rgb(13, 13, 13)");
+    await expect(page.locator(".profile-topbar")).toHaveCSS(
+      "background-color",
+      "rgba(23, 23, 23, 0.94)"
+    );
+
+    await page.goto("/settings");
+    await expect(page.locator(".settings-view")).toHaveCSS("background-color", "rgb(13, 13, 13)");
+    await expect(page.locator(".settings-panel").first()).toHaveCSS("background-color", "rgb(23, 23, 23)");
+
+    await page.goto("/profile");
+    await expect(page.locator(".token-level-0").first()).toHaveCSS("background-color", "rgb(36, 36, 36)");
+    await page.getByRole("grid", { name: "Daily token activity" })
+      .locator('[data-date="2026-06-11"]')
+      .hover();
+    await expect(page.getByRole("tooltip")).toHaveCSS("background-color", "rgb(63, 64, 66)");
+    await page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share", exact: true })
+      .click();
+    await expect(page.locator(".share-studio-action-icon").first())
+      .toHaveCSS("background-color", "rgb(244, 244, 244)");
+  });
 });
 
 test.describe("Stage 2 locale surfaces", () => {
@@ -2810,6 +2948,16 @@ async function mockAuthenticatedAccount(page) {
     data: ownerProfile("private"),
     ok: true
   }));
+}
+
+async function useThemePreference(page, preference) {
+  await page.addInitScript(({ storageKey, value }) => {
+    if (value === "system") {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+    localStorage.setItem(storageKey, value);
+  }, { storageKey: THEME_STORAGE_KEY, value: preference });
 }
 
 async function useKoreanLocale(page) {
