@@ -16,6 +16,7 @@ test("creates an operator-card Sites config with a static fallback and Cloud Run
 
   assert.equal(config.canonicalAppUrl, "https://profiles.example.test/app");
   assert.equal(config.appHref, "https://profiles.example.test/");
+  assert.deepEqual(config.copyOverrides, {});
   assert.equal(config.operatorCardHandle, "postmelee");
   assert.equal(
     buildMarketingOperatorCardUrl(config, "en"),

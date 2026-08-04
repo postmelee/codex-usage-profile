@@ -17,7 +17,6 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   imageUrlCopyFailed: "share.imageUrlCopyFailed",
   makePrivate: "share.makePrivate",
   makingPrivate: "share.makingPrivate",
-  openComposer: "share.openComposer",
   pasteImage: "share.pasteImage",
   previewAlt: "share.previewAlt",
   previewUnavailable: "share.previewUnavailable",
@@ -26,7 +25,6 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   readmeCopyFailed: "share.readmeCopyFailed",
   save: "share.save",
   saveAriaLabel: "share.saveAriaLabel",
-  shareInstructionsTitle: "share.shareInstructionsTitle",
   shareLinkedIn: "share.shareLinkedIn",
   shareReddit: "share.shareReddit",
   shareX: "share.shareX",
@@ -34,15 +32,34 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   title: "share.title"
 });
 
+const SHARE_PLATFORM_MESSAGE_IDS = Object.freeze({
+  openComposer: "share.openComposer",
+  shareInstructionsTitle: "share.shareInstructionsTitle"
+});
+
 export function getShareStudioCopy(locale = "en") {
   const normalizedLocale = resolveShareLocale(locale);
   return Object.freeze({
     ...Object.fromEntries(Object.entries(SHARE_MESSAGE_IDS).map(([key, id]) => (
-      [key, formatMessage(normalizedLocale, id, { platform: "{platform}" })]
+      [key, formatMessage(normalizedLocale, id)]
     ))),
     linkedin: "LinkedIn",
     reddit: "Reddit",
     x: "X"
+  });
+}
+
+export function formatShareStudioPlatformMessage(locale, key, platform) {
+  const messageId = SHARE_PLATFORM_MESSAGE_IDS[key];
+  if (!messageId) {
+    throw new TypeError(`Unsupported Share Studio platform message: ${key}`);
+  }
+  if (typeof platform !== "string" || platform.trim() === "") {
+    throw new TypeError("Share Studio platform must be a non-empty string");
+  }
+
+  return formatMessage(resolveShareLocale(locale), messageId, {
+    platform: platform.trim()
   });
 }
 

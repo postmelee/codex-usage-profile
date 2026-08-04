@@ -10,7 +10,8 @@ import {
   MARKETING_SAMPLE_CARD_URL,
   MARKETING_SUBMIT_COMMAND,
   createMarketingConfig,
-  normalizeOptionalCanonicalAppUrl
+  normalizeOptionalCanonicalAppUrl,
+  resolveMarketingCopy
 } from "../marketing-config.js";
 
 test("creates an operator-card marketing config without an app fallback URL", () => {
@@ -19,6 +20,8 @@ test("creates an operator-card marketing config without an app fallback URL", ()
   assert.equal(config.appHref, null);
   assert.equal(config.canonicalAppUrl, null);
   assert.equal(config.copy, DEFAULT_MARKETING_COPY);
+  assert.deepEqual(config.copyOverrides, {});
+  assert.equal(Object.isFrozen(config.copyOverrides), true);
   assert.equal(config.operatorCardHandle, MARKETING_OPERATOR_CARD_HANDLE);
   assert.equal(
     buildMarketingOperatorCardUrl(config, "en"),
@@ -99,7 +102,53 @@ test("accepts long localized copy without changing the data contract", () => {
 
   assert.equal(config.copy.title, longTitle);
   assert.equal(config.copy.description, DEFAULT_MARKETING_COPY.description);
+  assert.deepEqual(config.copyOverrides, { title: longTitle });
   assert.equal(Object.isFrozen(config.copy), true);
+  assert.equal(Object.isFrozen(config.copyOverrides), true);
+});
+
+test("resolves default, partial, and equal-valued explicit copy by source", () => {
+  const defaultConfig = createMarketingConfig();
+  const partialConfig = createMarketingConfig({
+    copy: { title: DEFAULT_MARKETING_COPY.title }
+  });
+
+  assert.equal(
+    resolveMarketingCopy(defaultConfig, "title", "지역화된 제목"),
+    "지역화된 제목"
+  );
+  assert.equal(
+    resolveMarketingCopy(partialConfig, "title", "지역화된 제목"),
+    DEFAULT_MARKETING_COPY.title
+  );
+  assert.equal(
+    resolveMarketingCopy(partialConfig, "description", "지역화된 설명"),
+    "지역화된 설명"
+  );
+  assert.deepEqual(partialConfig.copyOverrides, {
+    title: DEFAULT_MARKETING_COPY.title
+  });
+});
+
+test("normalizes complete explicit copy and rejects invalid override values", () => {
+  const explicitCopy = Object.fromEntries(
+    Object.keys(DEFAULT_MARKETING_COPY).map((key) => [key, `custom-${key}`])
+  );
+  const config = createMarketingConfig({ copy: explicitCopy });
+
+  assert.deepEqual(config.copy, explicitCopy);
+  assert.deepEqual(config.copyOverrides, explicitCopy);
+  assert.equal(Object.isFrozen(config.copy), true);
+  assert.equal(Object.isFrozen(config.copyOverrides), true);
+
+  assert.throws(
+    () => createMarketingConfig({ copy: { title: " " } }),
+    /copy\.title must be a non-empty string/
+  );
+  assert.throws(
+    () => createMarketingConfig({ copy: [] }),
+    /copy must be an object/
+  );
 });
 
 test("keeps the marketing fixture independent from account and usage state", () => {

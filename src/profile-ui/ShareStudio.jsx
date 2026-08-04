@@ -10,6 +10,7 @@ import {
 import {
   buildPublicProfileShareUrl,
   buildShareTargets,
+  formatShareStudioPlatformMessage,
   getShareStudioCopy
 } from "./shareStudio.js";
 
@@ -512,6 +513,7 @@ export function ShareStudio({
         {selectedSocialPlatform ? (
           <ShareInstructions
             copy={copy}
+            locale={locale}
             onCopy={copyImage}
             onDismiss={() => setSelectedSocialPlatform(null)}
             target={shareTargets.find(
@@ -577,7 +579,7 @@ function ShareDestination({ active, index, onSelect, target }) {
   );
 }
 
-function ShareInstructions({ copy, onCopy, onDismiss, target }) {
+function ShareInstructions({ copy, locale, onCopy, onDismiss, target }) {
   const dismissTimerRef = useRef(null);
   const dismissedRef = useRef(false);
   const instructionsRef = useRef(null);
@@ -681,7 +683,11 @@ function ShareInstructions({ copy, onCopy, onDismiss, target }) {
       }}
     >
       <div className="share-studio-instructions-header">
-        <h3>{formatCopy(copy.shareInstructionsTitle, target.label)}</h3>
+        <h3>{formatShareStudioPlatformMessage(
+          locale,
+          "shareInstructionsTitle",
+          target.label
+        )}</h3>
         <button
           aria-label={copy.dismissInstructions}
           className="icon-command share-studio-instructions-close"
@@ -712,7 +718,11 @@ function ShareInstructions({ copy, onCopy, onDismiss, target }) {
             target="_blank"
           >
             <Icon name="globe" size={14} />
-            <span>{formatCopy(copy.openComposer, target.label)}</span>
+            <span>{formatShareStudioPlatformMessage(
+              locale,
+              "openComposer",
+              target.label
+            )}</span>
           </a>
         </li>
         <li className="share-studio-step-copy">
@@ -751,10 +761,6 @@ function ShareToast({ copy, kind, message, onDismiss }) {
       </button>
     </div>
   );
-}
-
-function formatCopy(template, platform) {
-  return template.replace("{platform}", platform);
 }
 
 function ShareValue({ copyLabel, label, onCopy, value }) {

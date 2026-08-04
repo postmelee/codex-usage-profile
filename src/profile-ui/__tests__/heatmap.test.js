@@ -186,6 +186,35 @@ test("formats English and Korean compact plus exact token tooltips", () => {
   assert.equal(formatTokenCount(150_000_000, "ko"), "1.5억");
 });
 
+test("uses the shared compact formatter without losing exact token counts", () => {
+  assert.equal(formatTokenCount(999_999, "en"), "1M");
+  assert.equal(formatTokenCount(999_999_999, "en"), "1B");
+  assert.equal(formatTokenCount(1_000, "ko"), "1천");
+  assert.equal(formatTokenCount(99_999_999, "ko"), "1억");
+  assert.equal(formatTokenCount(999_999_999_999, "ko"), "1조");
+  assert.equal(formatTokenCount(999_999, "ja"), "1M");
+
+  assert.equal(
+    formatHeatmapTooltip({
+      dateIso: "2026-08-02",
+      mode: "daily",
+      tokens: 999_999
+    }, "en"),
+    "August 2, 2026 · 1M tokens (999,999)"
+  );
+  assert.equal(
+    formatHeatmapTooltip({
+      dateIso: "2026-08-02",
+      mode: "daily",
+      tokens: 99_999_999
+    }, "ko"),
+    "2026년 8월 2일 · 1억 토큰 (99,999,999)"
+  );
+
+  assert.throws(() => formatTokenCount(-1, "en"), /non-negative safe integer/);
+  assert.throws(() => formatTokenCount(1.5, "ko"), /non-negative safe integer/);
+});
+
 test("matches Account Usage bucket validation and sorting rules", () => {
   assert.deepEqual(normalizeDailyUsageBuckets([
     { startDate: "2026-08-02", tokens: 2 },

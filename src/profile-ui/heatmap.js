@@ -4,6 +4,7 @@ import {
   formatMessage,
   resolveLocale
 } from "./i18n.js";
+import { formatCompactNumber } from "./formatters.js";
 
 export const HEATMAP_COLUMN_COUNT = 52;
 export const HEATMAP_ROW_COUNT = 7;
@@ -124,27 +125,7 @@ export function formatHeatmapTooltip(target, locale = "en", options = {}) {
 
 export function formatTokenCount(value, locale = "en") {
   requireTokenCount(value, "value");
-  const normalizedLocale = resolveLocale(locale);
-  const units = normalizedLocale === "ko"
-    ? [
-        [1_000_000_000_000, "조"],
-        [100_000_000, "억"],
-        [10_000, "만"]
-      ]
-    : [
-        [1_000_000_000_000, "T"],
-        [1_000_000_000, "B"],
-        [1_000_000, "M"],
-        [1_000, "K"]
-      ];
-
-  for (const [divisor, suffix] of units) {
-    if (value >= divisor) {
-      return `${trimTrailingZero((value / divisor).toFixed(1))}${suffix}`;
-    }
-  }
-
-  return formatLocalizedNumber(value, normalizedLocale);
+  return formatCompactNumber(value, locale);
 }
 
 export function normalizeDailyUsageBuckets(value) {
@@ -373,10 +354,6 @@ function addDays(dateIso, days) {
   const date = new Date(`${dateIso}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-function trimTrailingZero(value) {
-  return value.endsWith(".0") ? value.slice(0, -2) : value;
 }
 
 function isRecord(value) {

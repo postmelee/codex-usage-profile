@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildPublicProfileShareUrl,
   buildShareTargets,
+  formatShareStudioPlatformMessage,
   getShareStudioCopy
 } from "../shareStudio.js";
 
@@ -19,6 +20,40 @@ test("resolves Korean and English Share Studio copy", () => {
     "Card preview is unavailable. Sharing options are still available."
   );
   assert.equal(getShareStudioCopy("ja-JP").title, "Share activity");
+});
+
+test("formats platform messages once for every locale and share target", () => {
+  const expectations = {
+    en: {
+      openComposer: (platform) => `Open ${platform} composer`,
+      shareInstructionsTitle: (platform) => `Share to ${platform}`
+    },
+    ko: {
+      openComposer: (platform) => `${platform} 작성 창 열기`,
+      shareInstructionsTitle: (platform) => `${platform}에 공유`
+    }
+  };
+
+  for (const [locale, messages] of Object.entries(expectations)) {
+    for (const platform of ["X", "LinkedIn", "Reddit"]) {
+      for (const [key, expected] of Object.entries(messages)) {
+        const message = formatShareStudioPlatformMessage(locale, key, platform);
+        assert.equal(message, expected(platform));
+        assert.doesNotMatch(message, /\{platform\}/);
+      }
+    }
+  }
+});
+
+test("rejects unsupported platform message keys and invalid labels", () => {
+  assert.throws(
+    () => formatShareStudioPlatformMessage("en", "title", "X"),
+    /Unsupported Share Studio platform message/
+  );
+  assert.throws(
+    () => formatShareStudioPlatformMessage("en", "openComposer", " "),
+    /non-empty string/
+  );
 });
 
 test("builds the canonical Sites public profile URL", () => {

@@ -32,11 +32,9 @@ test("keeps the Quickstart flow ordered and immutable", () => {
   );
   assert.equal(Object.isFrozen(HOME_QUICKSTART_STEPS), true);
   assert.equal(HOME_QUICKSTART_STEPS.every(Object.isFrozen), true);
-  assert.equal(
-    HOME_QUICKSTART_STEPS.every(({ description, title }) => (
-      description.trim() !== "" && title.trim() !== ""
-    )),
-    true
+  assert.deepEqual(
+    HOME_QUICKSTART_STEPS.map((step) => Object.keys(step)),
+    HOME_QUICKSTART_STEPS.map(() => ["id"])
   );
 });
 

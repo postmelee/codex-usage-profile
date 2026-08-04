@@ -4,8 +4,8 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
 import {
-  DEFAULT_MARKETING_COPY,
-  createMarketingConfig
+  createMarketingConfig,
+  resolveMarketingCopy
 } from "./marketing-config.js";
 
 const HOME_CARD_SKELETON_HEATMAP_COLUMN_COUNT = 26;
@@ -38,8 +38,7 @@ export function MarketingLanding({
   const resolvedCardAlt = cardAlt ?? resolveMarketingCopy(
     config,
     "sampleCardAlt",
-    t,
-    "home.sampleCardAlt"
+    t("home.sampleCardAlt")
   );
 
   return (
@@ -48,9 +47,9 @@ export function MarketingLanding({
         <div className="home-stage">
           <header className="home-heading">
             <h1 id="home-title">
-              {resolveMarketingCopy(config, "title", t, "home.title")}
+              {resolveMarketingCopy(config, "title", t("home.title"))}
             </h1>
-            <p>{resolveMarketingCopy(config, "description", t, "home.description")}</p>
+            <p>{resolveMarketingCopy(config, "description", t("home.description"))}</p>
           </header>
 
           <MarketingCardPreview
@@ -214,14 +213,13 @@ export function MarketingQuickstart({ config }) {
       <div className="home-quickstart-inner">
         <header className="home-quickstart-heading">
           <h2 id="quickstart-title">
-            {resolveMarketingCopy(config, "quickstartTitle", t, "quickstart.title")}
+            {resolveMarketingCopy(config, "quickstartTitle", t("quickstart.title"))}
           </h2>
           <p>
             {resolveMarketingCopy(
               config,
               "quickstartDescription",
-              t,
-              "quickstart.description"
+              t("quickstart.description")
             )}
           </p>
         </header>
@@ -276,8 +274,7 @@ function MarketingAppAction({ config }) {
         {resolveMarketingCopy(
           config,
           "appUnavailable",
-          t,
-          "quickstart.appUnavailable"
+          t("quickstart.appUnavailable")
         )}
       </button>
     );
@@ -285,7 +282,7 @@ function MarketingAppAction({ config }) {
 
   return (
     <a className="primary-command marketing-app-action" href={config.appHref}>
-      {resolveMarketingCopy(config, "appCta", t, "quickstart.appCta")}
+      {resolveMarketingCopy(config, "appCta", t("quickstart.appCta"))}
     </a>
   );
 }
@@ -367,11 +364,4 @@ function getCopyStatus(status, t) {
     error: t("quickstart.copyFailed"),
     idle: ""
   }[status] ?? "";
-}
-
-function resolveMarketingCopy(config, key, t, messageId) {
-  const configuredValue = config.copy[key];
-  return configuredValue === DEFAULT_MARKETING_COPY[key]
-    ? t(messageId)
-    : configuredValue;
 }

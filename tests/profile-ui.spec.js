@@ -112,7 +112,7 @@ test.describe("theme surfaces", () => {
     await expect(page.getByRole("tooltip")).toHaveCSS("color", "rgb(48, 48, 48)");
     await expect(page.getByRole("tooltip")).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0.12)");
     await page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "Share", exact: true })
+      .getByRole("button", { name: "Share profile", exact: true })
       .click();
     await expect(page.locator(".share-studio-action-icon").first())
       .toHaveCSS("background-color", "rgb(23, 23, 23)");
@@ -171,7 +171,7 @@ test.describe("theme surfaces", () => {
       "rgba(255, 255, 255, 0.14)"
     );
     await page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "Share", exact: true })
+      .getByRole("button", { name: "Share profile", exact: true })
       .click();
     await expect(page.locator(".share-studio-action-icon").first())
       .toHaveCSS("background-color", "rgb(244, 244, 244)");
@@ -349,7 +349,7 @@ test.describe("Stage 3 locale surfaces", () => {
     await page.goto("/profile");
 
     await page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "공유", exact: true })
+      .getByRole("button", { name: "프로필 공유", exact: true })
       .click();
     const dialog = page.getByRole("dialog", { name: "활동 공유하기" });
     await expect(dialog).toBeVisible();
@@ -407,7 +407,7 @@ test.describe("Stage 4 locale contract", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator('dl[aria-label="Usage summary"]')).toBeVisible();
     await page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "Share", exact: true })
+      .getByRole("button", { name: "Share profile", exact: true })
       .click();
     await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
     await page.getByRole("button", { name: "Close Share Studio" }).click();
@@ -2436,7 +2436,7 @@ test.describe("Home and share card flow", () => {
 });
 
 test.describe("Profile and Settings canvases", () => {
-  test("owner Profile keeps Share Studio functional on the fullscreen canvas", async ({ page }) => {
+  test("owner Profile share button keeps Share Studio accessible on the fullscreen canvas", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -2456,7 +2456,12 @@ test.describe("Profile and Settings canvases", () => {
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
 
-    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    await expect(page.locator(".profile-topbar")
+      .getByRole("button", { name: "Share profile" }))
+      .toHaveCount(0);
+    const shareButton = page.locator(".profile-card-account-state")
+      .getByRole("button", { name: "Share profile" });
+    await expect(shareButton).toHaveText("Share");
     const sourceCard = page.locator(
       '.profile-card-section [data-card-source="true"]'
     );
@@ -2468,8 +2473,6 @@ test.describe("Profile and Settings canvases", () => {
     expect(sourceCardBox).not.toBeNull();
     expect(Math.round(sourceCardBox.width)).toBe(600);
 
-    const shareButton = page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
     await shareButton.click();
     const dialog = page.getByRole("dialog", { name: "Share activity" });
