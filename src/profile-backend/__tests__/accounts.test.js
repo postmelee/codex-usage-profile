@@ -101,6 +101,23 @@ test("upserts GitHub owners idempotently by provider identity", async () => {
   assert.equal(store.listOwners().length, 1);
 });
 
+test("prepares canonical card settings for an atomic owner upsert", async () => {
+  const store = createMemoryProfileBackendStore();
+  const accounts = createAccountService({ store, now: fixedNow });
+
+  const prepared = await accounts.prepareGitHubOwner({
+    id: 12345,
+    login: "postmelee"
+  });
+
+  assert.equal(prepared.cardLocale, "en");
+  assert.deepEqual(prepared.cardStyle, {
+    effect: { preset: "none", version: 1 },
+    schemaVersion: 1,
+    theme: "dark"
+  });
+});
+
 test("assigns deterministic handles when GitHub logins collide", async () => {
   const store = createMemoryProfileBackendStore();
   const accounts = createAccountService({ store, now: fixedNow });

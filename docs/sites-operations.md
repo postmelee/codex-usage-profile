@@ -99,6 +99,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
+   Task #74 candidate는 D1 migration `1..5`와 `0004_card_style.sql`,
+   `0005_card_locale.sql`이 누락·중복 없이 manifest 순서로 포함돼야 한다.
 4. temporary `PROFILE_MAINTENANCE_MODE=enabled`와 새 operator secret을
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
@@ -123,7 +125,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `200`인지 확인한다. 이 전환이나 확인이 실패하면 다음 단계로 진행하지
    않는다.
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
-   private preview, publish/unpublish/ETag/404를 검증한다.
+   private preview, 카드 dark/light·en/ko 저장, 네 public PNG의 GET/HEAD/304,
+   query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -153,13 +156,14 @@ set으로 되돌린 뒤 operator route `404`와 같은 health를 확인한다. p
 backup은 repository 밖의 사용자 지정 위치에 `0600`으로 저장하고, 보고에는
 contract/schema version, digest와 count만 남긴다.
 
-- export는 owner identity, latest usage/snapshot, visibility와 publication
-  metadata만 포함한다. OAuth state, session, challenge, token digest와
+- export는 owner identity, latest usage/snapshot, visibility, canonical
+  `cardStyle`, `cardLocale`, `presentationDigest`와 publication metadata만
+  포함한다. OAuth state, session, challenge, token digest와
   rate-limit row는 포함하지 않는다.
 - restore는 disposable target에서 먼저 수행하고 export와 같은 digest/count를
   확인한다. 인증 상태는 복구하지 않으므로 다시 로그인해야 한다.
-- account deletion은 stable publication을 먼저 tombstone으로 확인한 뒤 R2
-  revision plan과 D1 owner-dependent plan이 일치할 때만 apply한다.
+- account deletion은 dark authority를 먼저 tombstone으로 확인한 뒤 light stable과
+  theme·locale별 revision plan, D1 owner-dependent plan이 일치할 때만 apply한다.
 - partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
   조건으로 수행한다.
@@ -172,8 +176,9 @@ mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두
 
 expired OAuth state, CLI challenge, session과 revoked/expired token은 plan에서
 count를 확인한 뒤 정리한다. public stable object와 tombstone은 retention
-cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 key,
-owner+locale별 최근 5개와 90일 이내 key를 보호한다.
+cleanup 대상이 아니다. dark authority가 참조하는 light stable과 immutable key,
+owner+theme+locale별 최근 5개와 90일 이내 key를 보호한다. authority 없는 light
+stable은 orphan candidate가 될 수 있다.
 
 개인 MVP에서는 매월 90일 dry-run을 수행하고 자동 schedule은 두지 않는다.
 
@@ -207,8 +212,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    필수다.
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
-   profile/card 404, OAuth/CLI/submit, publish `GET|HEAD|304`, unpublish 404를
-   순서대로 확인한다.
+   profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
+   query 없는 dark와 dark/light × en/ko 네 PNG의 `GET|HEAD|304`, 설정 저장 뒤
+   `selectedPublicCardUrl` 전환, unpublish 전 조합 404를 순서대로 확인한다.
 4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
    owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
    Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가
@@ -261,6 +267,10 @@ version을 선택한다.
 
 schema/data rollback은 먼저 승인된 D1/R2 backup 복구 가능성을 검증하고,
 backward-compatible migration 구간을 벗어나면 자동으로 진행하지 않는다.
+Task #74의 `card_style`과 `card_locale`은 default가 있는 additive column이며 기존
+query 없는 dark stable key를 보존한다. 따라서 이전 saved version application
+rollback 후보는 새 column과 light object를 무시할 수 있지만, readiness의
+unexpected version 우회와 실제 rollback 실행은 여전히 별도 Gate 승인 사항이다.
 
 Cloud Run fallback은 다음 순서로 평가하며 별도 승인 전에는 provider resource를
 만들지 않는다.

@@ -7,10 +7,11 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 1. 웹사이트에서 **Sign in with GitHub**을 선택한다.
 2. 로그인 후 `/profile`에서 GitHub 이름, 사용자명, 아바타가 반영된 private preview를 확인한다.
 3. CLI `submit`으로 Codex 사용량을 전송한다. credential이 없으면 browser 승인을 먼저 진행하고 같은 명령에서 제출을 계속한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
-4. **Publish card**를 선택해 프로필을 public으로 전환한다.
-5. 상단 **Share**에서 Share Studio를 열고 stable 이미지 URL 또는 README Markdown을 복사하거나 **저장**으로 PNG를 내려받는다.
-6. X, LinkedIn 또는 Reddit을 선택하면 Share Studio가 PNG 이미지 복사와 browser 작성 창 열기를 안내한다. 복사한 이미지는 열린 게시물 작성 창에 직접 붙여넣는다.
-7. Markdown을 GitHub profile 또는 repository README에 삽입한다.
+4. `/profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다. 이 설정은 사이트 화면 모드와 별개이며 사용량을 다시 제출하지 않아도 된다.
+5. **Publish card**를 선택해 프로필을 public으로 전환한다.
+6. 상단 **Share**에서 Share Studio를 열고 저장된 테마·언어의 stable 이미지 URL 또는 README Markdown을 복사하거나 **저장**으로 PNG를 내려받는다.
+7. X, LinkedIn 또는 Reddit을 선택하면 Share Studio가 PNG 이미지 복사와 browser 작성 창 열기를 안내한다. 복사한 이미지는 열린 게시물 작성 창에 직접 붙여넣는다.
+8. Markdown을 GitHub profile 또는 repository README에 삽입한다.
 
 ```md
 ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
@@ -80,23 +81,35 @@ profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 �
 
 현재 공개 프로필과 카드는 Account Usage Contract v1이 제공하는 누적/최대 토큰, 최장 작업, 연속 기록과 일별 버킷만 지원한다. favorite model, token breakdown, skill/plugin ranking은 이 계약에 없으므로 현재 제품 화면에 표시하지 않는다.
 
-## URL과 언어
+## URL, 테마와 언어
 
-기본 영문 카드는 query가 없는 고정 URL을 사용한다.
+기존 README와 consumer를 위한 query 없는 URL은 계속 dark 영문 카드를 제공한다.
 
 ```text
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
 ```
 
-한국어 카드는 `locale=ko`를 추가한다.
+테마는 `theme=dark|light`, 한국어는 `locale=ko`로 명시한다. 영어는 locale query를
+생략하며 Profile에서 저장한 선택은 Share Studio가 아래 canonical 조합 중 하나로
+복사한다.
 
 ```text
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark&locale=ko
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light&locale=ko
 ```
 
-현재 지원 언어는 `en`, `ko`다. 지원하지 않는 locale은 영문으로 렌더링된다. README에 삽입한 URL은 계정 visibility 또는 언어를 바꿀 때만 수정하면 된다.
+현재 지원 테마는 `dark`, `light`, 언어는 `en`, `ko`다. Profile 설정을 저장하면
+대표 URL만 바뀌며 기존 query 없는 URL의 bytes가 light로 바뀌지는 않는다. 이미
+README에 삽입한 카드의 모양을 바꾸려면 Share Studio에서 새 대표 URL 또는 Markdown을
+복사해 교체한다.
 
-최초 **Publish card**는 영문/한국어 immutable revision을 모두 생성한 뒤 하나의 stable publication metadata로 연결한다. 영문은 stable object body, 한국어는 metadata가 가리키는 immutable body를 제공한다. 두 locale 준비가 모두 끝나기 전에는 public visibility를 노출하지 않는다.
+최초 **Publish card**는 dark/light × en/ko 네 immutable revision을 모두 생성한다.
+dark stable object가 publication authority이며 light stable object와 네 revision을
+같은 publication id로 연결한다. 네 변형 준비와 authority commit이 끝나기 전에는
+public visibility를 노출하지 않는다. 기존 contract v3 dark publication은 query 없는
+dark URL에 한해 계속 읽을 수 있다.
 
 ## 자동 갱신 방식
 

@@ -122,7 +122,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
 
     const migrated = await requestJson(origin, "POST", "/__local/migrate");
     assert.equal(migrated.response.status, 200);
-    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3]);
+    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3, 4, 5]);
 
     const readiness = await requestMaintenance(origin, {
       operation: "readiness"
@@ -131,8 +131,8 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.deepEqual(readiness.body, {
       ok: true,
       summary: {
-        appliedVersions: [1, 2, 3],
-        expectedVersions: [1, 2, 3],
+        appliedVersions: [1, 2, 3, 4, 5],
+        expectedVersions: [1, 2, 3, 4, 5],
         operation: "readiness",
         ready: true
       }
@@ -378,24 +378,20 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.match(localOwner?.id ?? "", /^owner_/);
     const localOwnerId = localOwner.id;
 
-    const restoredEnCard = await fetch(new URL(
-      "/api/profile/card.png?locale=en",
-      origin
-    ), {
-      headers: { cookie: sessionCookie }
-    });
-    const restoredKoCard = await fetch(new URL(
-      "/api/profile/card.png?locale=ko",
-      origin
-    ), {
-      headers: { cookie: sessionCookie }
-    });
-    assert.equal(restoredEnCard.status, 200);
-    assert.equal(restoredKoCard.status, 200);
-    const privateApplicationEtags = {
-      en: restoredEnCard.headers.get("etag"),
-      ko: restoredKoCard.headers.get("etag")
-    };
+    const privateApplicationEtags = { dark: {}, light: {} };
+    for (const theme of ["dark", "light"]) {
+      for (const locale of ["en", "ko"]) {
+        const restoredCard = await fetch(new URL(
+          `/api/profile/card.png?theme=${theme}&locale=${locale}`,
+          origin
+        ), {
+          headers: { cookie: sessionCookie }
+        });
+        assert.equal(restoredCard.status, 200);
+        privateApplicationEtags[theme][locale] =
+          restoredCard.headers.get("etag");
+      }
+    }
 
     // The user-flow smoke above runs with the operator route hidden. Reopen it
     // only for the explicitly scoped maintenance lifecycle checks below.

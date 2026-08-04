@@ -18,7 +18,7 @@ test("production local smoke verifies artifact before one-runtime contract smoke
         artifactBytes: 1024,
         clientFileCount: 3,
         expectedBindingCount: 3,
-        migrationFileCount: 2,
+        migrationFileCount: 5,
         workerCompressedBytes: 512,
         workerFileCount: 1,
         workerRawBytes: 2048
@@ -39,7 +39,7 @@ test("production local smoke verifies artifact before one-runtime contract smoke
     artifactBytes: 1024,
     clientFileCount: 3,
     expectedBindingCount: 3,
-    migrationFileCount: 2,
+    migrationFileCount: 5,
     publicPngBytes: 4096,
     routesVerified: 35,
     workerCompressedBytes: 512,
@@ -61,7 +61,7 @@ test("production local smoke can reuse separately verified build inputs", async 
         artifactBytes: 10,
         clientFileCount: 3,
         expectedBindingCount: 3,
-        migrationFileCount: 2,
+        migrationFileCount: 5,
         workerCompressedBytes: 5,
         workerFileCount: 1,
         workerRawBytes: 15

@@ -118,7 +118,7 @@ test("bad maintenance tokens of different lengths produce the same safe response
 
 test("maintenance readiness returns only exact version state without mutations", async () => {
   const calls = [];
-  const database = readinessDatabase([1, 2, 3, 4]);
+  const database = readinessDatabase([1, 2, 3, 4, 5]);
   const fixture = await createServiceFixture({ calls, database });
   const handler = createProfileSitesMaintenanceHandler({
     config: enabledConfig(),
@@ -134,8 +134,8 @@ test("maintenance readiness returns only exact version state without mutations",
   assert.deepEqual(await response.json(), {
     ok: true,
     summary: {
-      appliedVersions: [1, 2, 3, 4],
-      expectedVersions: [1, 2, 3, 4],
+      appliedVersions: [1, 2, 3, 4, 5],
+      expectedVersions: [1, 2, 3, 4, 5],
       operation: "readiness",
       ready: true
     }

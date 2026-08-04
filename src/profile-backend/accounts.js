@@ -4,6 +4,10 @@ import {
 } from "./errors.js";
 import { normalizeGitHubIdentity } from "./auth.js";
 import { PROFILE_VISIBILITY } from "./store-values.js";
+import {
+  normalizeCardLocale,
+  normalizeCardStyle
+} from "../profile-card/presentation.js";
 
 const DEFAULT_HANDLE = "user";
 
@@ -82,6 +86,8 @@ export async function prepareGitHubOwnerRecord(store, identityPayload, options =
     profileUrl: identity.profileUrl,
     handle,
     visibility,
+    cardLocale: normalizeCardLocale(existingOwner?.cardLocale),
+    cardStyle: normalizeCardStyle(existingOwner?.cardStyle),
     createdAt: existingOwner?.createdAt ?? nowIso,
     updatedAt: nowIso
   };
