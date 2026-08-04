@@ -85,6 +85,13 @@ test("message catalogs keep placeholder tokens aligned", () => {
   }
 });
 
+test("profile share accessibility copy stays distinct from the visible label", () => {
+  assert.equal(MESSAGE_CATALOGS.en["common.share"], "Share");
+  assert.equal(MESSAGE_CATALOGS.en["common.shareProfile"], "Share profile");
+  assert.equal(MESSAGE_CATALOGS.ko["common.share"], "공유");
+  assert.equal(MESSAGE_CATALOGS.ko["common.shareProfile"], "프로필 공유");
+});
+
 test("appearance messages localize every supported theme preference", () => {
   assert.deepEqual(
     ["system", "light", "dark"].map((preference) => (

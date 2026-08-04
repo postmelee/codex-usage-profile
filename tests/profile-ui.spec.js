@@ -2436,7 +2436,7 @@ test.describe("Home and share card flow", () => {
 });
 
 test.describe("Profile and Settings canvases", () => {
-  test("owner Profile keeps Share Studio functional on the fullscreen canvas", async ({ page }) => {
+  test("owner Profile share button keeps Share Studio accessible on the fullscreen canvas", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -2456,7 +2456,8 @@ test.describe("Profile and Settings canvases", () => {
       .toBeVisible();
     await expect(page.getByText("Public", { exact: true })).toBeVisible();
 
-    await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
+    const shareButton = page.getByRole("button", { name: "Share profile" });
+    await expect(shareButton).toHaveText("Share");
     const sourceCard = page.locator(
       '.profile-card-section [data-card-source="true"]'
     );
@@ -2468,8 +2469,6 @@ test.describe("Profile and Settings canvases", () => {
     expect(sourceCardBox).not.toBeNull();
     expect(Math.round(sourceCardBox.width)).toBe(600);
 
-    const shareButton = page.locator(".profile-card-account-state")
-      .getByRole("button", { name: "Share", exact: true });
     await expect(shareButton).toBeEnabled();
     await shareButton.click();
     const dialog = page.getByRole("dialog", { name: "Share activity" });

@@ -314,6 +314,7 @@ function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner 
       </div>
       <div className="home-account-actions">
         <button
+          aria-label={isPublic ? t("common.shareProfile") : undefined}
           className="primary-command"
           disabled={isSubmitting}
           onClick={isPublic ? onShare : onPublish}

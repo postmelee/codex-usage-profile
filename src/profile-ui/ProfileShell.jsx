@@ -30,7 +30,7 @@ export function ProfileShell({
           <div className="profile-actions" aria-label={t("common.nav.pageActions")}>
             {showShare ? (
               <button
-                aria-label={t("common.share")}
+                aria-label={t("common.shareProfile")}
                 disabled={shareDisabled}
                 onClick={onShare}
                 type="button"
