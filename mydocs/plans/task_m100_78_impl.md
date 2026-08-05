@@ -1,0 +1,321 @@
+# Task #78 구현계획서 — 소셜 공유 OG 메타데이터와 PublicProfilePage 카드 인트로
+
+수행계획서: [`task_m100_78.md`](task_m100_78.md)
+GitHub Issue: [#78](https://github.com/postmelee/codex-usage-profile/issues/78)
+마일스톤: M100
+
+## 단계 개요
+
+| Stage | 제목 | 주요 산출 | 검증 |
+|---|---|---|---|
+| 1 | 공유 라우트와 OG 계약 | `src/profile-runtime/open-graph.js`, `src/profile-runtime/host-adapter.js` | `npm test`, 태그 계약 단위 테스트 |
+| 2 | 소셜 캔버스와 단일 이미지 | `src/profile-card/social-canvas.js`, `src/profile-media/publication-service.js` | `npm test`, PNG 크기·단일 객체·갱신 확인 |
+| 3 | 서버 OG 주입 | `sites/worker.js`, `production-server.js`, `dev-server.js` | `npm test`, 크롤러 UA 3런타임 대조 |
+| 4 | 공개 카드 통일과 소유자 안내 | `src/profile-ui/PublicProfilePage.jsx` | `npm test`, 실측 600x368, 응답 균일성 |
+| 5 | 모션 공용화와 인트로 모달 | `src/profile-ui/useCardHandoffMotion.js`, `PublicCardIntro.jsx` | `npm test`, `npm run test:e2e` |
+| 6 | Share Studio 재구성과 통합 검증 | `ShareStudio.jsx`, `docs/readme-card.md` | `npm test`, `npm run test:e2e`, 실플랫폼 확인 |
+
+## 문서 위치 확인
+
+| 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
+|---|---|---|---|---|
+| `docs/readme-card.md` | `docs/` | `docs/readme-card.md` (Stage 6) | OK | 새 문서를 만들지 않고 공유 흐름 절만 수정 |
+
+## Stage 1 — 공유 라우트와 OG 계약
+
+### 산출물
+
+신규:
+
+- `src/profile-runtime/open-graph.js`
+- `src/profile-runtime/__tests__/open-graph.test.js`
+
+수정:
+
+- `src/profile-runtime/host-adapter.js`
+- `src/profile-runtime/__tests__/host-adapter.test.js`
+
+### 변경 내용
+
+- `buildProfileOpenGraphTags({ profile, handle, locale, origin })`를 만들어 태그 집합을 순수 함수로 생성한다. 공개 프로필이면 handle별 태그, 비공개·미존재면 사이트 기본 태그를 반환한다.
+- 태그 값은 수행계획서 설계 방향을 그대로 따른다. `og:type=website`, `og:title={handle}'s Codex card`, `og:description`은 ko/en 고정 문구, `og:url`과 canonical은 쿼리 없는 `/u/{handle}`, `og:image`는 `/u/{handle}/social.png?v={revision}`.
+- `og:image:width=1200`, `og:image:height=630`, `og:image:type`, `og:image:alt`, `og:locale`, `og:locale:alternate`, `twitter:card=summary_large_image`와 `twitter:title|description|image|image:alt`를 포함한다.
+- 속성값은 HTML 이스케이프한다. 특히 `&`는 `&amp;`로 출력한다.
+- `v` 리비전 토큰은 `uploadedAt`을 초 단위 epoch로 변환해 사용한다. `presentationDigest`는 cardStyle만 반영하므로 사용하지 않는다.
+- 문구 로케일은 요청 `?locale`을 우선하고, 없으면 소유자 저장 `cardLocale`을 따른다. 이미지는 이 값에 영향받지 않는다.
+- `isProfileBackendRoutePath`에 `/u/{handle}` HTML 경로를 추가한다. `looksLikeStaticAsset` 판정과 겹치지 않도록 `/u/{handle}/...` 하위 경로는 기존 규칙을 유지한다.
+- HTML 응답 캐시 헤더는 짧은 `s-maxage`와 `must-revalidate`로 두고 값은 테스트에 고정한다.
+
+### 검증
+
+```bash
+npm test
+git status --short
+git diff --check
+```
+
+### 커밋
+
+```text
+Task #78 Stage 1: 공유 라우트 승격과 Open Graph 태그 계약
+```
+
+## Stage 2 — 소셜 캔버스와 단일 이미지
+
+### 산출물
+
+신규:
+
+- `src/profile-card/social-canvas.js`
+- `src/profile-card/__tests__/social-canvas.test.js`
+
+수정:
+
+- `src/profile-card/renderer.js`
+- `src/profile-card/service-core.js`
+- `src/profile-media/media-store-contract.js`
+- `src/profile-media/publication-service.js`
+- `src/profile-media/maintenance-contract.js`
+- `src/profile-backend/http.js`
+- `scripts/cleanup-orphan-card-media.mjs`
+- 각 영역 `__tests__`
+
+### 변경 내용
+
+- 1200x630 캔버스에 기존 1497x918 카드를 약 960x589로 축소해 중앙 배치한다. 좌우 약 120px, 상하 약 20px 안전 여백을 둔다. 배경은 카드 테마 배경색을 따른다.
+- 카드 렌더 결과를 재사용하고 렌더러의 시각 디자인은 바꾸지 않는다.
+- 미디어 식별자에 `format` 축을 추가한다. `card` format은 기존 locale x theme 축을 유지하고, `social` format은 축 없는 단일 stable key를 갖는다.
+- `publishOwnerCard`에 `social` 객체 생성을 편입한다. publish, 카드 설정 저장 경유의 `ensurePublishedCardVariants`, 사용량 갱신 refresh가 모두 같은 경로를 지나므로 별도 트리거를 만들지 않는다.
+- `unpublishOwnerCard`가 `social` 객체도 함께 제거하게 한다.
+- `GET|HEAD /u/{handle}/social.png` 라우트를 추가한다. theme/locale 쿼리는 받지 않고 `v`는 무시 가능한 캐시 버스터로 취급한다. 응답 계약은 기존 `card.png`와 동일하게 ETag, 304, 404를 지원한다.
+- orphan cleanup 판정에 `social` stable key를 포함한다.
+- `/u/{handle}/card.png`의 경로, 응답, ETag는 변경하지 않는다.
+
+### 검증
+
+```bash
+npm test
+npm run cleanup:card-media -- --dry-run
+git diff --check
+```
+
+- 로컬 서버에서 다음을 확인한다.
+  - `curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" .../u/{handle}/social.png`
+  - 출력 PNG가 1200x630이고 좌우 여백이 설계값과 일치
+  - 카드 설정을 light/en으로 저장한 뒤 같은 URL의 이미지가 갱신
+  - 저장 전후 소셜 객체가 하나만 존재
+  - unpublish 후 `social.png`가 404
+  - `card.png` 바이트 무변경
+
+### 커밋
+
+```text
+Task #78 Stage 2: 소셜 1200x630 캔버스와 단일 social.png 발행
+```
+
+## Stage 3 — 서버 OG 주입
+
+### 산출물
+
+수정:
+
+- `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/production-server.js`
+- `src/profile-runtime/static-assets.js`
+- `src/profile-runtime/dev-server.js`
+- `src/profile-backend/http.js`
+- 각 영역 `__tests__`
+
+### 변경 내용
+
+- 세 런타임이 `/u/{handle}` GET/HEAD에서 index.html을 읽고 Stage 1의 태그 집합을 `<head>`에 주입해 반환하게 한다.
+- 주입은 공통 함수 하나를 공유해 런타임별 분기가 문자열 생성이 아니라 자산 로딩에만 남게 한다.
+- 비공개·미존재 handle은 사이트 기본 태그로 폴백하고 상태 코드는 200을 유지한다. 프로필 존재 여부를 상태 코드로 구분하지 않는다.
+- 정적 자산 경로와 API 경로는 기존 동작을 유지한다.
+
+### 검증
+
+```bash
+npm test
+git diff --check
+```
+
+- 크롤러 User-Agent로 세 런타임 응답을 대조한다.
+  - `curl -sA "Twitterbot/1.0" .../u/{handle} | grep -o '<meta [^>]*>'`
+  - `curl -sA "facebookexternalhit/1.1" .../u/{handle}`
+  - `curl -sA "kakaotalk-scrap/1.0" .../u/{handle}`
+- 비공개 handle과 미존재 handle 응답이 동일한지 확인한다.
+
+### 커밋
+
+```text
+Task #78 Stage 3: Workers/Node/dev 런타임 Open Graph 주입
+```
+
+## Stage 4 — 공개 카드 통일과 소유자 안내
+
+### 산출물
+
+수정:
+
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/profile-ui/messages.js`
+- `src/styles.css`
+- `src/profile-ui/__tests__/`
+
+### 변경 내용
+
+- raw `<img className="public-profile-card">`를 `MarketingCardPreview`로 교체한다. 600px 상한, hover-tilt, BorderBeam, 스켈레톤, glare가 함께 적용된다.
+- 더 이상 쓰이지 않는 `.public-profile-card` 규칙을 정리한다. 새 카드 CSS는 만들지 않는다.
+- unavailable 분기에서, 인증된 세션의 handle과 경로 handle이 일치할 때만 "아직 비공개" 안내와 `카드 공개하기` CTA를 노출한다.
+- CTA는 `client.updateProfileVisibility("public")`를 호출하고 성공 시 공개 프로필을 재조회한다. 자동 전환은 하지 않는다.
+- 소유자 판별은 클라이언트 세션 비교로만 수행한다. `/api/profiles/public/{handle}` 응답은 변경하지 않는다.
+- ko/en 메시지를 추가한다.
+
+### 검증
+
+```bash
+npm test
+git diff --check
+```
+
+- 1440px 뷰포트에서 `/profile`과 `/u/{handle}` 카드 실측이 600x368로 일치하는지 확인한다.
+- 비공개 handle과 미존재 handle의 `/api/profiles/public/{handle}` 응답을 status, body, 헤더까지 대조한다.
+- 비로그인 방문자와 다른 계정 방문자에게 안내가 노출되지 않는지 확인한다.
+
+### 커밋
+
+```text
+Task #78 Stage 4: 공개 카드 컴포넌트 통일과 비공개 소유자 안내
+```
+
+## Stage 5 — 모션 공용화와 인트로 모달
+
+### Stage 5.1 산출물
+
+신규:
+
+- `src/profile-ui/useCardHandoffMotion.js`
+- `src/profile-ui/__tests__/useCardHandoffMotion.test.js`
+
+수정:
+
+- `src/profile-ui/ShareStudio.jsx`
+
+### Stage 5.1 변경 내용
+
+- `buildRectTransform`, `resolveSourceRect`, 열기·닫기·handoff 시퀀스를 공용 훅으로 추출한다.
+- `ShareStudio`는 훅을 사용하도록 바꾸고 동작은 그대로 유지한다. 이 하위 단계에서는 새 기능을 넣지 않는다.
+
+### Stage 5.2 산출물
+
+신규:
+
+- `src/profile-ui/PublicCardIntro.jsx`
+- `src/profile-ui/__tests__/PublicCardIntro.test.js`
+
+수정:
+
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/styles.css`
+- `src/profile-ui/messages.js`
+
+### Stage 5.2 변경 내용
+
+- `PublicProfilePage` 진입 시 배경 블러 모달로 카드를 노출한다. 매 진입마다 표시하며 로그인 상태로 자기 링크를 열 때도 동일하다.
+- 등장은 360도 회전으로 정의한다. `hover-tilt`가 자체 transform을 쓰므로 회전은 바깥 래퍼에 `perspective`와 함께 적용한다.
+- 닫으면 하단 `공유된 Codex 카드` 위치로 인계한다. 목적지가 뷰포트 밖이면 먼저 스크롤로 이동시킨 뒤 인계하거나 목적지 rect를 스크롤 보정한다.
+- 모달 안에 카드 생성 CTA를 배치한다.
+- `prefers-reduced-motion`이면 회전을 생략한다.
+
+### 검증
+
+```bash
+npm test
+npm run test:e2e
+git diff --check
+```
+
+- Stage 5.1 완료 시 홈과 `/profile`의 Share Studio 열기·닫기·handoff 회귀가 없는지 먼저 확인한다.
+- Stage 5.2는 모달 열기, 닫기 인계, 스크롤 보정, reduced-motion 분기를 확인한다.
+
+### 커밋
+
+```text
+Task #78 [Stage 5.1]: Share Studio 인계 모션 공용 훅 추출
+Task #78 [Stage 5.2]: 공개 프로필 카드 인트로 모달
+```
+
+## Stage 6 — Share Studio 재구성과 통합 검증
+
+### 산출물
+
+수정:
+
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/shareStudio.js`
+- `src/profile-ui/cardShare.js`
+- `src/profile-ui/messages.js`
+- `docs/readme-card.md`
+- 각 영역 `__tests__`
+
+### 변경 내용
+
+- 보조 액션을 1차 `공유 링크 복사`(HTML 주소), 2차 `README Markdown`, 3차 `이미지 원본 주소` 순으로 재배치한다.
+- `buildShareTargets`가 X, LinkedIn, Reddit intent에 공유 링크를 전달하게 한다.
+- ko/en 메시지를 갱신한다.
+- `docs/readme-card.md`의 공유 흐름 절을 갱신한다. 기존 내용을 먼저 읽고 바뀐 부분만 수정한다.
+
+### 검증
+
+```bash
+npm test
+npm run test:e2e
+git status --short
+git diff --check
+```
+
+- Issue #78 수용 기준 10개 항목을 재확인한다.
+- 배포 후 X, Threads, 카카오톡에서 실제 공유를 확인하고 카카오 OG 캐시 초기화 도구를 실행한다.
+
+### 커밋
+
+```text
+Task #78 Stage 6: Share Studio 액션 재구성과 공유 문서 갱신
+```
+
+## 검증
+
+- 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
+- 실패한 검증은 단계 완료로 처리하지 않는다.
+- 계획 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자 승인을 받는다.
+- 문서 위치가 수행계획서 판단과 달라지면 구현 전에 갱신하고 승인을 받는다.
+
+## 커밋
+
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_78_stage{N}.md`를 함께 묶는다.
+- 커밋 메시지는 `Task #78 Stage {N}: {요약}`, 하위 단계는 `Task #78 [Stage {N.M}]: {요약}` 형식을 따른다.
+
+## 단계 의존성
+
+- Stage 2는 Stage 1의 `v` 토큰 형식과 이미지 URL 형태 확정 후 진행한다.
+- Stage 3은 Stage 1의 태그 생성 함수와 Stage 2의 `social.png` 경로가 모두 있어야 실제 응답을 검증할 수 있다.
+- Stage 5.2는 Stage 4의 `MarketingCardPreview` 교체와 Stage 5.1의 훅 추출이 끝난 뒤 진행한다.
+- Stage 6의 실플랫폼 확인은 배포 이후에만 가능하므로, 배포 전에는 크롤러 UA 응답 확인까지만 수행한다.
+
+## 위험과 대응
+
+- **Share Studio 회귀**: Stage 5.1을 기능 변경 없는 추출로 한정하고, 홈과 `/profile` 동작 확인을 통과한 뒤에만 5.2로 넘어간다.
+- **세 런타임 불일치**: Stage 3에서 태그 문자열 생성을 공통 함수로 두고 세 응답을 대조한다.
+- **소셜 이미지 갱신 누락**: 갱신을 기존 `publishOwnerCard` 경로에 편입해 publish·설정 저장·refresh가 항상 같은 경로를 지나게 한다.
+- **미디어 키 하위 호환**: 기존 `card` format 키를 먼저 고정한 뒤 `social` format을 추가한다. cleanup 판정에서 기존 객체가 orphan으로 오인되지 않는지 dry-run으로 확인한다.
+- **handle 열거 오라클**: Stage 4 검증에 비공개와 미존재 응답 동일성 대조를 포함한다.
+- **플랫폼 캐시**: Stage 6 실측은 신규 공유 또는 캐시 초기화 이후에 수행한다.
+
+## 승인 요청 사항
+
+- 6단계 분할과 Stage 5의 하위 단계 구성
+- 각 Stage의 산출물 경로와 신규 모듈 이름
+- 각 Stage의 검증 명령
+- 커밋 메시지 형식과 문구
+- Stage 6의 실플랫폼 확인을 배포 이후로 미루는 검증 순서
