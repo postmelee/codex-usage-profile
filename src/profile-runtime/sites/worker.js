@@ -4,9 +4,17 @@ import {
 } from "../host-adapter.js";
 import {
   PROFILE_SITES_PROVIDER_RETRY_AFTER_SECONDS,
+  createProfileSitesBackendDependencies,
   createProfileSitesBackendHandler,
   createProfileSitesOperationalStopResponse
 } from "./backend.js";
+import {
+  createPublicProfileDocumentHandler,
+  isPublicProfileDocumentRequest
+} from "../public-profile-document.js";
+import {
+  createStorePublicProfileResolver
+} from "../public-profile-resolver.js";
 import { loadProfileSitesConfig } from "./config.js";
 import {
   PROFILE_SITES_MAINTENANCE_PATH,
@@ -101,12 +109,48 @@ async function handleProfileSitesRequest(
     rateLimiterOptions: options.rateLimiterOptions ??
       config.accountUsageRateLimit
   });
+  const documentResponse = await handleSitesPublicProfileDocument(request, {
+    config,
+    environment,
+    options
+  });
+  if (documentResponse) return documentResponse;
+
   const hostHandler = createProfileHostAdapter({
     apiHandler: backendHandler,
     frontendHandler: createSitesAssetHandler(environment)
   });
 
   return hostHandler(request);
+}
+
+async function handleSitesPublicProfileDocument(request, context) {
+  if (!isPublicProfileDocumentRequest(request)) return null;
+  if (typeof context.environment.ASSETS?.fetch !== "function") return null;
+
+  let store;
+  try {
+    store = createProfileSitesBackendDependencies({
+      database: context.config.database,
+      media: context.config.media
+    }).store;
+  } catch {
+    return null;
+  }
+
+  const handler = createPublicProfileDocumentHandler({
+    loadIndexHtml: async (documentRequest) => {
+      const response = await context.environment.ASSETS.fetch(new Request(
+        new URL(INDEX_PATH, documentRequest.url),
+        documentRequest
+      ));
+      return response.ok ? response.text() : null;
+    },
+    publicBaseUrl: context.config.publicBaseUrl,
+    resolveProfile: createStorePublicProfileResolver(store)
+  });
+
+  return handler(request);
 }
 
 export function createProfileSitesHealthResponse(environment = {}, options = {}) {

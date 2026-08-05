@@ -108,6 +108,25 @@ test("Sites backend fixes maintenance, owner-only, and quota stop semantics", as
   assert.equal(ownerOnly.status, 404);
   assert.equal((await ownerOnly.json()).error.code, "not_found");
 
+  // The public profile document and its social image close with the rest of
+  // the public surface, otherwise owner-only would still expose Open Graph
+  // thumbnails to external crawlers.
+  for (const pathname of ["/u/private-owner", "/u/private-owner/social.png"]) {
+    const stopped = createProfileSitesOperationalStopResponse(
+      new Request(`https://profile.test${pathname}`),
+      { serviceMode: "owner-only" }
+    );
+    assert.equal(stopped.status, 404, pathname);
+    assert.equal((await stopped.json()).error.code, "not_found", pathname);
+  }
+  assert.equal(
+    createProfileSitesOperationalStopResponse(
+      new Request("https://profile.test/u/private-owner"),
+      { serviceMode: "normal" }
+    ),
+    null
+  );
+
   const quota = createProfileSitesOperationalStopResponse(
     new Request("https://profile.test/api/account-usage/submit", {
       method: "POST"

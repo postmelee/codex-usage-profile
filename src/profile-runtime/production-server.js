@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +39,12 @@ import {
   assertStaticAssetRoot,
   createStaticAssetHandler
 } from "./static-assets.js";
+import {
+  createPublicProfileDocumentHandler
+} from "./public-profile-document.js";
+import {
+  createStorePublicProfileResolver
+} from "./public-profile-resolver.js";
 
 export const DEFAULT_HEALTH_PATH = "/healthz";
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 8_000;
@@ -98,6 +105,7 @@ export function createProductionMediaStore(options = {}) {
 export function createProductionNodeHandler(options = {}) {
   const {
     apiHandler,
+    documentHandler = null,
     frontendHandler,
     apiPrefix = DEFAULT_API_PREFIX,
     healthPath = DEFAULT_HEALTH_PATH,
@@ -124,7 +132,10 @@ export function createProductionNodeHandler(options = {}) {
       const request = createWebRequestFromNodeRequest(nodeRequest, {
         url: requestUrl.toString()
       });
-      const response = await hostHandler(request);
+      const documentResponse = documentHandler
+        ? await documentHandler(request)
+        : null;
+      const response = documentResponse ?? await hostHandler(request);
       await writeWebResponseToNodeResponse(response, nodeResponse);
     } catch (error) {
       writeNodeErrorResponse(nodeResponse, error);
@@ -220,10 +231,20 @@ export async function startProfileProductionServer(options = {}) {
     const frontendHandler = options.frontendHandler ?? createStaticAssetHandler({
       rootDirectory
     });
+    const documentHandler = options.documentHandler ??
+      createPublicProfileDocumentHandler({
+        loadIndexHtml: async () => readFile(
+          resolve(rootDirectory, "index.html"),
+          "utf8"
+        ).catch(() => null),
+        publicBaseUrl: deploymentConfig.canonicalAppOrigin,
+        resolveProfile: createStorePublicProfileResolver(store)
+      });
     server = options.server ?? createHttpServer(
       createProductionNodeHandler({
         apiHandler,
         apiPrefix: options.apiPrefix ?? DEFAULT_API_PREFIX,
+        documentHandler,
         frontendHandler,
         publicBaseUrl: deploymentConfig.canonicalAppOrigin
       })

@@ -24,6 +24,15 @@ import {
 import {
   createProfileRuntimeBackendHandler
 } from "./runtime-backend.js";
+import {
+  createPublicProfileDocumentHandler
+} from "./public-profile-document.js";
+import {
+  createStorePublicProfileResolver
+} from "./public-profile-resolver.js";
+import {
+  createFileProfileBackendStore
+} from "../profile-backend/index.js";
 
 export {
   createNodeRequestUrl,
@@ -44,6 +53,7 @@ export function createProfileRuntimeNodeHandler(options = {}) {
   const {
     apiHandler,
     apiPrefix = DEFAULT_API_PREFIX,
+    documentHandler = null,
     frontendMiddleware = createMissingFrontendMiddleware(),
     publicBaseUrl
   } = options;
@@ -66,6 +76,17 @@ export function createProfileRuntimeNodeHandler(options = {}) {
 
         await writeWebResponseToNodeResponse(response, nodeResponse);
         return;
+      }
+
+      if (documentHandler) {
+        const request = createWebRequestFromNodeRequest(nodeRequest, {
+          url: requestUrl
+        });
+        const documentResponse = await documentHandler(request);
+        if (documentResponse) {
+          await writeWebResponseToNodeResponse(documentResponse, nodeResponse);
+          return;
+        }
       }
 
       frontendMiddleware(nodeRequest, nodeResponse, (error) => {
@@ -97,15 +118,23 @@ export async function startProfileRuntimeDevServer(options = {}) {
     requireGitHubOAuth: options.requireGitHubOAuth === true
   });
   const vite = options.viteServer ?? await createViteMiddlewareServer(options);
+  const store = options.store ?? createFileProfileBackendStore({
+    createIfMissing: true,
+    filePath: config.profileStoreFile
+  });
   const apiHandler = options.apiHandler ?? createProfileRuntimeBackendHandler({
     ...options,
     config,
-    env
+    env,
+    store
   });
+  const documentHandler = options.documentHandler ??
+    createDevPublicProfileDocumentHandler({ config, store, vite });
   const server = options.server ?? createHttpServer(
     createProfileRuntimeNodeHandler({
       apiHandler,
       apiPrefix: options.apiPrefix ?? DEFAULT_API_PREFIX,
+      documentHandler,
       frontendMiddleware: vite.middlewares,
       publicBaseUrl: config.publicBaseUrl
     })
@@ -130,6 +159,30 @@ export async function startProfileRuntimeDevServer(options = {}) {
       ]);
     }
   };
+}
+
+export function createDevPublicProfileDocumentHandler(options = {}) {
+  const { config, store, vite } = options;
+  if (!config || !store || typeof vite?.transformIndexHtml !== "function") {
+    return null;
+  }
+
+  const indexPath = resolve(process.cwd(), "index.html");
+  return createPublicProfileDocumentHandler({
+    loadIndexHtml: async (request) => {
+      try {
+        const html = readFileSync(indexPath, "utf8");
+        return await vite.transformIndexHtml(
+          new URL(request.url).pathname,
+          html
+        );
+      } catch {
+        return null;
+      }
+    },
+    publicBaseUrl: config.publicBaseUrl,
+    resolveProfile: createStorePublicProfileResolver(store)
+  });
 }
 
 export async function createViteMiddlewareServer(options = {}) {
