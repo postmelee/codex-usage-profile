@@ -8,9 +8,9 @@ GitHub Issue: [#78](https://github.com/postmelee/codex-usage-profile/issues/78)
 
 | Stage | 제목 | 주요 산출 | 검증 |
 |---|---|---|---|
-| 1 | 공유 라우트와 OG 계약 | `src/profile-runtime/open-graph.js`, `src/profile-runtime/host-adapter.js` | `npm test`, 태그 계약 단위 테스트 |
+| 1 | OG 계약과 문서 핸들러 | `src/profile-runtime/open-graph.js`, `src/profile-runtime/public-profile-document.js` | `npm test`, 태그 계약 단위 테스트 |
 | 2 | 소셜 캔버스와 단일 이미지 | `src/profile-card/social-canvas.js`, `src/profile-media/publication-service.js` | `npm test`, PNG 크기·단일 객체·갱신 확인 |
-| 3 | 서버 OG 주입 | `sites/worker.js`, `production-server.js`, `dev-server.js` | `npm test`, 크롤러 UA 3런타임 대조 |
+| 3 | 런타임 연결과 운영 모드 | `sites/worker.js`, `sites/backend.js`, `production-server.js`, `dev-server.js` | `npm test`, 크롤러 UA 3런타임 대조, owner-only 차단 |
 | 4 | 공개 카드 통일과 소유자 안내 | `src/profile-ui/PublicProfilePage.jsx` | `npm test`, 실측 600x368, 응답 균일성 |
 | 5 | 모션 공용화와 인트로 모달 | `src/profile-ui/useCardHandoffMotion.js`, `PublicCardIntro.jsx` | `npm test`, `npm run test:e2e` |
 | 6 | Share Studio 재구성과 통합 검증 | `ShareStudio.jsx`, `docs/readme-card.md` | `npm test`, `npm run test:e2e`, 실플랫폼 확인 |
@@ -21,19 +21,20 @@ GitHub Issue: [#78](https://github.com/postmelee/codex-usage-profile/issues/78)
 |---|---|---|---|---|
 | `docs/readme-card.md` | `docs/` | `docs/readme-card.md` (Stage 6) | OK | 새 문서를 만들지 않고 공유 흐름 절만 수정 |
 
-## Stage 1 — 공유 라우트와 OG 계약
+## Stage 1 — OG 계약과 문서 핸들러
 
 ### 산출물
 
 신규:
 
 - `src/profile-runtime/open-graph.js`
+- `src/profile-runtime/public-profile-document.js`
 - `src/profile-runtime/__tests__/open-graph.test.js`
+- `src/profile-runtime/__tests__/public-profile-document.test.js`
 
 수정:
 
-- `src/profile-runtime/host-adapter.js`
-- `src/profile-runtime/__tests__/host-adapter.test.js`
+- 없음. `host-adapter.js`는 건드리지 않는다.
 
 ### 변경 내용
 
@@ -43,8 +44,11 @@ GitHub Issue: [#78](https://github.com/postmelee/codex-usage-profile/issues/78)
 - 속성값은 HTML 이스케이프한다. 특히 `&`는 `&amp;`로 출력한다.
 - `v` 리비전 토큰은 `uploadedAt`을 초 단위 epoch로 변환해 사용한다. `presentationDigest`는 cardStyle만 반영하므로 사용하지 않는다.
 - 문구 로케일은 요청 `?locale`을 우선하고, 없으면 소유자 저장 `cardLocale`을 따른다. 이미지는 이 값에 영향받지 않는다.
-- `isProfileBackendRoutePath`에 `/u/{handle}` HTML 경로를 추가한다. `looksLikeStaticAsset` 판정과 겹치지 않도록 `/u/{handle}/...` 하위 경로는 기존 규칙을 유지한다.
-- HTML 응답 캐시 헤더는 짧은 `s-maxage`와 `must-revalidate`로 두고 값은 테스트에 고정한다.
+- `createPublicProfileDocumentHandler({ loadIndexHtml, resolveProfile, publicBaseUrl })`를 만든다. `/u/{handle}` GET/HEAD를 판별하고, 프로필을 조회해 태그를 만들고, index.html의 `<head>`에 주입해 응답한다. 매칭되지 않으면 `null`을 반환해 호출 측이 기존 처리로 넘어가게 한다.
+- 라우팅 경계는 바꾸지 않는다. `isProfileBackendRoutePath`와 `looksLikeStaticAsset`은 그대로 두고 `host-adapter.js`를 수정하지 않는다. Sites 백엔드 핸들러는 `environment.ASSETS`를 받지 않으므로 라우트를 승격하면 index.html을 읽을 수 없다.
+- `resolveProfile`은 단일 인덱스 조회로 제한한다. handle에서 owner와 최신 usage의 `uploadedAt`만 얻고 카드 렌더나 미디어 조회를 하지 않는다.
+- HTML 응답 캐시 헤더는 짧은 `s-maxage`와 `must-revalidate`로 두고 값은 테스트에 고정한다. 핸들별 응답이 섞이지 않도록 `vary`와 캐시 키 조건을 테스트로 고정한다.
+- `loadIndexHtml`은 주입 지점에서 문자열을 반환하는 비동기 함수로 정의한다. 런타임별 구현은 Stage 3에서 연결한다.
 
 ### 검증
 
@@ -54,10 +58,12 @@ git status --short
 git diff --check
 ```
 
+- `host-adapter.js`와 그 테스트가 변경되지 않았는지 `git status --short`로 확인한다.
+
 ### 커밋
 
 ```text
-Task #78 Stage 1: 공유 라우트 승격과 Open Graph 태그 계약
+Task #78 Stage 1: Open Graph 태그 계약과 공개 프로필 문서 핸들러
 ```
 
 ## Stage 2 — 소셜 캔버스와 단일 이미지
@@ -113,24 +119,27 @@ git diff --check
 Task #78 Stage 2: 소셜 1200x630 캔버스와 단일 social.png 발행
 ```
 
-## Stage 3 — 서버 OG 주입
+## Stage 3 — 런타임 연결과 운영 모드 반영
 
 ### 산출물
 
 수정:
 
 - `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/sites/backend.js`
 - `src/profile-runtime/production-server.js`
-- `src/profile-runtime/static-assets.js`
 - `src/profile-runtime/dev-server.js`
-- `src/profile-backend/http.js`
 - 각 영역 `__tests__`
+
+`static-assets.js`와 `host-adapter.js`는 수정하지 않는다.
 
 ### 변경 내용
 
-- 세 런타임이 `/u/{handle}` GET/HEAD에서 index.html을 읽고 Stage 1의 태그 집합을 `<head>`에 주입해 반환하게 한다.
-- 주입은 공통 함수 하나를 공유해 런타임별 분기가 문자열 생성이 아니라 자산 로딩에만 남게 한다.
+- Sites: `handleProfileSitesRequest`에서 문서 핸들러를 조립한다. `loadIndexHtml`은 `environment.ASSETS.fetch(new Request(INDEX_PATH, request))`, `resolveProfile`은 D1 store 조회를 사용한다. 문서 핸들러가 `null`을 반환하면 기존 `hostHandler` 경로로 넘어간다.
+- Node 프로덕션: `startProductionServer`에서 같은 조립을 수행한다. `loadIndexHtml`은 빌드 산출물의 index.html 읽기를 사용한다.
+- dev: `createProfileRuntimeNodeHandler`에서 `/u/{handle}`을 vite 미들웨어보다 먼저 처리한다. `loadIndexHtml`은 루트 index.html을 읽어 `vite.transformIndexHtml(url, html)`을 거친 문자열을 반환한다. dev store는 `config.profileStoreFile` 기반 파일 store로 구성한다.
 - 비공개·미존재 handle은 사이트 기본 태그로 폴백하고 상태 코드는 200을 유지한다. 프로필 존재 여부를 상태 코드로 구분하지 않는다.
+- `createProfileSitesOperationalStopResponse`의 `owner-only` 차단 판정에 `/^\/u\/[^/]+$/` GET/HEAD를 추가한다. 차단 응답은 기존 공개 라우트와 같은 형태를 따른다.
 - 정적 자산 경로와 API 경로는 기존 동작을 유지한다.
 
 ### 검증
@@ -145,11 +154,14 @@ git diff --check
   - `curl -sA "facebookexternalhit/1.1" .../u/{handle}`
   - `curl -sA "kakaotalk-scrap/1.0" .../u/{handle}`
 - 비공개 handle과 미존재 handle 응답이 동일한지 확인한다.
+- `PROFILE_SERVICE_MODE=owner-only`에서 `/u/{handle}` HTML이 차단되고, `normal`에서는 정상 응답하는지 확인한다.
+- HTML 응답의 캐시 헤더와 `vary`를 확인한다.
+- `git status --short`로 `static-assets.js`와 `host-adapter.js`가 변경되지 않았는지 확인한다.
 
 ### 커밋
 
 ```text
-Task #78 Stage 3: Workers/Node/dev 런타임 Open Graph 주입
+Task #78 Stage 3: 런타임별 문서 핸들러 연결과 owner-only 차단
 ```
 
 ## Stage 4 — 공개 카드 통일과 소유자 안내
@@ -299,14 +311,17 @@ Task #78 Stage 6: Share Studio 액션 재구성과 공유 문서 갱신
 ## 단계 의존성
 
 - Stage 2는 Stage 1의 `v` 토큰 형식과 이미지 URL 형태 확정 후 진행한다.
-- Stage 3은 Stage 1의 태그 생성 함수와 Stage 2의 `social.png` 경로가 모두 있어야 실제 응답을 검증할 수 있다.
+- Stage 3은 Stage 1의 문서 핸들러와 Stage 2의 `social.png` 경로가 모두 있어야 실제 응답을 검증할 수 있다.
 - Stage 5.2는 Stage 4의 `MarketingCardPreview` 교체와 Stage 5.1의 훅 추출이 끝난 뒤 진행한다.
 - Stage 6의 실플랫폼 확인은 배포 이후에만 가능하므로, 배포 전에는 크롤러 UA 응답 확인까지만 수행한다.
 
 ## 위험과 대응
 
 - **Share Studio 회귀**: Stage 5.1을 기능 변경 없는 추출로 한정하고, 홈과 `/profile` 동작 확인을 통과한 뒤에만 5.2로 넘어간다.
-- **세 런타임 불일치**: Stage 3에서 태그 문자열 생성을 공통 함수로 두고 세 응답을 대조한다.
+- **세 런타임 불일치**: 태그 생성과 주입을 공통 모듈에 두고 런타임별로는 `loadIndexHtml`만 다르게 주입한다. Stage 3에서 세 응답을 대조한다.
+- **라우팅 경계 훼손**: `isProfileBackendRoutePath`는 `looksLikeStaticAsset`과 공유되므로 수정하지 않는다. Stage 1과 Stage 3 검증에 해당 파일 무변경 확인을 포함한다.
+- **D1 hot path**: OG HTML은 공개 카드 PNG와 달리 D1을 탄다. 조회를 단일 인덱스 읽기로 제한하고 짧은 edge 캐시를 둔다.
+- **owner-only 노출**: 공개를 닫은 상태에서 OG 썸네일이 노출되지 않도록 Stage 3에서 차단 목록을 확장하고 모드별 응답을 검증한다.
 - **소셜 이미지 갱신 누락**: 갱신을 기존 `publishOwnerCard` 경로에 편입해 publish·설정 저장·refresh가 항상 같은 경로를 지나게 한다.
 - **미디어 키 하위 호환**: 기존 `card` format 키를 먼저 고정한 뒤 `social` format을 추가한다. cleanup 판정에서 기존 객체가 orphan으로 오인되지 않는지 dry-run으로 확인한다.
 - **handle 열거 오라클**: Stage 4 검증에 비공개와 미존재 응답 동일성 대조를 포함한다.
