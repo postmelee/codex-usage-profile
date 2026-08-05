@@ -46,6 +46,10 @@ export function createProfileCardServiceCore(options = {}) {
     cacheEntries = DEFAULT_PROFILE_CARD_CACHE_ENTRIES
   } = options;
   const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (async () => {});
+  const renderSocialPng = options.renderSocialPng ??
+    (typeof renderPng?.renderSocial === "function"
+      ? renderPng.renderSocial
+      : null);
 
   if (!store) {
     throw new TypeError("store is required");
@@ -88,10 +92,15 @@ export function createProfileCardServiceCore(options = {}) {
       let mediaPreparation = null;
       const presentationChanged = serializeCardStyle(current.cardStyle) !==
         serializeCardStyle(cardStyle);
-      if (current.visibility === PROFILE_VISIBILITY.PUBLIC && presentationChanged) {
+      const localeChanged = resolveCardLocale(current.cardLocale) !== cardLocale;
+      if (
+        current.visibility === PROFILE_VISIBILITY.PUBLIC &&
+        (presentationChanged || localeChanged)
+      ) {
         mediaPreparation = await ensureCardStyleMedia({
           owner: current,
           usageRecord,
+          cardLocale,
           cardStyle
         });
       }
@@ -134,6 +143,35 @@ export function createProfileCardServiceCore(options = {}) {
         includeBody: renderOptions.includeBody !== false,
         ifNoneMatch: renderOptions.ifNoneMatch
       });
+    },
+
+    supportsSocialCard() {
+      return typeof renderSocialPng === "function";
+    },
+
+    async renderOwnerSocialCard(renderOptions = {}) {
+      if (typeof renderSocialPng !== "function") {
+        throw new TypeError("renderSocialPng must be a function");
+      }
+
+      const owner = await requireOwnerById(store, renderOptions.ownerId);
+      const usageRecord = await requireUsageByOwnerId(store, owner.id);
+      const locale = resolveCardLocale(renderOptions.locale);
+      const theme = normalizeCardTheme(renderOptions.theme);
+      const usage = normalizeAccountUsageReadResult(usageRecord.usage);
+      const avatarSource = await loadOwnerAvatar(owner);
+      const viewModel = buildCardViewModel({ locale, owner, theme, usage });
+      const body = Buffer.from(
+        await renderSocialPng(viewModel, { avatarSource, theme })
+      );
+
+      return {
+        body,
+        etag: createProfileCardEtag(body),
+        locale,
+        revision: createProfileCardRevision(body),
+        theme
+      };
     },
 
     async renderPublicCard(renderOptions = {}) {

@@ -963,6 +963,7 @@ test("updates versioned owner card settings and validates the exact payload", as
   assert.equal(fixture.store.getOwnerById("owner_1").cardLocale, "ko");
   assert.equal(ensureCalls.length, 1);
   assert.equal(ensureCalls[0].owner.id, "owner_1");
+  assert.equal(ensureCalls[0].cardLocale, "ko");
 
   const localeOnly = await requestJson(
     fixture.handler,
@@ -977,7 +978,10 @@ test("updates versioned owner card settings and validates the exact payload", as
     localeOnly.body.data.selectedPublicCardUrl,
     `${BASE_URL}/u/postmelee/card.png?theme=light`
   );
-  assert.equal(ensureCalls.length, 1);
+  // A locale-only change still prepares media because the single social image
+  // is rendered from the saved card locale.
+  assert.equal(ensureCalls.length, 2);
+  assert.equal(ensureCalls[1].cardLocale, "en");
 
   assert.equal(injected.status, 400);
   assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);

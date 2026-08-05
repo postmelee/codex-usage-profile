@@ -117,6 +117,7 @@ export function createProfileBackendHttpHandler(options = {}) {
     async (ensureOptions) => publicationService?.ensurePublishedCardVariants?.({
       ownerId: ensureOptions.owner.id,
       owner: ensureOptions.owner,
+      cardLocale: ensureOptions.cardLocale,
       cardStyle: ensureOptions.cardStyle
     })
   );
@@ -126,6 +127,7 @@ export function createProfileBackendHttpHandler(options = {}) {
     now,
     fetchImpl: options.profileCardFetchImpl ?? options.fetchImpl,
     renderPng: options.profileCardRenderPng,
+    renderSocialPng: options.profileCardRenderSocialPng,
     rendererVersion: options.profileCardRendererVersion,
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,

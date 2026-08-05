@@ -12,6 +12,7 @@ import {
   normalizeCardStyle
 } from "../profile-card/presentation.js";
 import {
+  PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_FORMAT,
   PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
   PROFILE_MEDIA_STORE_CONTRACT_VERSION,
@@ -20,7 +21,8 @@ import {
   PROFILE_MEDIA_SUPPORTED_LOCALES,
   PROFILE_MEDIA_SUPPORTED_THEMES,
   assertProfileMediaStoreContract,
-  createProfileMediaStoreError
+  createProfileMediaStoreError,
+  supportsProfileMediaSocialCard
 } from "./media-store-contract.js";
 
 export function createProfilePublicationService(options = {}) {
@@ -99,6 +101,14 @@ export function createProfilePublicationService(options = {}) {
           presentationDigest
         );
       if (publicationMatches) {
+        await writeSocialCard({
+          cardLocale: publishOptions.cardLocale ?? owner.cardLocale,
+          cardStyle,
+          createdAt: toIsoString(now()),
+          owner,
+          presentationDigest,
+          publicationId: current.publication.publicationId
+        });
         return {
           owner,
           usageRecord,
@@ -137,6 +147,14 @@ export function createProfilePublicationService(options = {}) {
 
       const publication = await mediaStore.publishRevision(publicationInput);
       mediaMutation.writtenStorageEtag = publication.storageEtag;
+      await writeSocialCard({
+        cardLocale: publishOptions.cardLocale ?? owner.cardLocale,
+        cardStyle,
+        createdAt,
+        owner,
+        presentationDigest,
+        publicationId: publicationInput.publicationId
+      });
       if (publishOptions.prepareOnly === true) {
         return {
           owner,
@@ -178,6 +196,7 @@ export function createProfilePublicationService(options = {}) {
     }
 
     const result = await publishOwnerCard({
+      cardLocale: ensureOptions.cardLocale,
       cardStyle: ensureOptions.cardStyle,
       ownerId,
       onlyIfAlreadyPublic: true,
@@ -223,6 +242,43 @@ export function createProfilePublicationService(options = {}) {
         });
       }));
     }
+  }
+
+  async function writeSocialCard(options) {
+    if (
+      !supportsProfileMediaSocialCard(mediaStore) ||
+      typeof cardService.renderOwnerSocialCard !== "function" ||
+      cardService.supportsSocialCard?.() === false
+    ) {
+      return null;
+    }
+
+    const staticStyle = createStaticFallbackStyle(
+      options.cardStyle,
+      options.cardStyle.theme
+    );
+    const card = await cardService.renderOwnerSocialCard({
+      ownerId: options.owner.id,
+      locale: options.cardLocale,
+      theme: staticStyle.theme
+    });
+
+    return mediaStore.putSocialCard({
+      body: card.body,
+      contentType: PROFILE_MEDIA_CONTENT_TYPE,
+      createdAt: options.createdAt,
+      etag: card.etag,
+      handle: options.owner.handle,
+      ownerId: options.owner.id,
+      presentationDigest: options.presentationDigest,
+      publicationId: options.publicationId,
+      revision: card.revision
+    });
+  }
+
+  async function removeSocialCard(handle) {
+    if (!supportsProfileMediaSocialCard(mediaStore)) return null;
+    return mediaStore.deleteSocialCard({ handle });
   }
 
   async function putVariantRevision(options) {
@@ -296,6 +352,7 @@ export function createProfilePublicationService(options = {}) {
         const unpublished = await mediaStore.unpublishCard(unpublishInput);
         mediaMutation.tombstoneStorageEtag =
           unpublished?.unpublishedStorageEtag ?? null;
+        await removeSocialCard(owner.handle);
       }
 
       if (
