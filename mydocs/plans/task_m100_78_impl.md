@@ -92,7 +92,7 @@ Task #78 Stage 1: Open Graph 태그 계약과 공개 프로필 문서 핸들러
 - 배치 모듈은 렌더러를 import하지 않는다. 카드 논리 크기를 자체 상수로 두고 렌더러 값과 일치하는지 테스트로 고정해 순환 import를 피한다.
 - Node 렌더러에 `renderProfileSocialCardPng`를 추가한다. 카드 드로잉을 `drawCard`로 분리해 기존 경로와 공유하고, 소셜 경로는 배경을 채운 뒤 translate/scale 후 같은 드로잉을 호출한다.
 - Worker 렌더러의 SVG 본문을 `createWorkerProfileCardBody`로 분리하고 `createWorkerProfileSocialCardSvg`가 1200x630 래퍼에 같은 본문을 배치한다. 렌더 팩토리는 `renderSocial`을 함께 노출한다.
-- 캔버스 배경은 카드 테마 배경색을 그대로 쓴다. 새 색을 도입하지 않는다.
+- 캔버스 여백은 투명으로 둔다. 카드의 크기, 비율, 테두리 곡선은 원본 그대로 유지하고 둥근 모서리가 여백과 구분되어 보이게 한다. 새 색을 도입하지 않는다.
 - 기존 카드 출력의 바이트와 SVG 치수는 변경하지 않는다.
 
 ### Stage 2.2 산출물

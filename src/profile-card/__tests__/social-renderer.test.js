@@ -48,26 +48,49 @@ test("renders the social card as a 1200x630 PNG", async () => {
   assert.equal(image.height, SOCIAL_CANVAS_HEIGHT);
 });
 
-test("keeps the safe area filled with the theme background", async () => {
+test("leaves the padding around the card transparent", async () => {
   const layout = computeSocialCanvasLayout();
   const png = await renderProfileSocialCardPng(createViewModel(), {
     avatarSource: AVATAR_SOURCE,
     theme: "light"
   });
-  const image = await loadImage(png);
-  const canvas = createCanvas(image.width, image.height);
-  const context = canvas.getContext("2d");
-  context.drawImage(image, 0, 0);
+  const context = await drawToContext(png);
 
-  const expected = rgba(CARD_THEME_PALETTES.light.background);
-  assert.deepEqual(readPixel(context, 4, 4), expected);
-  assert.deepEqual(
-    readPixel(context, layout.canvasWidth - 4, layout.canvasHeight - 4),
-    expected
+  assert.equal(readPixel(context, 4, 4)[3], 0);
+  assert.equal(
+    readPixel(context, layout.canvasWidth - 4, layout.canvasHeight - 4)[3],
+    0
+  );
+  assert.equal(
+    readPixel(context, Math.round(layout.cardX / 2), layout.canvasHeight / 2)[3],
+    0
+  );
+});
+
+test("keeps the rounded card corners visible against the transparent padding", async () => {
+  const layout = computeSocialCanvasLayout();
+  const png = await renderProfileSocialCardPng(createViewModel(), {
+    avatarSource: AVATAR_SOURCE,
+    theme: "light"
+  });
+  const context = await drawToContext(png);
+
+  assert.equal(readPixel(context, layout.cardX + 1, layout.cardY + 1)[3], 0);
+  assert.equal(
+    readPixel(
+      context,
+      layout.cardX + layout.cardWidth - 2,
+      layout.cardY + layout.cardHeight - 2
+    )[3],
+    0
   );
   assert.deepEqual(
-    readPixel(context, Math.round(layout.cardX / 2), layout.canvasHeight / 2),
-    expected
+    readPixel(
+      context,
+      layout.cardX + (layout.cardWidth / 2),
+      layout.cardY + 6
+    ),
+    rgba(CARD_THEME_PALETTES.light.background)
   );
 });
 
@@ -77,10 +100,7 @@ test("draws card content inside the placed card area", async () => {
     avatarSource: AVATAR_SOURCE,
     theme: "dark"
   });
-  const image = await loadImage(png);
-  const canvas = createCanvas(image.width, image.height);
-  const context = canvas.getContext("2d");
-  context.drawImage(image, 0, 0);
+  const context = await drawToContext(png);
 
   const heatmapX = Math.round(layout.cardX + (layout.scale * 40));
   const heatmapY = Math.round(layout.cardY + (layout.scale * 150));
@@ -116,6 +136,7 @@ test("worker social svg uses the shared canvas layout", () => {
     `<g transform="translate(${layout.cardX} ${layout.cardY}) scale(${layout.scale})">`
   ));
   assert.ok(svg.endsWith("</g></svg>"));
+  assert.ok(!/<svg[^>]*><rect/.test(svg));
 });
 
 test("worker social svg reuses the card body markup unchanged", () => {
@@ -136,6 +157,14 @@ test("worker card svg keeps its original dimensions", () => {
   assert.ok(svg.includes('height="306" viewBox="0 0 499 306"'));
   assert.ok(svg.endsWith("</svg>"));
 });
+
+async function drawToContext(png) {
+  const image = await loadImage(png);
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  return context;
+}
 
 function readPixel(context, x, y) {
   const { data } = context.getImageData(Math.round(x), Math.round(y), 1, 1);

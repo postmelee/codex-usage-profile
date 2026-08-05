@@ -68,9 +68,6 @@ export async function renderProfileSocialCardPng(viewModel, options = {}) {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
-  context.fillStyle = palette.background;
-  context.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
-
   context.save();
   context.translate(layout.cardX, layout.cardY);
   context.scale(layout.scale, layout.scale);

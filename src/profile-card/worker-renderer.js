@@ -100,8 +100,6 @@ export function createWorkerProfileSocialCardSvg(viewModel, options = {}) {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.canvasWidth}"`,
     ` height="${layout.canvasHeight}" viewBox="0 0 ${layout.canvasWidth}`,
     ` ${layout.canvasHeight}">`,
-    `<rect width="${layout.canvasWidth}" height="${layout.canvasHeight}"`,
-    ` fill="${palette.background}"/>`,
     `<g transform="translate(${layout.cardX} ${layout.cardY})`,
     ` scale(${layout.scale})">`,
     createWorkerProfileCardBody(viewModel, options, palette),
