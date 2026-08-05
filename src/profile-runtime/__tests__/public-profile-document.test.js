@@ -131,8 +131,26 @@ test("falls back to site tags for private and missing handles", async () => {
   ).text();
 
   assert.equal(missing, privateProfile);
-  assert.ok(!missing.includes("og:image"));
-  assert.ok(missing.includes("content=\"summary\""));
+  assert.ok(missing.includes("<title>Codex Usage Profile</title>"));
+  assert.ok(missing.includes("/u/postmelee/social.png"));
+  assert.ok(!missing.includes("/u/ghost/social.png"));
+  assert.ok(!missing.includes("/u/hidden/social.png"));
+  assert.ok(missing.includes("content=\"summary_large_image\""));
+});
+
+test("uses a configured fallback image handle", async () => {
+  const handler = createHandler({ fallbackImageHandle: "operator" });
+  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
+
+  assert.ok(body.includes("/u/operator/social.png"));
+});
+
+test("omits the fallback image when no handle is configured", async () => {
+  const handler = createHandler({ fallbackImageHandle: null });
+  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
+
+  assert.ok(!body.includes("og:image"));
+  assert.ok(body.includes("content=\"summary\""));
 });
 
 test("falls back to site tags when the profile lookup fails", async () => {
@@ -144,7 +162,7 @@ test("falls back to site tags when the profile lookup fails", async () => {
   const response = await handler(new Request(`${BASE_URL}/u/postmelee`));
 
   assert.equal(response.status, 200);
-  assert.ok(!(await response.text()).includes("og:image"));
+  assert.ok((await response.text()).includes("<title>Codex Usage Profile</title>"));
 });
 
 test("ignores profiles without a usable uploadedAt", async () => {
@@ -159,7 +177,7 @@ test("ignores profiles without a usable uploadedAt", async () => {
     await handler(new Request(`${BASE_URL}/u/postmelee`))
   ).text();
 
-  assert.ok(!body.includes("og:image"));
+  assert.ok(body.includes("<title>Codex Usage Profile</title>"));
 });
 
 test("omits the body for HEAD requests", async () => {

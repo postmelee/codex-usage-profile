@@ -38,13 +38,21 @@ export function buildProfileOpenGraphDocument(options = {}) {
   const description = SERVICE_DESCRIPTIONS[locale];
 
   if (!profile) {
+    const fallbackUrl = new URL("/", origin).toString();
+    const fallbackHandle = normalizeOptionalHandle(options.fallbackImageHandle);
     return freezeDocument({
-      canonicalUrl: new URL("/", origin).toString(),
+      canonicalUrl: fallbackUrl,
       description,
       locale,
       metaTags: buildFallbackMetaTags({
-        canonicalUrl: new URL("/", origin).toString(),
+        canonicalUrl: fallbackUrl,
         description,
+        imageAlt: locale === "ko"
+          ? "Codex 사용량 카드 예시"
+          : "Sample Codex usage card",
+        imageUrl: fallbackHandle
+          ? buildSocialImageUrl(origin, fallbackHandle)
+          : null,
         locale
       }),
       title: PROFILE_OPEN_GRAPH_SITE_NAME
@@ -134,16 +142,38 @@ function buildProfileMetaTags(input) {
 }
 
 function buildFallbackMetaTags(input) {
+  const imageTags = input.imageUrl
+    ? [
+      metaTag("property", "og:image", input.imageUrl),
+      metaTag("property", "og:image:secure_url", input.imageUrl),
+      metaTag("property", "og:image:type", PROFILE_SOCIAL_IMAGE_TYPE),
+      metaTag("property", "og:image:width", String(PROFILE_SOCIAL_IMAGE_WIDTH)),
+      metaTag("property", "og:image:height", String(PROFILE_SOCIAL_IMAGE_HEIGHT)),
+      metaTag("property", "og:image:alt", input.imageAlt)
+    ]
+    : [];
+
   return Object.freeze([
     metaTag("property", "og:site_name", PROFILE_OPEN_GRAPH_SITE_NAME),
     metaTag("property", "og:type", "website"),
     metaTag("property", "og:url", input.canonicalUrl),
     metaTag("property", "og:title", PROFILE_OPEN_GRAPH_SITE_NAME),
     metaTag("property", "og:description", input.description),
+    ...imageTags,
     ...buildLocaleTags(input.locale),
-    metaTag("name", "twitter:card", "summary"),
+    metaTag(
+      "name",
+      "twitter:card",
+      input.imageUrl ? "summary_large_image" : "summary"
+    ),
     metaTag("name", "twitter:title", PROFILE_OPEN_GRAPH_SITE_NAME),
-    metaTag("name", "twitter:description", input.description)
+    metaTag("name", "twitter:description", input.description),
+    ...(input.imageUrl
+      ? [
+        metaTag("name", "twitter:image", input.imageUrl),
+        metaTag("name", "twitter:image:alt", input.imageAlt)
+      ]
+      : [])
   ]);
 }
 
@@ -172,7 +202,9 @@ export function buildPublicProfileUrl(origin, handle) {
 
 export function buildSocialImageUrl(origin, handle, uploadedAt) {
   const url = new URL(`${buildPublicProfileUrl(origin, handle)}/social.png`);
-  url.searchParams.set("v", String(toRevisionToken(uploadedAt)));
+  if (uploadedAt !== undefined && uploadedAt !== null) {
+    url.searchParams.set("v", String(toRevisionToken(uploadedAt)));
+  }
   return url.toString();
 }
 
@@ -225,6 +257,15 @@ function normalizeProfileSummary(value) {
     handle: normalizeHandle(value.handle),
     uploadedAt: value.uploadedAt
   });
+}
+
+function normalizeOptionalHandle(value) {
+  if (value === undefined || value === null || value === "") return null;
+  try {
+    return normalizeHandle(value);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeHandle(value) {

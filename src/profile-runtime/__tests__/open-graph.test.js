@@ -74,7 +74,28 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   );
 });
 
-test("omits the image and downgrades the twitter card on fallback", () => {
+test("uses the operator social image on fallback when a handle is configured", () => {
+  const document = buildProfileOpenGraphDocument({
+    fallbackImageHandle: "postmelee",
+    handle: "ghost",
+    origin: ORIGIN,
+    profile: null
+  });
+
+  assert.equal(document.title, PROFILE_OPEN_GRAPH_SITE_NAME);
+  assert.equal(
+    readTag(document, "og:image"),
+    `${ORIGIN}/u/postmelee/social.png`
+  );
+  assert.equal(readTag(document, "og:image:width"), "1200");
+  assert.equal(readTag(document, "twitter:card"), "summary_large_image");
+  assert.equal(
+    readTag(document, "twitter:image"),
+    readTag(document, "og:image")
+  );
+});
+
+test("omits the image and downgrades the twitter card without a fallback handle", () => {
   const document = buildProfileOpenGraphDocument({
     handle: "ghost",
     origin: ORIGIN,

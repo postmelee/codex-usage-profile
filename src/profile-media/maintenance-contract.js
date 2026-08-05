@@ -90,7 +90,12 @@ export function selectProfileMediaCleanupCandidates(revisions, options = {}) {
 }
 
 export function isProfileMediaStableKey(key) {
-  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key);
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key) ||
+    isProfileMediaSocialKey(key);
+}
+
+export function isProfileMediaSocialKey(key) {
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/social\.png$/.test(key);
 }
 
 function normalizeDate(value) {

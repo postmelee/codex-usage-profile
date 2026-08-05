@@ -208,7 +208,14 @@ async function listObjects(options) {
 }
 
 function isStableKey(key) {
-  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key);
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/themes\/light)?\/card\.png$/.test(key) ||
+    isSocialStableKey(key);
+}
+
+// Social objects are published and removed with the card publication, so the
+// orphan sweep only counts them and never treats them as revision authorities.
+function isSocialStableKey(key) {
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/social\.png$/.test(key);
 }
 
 function isAuthorityStableKey(key) {
