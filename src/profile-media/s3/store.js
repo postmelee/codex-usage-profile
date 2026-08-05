@@ -21,6 +21,7 @@ import {
   PROFILE_MEDIA_SUPPORTED_THEMES,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
+  createProfileMediaSocialKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
   getProfileMediaThemeRepresentations,
@@ -28,6 +29,7 @@ import {
   normalizeProfileMediaLocale,
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
+  normalizeProfileMediaSocialRecord,
   normalizeProfileMediaTheme
 } from "../media-store-contract.js";
 import {
@@ -89,6 +91,77 @@ export function createS3ProfileMediaStore(options = {}) {
         if (error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND) return null;
         throw error;
       }
+    },
+
+    async getSocialCard(getOptions = {}) {
+      const handle = normalizeHandle(getOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      const includeBody = getOptions.includeBody !== false;
+
+      try {
+        const response = includeBody
+          ? await send(new GetObjectCommand({
+            Bucket: bucket,
+            Key: socialKey
+          }), "read social media")
+          : await send(new HeadObjectCommand({
+            Bucket: bucket,
+            Key: socialKey
+          }), "read social media");
+        return socialRecordFromResponse(response, {
+          body: includeBody ? await readSdkBody(response.Body) : null,
+          handle,
+          socialKey
+        });
+      } catch (error) {
+        if (error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND) return null;
+        throw error;
+      }
+    },
+
+    async putSocialCard(putOptions = {}) {
+      const record = normalizeProfileMediaSocialRecord(putOptions);
+      if (createProfileMediaRevisionDigest(record.body) !== record.revision) {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+          "social media does not match body digest"
+        );
+      }
+
+      await send(new PutObjectCommand({
+        Body: record.body,
+        Bucket: bucket,
+        CacheControl: record.cacheControl,
+        ContentType: record.contentType,
+        Key: record.socialKey,
+        Metadata: socialMetadata(record)
+      }), "write social media");
+
+      const { body, ...metadata } = record;
+      return metadata;
+    },
+
+    async deleteSocialCard(deleteOptions = {}) {
+      const handle = normalizeHandle(deleteOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      let existed = true;
+
+      try {
+        await send(new HeadObjectCommand({
+          Bucket: bucket,
+          Key: socialKey
+        }), "inspect social media");
+      } catch (error) {
+        if (error?.code !== PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND) throw error;
+        existed = false;
+      }
+      if (!existed) return { deleted: false, handle };
+
+      await send(new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: socialKey
+      }), "delete social media");
+      return { deleted: true, handle };
     },
 
     async inspectStableCard(inspectOptions = {}) {
@@ -404,6 +477,60 @@ export function createS3ProfileMediaStore(options = {}) {
       throw mapS3Error(error, operation);
     }
   }
+}
+
+function socialMetadata(record) {
+  return {
+    [METADATA_KIND]: "social",
+    [METADATA_CONTRACT_VERSION]: String(PROFILE_MEDIA_STORE_CONTRACT_VERSION),
+    [METADATA_OWNER_ID]: record.ownerId,
+    [METADATA_HANDLE]: record.handle,
+    [METADATA_FORMAT]: PROFILE_MEDIA_FORMAT,
+    [METADATA_REVISION]: record.revision,
+    [METADATA_ETAG]: record.revision,
+    [METADATA_PRESENTATION_DIGEST]: record.presentationDigest,
+    [METADATA_PUBLICATION_ID]: record.publicationId,
+    [METADATA_CREATED_AT]: record.createdAt
+  };
+}
+
+function socialRecordFromResponse(response, expected) {
+  const metadata = response.Metadata ?? {};
+  if (metadata[METADATA_KIND] !== "social") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object has an unexpected kind"
+    );
+  }
+
+  const revision = metadata[METADATA_REVISION];
+  if (typeof revision !== "string" || revision === "") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object is missing its revision"
+    );
+  }
+  if (expected.body && createProfileMediaRevisionDigest(expected.body) !== revision) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object does not match its revision"
+    );
+  }
+
+  const record = {
+    cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
+    contentType: PROFILE_MEDIA_CONTENT_TYPE,
+    createdAt: metadata[METADATA_CREATED_AT],
+    etag: `"${revision}"`,
+    handle: expected.handle,
+    ownerId: metadata[METADATA_OWNER_ID],
+    presentationDigest: metadata[METADATA_PRESENTATION_DIGEST],
+    publicationId: metadata[METADATA_PUBLICATION_ID],
+    revision,
+    socialKey: expected.socialKey
+  };
+  if (expected.body) record.body = expected.body;
+  return record;
 }
 
 function revisionMetadata(record) {

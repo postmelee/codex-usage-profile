@@ -12,6 +12,7 @@ import {
   PROFILE_MEDIA_SUPPORTED_THEMES,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
+  createProfileMediaSocialKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
   getProfileMediaThemeRepresentations,
@@ -19,6 +20,7 @@ import {
   normalizeProfileMediaLocale,
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
+  normalizeProfileMediaSocialRecord,
   normalizeProfileMediaTheme
 } from "../media-store-contract.js";
 
@@ -75,6 +77,67 @@ export function createR2BindingProfileMediaStore(options = {}) {
         revisionKey,
         theme: normalizeProfileMediaTheme(getOptions.theme)
       });
+    },
+
+    async getSocialCard(getOptions = {}) {
+      const handle = normalizeHandle(getOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      const includeBody = getOptions.includeBody !== false;
+      let object;
+      try {
+        object = includeBody
+          ? await bucket.get(socialKey)
+          : await bucket.head(socialKey);
+      } catch (error) {
+        throw unavailable("read social media", error);
+      }
+      if (!object) return null;
+
+      const body = includeBody
+        ? await readR2Body(object, "social media")
+        : null;
+      return socialRecordFromObject(object, { body, handle, socialKey });
+    },
+
+    async putSocialCard(putOptions = {}) {
+      const record = normalizeProfileMediaSocialRecord(putOptions);
+      if (createProfileMediaRevisionDigest(record.body) !== record.revision) {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+          "social media does not match body digest"
+        );
+      }
+
+      try {
+        await bucket.put(record.socialKey, record.body, {
+          customMetadata: socialMetadata(record),
+          httpMetadata: mediaHttpMetadata()
+        });
+      } catch (error) {
+        throw unavailable("write social media", error);
+      }
+
+      const { body, ...metadata } = record;
+      return metadata;
+    },
+
+    async deleteSocialCard(deleteOptions = {}) {
+      const handle = normalizeHandle(deleteOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      let existing;
+      try {
+        existing = await bucket.head(socialKey);
+      } catch (error) {
+        throw unavailable("inspect social media", error);
+      }
+      if (!existing) return { deleted: false, handle };
+
+      try {
+        await bucket.delete(socialKey);
+      } catch (error) {
+        throw unavailable("delete social media", error);
+      }
+      return { deleted: true, handle };
     },
 
     async inspectStableCard(inspectOptions = {}) {
@@ -714,6 +777,61 @@ function samePublicationAuthority(left, right) {
   return left.publicationId === right.publicationId &&
     left.presentationDigest === right.presentationDigest &&
     left.contractVersion === right.contractVersion;
+}
+
+function socialMetadata(record) {
+  return {
+    [METADATA_KIND]: "social",
+    [METADATA_CONTRACT_VERSION]: String(PROFILE_MEDIA_STORE_CONTRACT_VERSION),
+    [METADATA_OWNER_ID]: record.ownerId,
+    [METADATA_HANDLE]: record.handle,
+    [METADATA_FORMAT]: PROFILE_MEDIA_FORMAT,
+    [METADATA_REVISION]: record.revision,
+    [METADATA_ETAG]: record.revision,
+    [METADATA_PRESENTATION_DIGEST]: record.presentationDigest,
+    [METADATA_PUBLICATION_ID]: record.publicationId,
+    [METADATA_CREATED_AT]: record.createdAt
+  };
+}
+
+function socialRecordFromObject(object, expected) {
+  const metadata = object.customMetadata ?? {};
+  if (metadata[METADATA_KIND] !== "social") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object has an unexpected kind"
+    );
+  }
+  assertHttpMetadata(object, mediaHttpMetadata());
+
+  const revision = metadata[METADATA_REVISION];
+  if (typeof revision !== "string" || revision === "") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object is missing its revision"
+    );
+  }
+  if (expected.body && createProfileMediaRevisionDigest(expected.body) !== revision) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object does not match its revision"
+    );
+  }
+
+  const record = {
+    cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
+    contentType: PROFILE_MEDIA_CONTENT_TYPE,
+    createdAt: metadata[METADATA_CREATED_AT],
+    etag: `"${revision}"`,
+    handle: expected.handle,
+    ownerId: metadata[METADATA_OWNER_ID],
+    presentationDigest: metadata[METADATA_PRESENTATION_DIGEST],
+    publicationId: metadata[METADATA_PUBLICATION_ID],
+    revision,
+    socialKey: expected.socialKey
+  };
+  if (expected.body) record.body = expected.body;
+  return record;
 }
 
 function mediaHttpMetadata() {
