@@ -68,33 +68,56 @@ Task #78 Stage 1: Open Graph 태그 계약과 공개 프로필 문서 핸들러
 
 ## Stage 2 — 소셜 캔버스와 단일 이미지
 
-### 산출물
+조사 결과 두 가지가 계획 시점 가정과 달라 하위 단계로 나눈다.
+
+- 미디어 계약은 버전 4에 v3 레거시 분기를 유지하고 어댑터가 memory, r2-binding, s3 셋이다. `representations`에 format 축을 넣으면 계약 버전 인상과 정합성 검사 재작업이 따라온다. 승인된 범위가 아니므로 계약 버전을 유지하고 독립 stable key와 전용 store 메서드를 사용한다.
+- 카드 렌더러는 Node용(`renderer.js`)과 Worker용(`worker-renderer.js`) 두 구현이며 프로덕션 Sites는 Worker 구현을 쓴다. 소셜 출력도 양쪽에 필요하다.
+
+### Stage 2.1 산출물
 
 신규:
 
 - `src/profile-card/social-canvas.js`
 - `src/profile-card/__tests__/social-canvas.test.js`
+- `src/profile-card/__tests__/social-renderer.test.js`
 
 수정:
 
 - `src/profile-card/renderer.js`
+- `src/profile-card/worker-renderer.js`
+
+### Stage 2.1 변경 내용
+
+- 1200x630 캔버스 배치 계약을 단일 모듈로 고정한다. 카드는 960 x 588.7로 축소해 중앙 배치하고 좌우 120, 상하 20.7 여백을 둔다. 종횡비 499:306을 보존한다.
+- 배치 모듈은 렌더러를 import하지 않는다. 카드 논리 크기를 자체 상수로 두고 렌더러 값과 일치하는지 테스트로 고정해 순환 import를 피한다.
+- Node 렌더러에 `renderProfileSocialCardPng`를 추가한다. 카드 드로잉을 `drawCard`로 분리해 기존 경로와 공유하고, 소셜 경로는 배경을 채운 뒤 translate/scale 후 같은 드로잉을 호출한다.
+- Worker 렌더러의 SVG 본문을 `createWorkerProfileCardBody`로 분리하고 `createWorkerProfileSocialCardSvg`가 1200x630 래퍼에 같은 본문을 배치한다. 렌더 팩토리는 `renderSocial`을 함께 노출한다.
+- 캔버스 배경은 카드 테마 배경색을 그대로 쓴다. 새 색을 도입하지 않는다.
+- 기존 카드 출력의 바이트와 SVG 치수는 변경하지 않는다.
+
+### Stage 2.2 산출물
+
+수정:
+
 - `src/profile-card/service-core.js`
 - `src/profile-media/media-store-contract.js`
 - `src/profile-media/publication-service.js`
 - `src/profile-media/maintenance-contract.js`
+- `src/profile-media/r2-binding/store.js`
+- `src/profile-media/s3/store.js`
+- `src/profile-runtime/open-graph.js`
 - `src/profile-backend/http.js`
 - `scripts/cleanup-orphan-card-media.mjs`
 - 각 영역 `__tests__`
 
-### 변경 내용
+### Stage 2.2 변경 내용
 
-- 1200x630 캔버스에 기존 1497x918 카드를 약 960x589로 축소해 중앙 배치한다. 좌우 약 120px, 상하 약 20px 안전 여백을 둔다. 배경은 카드 테마 배경색을 따른다.
-- 카드 렌더 결과를 재사용하고 렌더러의 시각 디자인은 바꾸지 않는다.
-- 미디어 식별자에 `format` 축을 추가한다. `card` format은 기존 locale x theme 축을 유지하고, `social` format은 축 없는 단일 stable key를 갖는다.
-- `publishOwnerCard`에 `social` 객체 생성을 편입한다. publish, 카드 설정 저장 경유의 `ensurePublishedCardVariants`, 사용량 갱신 refresh가 모두 같은 경로를 지나므로 별도 트리거를 만들지 않는다.
-- `unpublishOwnerCard`가 `social` 객체도 함께 제거하게 한다.
-- `GET|HEAD /u/{handle}/social.png` 라우트를 추가한다. theme/locale 쿼리는 받지 않고 `v`는 무시 가능한 캐시 버스터로 취급한다. 응답 계약은 기존 `card.png`와 동일하게 ETag, 304, 404를 지원한다.
-- orphan cleanup 판정에 `social` stable key를 포함한다.
+- 미디어 계약 버전은 유지한다. `cards/v2/public/{handle}/social.png` stable key와 전용 store 메서드를 추가하고 memory, r2-binding, s3 세 어댑터가 동일하게 구현한다.
+- `publishOwnerCard`에 소셜 객체 생성을 편입한다. publish, 카드 설정 저장 경유의 `ensurePublishedCardVariants`, 사용량 갱신 refresh가 모두 같은 경로를 지나므로 별도 트리거를 만들지 않는다. 소유자가 저장한 `cardLocale`과 `cardStyle.theme`으로 하나만 만든다.
+- `unpublishOwnerCard`가 소셜 객체도 함께 제거한다.
+- `GET|HEAD /u/{handle}/social.png` 라우트를 추가한다. theme/locale 쿼리는 받지 않고 `v`는 무시 가능한 캐시 버스터다. 응답은 publication 존재를 먼저 확인하므로 unpublish 이후에는 노출되지 않는다. ETag, 304, 404 계약은 `card.png`와 같다.
+- OG 폴백 `og:image`를 운영자 핸들의 소셜 이미지로 지정한다. 운영자 핸들은 `MARKETING_OPERATOR_CARD_HANDLE`과 같은 값을 사용한다.
+- orphan cleanup 판정에 소셜 stable key를 포함한다.
 - `/u/{handle}/card.png`의 경로, 응답, ETag는 변경하지 않는다.
 
 ### 검증
@@ -105,9 +128,9 @@ npm run cleanup:card-media -- --dry-run
 git diff --check
 ```
 
-- 로컬 서버에서 다음을 확인한다.
+- Stage 2.1은 출력 PNG가 1200x630이고 여백과 배치가 설계값과 일치하는지, 결정적인지, 기존 카드 SVG 치수가 그대로인지 확인한다.
+- Stage 2.2는 로컬 서버에서 다음을 확인한다.
   - `curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" .../u/{handle}/social.png`
-  - 출력 PNG가 1200x630이고 좌우 여백이 설계값과 일치
   - 카드 설정을 light/en으로 저장한 뒤 같은 URL의 이미지가 갱신
   - 저장 전후 소셜 객체가 하나만 존재
   - unpublish 후 `social.png`가 404
@@ -116,7 +139,8 @@ git diff --check
 ### 커밋
 
 ```text
-Task #78 Stage 2: 소셜 1200x630 캔버스와 단일 social.png 발행
+Task #78 [Stage 2.1]: 소셜 1200x630 캔버스 배치와 두 렌더러 출력
+Task #78 [Stage 2.2]: 단일 social.png 발행과 공개 라우트
 ```
 
 ## Stage 3 — 런타임 연결과 운영 모드 반영

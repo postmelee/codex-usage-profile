@@ -1,5 +1,6 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
+import { computeSocialCanvasLayout } from "./social-canvas.js";
 import { getCardThemePalette } from "./theme.js";
 
 export const WORKER_CARD_RENDERER_VERSION =
@@ -29,15 +30,11 @@ export function createWorkerProfileCardRenderer(options = {}) {
     throw new TypeError("Worker renderer Wasm module is required");
   }
 
-  return async function renderWorkerProfileCardPng(viewModel, renderOptions = {}) {
+  async function renderSvg(svg, fitTo) {
     await initializeWorkerRendererWasm(wasmModule);
 
-    const svg = createWorkerProfileCardSvg(viewModel, renderOptions);
     const renderer = new Resvg(svg, {
-      fitTo: {
-        mode: "zoom",
-        value: CARD_OUTPUT_SCALE
-      },
+      fitTo,
       font: {
         defaultFontFamily: "Noto Sans KR",
         fontBuffers,
@@ -59,13 +56,61 @@ export function createWorkerProfileCardRenderer(options = {}) {
     } finally {
       renderer.free();
     }
+  }
+
+  async function renderWorkerProfileCardPng(viewModel, renderOptions = {}) {
+    return renderSvg(
+      createWorkerProfileCardSvg(viewModel, renderOptions),
+      { mode: "zoom", value: CARD_OUTPUT_SCALE }
+    );
+  }
+
+  renderWorkerProfileCardPng.renderSocial = async function renderSocial(
+    viewModel,
+    renderOptions = {}
+  ) {
+    return renderSvg(
+      createWorkerProfileSocialCardSvg(viewModel, renderOptions),
+      { mode: "original" }
+    );
   };
+
+  return renderWorkerProfileCardPng;
 }
 
 export function createWorkerProfileCardSvg(viewModel, options = {}) {
   assertViewModel(viewModel);
   const palette = getCardThemePalette(options.theme ?? viewModel.theme);
 
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_LOGICAL_WIDTH}"`,
+    ` height="${CARD_LOGICAL_HEIGHT}" viewBox="0 0 ${CARD_LOGICAL_WIDTH}`,
+    ` ${CARD_LOGICAL_HEIGHT}">`,
+    createWorkerProfileCardBody(viewModel, options, palette),
+    "</svg>"
+  ].join("");
+}
+
+export function createWorkerProfileSocialCardSvg(viewModel, options = {}) {
+  assertViewModel(viewModel);
+  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
+  const layout = computeSocialCanvasLayout();
+
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.canvasWidth}"`,
+    ` height="${layout.canvasHeight}" viewBox="0 0 ${layout.canvasWidth}`,
+    ` ${layout.canvasHeight}">`,
+    `<rect width="${layout.canvasWidth}" height="${layout.canvasHeight}"`,
+    ` fill="${palette.background}"/>`,
+    `<g transform="translate(${layout.cardX} ${layout.cardY})`,
+    ` scale(${layout.scale})">`,
+    createWorkerProfileCardBody(viewModel, options, palette),
+    "</g>",
+    "</svg>"
+  ].join("");
+}
+
+function createWorkerProfileCardBody(viewModel, options, palette) {
   const avatar = createAvatarMarkup(
     viewModel.header,
     options.avatarSource,
@@ -75,9 +120,6 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
   const stats = createStatsMarkup(viewModel.stats, palette);
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_LOGICAL_WIDTH}"`,
-    ` height="${CARD_LOGICAL_HEIGHT}" viewBox="0 0 ${CARD_LOGICAL_WIDTH}`,
-    ` ${CARD_LOGICAL_HEIGHT}">`,
     "<defs>",
     '<clipPath id="avatar-clip"><circle cx="58" cy="58" r="22"/></clipPath>',
     "</defs>",
@@ -113,8 +155,7 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
       y: 64.5
     }),
     heatmap,
-    stats,
-    "</svg>"
+    stats
   ].join("");
 }
 
