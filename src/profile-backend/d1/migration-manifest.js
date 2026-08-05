@@ -69,6 +69,16 @@ export const D1_MIGRATION_MANIFEST = createD1MigrationManifest([
     version: 3,
     name: "cli_login_intent",
     file: "db/migrations/0003_cli_login_intent.sql"
+  },
+  {
+    version: 4,
+    name: "card_style",
+    file: "db/migrations/0004_card_style.sql"
+  },
+  {
+    version: 5,
+    name: "card_locale",
+    file: "db/migrations/0005_card_locale.sql"
   }
 ]);
 

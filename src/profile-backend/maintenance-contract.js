@@ -25,6 +25,7 @@ const PROFILE_KEYS = Object.freeze([
   "publication",
   "submittedDevices"
 ]);
+const PROFILE_OPTIONAL_KEYS = Object.freeze(["presentationDigest"]);
 const FORBIDDEN_BACKUP_KEYS = new Set([
   "accountUsageRateLimits",
   "cliLoginChallenges",
@@ -129,7 +130,7 @@ function normalizeProfiles(value) {
   }
   return value.map((profile) => {
     requirePlainObject(profile, "maintenance profile");
-    assertExactKeys(profile, PROFILE_KEYS, "maintenance profile");
+    assertAllowedProfileKeys(profile);
     requirePlainObject(profile.owner, "maintenance profile owner");
     if (!Array.isArray(profile.submittedDevices)) {
       throw new TypeError("maintenance submittedDevices must be an array");
@@ -148,6 +149,18 @@ function normalizeProfiles(value) {
     }
     return structuredClone(profile);
   });
+}
+
+function assertAllowedProfileKeys(value) {
+  const actual = Object.keys(value).sort();
+  const legacy = [...PROFILE_KEYS].sort();
+  const current = [...PROFILE_KEYS, ...PROFILE_OPTIONAL_KEYS].sort();
+  const matches = (expected) =>
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index]);
+  if (!matches(legacy) && !matches(current)) {
+    throw new TypeError("maintenance profile fields are invalid");
+  }
 }
 
 function assertNoForbiddenBackupFields(value, path = "backup") {

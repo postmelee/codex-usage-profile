@@ -2,38 +2,49 @@ import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_DEFAULT_THEME,
+  PROFILE_MEDIA_FORMAT,
+  PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
   PROFILE_MEDIA_STABLE_STATE_KINDS,
+  PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
+  PROFILE_MEDIA_SUPPORTED_THEMES,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
+  getProfileMediaThemeRepresentations,
   matchesProfileMediaIfNoneMatch,
   normalizeProfileMediaLocale,
   normalizeProfileMediaPublicationInput,
-  normalizeProfileMediaRevisionRecord
+  normalizeProfileMediaRevisionRecord,
+  normalizeProfileMediaTheme
 } from "../media-store-contract.js";
 
 const TOMBSTONE_CONTENT_TYPE = "application/octet-stream";
 const TOMBSTONE_CACHE_CONTROL = "no-store";
 const METADATA_KIND = "kind";
+const METADATA_CONTRACT_VERSION = "contract-version";
 const METADATA_OWNER_ID = "owner-id";
 const METADATA_HANDLE = "handle";
 const METADATA_LOCALE = "locale";
+const METADATA_THEME = "theme";
+const METADATA_FORMAT = "format";
 const METADATA_REVISION = "revision";
 const METADATA_ETAG = "etag";
+const METADATA_PRESENTATION_DIGEST = "presentation-digest";
 const METADATA_CREATED_AT = "created-at";
 const METADATA_PUBLICATION_ID = "publication-id";
 const METADATA_PUBLISHED_AT = "published-at";
+const METADATA_AUTHORITY_KEY = "authority-key";
 const METADATA_TOMBSTONE_ID = "tombstone-id";
 const METADATA_UNPUBLISHED_AT = "unpublished-at";
 
 export function createR2BindingProfileMediaStore(options = {}) {
   const bucket = requireR2Bucket(options.bucket);
   const now = options.now ?? (() => new Date());
-  const createTombstoneId = options.createTombstoneId ??
-    defaultCreateTombstoneId;
+  const createTombstoneId = options.createTombstoneId ?? defaultCreateTombstoneId;
 
   const store = {
     async getPublishedCard(getOptions = {}) {
@@ -41,7 +52,8 @@ export function createR2BindingProfileMediaStore(options = {}) {
         handle: normalizeHandle(getOptions.handle),
         ifNoneMatch: getOptions.ifNoneMatch,
         includeBody: getOptions.includeBody,
-        locale: normalizeProfileMediaLocale(getOptions.locale)
+        locale: normalizeProfileMediaLocale(getOptions.locale),
+        theme: normalizeProfileMediaTheme(getOptions.theme)
       });
     },
 
@@ -60,7 +72,8 @@ export function createR2BindingProfileMediaStore(options = {}) {
         locale: getOptions.locale,
         ownerId: getOptions.ownerId,
         revision: getOptions.revision,
-        revisionKey
+        revisionKey,
+        theme: normalizeProfileMediaTheme(getOptions.theme)
       });
     },
 
@@ -125,9 +138,7 @@ export function createR2BindingProfileMediaStore(options = {}) {
 
     async publishRevision(publishOptions = {}) {
       const publication = normalizeProfileMediaPublicationInput(publishOptions);
-      const current = await store.inspectStableCard({
-        handle: publication.handle
-      });
+      const current = await store.inspectStableCard({ handle: publication.handle });
       assertExpectedStorageEtag(current, publishOptions);
       if (
         current.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION &&
@@ -139,34 +150,16 @@ export function createR2BindingProfileMediaStore(options = {}) {
         );
       }
 
-      const revisions = {};
-      for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
-        const expected = publication.representations[locale];
-        const revision = await store.getRevision({
-          locale,
-          ownerId: publication.ownerId,
-          revision: expected.revision
-        });
-        if (!revision) {
-          throw createProfileMediaStoreError(
-            PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND,
-            "media revision not found"
-          );
-        }
-        if (revision.etag !== expected.etag) {
-          throw createProfileMediaStoreError(
-            PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
-            "media revision ETag does not match publication metadata"
-          );
-        }
-        revisions[locale] = revision;
+      const revisions = await loadPublicationRevisions(store, publication);
+      if (publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
+        await stageLightStableObject(bucket, publication, revisions.light);
       }
 
       let created;
       try {
         created = await bucket.put(
           publication.stableKey,
-          revisions[PROFILE_MEDIA_DEFAULT_LOCALE].body,
+          revisions.dark[PROFILE_MEDIA_DEFAULT_LOCALE].body,
           {
             customMetadata: publicationMetadata(publication),
             httpMetadata: mediaHttpMetadata(),
@@ -182,9 +175,10 @@ export function createR2BindingProfileMediaStore(options = {}) {
         ...publication,
         storageEtag: requireStorageEtag(created)
       }, {
-        body: revisions[PROFILE_MEDIA_DEFAULT_LOCALE].body,
+        body: revisions.dark[PROFILE_MEDIA_DEFAULT_LOCALE].body,
         locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-        notModified: false
+        notModified: false,
+        theme: PROFILE_MEDIA_DEFAULT_THEME
       });
     },
 
@@ -192,9 +186,7 @@ export function createR2BindingProfileMediaStore(options = {}) {
       const handle = normalizeHandle(unpublishOptions.handle);
       const current = await store.inspectStableCard({ handle });
       assertExpectedStorageEtag(current, unpublishOptions);
-      if (current.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) {
-        return null;
-      }
+      if (current.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) return null;
 
       const tombstoneId = requireKeySegment(
         unpublishOptions.tombstoneId ?? createTombstoneId(),
@@ -249,7 +241,18 @@ export function createR2BindingProfileMediaStore(options = {}) {
     if (stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) return null;
 
     const publication = stable.publication;
-    const representation = publication.representations[getOptions.locale];
+    const representations = getProfileMediaThemeRepresentations(
+      publication,
+      getOptions.theme
+    );
+    if (!representations) return null;
+    const representation = representations[getOptions.locale];
+    const variant = getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME
+      ? {
+          stableKey: publication.stableKey,
+          storageEtag: publication.storageEtag
+        }
+      : await inspectLightStableObject(bucket, publication);
     const notModified = matchesProfileMediaIfNoneMatch(
       getOptions.ifNoneMatch,
       representation.etag
@@ -261,26 +264,16 @@ export function createR2BindingProfileMediaStore(options = {}) {
       const revision = await store.getRevision({
         locale: getOptions.locale,
         ownerId: publication.ownerId,
-        revision: representation.revision
+        revision: representation.revision,
+        theme: getOptions.theme
       });
-      if (!revision) {
-        throw createProfileMediaStoreError(
-          PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND,
-          "media revision not found"
-        );
-      }
-      if (revision.etag !== representation.etag) {
-        throw createProfileMediaStoreError(
-          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
-          "media revision ETag does not match publication metadata"
-        );
-      }
+      assertCoherentRevision(revision, publication, representation, getOptions.theme);
       if (includeBody) body = revision.body;
     } else if (includeBody) {
       let object;
       try {
-        object = await bucket.get(publication.stableKey, {
-          onlyIf: { etagMatches: publication.storageEtag }
+        object = await bucket.get(variant.stableKey, {
+          onlyIf: { etagMatches: variant.storageEtag }
         });
       } catch (error) {
         throw unavailable("read published media", error);
@@ -295,20 +288,21 @@ export function createR2BindingProfileMediaStore(options = {}) {
         if (stableReadAttempt === 0) {
           return readPublishedCard(getOptions, stableReadAttempt + 1);
         }
-        throw createProfileMediaStoreError(
-          PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
-          "stable media changed repeatedly during read"
-        );
+        throw repeatedStableReadError();
       }
-      const coherent = publicationFromObject(object, {
-        handle: publication.handle,
-        stableKey: publication.stableKey
-      });
-      if (coherent.publicationId !== publication.publicationId) {
-        throw createProfileMediaStoreError(
-          PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
-          "stable media changed repeatedly during read"
-        );
+      if (getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME) {
+        const coherent = publicationFromObject(object, {
+          handle: publication.handle,
+          stableKey: publication.stableKey
+        });
+        if (!samePublicationAuthority(coherent, publication)) {
+          throw repeatedStableReadError();
+        }
+      } else {
+        const coherent = lightStableFromObject(object, publication);
+        if (coherent.storageEtag !== variant.storageEtag) {
+          throw repeatedStableReadError();
+        }
       }
       body = await readR2Body(object, "published media");
       if (createProfileMediaRevisionDigest(body) !== representation.revision) {
@@ -322,9 +316,84 @@ export function createR2BindingProfileMediaStore(options = {}) {
     return createSelectedPublicationRecord(publication, {
       body,
       locale: getOptions.locale,
-      notModified
+      notModified,
+      theme: getOptions.theme,
+      stableKey: variant.stableKey
     });
   }
+}
+
+async function loadPublicationRevisions(store, publication) {
+  const themes = publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION
+    ? PROFILE_MEDIA_SUPPORTED_THEMES
+    : [PROFILE_MEDIA_DEFAULT_THEME];
+  const revisions = {};
+  for (const theme of themes) {
+    revisions[theme] = {};
+    const expectedByLocale = getProfileMediaThemeRepresentations(publication, theme);
+    for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
+      const expected = expectedByLocale[locale];
+      const revision = await store.getRevision({
+        locale,
+        ownerId: publication.ownerId,
+        revision: expected.revision,
+        theme
+      });
+      assertCoherentRevision(revision, publication, expected, theme);
+      revisions[theme][locale] = revision;
+    }
+  }
+  return revisions;
+}
+
+async function stageLightStableObject(bucket, publication, revisions) {
+  const stableKey = publication.stableKeys.light;
+  let current;
+  try {
+    current = await bucket.head(stableKey);
+  } catch (error) {
+    throw unavailable("inspect light stable media", error);
+  }
+  let created;
+  try {
+    created = await bucket.put(
+      stableKey,
+      revisions[PROFILE_MEDIA_DEFAULT_LOCALE].body,
+      {
+        customMetadata: lightStableMetadata(publication),
+        httpMetadata: mediaHttpMetadata(),
+        onlyIf: current
+          ? { etagMatches: requireStorageEtag(current) }
+          : { etagDoesNotMatch: "*" }
+      }
+    );
+  } catch (error) {
+    throw unavailable("stage light stable media", error);
+  }
+  if (!created) throw stableConflict();
+}
+
+async function inspectLightStableObject(bucket, publication) {
+  if (publication.contractVersion !== PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND,
+      "light media variant is not available"
+    );
+  }
+  const stableKey = publication.stableKeys.light;
+  let object;
+  try {
+    object = await bucket.head(stableKey);
+  } catch (error) {
+    throw unavailable("inspect light stable media", error);
+  }
+  if (!object) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND,
+      "light media variant is not available"
+    );
+  }
+  return lightStableFromObject(object, publication);
 }
 
 function stableStateFromObject(object, expected) {
@@ -360,7 +429,8 @@ function stableStateFromObject(object, expected) {
     publication: createSelectedPublicationRecord(publication, {
       body: null,
       locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-      notModified: false
+      notModified: false,
+      theme: PROFILE_MEDIA_DEFAULT_THEME
     }),
     stableKey: publication.stableKey,
     storageEtag: publication.storageEtag
@@ -372,19 +442,27 @@ function revisionRecordFromObject(object, expected) {
     assertHttpMetadata(object, mediaHttpMetadata());
     const metadata = normalizeMetadata(object.customMetadata);
     if (metadata[METADATA_KIND] !== "revision") throw malformedMetadataError();
+    const contractVersion = Number(
+      metadata[METADATA_CONTRACT_VERSION] ?? PROFILE_MEDIA_LEGACY_CONTRACT_VERSION
+    );
     const record = normalizeProfileMediaRevisionRecord({
       body: expected.body,
       cacheControl: object.httpMetadata?.cacheControl,
       contentType: object.httpMetadata?.contentType,
+      contractVersion,
       createdAt: requireMetadata(metadata, METADATA_CREATED_AT),
       etag: quoteDigest(requireMetadata(metadata, METADATA_ETAG)),
+      format: metadata[METADATA_FORMAT] ?? PROFILE_MEDIA_FORMAT,
       locale: requireMetadata(metadata, METADATA_LOCALE),
       ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
-      revision: requireMetadata(metadata, METADATA_REVISION)
+      presentationDigest: metadata[METADATA_PRESENTATION_DIGEST] ?? null,
+      revision: requireMetadata(metadata, METADATA_REVISION),
+      theme: metadata[METADATA_THEME] ?? PROFILE_MEDIA_DEFAULT_THEME
     });
     if (
       record.ownerId !== expected.ownerId ||
       record.locale !== normalizeProfileMediaLocale(expected.locale, { fallback: false }) ||
+      record.theme !== expected.theme ||
       record.revision !== expected.revision ||
       record.revisionKey !== expected.revisionKey ||
       createProfileMediaRevisionDigest(record.body) !== record.revision
@@ -407,16 +485,24 @@ function publicationFromObject(object, expected) {
     assertHttpMetadata(object, mediaHttpMetadata());
     const metadata = normalizeMetadata(object.customMetadata);
     if (metadata[METADATA_KIND] !== "publication") throw malformedMetadataError();
-    const representations = Object.fromEntries(
-      PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [locale, {
-        etag: quoteDigest(requireMetadata(metadata, `${locale}-etag`)),
-        revision: requireMetadata(metadata, `${locale}-revision`),
-        revisionKey: requireMetadata(metadata, `${locale}-key`)
-      }])
+    const contractVersion = Number(
+      metadata[METADATA_CONTRACT_VERSION] ?? PROFILE_MEDIA_LEGACY_CONTRACT_VERSION
     );
+    const isV4 = contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
+    const representations = isV4
+      ? Object.fromEntries(PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
+          theme,
+          readRepresentationMetadata(metadata, theme)
+        ]))
+      : readRepresentationMetadata(metadata);
     const normalized = normalizeProfileMediaPublicationInput({
+      contractVersion,
+      format: metadata[METADATA_FORMAT] ?? PROFILE_MEDIA_FORMAT,
       handle: requireMetadata(metadata, METADATA_HANDLE),
       ownerId: requireMetadata(metadata, METADATA_OWNER_ID),
+      presentationDigest: isV4
+        ? requireMetadata(metadata, METADATA_PRESENTATION_DIGEST)
+        : undefined,
       publicationId: requireMetadata(metadata, METADATA_PUBLICATION_ID),
       publishedAt: requireMetadata(metadata, METADATA_PUBLISHED_AT),
       representations
@@ -437,33 +523,103 @@ function publicationFromObject(object, expected) {
   }
 }
 
+function lightStableFromObject(object, authority) {
+  try {
+    assertHttpMetadata(object, mediaHttpMetadata());
+    const metadata = normalizeMetadata(object.customMetadata);
+    if (
+      metadata[METADATA_KIND] !== "representation" ||
+      Number(requireMetadata(metadata, METADATA_CONTRACT_VERSION)) !==
+        PROFILE_MEDIA_STORE_CONTRACT_VERSION ||
+      requireMetadata(metadata, METADATA_THEME) !== "light" ||
+      requireMetadata(metadata, METADATA_FORMAT) !== authority.format ||
+      requireMetadata(metadata, METADATA_HANDLE) !== authority.handle ||
+      requireMetadata(metadata, METADATA_OWNER_ID) !== authority.ownerId ||
+      requireMetadata(metadata, METADATA_PUBLICATION_ID) !== authority.publicationId ||
+      requireMetadata(metadata, METADATA_PRESENTATION_DIGEST) !==
+        authority.presentationDigest ||
+      requireMetadata(metadata, METADATA_AUTHORITY_KEY) !== authority.stableKey
+    ) {
+      throw malformedMetadataError();
+    }
+    const expected = getProfileMediaThemeRepresentations(authority, "light").en;
+    if (
+      requireMetadata(metadata, METADATA_REVISION) !== expected.revision ||
+      quoteDigest(requireMetadata(metadata, METADATA_ETAG)) !== expected.etag
+    ) {
+      throw malformedMetadataError();
+    }
+    return {
+      stableKey: authority.stableKeys.light,
+      storageEtag: requireStorageEtag(object)
+    };
+  } catch (error) {
+    if (error?.name === "ProfileMediaStoreError") throw error;
+    throw malformedMetadataError(error);
+  }
+}
+
+function readRepresentationMetadata(metadata, theme) {
+  const prefix = theme ? `${theme}-` : "";
+  return Object.fromEntries(PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => [
+    locale,
+    {
+      etag: quoteDigest(requireMetadata(metadata, `${prefix}${locale}-etag`)),
+      revision: requireMetadata(metadata, `${prefix}${locale}-revision`),
+      revisionKey: requireMetadata(metadata, `${prefix}${locale}-key`)
+    }
+  ]));
+}
+
 function createSelectedPublicationRecord(publication, options) {
-  const representation = publication.representations[options.locale];
+  const representations = getProfileMediaThemeRepresentations(
+    publication,
+    options.theme
+  );
+  const representation = representations[options.locale];
   return {
     body: options.body ? Buffer.from(options.body) : null,
     cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
     contentType: PROFILE_MEDIA_CONTENT_TYPE,
+    contractVersion: publication.contractVersion,
     etag: representation.etag,
+    format: publication.format,
     handle: publication.handle,
     locale: options.locale,
     notModified: options.notModified,
     ownerId: publication.ownerId,
+    presentationDigest: publication.presentationDigest,
     publicationId: publication.publicationId,
     publishedAt: publication.publishedAt,
-    representations: Object.fromEntries(
-      Object.entries(publication.representations).map(
-        ([locale, value]) => [locale, { ...value, locale }]
-      )
-    ),
+    representations: cloneRepresentations(publication),
     revision: representation.revision,
     revisionKey: representation.revisionKey,
-    stableKey: publication.stableKey,
-    storageEtag: publication.storageEtag
+    stableKey: options.stableKey ?? createProfileMediaStableKey({
+      handle: publication.handle,
+      theme: options.theme
+    }),
+    stableKeys: { ...publication.stableKeys },
+    storageEtag: publication.storageEtag,
+    theme: options.theme
   };
 }
 
+function cloneRepresentations(publication) {
+  if (publication.contractVersion !== PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
+    return Object.fromEntries(Object.entries(publication.representations).map(
+      ([locale, value]) => [locale, { ...value, locale, theme: "dark" }]
+    ));
+  }
+  return Object.fromEntries(PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
+    theme,
+    Object.fromEntries(Object.entries(publication.representations[theme]).map(
+      ([locale, value]) => [locale, { ...value, locale, theme }]
+    ))
+  ]));
+}
+
 function revisionMetadata(record) {
-  return {
+  const metadata = {
     [METADATA_KIND]: "revision",
     [METADATA_OWNER_ID]: record.ownerId,
     [METADATA_LOCALE]: record.locale,
@@ -471,6 +627,13 @@ function revisionMetadata(record) {
     [METADATA_ETAG]: record.revision,
     [METADATA_CREATED_AT]: record.createdAt
   };
+  if (record.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
+    metadata[METADATA_CONTRACT_VERSION] = String(record.contractVersion);
+    metadata[METADATA_THEME] = record.theme;
+    metadata[METADATA_FORMAT] = record.format;
+    metadata[METADATA_PRESENTATION_DIGEST] = record.presentationDigest;
+  }
+  return metadata;
 }
 
 function publicationMetadata(publication) {
@@ -481,13 +644,76 @@ function publicationMetadata(publication) {
     [METADATA_PUBLICATION_ID]: publication.publicationId,
     [METADATA_PUBLISHED_AT]: publication.publishedAt
   };
-  for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
-    const representation = publication.representations[locale];
-    metadata[`${locale}-key`] = representation.revisionKey;
-    metadata[`${locale}-revision`] = representation.revision;
-    metadata[`${locale}-etag`] = representation.revision;
+  const isV4 = publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
+  if (isV4) {
+    metadata[METADATA_CONTRACT_VERSION] = String(publication.contractVersion);
+    metadata[METADATA_FORMAT] = publication.format;
+    metadata[METADATA_PRESENTATION_DIGEST] = publication.presentationDigest;
+  }
+  const themes = isV4
+    ? PROFILE_MEDIA_SUPPORTED_THEMES
+    : [PROFILE_MEDIA_DEFAULT_THEME];
+  for (const theme of themes) {
+    const representations = getProfileMediaThemeRepresentations(publication, theme);
+    const prefix = isV4 ? `${theme}-` : "";
+    for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
+      const representation = representations[locale];
+      metadata[`${prefix}${locale}-key`] = representation.revisionKey;
+      metadata[`${prefix}${locale}-revision`] = representation.revision;
+      metadata[`${prefix}${locale}-etag`] = representation.revision;
+    }
   }
   return metadata;
+}
+
+function lightStableMetadata(publication) {
+  const representation = publication.representations.light.en;
+  return {
+    [METADATA_KIND]: "representation",
+    [METADATA_CONTRACT_VERSION]: String(publication.contractVersion),
+    [METADATA_OWNER_ID]: publication.ownerId,
+    [METADATA_HANDLE]: publication.handle,
+    [METADATA_THEME]: "light",
+    [METADATA_FORMAT]: publication.format,
+    [METADATA_REVISION]: representation.revision,
+    [METADATA_ETAG]: representation.revision,
+    [METADATA_PRESENTATION_DIGEST]: publication.presentationDigest,
+    [METADATA_PUBLICATION_ID]: publication.publicationId,
+    [METADATA_AUTHORITY_KEY]: publication.stableKey
+  };
+}
+
+function assertCoherentRevision(revision, publication, expected, theme) {
+  if (!revision) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND,
+      "media revision not found"
+    );
+  }
+  if (
+    revision.etag !== expected.etag ||
+    revision.theme !== theme ||
+    !isPublicationRevisionPresentationCompatible(revision, publication, theme)
+  ) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+      "media revision metadata does not match publication metadata"
+    );
+  }
+}
+
+function isPublicationRevisionPresentationCompatible(revision, publication, theme) {
+  if (revision.presentationDigest === publication.presentationDigest) return true;
+  return publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
+    theme === PROFILE_MEDIA_DEFAULT_THEME &&
+    revision.contractVersion === PROFILE_MEDIA_LEGACY_CONTRACT_VERSION &&
+    revision.presentationDigest === null;
+}
+
+function samePublicationAuthority(left, right) {
+  return left.publicationId === right.publicationId &&
+    left.presentationDigest === right.presentationDigest &&
+    left.contractVersion === right.contractVersion;
 }
 
 function mediaHttpMetadata() {
@@ -567,6 +793,9 @@ function hasR2Body(object) {
 function sameImmutableRevision(left, right) {
   return left.etag === right.etag &&
     left.locale === right.locale &&
+    left.theme === right.theme &&
+    left.presentationDigest === right.presentationDigest &&
+    left.format === right.format &&
     left.contentType === right.contentType &&
     left.cacheControl === right.cacheControl &&
     Buffer.from(left.body).equals(Buffer.from(right.body));
@@ -644,6 +873,13 @@ function stableConflict() {
   return createProfileMediaStoreError(
     PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
     "stable media storage revision changed"
+  );
+}
+
+function repeatedStableReadError() {
+  return createProfileMediaStoreError(
+    PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+    "stable media changed repeatedly during read"
   );
 }
 

@@ -9,12 +9,13 @@ import {
   createMemoryProfileBackendStore
 } from "../index.js";
 
-test("contract v2 fixes exactly five named atomic operations", () => {
+test("contract v2 fixes the named atomic operations", () => {
   assert.deepEqual(PROFILE_BACKEND_ATOMIC_OPERATION_NAMES, [
     "approveCliLogin",
     "completeOAuthCallback",
     "exchangeCliLogin",
     "submitAccountUsage",
+    "updateCardSettings",
     "updateVisibility"
   ]);
   const store = createMemoryProfileBackendStore();

@@ -118,7 +118,7 @@ test("bad maintenance tokens of different lengths produce the same safe response
 
 test("maintenance readiness returns only exact version state without mutations", async () => {
   const calls = [];
-  const database = readinessDatabase([1, 2, 3]);
+  const database = readinessDatabase([1, 2, 3, 4, 5]);
   const fixture = await createServiceFixture({ calls, database });
   const handler = createProfileSitesMaintenanceHandler({
     config: enabledConfig(),
@@ -134,8 +134,8 @@ test("maintenance readiness returns only exact version state without mutations",
   assert.deepEqual(await response.json(), {
     ok: true,
     summary: {
-      appliedVersions: [1, 2, 3],
-      expectedVersions: [1, 2, 3],
+      appliedVersions: [1, 2, 3, 4, 5],
+      expectedVersions: [1, 2, 3, 4, 5],
       operation: "readiness",
       ready: true
     }
@@ -307,6 +307,39 @@ test("public restore stages D1 privately before publication", async () => {
   );
 });
 
+test("publication repair stages every v4 variant before replacing authority", async () => {
+  const calls = [];
+  const fixture = await createServiceFixture({ calls });
+  const plan = await fixture.service.planOwner(OWNER_SCOPE);
+  const applicationEtag = `"${"C".repeat(43)}"`;
+
+  const repaired = await fixture.service.repairPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedApplicationEtags: {
+      dark: { en: applicationEtag, ko: applicationEtag },
+      light: { en: applicationEtag, ko: applicationEtag }
+    },
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount,
+    expectedStorageEtag: "legacy-storage-etag"
+  });
+
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("media.put") || call === "r2.repair"),
+    [
+      "media.put.light.en",
+      "media.put.light.ko",
+      "media.put.dark.en",
+      "media.put.dark.ko",
+      "r2.repair"
+    ]
+  );
+  assert.equal(repaired.summary.objectCount, 6);
+  assert.equal(repaired.summary.operation, "repair-publication");
+});
+
 async function createServiceFixture(options = {}) {
   const digestA = "A".repeat(43);
   const digestB = "B".repeat(43);
@@ -406,7 +439,17 @@ async function createServiceFixture(options = {}) {
         })
       };
     },
-    async applyRetention() {}
+    async applyRetention() {},
+    async repairPublication() {
+      calls.push("r2.repair");
+      return {
+        stable: {
+          kind: "publication",
+          stableKey: "cards/v2/public/postmelee/card.png",
+          storageEtag: "repaired-storage-etag"
+        }
+      };
+    }
   };
   const store = {
     atomic: {
@@ -417,7 +460,9 @@ async function createServiceFixture(options = {}) {
     }
   };
   const mediaStore = {
-    async putRevision() {},
+    async putRevision(revision) {
+      calls.push(`media.put.${revision.theme}.${revision.locale}`);
+    },
     async unpublishCard() {}
   };
   const service = createProfileSitesMaintenanceService({

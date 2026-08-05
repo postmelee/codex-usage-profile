@@ -2,12 +2,19 @@ import { createAccountService } from "./accounts.js";
 import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
 import { createProfileCardServiceCore } from "../profile-card/service-core.js";
+import {
+  CARD_STYLE_MAX_BYTES,
+  createPresentationDigest,
+  normalizeCardLocale,
+  normalizeCardStyle
+} from "../profile-card/presentation.js";
 import { createProfilePublicationService } from "../profile-media/publication-service.js";
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
   PROFILE_MEDIA_STORE_ERROR_CODES,
-  createProfileMediaStableKey
+  createProfileMediaStableKey,
+  normalizeProfileMediaTheme
 } from "../profile-media/media-store-contract.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
 import { createCliLoginService } from "./cli-login.js";
@@ -105,6 +112,14 @@ export function createProfileBackendHttpHandler(options = {}) {
     deviceService,
     createId
   });
+  let publicationService = options.publicationService ?? null;
+  const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (
+    async (ensureOptions) => publicationService?.ensurePublishedCardVariants?.({
+      ownerId: ensureOptions.owner.id,
+      owner: ensureOptions.owner,
+      cardStyle: ensureOptions.cardStyle
+    })
+  );
   const cardService = options.cardService ?? createProfileCardServiceCore({
     store,
     accountService,
@@ -114,20 +129,19 @@ export function createProfileBackendHttpHandler(options = {}) {
     rendererVersion: options.profileCardRendererVersion,
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
-    cacheEntries: options.profileCardCacheEntries
+    cacheEntries: options.profileCardCacheEntries,
+    ensureCardStyleMedia
   });
   const mediaStore = options.mediaStore ?? null;
-  const publicationService = options.publicationService ?? (
-    mediaStore
-      ? createProfilePublicationService({
-        store,
-        mediaStore,
-        cardService,
-        now,
-        createId
-      })
-      : null
-  );
+  if (!publicationService && mediaStore) {
+    publicationService = createProfilePublicationService({
+      store,
+      mediaStore,
+      cardService,
+      now,
+      createId
+    });
+  }
   const accountUsageService = options.accountUsageService ??
     createAccountUsageSubmitService({
       store,
@@ -229,7 +243,11 @@ export function createProfileBackendHttpHandler(options = {}) {
           readCookieHeader(request)
         );
         const profile = await cardService.getOwnerProfile({ ownerId: owner.id });
-        return okResponse(serializeOwnerProfile(profile, request, options.publicBaseUrl));
+        return okResponse(await serializeOwnerProfile(
+          profile,
+          request,
+          options.publicBaseUrl
+        ));
       }
 
       if (route === "PATCH /api/profile") {
@@ -241,7 +259,31 @@ export function createProfileBackendHttpHandler(options = {}) {
           ownerId: owner.id,
           visibility: readProfileVisibility(body)
         });
-        return okResponse(serializeOwnerProfile(profile, request, options.publicBaseUrl));
+        return okResponse(await serializeOwnerProfile(
+          profile,
+          request,
+          options.publicBaseUrl
+        ));
+      }
+
+      if (route === "PATCH /api/profile/card-settings") {
+        const { owner } = await sessionService.verifySessionFromCookie(
+          readCookieHeader(request)
+        );
+        const body = await readJsonBody(request, {
+          requireJson: true,
+          maxBytes: CARD_STYLE_MAX_BYTES + 128
+        });
+        const settings = readProfileCardSettings(body);
+        const profile = await cardService.updateCardSettings({
+          ownerId: owner.id,
+          ...settings
+        });
+        return okResponse(await serializeOwnerProfile(
+          profile,
+          request,
+          options.publicBaseUrl
+        ));
       }
 
       if (route === "GET /api/profile/card.png") {
@@ -501,7 +543,7 @@ export function createProfileBackendHttpHandler(options = {}) {
         });
 
         return okResponse(
-          serializePublicProfile(profile, request, options.publicBaseUrl),
+          await serializePublicProfile(profile, request, options.publicBaseUrl),
           200,
           { "cache-control": "no-store" }
         );
@@ -534,6 +576,7 @@ export function createProfileBackendHttpHandler(options = {}) {
           mediaStore,
           handle: decodePublicCardHandle(publicCardMatch[1]),
           locale: url.searchParams.get("locale"),
+          theme: readPublicCardTheme(url.searchParams.get("theme")),
           ifNoneMatch: request.headers.get("if-none-match"),
           includeBody: method === "GET"
         });
@@ -676,6 +719,30 @@ function readProfileVisibility(body) {
   return body.visibility;
 }
 
+function readProfileCardSettings(body) {
+  if (
+    !body || typeof body !== "object" || Array.isArray(body) ||
+    Object.keys(body).length !== 2 || !Object.hasOwn(body, "cardStyle") ||
+    !Object.hasOwn(body, "cardLocale")
+  ) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      "Profile card settings payload must contain only cardStyle and cardLocale"
+    );
+  }
+  try {
+    return {
+      cardLocale: normalizeCardLocale(body.cardLocale, { defaultWhenMissing: false }),
+      cardStyle: normalizeCardStyle(body.cardStyle, { defaultWhenMissing: false })
+    };
+  } catch (error) {
+    throw new ProfileBackendError(
+      PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED,
+      error instanceof Error ? error.message : "card settings are invalid"
+    );
+  }
+}
+
 function normalizeError(error) {
   if (isProfileBackendError(error)) {
     return error;
@@ -787,6 +854,7 @@ function isSessionMutationRoute(route, pathname) {
     "POST /api/auth/logout",
     "POST /api/cli/login/approve",
     "PATCH /api/profile",
+    "PATCH /api/profile/card-settings",
     "POST /api/settings/tokens"
   ].includes(route)) {
     return true;
@@ -809,6 +877,8 @@ function serializeOwner(owner) {
     profileUrl: owner.profileUrl ?? null,
     handle: owner.handle,
     visibility: owner.visibility,
+    cardLocale: normalizeCardLocale(owner.cardLocale),
+    cardStyle: normalizeCardStyle(owner.cardStyle),
     createdAt: owner.createdAt ?? null,
     updatedAt: owner.updatedAt ?? null
   };
@@ -943,17 +1013,47 @@ function serializeLatestSnapshot(record) {
   };
 }
 
-function serializeOwnerProfile(profile, request, publicBaseUrl) {
+async function serializeOwnerProfile(profile, request, publicBaseUrl) {
+  const cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  const cardLocale = normalizeCardLocale(profile.owner.cardLocale);
+  const publicCardUrls = buildPublicCardUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
+  const publicCardVariantUrls = buildPublicCardVariantUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
   return {
     owner: serializeOwner(profile.owner),
     usage: serializeLatestUsage(profile.usageRecord),
     visibility: profile.visibility,
-    publicCardUrl: buildPublicCardUrl(profile.owner.handle, request, publicBaseUrl)
+    cardLocale,
+    cardStyle,
+    presentationDigest: await createPresentationDigest(cardStyle),
+    publicCardUrl: buildPublicCardUrl(profile.owner.handle, request, publicBaseUrl),
+    selectedPublicCardUrl: publicCardVariantUrls[cardLocale][cardStyle.theme],
+    publicCardUrls,
+    publicCardVariantUrls
   };
 }
 
-function serializePublicProfile(profile, request, publicBaseUrl) {
+async function serializePublicProfile(profile, request, publicBaseUrl) {
   const usage = normalizeAccountUsageReadResult(profile.usageRecord.usage);
+  const cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  const cardLocale = normalizeCardLocale(profile.owner.cardLocale);
+  const publicCardUrls = buildPublicCardUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
+  const publicCardVariantUrls = buildPublicCardVariantUrls(
+    profile.owner.handle,
+    request,
+    publicBaseUrl
+  );
 
   return {
     owner: {
@@ -971,11 +1071,17 @@ function serializePublicProfile(profile, request, publicBaseUrl) {
       }
     },
     visibility: PROFILE_VISIBILITY.PUBLIC,
+    cardLocale,
+    cardStyle,
+    presentationDigest: await createPresentationDigest(cardStyle),
     publicCardUrl: buildPublicCardUrl(
       profile.owner.handle,
       request,
       publicBaseUrl
-    )
+    ),
+    selectedPublicCardUrl: publicCardVariantUrls[cardLocale][cardStyle.theme],
+    publicCardUrls,
+    publicCardVariantUrls
   };
 }
 
@@ -1105,6 +1211,42 @@ function buildPublicCardUrl(handle, request, publicBaseUrl) {
   return new URL(`/u/${encodeURIComponent(handle)}/card.png`, baseUrl).toString();
 }
 
+function buildPublicCardUrls(handle, request, publicBaseUrl) {
+  const base = buildPublicCardUrl(handle, request, publicBaseUrl);
+  return Object.freeze({
+    light: withTheme(base, "light"),
+    dark: withTheme(base, "dark")
+  });
+}
+
+function buildPublicCardVariantUrls(handle, request, publicBaseUrl) {
+  const base = buildPublicCardUrl(handle, request, publicBaseUrl);
+  return Object.freeze(Object.fromEntries(["en", "ko"].map((locale) => [
+    locale,
+    Object.freeze(Object.fromEntries(["light", "dark"].map((theme) => [
+      theme,
+      withCardVariant(base, { locale, theme })
+    ])))
+  ])));
+}
+
+function withTheme(value, theme) {
+  const url = new URL(value);
+  url.searchParams.set("theme", theme);
+  return url.toString();
+}
+
+function withCardVariant(value, options) {
+  const url = new URL(value);
+  url.searchParams.set("theme", options.theme);
+  if (options.locale === "ko") {
+    url.searchParams.set("locale", "ko");
+  } else {
+    url.searchParams.delete("locale");
+  }
+  return url.toString();
+}
+
 function decodePublicHandle(value) {
   try {
     return decodeURIComponent(value);
@@ -1174,6 +1316,7 @@ async function readPublishedMediaCard(options) {
     card = await options.mediaStore.getPublishedCard({
       handle: options.handle,
       locale: options.locale,
+      theme: options.theme,
       ifNoneMatch: options.ifNoneMatch,
       includeBody: options.includeBody
     });
@@ -1192,6 +1335,15 @@ async function readPublishedMediaCard(options) {
     throw publicCardNotFoundError();
   }
   return card;
+}
+
+function readPublicCardTheme(value) {
+  if (value === null) return "dark";
+  try {
+    return normalizeProfileMediaTheme(value, { fallback: false });
+  } catch {
+    throw publicCardNotFoundError();
+  }
 }
 
 function publicCardNotFoundError() {

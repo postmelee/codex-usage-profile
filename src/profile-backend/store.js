@@ -11,6 +11,10 @@ import {
   PROFILE_BACKEND_STORE_SCHEMA_VERSION,
   PROFILE_VISIBILITY
 } from "./store-values.js";
+import {
+  normalizeCardLocale,
+  normalizeCardStyle
+} from "../profile-card/presentation.js";
 
 export {
   PROFILE_BACKEND_STORE_SCHEMA_VERSION,
@@ -332,19 +336,27 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         "handle"
       ]);
 
-      const previousOwner = ownersById.get(owner.id);
-      const providerIdentity = providerKey(owner.authProvider, owner.providerUserId);
+      const normalizedOwner = {
+        ...owner,
+        cardLocale: normalizeCardLocale(owner.cardLocale),
+        cardStyle: normalizeCardStyle(owner.cardStyle)
+      };
+      const previousOwner = ownersById.get(normalizedOwner.id);
+      const providerIdentity = providerKey(
+        normalizedOwner.authProvider,
+        normalizedOwner.providerUserId
+      );
       const ownerIdForProvider = ownerIdByProvider.get(providerIdentity);
-      const ownerIdForHandle = ownerIdByHandle.get(owner.handle);
+      const ownerIdForHandle = ownerIdByHandle.get(normalizedOwner.handle);
 
-      if (ownerIdForProvider && ownerIdForProvider !== owner.id) {
+      if (ownerIdForProvider && ownerIdForProvider !== normalizedOwner.id) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.CONFLICT,
           "Provider identity already belongs to another owner"
         );
       }
 
-      if (ownerIdForHandle && ownerIdForHandle !== owner.id) {
+      if (ownerIdForHandle && ownerIdForHandle !== normalizedOwner.id) {
         throw new ProfileBackendError(
           PROFILE_BACKEND_ERROR_CODES.CONFLICT,
           "Handle already belongs to another owner"
@@ -356,11 +368,11 @@ export function createMemoryProfileBackendStore(initialState = {}) {
         ownerIdByHandle.delete(previousOwner.handle);
       }
 
-      ownersById.set(owner.id, clone(owner));
-      ownerIdByProvider.set(providerIdentity, owner.id);
-      ownerIdByHandle.set(owner.handle, owner.id);
+      ownersById.set(normalizedOwner.id, clone(normalizedOwner));
+      ownerIdByProvider.set(providerIdentity, normalizedOwner.id);
+      ownerIdByHandle.set(normalizedOwner.handle, normalizedOwner.id);
 
-      return clone(owner);
+      return clone(normalizedOwner);
     },
 
     exportState() {

@@ -5,6 +5,12 @@ import {
   stableStringify
 } from "../maintenance-contract.js";
 import { createD1ProfileBackendStore } from "./store.js";
+import {
+  createPresentationDigest,
+  normalizeCardLocale,
+  normalizeCardStyle,
+  serializeCardStyle
+} from "../../profile-card/presentation.js";
 
 export const DEFAULT_PROFILE_RETENTION_DAYS = 30;
 export const MAX_PROFILE_RETENTION_ROWS_PER_TABLE = 100;
@@ -59,6 +65,7 @@ export function createD1ProfileMaintenance(options = {}) {
       latestSnapshot,
       latestUsage,
       owner,
+      presentationDigest: await createPresentationDigest(owner.cardStyle),
       publication: null,
       submittedDevices
     });
@@ -238,7 +245,7 @@ export function createD1ProfileMaintenance(options = {}) {
   }
 
   async function restoreOwner(restoreOptions = {}) {
-    const profile = normalizeDurableProfile(restoreOptions.profile);
+    const profile = await normalizeDurableProfile(restoreOptions.profile);
     const desiredVisibility = profile.owner.visibility;
     const stagedProfile = withProfileVisibility(profile, "private");
     const currentById = await store.getOwnerById(profile.owner.id);
@@ -570,7 +577,7 @@ function deleteByIds(prepare, table, ids) {
   );
 }
 
-function normalizeDurableProfile(value) {
+async function normalizeDurableProfile(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("restore profile must be an object");
   }
@@ -586,6 +593,18 @@ function normalizeDurableProfile(value) {
   if (!Array.isArray(profile.submittedDevices)) {
     throw new TypeError("restore submittedDevices must be an array");
   }
+  profile.owner.cardStyle = normalizeCardStyle(profile.owner.cardStyle);
+  profile.owner.cardLocale = normalizeCardLocale(profile.owner.cardLocale);
+  const presentationDigest = await createPresentationDigest(
+    profile.owner.cardStyle
+  );
+  if (
+    profile.presentationDigest !== undefined &&
+    !safeEqualText(profile.presentationDigest, presentationDigest)
+  ) {
+    throw new TypeError("restore presentationDigest does not match cardStyle");
+  }
+  profile.presentationDigest = presentationDigest;
   profile.publication = profile.publication ?? null;
   return profile;
 }
@@ -618,8 +637,8 @@ function isSafeQuiescedRestoreState(current, staged) {
 function insertOwnerSql() {
   return "INSERT INTO owners (" +
     "id, auth_provider, provider_user_id, github_login, display_name, " +
-    "avatar_url, profile_url, handle, visibility, created_at, updated_at" +
-  ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    "avatar_url, profile_url, handle, visibility, card_locale, card_style, created_at, updated_at" +
+  ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 }
 
 function ownerParams(owner) {
@@ -633,6 +652,8 @@ function ownerParams(owner) {
     owner.profileUrl ?? null,
     owner.handle,
     owner.visibility,
+    normalizeCardLocale(owner.cardLocale),
+    serializeCardStyle(owner.cardStyle),
     owner.createdAt ?? null,
     owner.updatedAt ?? null
   ];

@@ -8,6 +8,7 @@ export const PROFILE_BACKEND_ATOMIC_OPERATION_NAMES = Object.freeze([
   "completeOAuthCallback",
   "exchangeCliLogin",
   "submitAccountUsage",
+  "updateCardSettings",
   "updateVisibility"
 ]);
 
@@ -28,6 +29,13 @@ const REQUIRED_COMMAND_FIELDS = Object.freeze({
     "uploadedAt",
     "device",
     "deviceId"
+  ],
+  updateCardSettings: [
+    "ownerId",
+    "expectedOwnerUpdatedAt",
+    "cardLocale",
+    "cardStyle",
+    "updatedAt"
   ],
   updateVisibility: [
     "ownerId",
@@ -69,10 +77,10 @@ export function assertProfileBackendAtomicCommand(name, command) {
     throw new TypeError(`${name} command is missing fields: ${missing.join(", ")}`);
   }
   if (
-    name === "updateVisibility" &&
+    (name === "updateVisibility" || name === "updateCardSettings") &&
     command.updatedAt === command.expectedOwnerUpdatedAt
   ) {
-    throw new TypeError("updateVisibility must advance the owner revision");
+    throw new TypeError(`${name} must advance the owner revision`);
   }
 
   return command;
@@ -88,6 +96,7 @@ export function assertProfileBackendAtomicResult(name, result) {
     completeOAuthCallback: ["oauthState", "owner", "session"],
     exchangeCliLogin: ["challenge", "token", "tokenRecord"],
     submitAccountUsage: ["device", "idempotent", "owner", "usageRecord"],
+    updateCardSettings: ["cardLocale", "cardStyle", "owner"],
     updateVisibility: ["owner", "usageRecord", "visibility"]
   }[name];
 
@@ -232,6 +241,28 @@ export function createTransactionalProfileBackendAtomicOperations(store) {
           usageRecord,
           device,
           idempotent: outcome === "idempotent"
+        });
+      });
+    },
+
+    updateCardSettings(command) {
+      assertProfileBackendAtomicCommand("updateCardSettings", command);
+      return store.transaction(async (tx) => {
+        const current = await requireOwner(tx, command.ownerId);
+        if ((current.updatedAt ?? null) !== command.expectedOwnerUpdatedAt) {
+          throw conflict("Owner card settings revision changed; retry the update");
+        }
+
+        const owner = await tx.saveOwner({
+          ...current,
+          cardLocale: command.cardLocale,
+          cardStyle: command.cardStyle,
+          updatedAt: command.updatedAt
+        });
+        return assertProfileBackendAtomicResult("updateCardSettings", {
+          owner,
+          cardLocale: owner.cardLocale,
+          cardStyle: owner.cardStyle
         });
       });
     },

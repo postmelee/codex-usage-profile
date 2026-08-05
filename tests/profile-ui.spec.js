@@ -261,7 +261,7 @@ test.describe("Stage 2 locale surfaces", () => {
 });
 
 test.describe("Stage 3 locale surfaces", () => {
-  test("locale profile keeps owner data while localizing summary and card", async ({ page }) => {
+  test("locale profile localizes UI while preserving the saved card language", async ({ page }) => {
     await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
@@ -282,7 +282,7 @@ test.describe("Stage 3 locale surfaces", () => {
       .toBeVisible();
     await expect(page.getByText("공개", { exact: true })).toBeVisible();
     const card = page.getByRole("img", { name: "내 Codex 사용량 카드" });
-    await expect(card).toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+    await expect(card).toHaveAttribute("src", /[?&]locale=en(?:&|$)/);
 
     await page.evaluate(() => {
       Object.defineProperty(navigator, "languages", {
@@ -308,7 +308,7 @@ test.describe("Stage 3 locale surfaces", () => {
       "June 11, 2026 · 100M tokens"
     );
     const englishCard = page.getByRole("img", { name: "Your Codex usage card" });
-    await expect(englishCard).not.toHaveAttribute("src", /[?&]locale=ko(?:&|$)/);
+    await expect(englishCard).toHaveAttribute("src", /[?&]locale=en(?:&|$)/);
   });
 
   test("locale heatmap localizes modes, tooltips, exact count, and month labels", async ({ page }) => {
@@ -342,7 +342,11 @@ test.describe("Stage 3 locale surfaces", () => {
     await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
-      data: ownerProfile("public"),
+      data: {
+        ...ownerProfile("public"),
+        cardLocale: "ko",
+        selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark&locale=ko"
+      },
       ok: true
     }));
     await mockCardImages(page);
@@ -1762,13 +1766,13 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/u/postmelee/card.png"
+      "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
     );
 
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png)"
+      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png?theme=dark)"
     );
 
     const downloadPromise = page.waitForEvent("download");
@@ -2286,29 +2290,18 @@ test.describe("Home and share card flow", () => {
       data: ownerProfile("public"),
       ok: true
     }));
-    await page.route("**/api/profile/card.png*", async (route) => {
-      const url = new URL(route.request().url());
-      if (url.searchParams.has("v")) {
-        await route.fulfill({
-          body: JSON.stringify({
-            error: { code: "unavailable", message: "Preview unavailable" },
-            ok: false
-          }),
-          contentType: "application/json",
-          status: 503
-        });
-        return;
-      }
-      await route.fulfill({
-        body: CARD_PNG,
-        contentType: "image/png",
-        status: 200
-      });
-    });
-    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+    await page.route("**/api/profile/card.png*", (route) => route.fulfill({
       body: CARD_PNG,
       contentType: "image/png",
       status: 200
+    }));
+    await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+      body: JSON.stringify({
+        error: { code: "unavailable", message: "Preview unavailable" },
+        ok: false
+      }),
+      contentType: "application/json",
+      status: 503
     }));
 
     await page.goto("/");
@@ -2918,52 +2911,136 @@ test.describe("Settings appearance control", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
-  test("themed card preview follows the resolved owner theme", async ({ page }) => {
+  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ page }) => {
     await page.addInitScript((storageKey) => {
       if (localStorage.getItem(storageKey) === null) {
         localStorage.setItem(storageKey, "light");
       }
     }, THEME_STORAGE_KEY);
     await mockAuthenticatedAccount(page);
+    let profile = ownerProfile("public");
+    let savedPayload = null;
     await page.route("**/api/profile", (route) => fulfillJson(route, {
-      data: ownerProfile("public"),
+      data: profile,
       ok: true
     }));
+    await page.route("**/api/profile/card-settings", async (route) => {
+      savedPayload = route.request().postDataJSON();
+      profile = {
+        ...profile,
+        cardLocale: savedPayload.cardLocale,
+        cardStyle: savedPayload.cardStyle,
+        selectedPublicCardUrl: `http://127.0.0.1:5173/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
+      };
+      await fulfillJson(route, { data: profile, ok: true });
+    });
     await mockCardImages(page);
 
     await page.goto("/");
     await expect(page.locator(".home-card-preview")).toHaveAttribute(
       "src",
-      /\/api\/profile\/card\.png\?locale=en&theme=light/
+      /\/api\/profile\/card\.png\?locale=en&theme=dark/
     );
-    await page.getByRole("button", { name: "Share", exact: true }).click();
-    await expect(page.locator(".share-studio-card")).toHaveAttribute(
-      "src",
-      /\/api\/profile\/card\.png\?locale=en&theme=light/
-    );
-    await page.getByRole("button", { name: "Close Share Studio" }).click();
 
-    await page.goto("/profile");
-    await expect(page.locator(".profile-card-section .home-card-preview"))
-      .toHaveAttribute(
-        "src",
-        /\/api\/profile\/card\.png\?locale=en&theme=light/
-      );
-
-    await page.goto("/settings");
-    await mockSettingsData(page);
-    await page.getByRole("radio", { name: /Dark/ }).check();
     await page.goto("/profile");
     await expect(page.locator(".profile-card-section .home-card-preview"))
       .toHaveAttribute(
         "src",
         /\/api\/profile\/card\.png\?locale=en&theme=dark/
       );
+    const darkCard = page.locator('input[name="card-theme"][value="dark"]');
+    const lightCard = page.locator('input[name="card-theme"][value="light"]');
+    const englishCard = page.locator('input[name="card-locale"][value="en"]');
+    const koreanCard = page.locator('input[name="card-locale"][value="ko"]');
+    await expect(darkCard).toBeChecked();
+    await expect(englishCard).toBeChecked();
+
+    await lightCard.check();
+    await koreanCard.check();
+    await expect(page.locator(".profile-card-section .home-card-preview"))
+      .toHaveAttribute(
+        "src",
+        /\/api\/profile\/card\.png\?locale=ko&theme=light/
+      );
+    await page.getByRole("button", { name: "Save card settings" }).click();
+    await expect.poll(() => savedPayload).toEqual({
+      cardLocale: "ko",
+      cardStyle: {
+        effect: { preset: "none", version: 1 },
+        schemaVersion: 1,
+        theme: "light"
+      }
+    });
+    await expect(page.getByRole("button", { name: "Save card settings" }))
+      .toBeDisabled();
+    await expect(page.locator(".card-style-settings-status"))
+      .toHaveText("Card settings saved.");
+
+    await page.reload();
+    await expect(lightCard).toBeChecked();
+    await expect(koreanCard).toBeChecked();
+    await expect(page.locator(".profile-card-section .home-card-preview"))
+      .toHaveAttribute(
+        "src",
+        /\/api\/profile\/card\.png\?locale=ko&theme=light/
+      );
+
+    await darkCard.check();
+    await englishCard.check();
+    await expect(page.getByRole("button", { name: "Save & share" }))
+      .toBeEnabled();
+    await page.getByRole("button", { name: "Save & share" }).click();
+    await expect.poll(() => savedPayload).toEqual({
+      cardLocale: "en",
+      cardStyle: {
+        effect: { preset: "none", version: 1 },
+        schemaVersion: 1,
+        theme: "dark"
+      }
+    });
+    const shareStudio = page.getByRole("dialog", { name: "Share activity" });
+    await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
+      .toHaveAttribute(
+        "src",
+        "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+      );
+    await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
+      .toHaveAttribute("title", /[?&]theme=dark(?:&|$)/);
+    await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
+      .not.toHaveAttribute("title", /[?&]locale=/);
+  });
+
+  test("card appearance keeps the draft available after a save failure", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card-settings", (route) => fulfillJson(route, {
+      error: { code: "media_unavailable", message: "Unavailable" },
+      ok: false
+    }, 503));
+    await mockCardImages(page);
+    await page.goto("/profile");
+
+    const lightCard = page.locator('input[name="card-theme"][value="light"]');
+    await lightCard.check();
+    const saveAndShare = page.getByRole("button", { name: "Save & share" });
+    await saveAndShare.click();
+
+    await expect(page.locator(".card-style-settings-status")).toHaveText(
+      "Could not save card settings. Try again."
+    );
+    await expect(page.getByRole("dialog", { name: "Share activity" }))
+      .toHaveCount(0);
+    await expect(lightCard).toBeChecked();
+    await expect(saveAndShare).toBeEnabled();
   });
 });
 
 test.describe("Public profile", () => {
-  test("public profile renders the API-backed GitHub identity and stable card", async ({ page }, testInfo) => {
+  test("public profile renders the API-backed GitHub identity and selected public card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
     await mockPublicProfile(page);
     await mockCardImages(page);
@@ -2985,7 +3062,7 @@ test.describe("Public profile", () => {
     const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
     await expect(card).toHaveAttribute(
       "src",
-      "http://127.0.0.1:5173/u/postmelee/card.png"
+      "http://127.0.0.1:5173/u/postmelee/card.png?theme=light&locale=ko"
     );
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
     await expect.poll(() => card.evaluate((image) => image.naturalWidth)).toBe(1497);
@@ -3430,6 +3507,12 @@ async function mockPublicProfile(page) {
 
 function publicProfile() {
   return {
+    cardLocale: "ko",
+    cardStyle: {
+      effect: { preset: "none", version: 1 },
+      schemaVersion: 1,
+      theme: "light"
+    },
     owner: {
       avatarUrl: "https://avatars.githubusercontent.com/u/12345",
       displayName: "Post Melee",
@@ -3437,6 +3520,7 @@ function publicProfile() {
       handle: "postmelee"
     },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light",
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",
@@ -3456,9 +3540,31 @@ function publicProfile() {
 }
 
 function ownerProfile(visibility) {
+  const cardStyle = {
+    effect: { preset: "none", version: 1 },
+    schemaVersion: 1,
+    theme: "dark"
+  };
   return {
+    cardLocale: "en",
+    cardStyle,
     owner: { ...AUTH_OWNER, visibility },
     publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    publicCardUrls: {
+      dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
+      light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+    },
+    publicCardVariantUrls: {
+      en: {
+        dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
+        light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+      },
+      ko: {
+        dark: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=dark",
+        light: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light"
+      }
+    },
+    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",

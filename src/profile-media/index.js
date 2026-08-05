@@ -1,12 +1,16 @@
 export {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
+  PROFILE_MEDIA_DEFAULT_THEME,
   PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_FORMAT,
+  PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
   PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   PROFILE_MEDIA_STORE_METHODS,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
+  PROFILE_MEDIA_SUPPORTED_THEMES,
   assertProfileMediaStoreContract,
   createMemoryProfileMediaStore,
   createProfileMediaObjectKeys,
@@ -14,8 +18,10 @@ export {
   createProfileMediaRevisionKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
+  getProfileMediaThemeRepresentations,
   matchesProfileMediaIfNoneMatch,
   normalizeProfileMediaLocale,
+  normalizeProfileMediaTheme,
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord
 } from "./media-store-contract.js";

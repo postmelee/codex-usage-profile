@@ -11,9 +11,44 @@ import {
   HANDLE,
   OWNER_ID,
   createRepresentations,
+  createThemeRepresentations,
   publicationInput,
-  putRepresentations
+  putRepresentations,
+  putThemeRepresentations,
+  themePublicationInput
 } from "./_r2-fixtures.js";
+
+test("R2 owner manifest counts and protects every v4 theme object", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const maintenance = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store,
+    now: () => NOW
+  });
+  const revisions = createThemeRepresentations("theme-manifest");
+  await putThemeRepresentations(store, revisions);
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+
+  const ownerPlan = await maintenance.planOwnerDeletion(OWNER_SCOPE);
+  const retention = await maintenance.planRetention({
+    now: new Date("2027-07-24T00:00:00.000Z"),
+    recentRevisions: 1,
+    retentionDays: 90
+  });
+
+  assert.equal(ownerPlan.summary.objectCount, 6);
+  assert.equal(ownerPlan.manifest.revisions.length, 4);
+  assert.equal(ownerPlan.manifest.stableObjectKeys.length, 2);
+  assert.equal(ownerPlan.manifest.stable.publication.contractVersion, 4);
+  assert.equal(
+    ownerPlan.manifest.stable.publication.representations.light.ko.theme,
+    "light"
+  );
+  assert.deepEqual(retention.candidates, []);
+});
 
 test("R2 owner deletion requires a tombstone and exact revision manifest", async () => {
   const bucket = createFakeR2Bucket();

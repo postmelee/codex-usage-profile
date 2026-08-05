@@ -10,8 +10,11 @@ import { createFakeR2Bucket } from "./_r2-binding-fake.js";
 import {
   HANDLE,
   createRepresentations,
+  createThemeRepresentations,
   publicationInput,
-  putRepresentations
+  putRepresentations,
+  putThemeRepresentations,
+  themePublicationInput
 } from "./_r2-fixtures.js";
 
 test("native R2 binding stores immutable revisions and locale publications", async () => {
@@ -183,6 +186,78 @@ test("native R2 binding rejects bytes that do not match application ETags", asyn
 
   await assert.rejects(
     () => store.getPublishedCard({ handle: HANDLE }),
+    (error) => error.code === "invalid"
+  );
+});
+
+test("native R2 binding serves light only when it matches the dark authority", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("v4");
+  await putThemeRepresentations(store, revisions);
+  const published = await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+
+  const dark = await store.getPublishedCard({ handle: HANDLE, theme: "dark" });
+  const light = await store.getPublishedCard({
+    handle: HANDLE,
+    locale: "ko",
+    theme: "light"
+  });
+
+  assert.equal(published.contractVersion, 4);
+  assert.equal(dark.theme, "dark");
+  assert.deepEqual(dark.body, revisions.dark.en.body);
+  assert.equal(light.theme, "light");
+  assert.deepEqual(light.body, revisions.light.ko.body);
+  assert.equal(
+    light.stableKey,
+    createProfileMediaStableKey({ handle: HANDLE, theme: "light" })
+  );
+});
+
+test("native R2 binding fails closed when the light object is missing or stale", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("v4");
+  await putThemeRepresentations(store, revisions);
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  const lightKey = createProfileMediaStableKey({ handle: HANDLE, theme: "light" });
+
+  bucket.objects.delete(lightKey);
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE, theme: "light" }),
+    (error) => error.code === "not_found"
+  );
+
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: (await store.inspectStableCard({ handle: HANDLE })).storageEtag,
+    publicationId: "publication_v4_retry"
+  }));
+  bucket.objects.get(lightKey).customMetadata["publication-id"] = "stale";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE, theme: "light" }),
+    (error) => error.code === "invalid"
+  );
+});
+
+test("native R2 binding rejects light metadata drift", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("v4");
+  await putThemeRepresentations(store, revisions);
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  const lightKey = createProfileMediaStableKey({ handle: HANDLE, theme: "light" });
+  bucket.objects.get(lightKey).customMetadata["presentation-digest"] =
+    revisions.light.en.revision;
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE, theme: "light" }),
     (error) => error.code === "invalid"
   );
 });

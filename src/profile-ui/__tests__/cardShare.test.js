@@ -5,7 +5,8 @@ import {
   buildLocalizedCardUrl,
   buildProfileLoginHref,
   buildReadmeCardSnippet,
-  resolveShareLocale
+  resolveShareLocale,
+  resolveShareTheme
 } from "../cardShare.js";
 
 test("resolves supported share locales", () => {
@@ -32,6 +33,34 @@ test("builds localized image URLs and README snippets", () => {
     buildReadmeCardSnippet(korean),
     `![Codex usage profile](${korean})`
   );
+});
+
+test("normalizes selected card theme and locale independently", () => {
+  const base = "https://profiles.example.test/u/postmelee/card.png";
+  assert.equal(resolveShareTheme("light"), "light");
+  assert.equal(resolveShareTheme("dark"), "dark");
+  assert.equal(resolveShareTheme("unsupported"), "dark");
+  assert.equal(
+    buildLocalizedCardUrl(`${base}?locale=ko&theme=light`, "en", "dark"),
+    `${base}?theme=dark`
+  );
+  assert.equal(
+    buildLocalizedCardUrl(`${base}?theme=dark`, "ko", "light"),
+    `${base}?theme=light&locale=ko`
+  );
+  assert.equal(
+    buildLocalizedCardUrl("/u/postmelee/card.png", "ko", "light"),
+    "/u/postmelee/card.png?theme=light&locale=ko"
+  );
+});
+
+test("preserves legacy queryless dark URLs and rejects unsafe schemes", () => {
+  assert.equal(
+    buildLocalizedCardUrl("https://profiles.example.test/u/postmelee/card.png", "en"),
+    "https://profiles.example.test/u/postmelee/card.png"
+  );
+  assert.equal(buildLocalizedCardUrl("javascript:alert(1)", "en", "dark"), null);
+  assert.equal(buildLocalizedCardUrl("data:image/png;base64,abc", "en"), null);
 });
 
 test("builds GitHub login links that always return to the owner profile", () => {

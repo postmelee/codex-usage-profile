@@ -8,6 +8,11 @@ import {
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
 import {
+  normalizeCardLocale,
+  normalizeCardStyle,
+  serializeCardStyle
+} from "./presentation.js";
+import {
   DEFAULT_CARD_THEME,
   normalizeCardTheme
 } from "./theme.js";
@@ -40,6 +45,7 @@ export function createProfileCardServiceCore(options = {}) {
     avatarMaxBytes = DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES,
     cacheEntries = DEFAULT_PROFILE_CARD_CACHE_ENTRIES
   } = options;
+  const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (async () => {});
 
   if (!store) {
     throw new TypeError("store is required");
@@ -67,6 +73,49 @@ export function createProfileCardServiceCore(options = {}) {
         visibility: normalizeVisibility(updateOptions.visibility),
         updatedAt: nextOwnerRevisionTimestamp(owner.updatedAt, now())
       });
+    },
+
+    async updateCardSettings(updateOptions = {}) {
+      const current = await requireOwnerById(store, updateOptions.ownerId);
+      const cardStyle = normalizeCardStyle(updateOptions.cardStyle, {
+        defaultWhenMissing: false
+      });
+      const cardLocale = normalizeCardLocale(updateOptions.cardLocale, {
+        defaultWhenMissing: false
+      });
+      const usageRecord = await store.getLatestUsageByOwnerId(current.id);
+
+      let mediaPreparation = null;
+      const presentationChanged = serializeCardStyle(current.cardStyle) !==
+        serializeCardStyle(cardStyle);
+      if (current.visibility === PROFILE_VISIBILITY.PUBLIC && presentationChanged) {
+        mediaPreparation = await ensureCardStyleMedia({
+          owner: current,
+          usageRecord,
+          cardStyle
+        });
+      }
+
+      let result;
+      try {
+        result = await store.atomic.updateCardSettings({
+          ownerId: current.id,
+          expectedOwnerUpdatedAt: current.updatedAt ?? null,
+          cardLocale,
+          cardStyle,
+          updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
+        });
+      } catch (error) {
+        if (typeof mediaPreparation?.rollback === "function") {
+          await mediaPreparation.rollback();
+        }
+        throw error;
+      }
+      return {
+        owner: result.owner,
+        usageRecord,
+        visibility: result.owner.visibility
+      };
     },
 
     async getPublicProfile(profileOptions = {}) {

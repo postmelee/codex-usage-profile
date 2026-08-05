@@ -9,7 +9,6 @@ import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
-import { useTheme } from "./ThemeProvider.jsx";
 import {
   buildAccountLoginHref,
   getAccountAvatar,
@@ -42,7 +41,6 @@ export function HomePage({
   const status = authState?.status ?? "loading";
   const owner = getAccountOwner(authState);
   const { locale, t } = useLocale();
-  const { resolvedTheme } = useTheme();
   const operatorCardSource = useMemo(() => createHomeCardSource({
     kind: HOME_CARD_SOURCE_KINDS.OPERATOR,
     src: buildMarketingOperatorCardUrl(HOME_MARKETING_CONFIG, locale)
@@ -103,10 +101,12 @@ export function HomePage({
   const profile = profileState.profile;
   const hasUsage = Boolean(profile?.usage);
   const isPublic = profile?.visibility === "public";
+  const cardLocale = profile?.cardLocale ?? "en";
+  const cardTheme = profile?.cardStyle?.theme ?? "dark";
   const ownerPreviewUrl = isAuthenticated && hasUsage
     ? client?.buildOwnerCardPreviewUrl?.({
-      locale,
-      theme: resolvedTheme,
+      locale: cardLocale,
+      theme: cardTheme,
       ...(previewRevision > 0 ? { revision: previewRevision } : {})
     }) ?? null
     : null;
@@ -214,13 +214,6 @@ export function HomePage({
     isPublic &&
     ownerCardReady
   );
-  const sharePreviewUrl = hasUsage
-    ? client.buildOwnerCardPreviewUrl({
-      locale,
-      revision: previewRevision,
-      theme: resolvedTheme
-    })
-    : null;
 
   function handleVisibleCardError() {
     setCardTransition((current) => {
@@ -320,14 +313,15 @@ export function HomePage({
       />
 
       <ShareStudio
+        cardLocale={cardLocale}
+        cardTheme={profile?.cardStyle?.theme}
         locale={locale}
         locationOrigin={location?.origin}
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
-        previewUrl={sharePreviewUrl}
-        publicCardUrl={profile?.publicCardUrl}
+        publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx";
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
+import { CardStyleSettings } from "./CardStyleSettings.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
-import { useTheme } from "./ThemeProvider.jsx";
 import { Icon } from "./Icons.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import {
@@ -17,7 +17,6 @@ import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const { locale, t } = useLocale();
-  const { resolvedTheme } = useTheme();
   const authStatus = authState?.status ?? "loading";
   const [profileState, setProfileState] = useState({
     error: null,
@@ -25,6 +24,12 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     status: "loading"
   });
   const [mutationState, setMutationState] = useState({ error: null, status: "idle" });
+  const [cardSettingsState, setCardSettingsState] = useState({
+    draftLocale: "en",
+    draftStyle: null,
+    error: null,
+    status: "idle"
+  });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
   const shareSourceCardRef = useRef(null);
@@ -39,7 +44,15 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
 
     setProfileState({ error: null, profile: null, status: "loading" });
     client.getOwnerProfile().then((profile) => {
-      if (isCurrent) setProfileState({ error: null, profile, status: "ready" });
+      if (isCurrent) {
+        setProfileState({ error: null, profile, status: "ready" });
+        setCardSettingsState({
+          draftLocale: profile.cardLocale ?? "en",
+          draftStyle: profile.cardStyle,
+          error: null,
+          status: "idle"
+        });
+      }
     }).catch((error) => {
       if (isCurrent) {
         setProfileState({
@@ -57,11 +70,17 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const hasUsage = Boolean(profile?.usage);
   const isPublic = profile?.visibility === "public";
   const canShare = profileState.status === "ready" && hasUsage && isPublic;
+  const draftStyle = cardSettingsState.draftStyle ?? profile?.cardStyle;
+  const draftLocale = cardSettingsState.draftLocale ?? profile?.cardLocale ?? "en";
+  const cardSettingsDirty = Boolean(profile && draftStyle) && (
+    draftLocale !== (profile.cardLocale ?? "en") ||
+    JSON.stringify(draftStyle) !== JSON.stringify(profile.cardStyle)
+  );
   const previewUrl = hasUsage
     ? client.buildOwnerCardPreviewUrl({
-      locale,
+      locale: draftLocale,
       revision: previewRevision,
-      theme: resolvedTheme
+      theme: draftStyle?.theme ?? "dark"
     })
     : null;
 
@@ -70,7 +89,12 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     shareSourceRectRef.current = null;
   }, []);
 
-  function openShare() {
+  async function openShare() {
+    if (cardSettingsDirty) {
+      const nextProfile = await saveCardSettings();
+      if (!nextProfile) return;
+    }
+
     shareSourceRectRef.current = snapshotRect(
       shareSourceCardRef.current?.getBoundingClientRect()
     );
@@ -102,6 +126,50 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
     }
   }
 
+  function updateCardTheme(theme) {
+    setCardSettingsState((current) => ({
+      ...current,
+      draftStyle: { ...current.draftStyle, theme },
+      error: null,
+      status: "idle"
+    }));
+  }
+
+  function updateCardLocale(cardLocale) {
+    setCardSettingsState((current) => ({
+      ...current,
+      draftLocale: cardLocale,
+      error: null,
+      status: "idle"
+    }));
+  }
+
+  async function saveCardSettings() {
+    if (!draftStyle || !cardSettingsDirty || cardSettingsState.status === "saving") {
+      return null;
+    }
+    setCardSettingsState((current) => ({ ...current, error: null, status: "saving" }));
+    try {
+      const nextProfile = await client.updateCardSettings(draftStyle, draftLocale);
+      setProfileState({ error: null, profile: nextProfile, status: "ready" });
+      setCardSettingsState({
+        draftLocale: nextProfile.cardLocale,
+        draftStyle: nextProfile.cardStyle,
+        error: null,
+        status: "saved"
+      });
+      setPreviewRevision((value) => value + 1);
+      return nextProfile;
+    } catch {
+      setCardSettingsState((current) => ({
+        ...current,
+        error: "profile.card.settings.error",
+        status: "error"
+      }));
+      return null;
+    }
+  }
+
   return (
     <ProfileShell
       authState={authState}
@@ -115,11 +183,16 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       <section className="card-profile-view" aria-labelledby="card-profile-title">
         <CardProfileContent
           authStatus={authStatus}
+          cardSettingsDirty={cardSettingsDirty}
+          cardSettingsState={cardSettingsState}
           client={client}
           hasUsage={hasUsage}
           isPublic={isPublic}
           mutationState={mutationState}
           onShare={openShare}
+          onCardLocaleChange={updateCardLocale}
+          onCardSettingsSave={saveCardSettings}
+          onCardThemeChange={updateCardTheme}
           onVisibilityChange={updateVisibility}
           previewUrl={previewUrl}
           profile={profile}
@@ -130,14 +203,15 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       </section>
 
       <ShareStudio
+        cardLocale={profile?.cardLocale ?? "en"}
+        cardTheme={profile?.cardStyle?.theme}
         locale={locale}
         locationOrigin={globalThis.location?.origin}
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
-        previewUrl={previewUrl}
-        publicCardUrl={profile?.publicCardUrl}
+        publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
@@ -201,6 +275,8 @@ function CardProfileContent(props) {
             transitionSuspended={props.shareOpen}
           />
           <ProfileCardAction
+            cardSettingsDirty={props.cardSettingsDirty}
+            cardSettingsSaving={props.cardSettingsState.status === "saving"}
             isPublic={props.isPublic}
             mutationState={props.mutationState}
             onPublish={() => props.onVisibilityChange("public")}
@@ -208,6 +284,18 @@ function CardProfileContent(props) {
             owner={props.profile.owner}
           />
         </div>
+
+        <CardStyleSettings
+          draftLocale={props.cardSettingsState.draftLocale}
+          draftTheme={props.cardSettingsState.draftStyle?.theme ?? "dark"}
+          error={props.cardSettingsState.error}
+          isDirty={props.cardSettingsDirty}
+          isSaving={props.cardSettingsState.status === "saving"}
+          isSaved={props.cardSettingsState.status === "saved"}
+          onLocaleChange={props.onCardLocaleChange}
+          onSave={props.onCardSettingsSave}
+          onThemeChange={props.onCardThemeChange}
+        />
       </section>
     </div>
   );
@@ -292,7 +380,15 @@ function getEmptyProfileCopyStatus(status, t) {
   return "";
 }
 
-function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner }) {
+function ProfileCardAction({
+  cardSettingsDirty,
+  cardSettingsSaving,
+  isPublic,
+  mutationState,
+  onPublish,
+  onShare,
+  owner
+}) {
   const { locale, t } = useLocale();
   const avatar = getAccountAvatar(owner, locale);
   const displayName = getAccountDisplayName(owner, locale);
@@ -314,14 +410,25 @@ function ProfileCardAction({ isPublic, mutationState, onPublish, onShare, owner 
       </div>
       <div className="home-account-actions">
         <button
-          aria-label={isPublic ? t("common.shareProfile") : undefined}
+          aria-busy={isPublic && cardSettingsSaving ? true : undefined}
+          aria-label={isPublic
+            ? cardSettingsSaving
+              ? t("profile.card.settings.savingBeforeShare")
+              : cardSettingsDirty
+                ? t("profile.card.settings.saveAndShare")
+                : t("common.shareProfile")
+            : undefined}
           className="primary-command"
-          disabled={isSubmitting}
+          disabled={isSubmitting || cardSettingsSaving}
           onClick={isPublic ? onShare : onPublish}
           type="button"
         >
           {isPublic
-            ? t("common.share")
+            ? cardSettingsSaving
+              ? t("profile.card.settings.savingBeforeShare")
+              : cardSettingsDirty
+                ? t("profile.card.settings.saveAndShare")
+                : t("common.share")
             : isSubmitting
               ? t("profile.card.publishing")
               : t("profile.card.publish")}

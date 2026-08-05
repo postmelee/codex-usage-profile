@@ -9,8 +9,11 @@ import { createFakeR2Bucket } from "./_r2-binding-fake.js";
 import {
   HANDLE,
   createRepresentations,
+  createThemeRepresentations,
   publicationInput,
-  putRepresentations
+  putRepresentations,
+  putThemeRepresentations,
+  themePublicationInput
 } from "./_r2-fixtures.js";
 
 test("native R2 binding maps revision and stable PUT failures to unavailable", async () => {
@@ -155,6 +158,44 @@ test("repeated stable R2 read races fail unavailable", async () => {
       error.code === "unavailable" &&
       error.message === "stable media changed repeatedly during read"
   );
+});
+
+test("light R2 HEAD to GET race retries against the dark authority", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const first = createThemeRepresentations("v4-first");
+  const next = createThemeRepresentations("v4-next");
+  await putThemeRepresentations(store, first);
+  await putThemeRepresentations(store, next);
+  const firstPublication = await store.publishRevision(themePublicationInput(first, {
+    expectedStorageEtag: null,
+    publicationId: "publication_first"
+  }));
+  await store.publishRevision(themePublicationInput(next, {
+    expectedStorageEtag: firstPublication.storageEtag,
+    publicationId: "publication_next"
+  }));
+  const lightKey = createProfileMediaStableKey({ handle: HANDLE, theme: "light" });
+  const nextLight = cloneStoredObject(bucket.objects.get(lightKey));
+  const nextAuthority = cloneStoredObject(
+    bucket.objects.get(createProfileMediaStableKey({ handle: HANDLE }))
+  );
+  const current = await store.inspectStableCard({ handle: HANDLE });
+  await store.publishRevision(themePublicationInput(first, {
+    expectedStorageEtag: current.storageEtag,
+    publicationId: "publication_third"
+  }));
+  bucket.beforeNext("get", () => {
+    bucket.objects.set(lightKey, cloneStoredObject(nextLight));
+    bucket.objects.set(
+      createProfileMediaStableKey({ handle: HANDLE }),
+      cloneStoredObject(nextAuthority)
+    );
+  });
+
+  const read = await store.getPublishedCard({ handle: HANDLE, theme: "light" });
+  assert.equal(read.publicationId, "publication_next");
+  assert.deepEqual(read.body, next.light.en.body);
 });
 
 function cloneStoredObject(object) {

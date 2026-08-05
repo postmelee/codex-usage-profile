@@ -234,11 +234,34 @@ test("rejects cross-site session mutation and accepts same-origin mutation", asy
       "sec-fetch-site": "same-origin"
     }
   );
+  const crossSiteCardSettings = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    {
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      },
+      cardLocale: "en"
+    },
+    {
+      cookie,
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site"
+    }
+  );
 
   assert.equal(crossSite.status, 403);
   assert.equal(crossSite.body.error.code, PROFILE_BACKEND_ERROR_CODES.FORBIDDEN);
   assert.equal(sameOrigin.status, 200);
   assert.equal(sameOrigin.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
+  assert.equal(crossSiteCardSettings.status, 403);
+  assert.equal(
+    crossSiteCardSettings.body.error.code,
+    PROFILE_BACKEND_ERROR_CODES.FORBIDDEN
+  );
 });
 
 test("handles CLI login start, approve, and exchange without exposing token digest", async () => {
@@ -796,6 +819,12 @@ test("returns the session owner's card profile metadata", async () => {
   assert.equal(profile.body.data.visibility, PROFILE_VISIBILITY.PRIVATE);
   assert.deepEqual(profile.body.data.usage.usage, sampleAccountUsageReadResult);
   assert.equal(profile.body.data.publicCardUrl, `${BASE_URL}/u/postmelee/card.png`);
+  assert.equal(profile.body.data.cardStyle.theme, "dark");
+  assert.equal(profile.body.data.cardLocale, "en");
+  assert.equal(
+    profile.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=dark`
+  );
 });
 
 test("serves a public Account Usage profile with an explicit response allowlist", async () => {
@@ -837,7 +866,29 @@ test("serves a public Account Usage profile with an explicit response allowlist"
       usage: sampleAccountUsageReadResult
     },
     visibility: PROFILE_VISIBILITY.PUBLIC,
-    publicCardUrl: `${BASE_URL}/u/postmelee/card.png`
+    cardLocale: "en",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "dark",
+      effect: { preset: "none", version: 1 }
+    },
+    presentationDigest: "4Pu_ghjqNSMCxM4CfBZvubJIeSIdlJmR_H71FnHYb5U",
+    publicCardUrl: `${BASE_URL}/u/postmelee/card.png`,
+    selectedPublicCardUrl: `${BASE_URL}/u/postmelee/card.png?theme=dark`,
+    publicCardUrls: {
+      light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
+      dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
+    },
+    publicCardVariantUrls: {
+      en: {
+        light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
+        dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
+      },
+      ko: {
+        light: `${BASE_URL}/u/postmelee/card.png?theme=light&locale=ko`,
+        dark: `${BASE_URL}/u/postmelee/card.png?theme=dark&locale=ko`
+      }
+    }
   });
 
   const serialized = JSON.stringify(response.body.data);
@@ -858,6 +909,80 @@ test("serves a public Account Usage profile with an explicit response allowlist"
   ]) {
     assert.equal(serialized.includes(`\"${internalKey}\"`), false);
   }
+});
+
+test("updates versioned owner card settings and validates the exact payload", async () => {
+  const ensureCalls = [];
+  const fixture = createFixture({
+    ensureCardStyleMedia(options) {
+      ensureCalls.push(options);
+    }
+  });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  fixture.saveLatestUsage({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const cookie = fixture.saveSession();
+  const light = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "ko" },
+    { cookie }
+  );
+  const injected = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { ownerId: "owner_2", cardStyle: light, cardLocale: "ko" },
+    { cookie }
+  );
+  const unknown = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    {
+      cardStyle: { ...light, effect: { preset: "beam.rotate", version: 1 } },
+      cardLocale: "ko"
+    },
+    { cookie }
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.data.cardStyle, light);
+  assert.equal(response.body.data.cardLocale, "ko");
+  assert.equal(
+    response.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=light&locale=ko`
+  );
+  assert.deepEqual(fixture.store.getOwnerById("owner_1").cardStyle, light);
+  assert.equal(fixture.store.getOwnerById("owner_1").cardLocale, "ko");
+  assert.equal(ensureCalls.length, 1);
+  assert.equal(ensureCalls[0].owner.id, "owner_1");
+
+  const localeOnly = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "en" },
+    { cookie }
+  );
+  assert.equal(localeOnly.status, 200);
+  assert.equal(localeOnly.body.data.cardLocale, "en");
+  assert.equal(
+    localeOnly.body.data.selectedPublicCardUrl,
+    `${BASE_URL}/u/postmelee/card.png?theme=light`
+  );
+  assert.equal(ensureCalls.length, 1);
+
+  assert.equal(injected.status, 400);
+  assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+  assert.equal(unknown.status, 400);
+  assert.equal(unknown.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
 });
 
 test("hides non-public, missing, malformed, and mismatched public profiles", async () => {
@@ -1011,6 +1136,49 @@ test("creates the publication service when a media store is configured", async (
   assert.equal(response.body.data.visibility, PROFILE_VISIBILITY.PUBLIC);
 });
 
+test("saves a public card preference only after v4 theme variants converge", async () => {
+  const mediaStore = createMemoryProfileMediaStore();
+  const fixture = createFixture({
+    mediaStore,
+    profileCardRenderPng: async (viewModel) => Buffer.from(
+      `card:${viewModel.theme}:${viewModel.locale}`
+    )
+  });
+  fixture.saveOwner();
+  fixture.saveLatestUsage();
+  const cookie = fixture.saveSession();
+  await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile",
+    { visibility: PROFILE_VISIBILITY.PUBLIC },
+    { cookie }
+  );
+
+  const light = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "ko" },
+    { cookie }
+  );
+  const published = await mediaStore.getPublishedCard({
+    handle: "postmelee",
+    locale: "ko",
+    theme: "light"
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.data.cardStyle, light);
+  assert.equal(published.contractVersion, 4);
+  assert.deepEqual(published.body, Buffer.from("card:light:ko"));
+});
+
 test("returns a generic 503 when profile publication is unavailable", async () => {
   const fixture = createFixture({
     createPublicationService() {
@@ -1119,6 +1287,12 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const themeResponse = await requestResponse(
     fixture.handler, "GET", "/u/postmelee/card.png?theme=light"
   );
+  const localizedThemeResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?theme=light&locale=ko"
+  );
+  const invalidThemeResponse = await requestResponse(
+    fixture.handler, "GET", "/u/postmelee/card.png?theme=unsupported"
+  );
   const etag = getResponse.headers.get("etag");
   const headResponse = await requestResponse(
     fixture.handler, "HEAD", "/u/postmelee/card.png?locale=ko"
@@ -1140,7 +1314,18 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   );
   assert.match(etag, /^"[A-Za-z0-9_-]{43}"$/);
   assert.equal(fallbackResponse.headers.get("etag"), englishResponse.headers.get("etag"));
-  assert.equal(themeResponse.headers.get("etag"), englishResponse.headers.get("etag"));
+  assert.equal(themeResponse.status, 200);
+  assert.notEqual(
+    themeResponse.headers.get("etag"),
+    englishResponse.headers.get("etag")
+  );
+  assert.equal(localizedThemeResponse.status, 200);
+  assert.notEqual(localizedThemeResponse.headers.get("etag"), etag);
+  assert.notEqual(
+    localizedThemeResponse.headers.get("etag"),
+    themeResponse.headers.get("etag")
+  );
+  assert.equal(invalidThemeResponse.status, 404);
   assert.notEqual(englishResponse.headers.get("etag"), etag);
   assert.equal(headResponse.status, 200);
   assert.equal(headResponse.headers.get("etag"), etag);
@@ -1163,7 +1348,7 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
 
 test("serves public cards without reading the structured store or renderer", async () => {
   const baseMediaStore = createMemoryProfileMediaStore();
-  await publishMediaFixture(baseMediaStore, { handle: "media-only" });
+  await publishThemeMediaFixture(baseMediaStore, { handle: "media-only" });
   const mediaCalls = [];
   const mediaStore = wrapMediaStore(baseMediaStore, {}, mediaCalls);
   const forbiddenStore = new Proxy(createMemoryProfileBackendStore(), {
@@ -1191,14 +1376,18 @@ test("serves public cards without reading the structured store or renderer", asy
   const response = await requestResponse(
     handler,
     "GET",
-    "/u/media-only/card.png?locale=ko"
+    "/u/media-only/card.png?locale=ko&theme=light"
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from("media:ko"));
+  assert.deepEqual(
+    Buffer.from(await response.arrayBuffer()),
+    Buffer.from("media:light:ko")
+  );
   assert.deepEqual(mediaCalls, [["getPublishedCard", {
     handle: "media-only",
     locale: "ko",
+    theme: "light",
     ifNoneMatch: null,
     includeBody: true
   }]]);
@@ -1902,6 +2091,7 @@ function createFixture(options = {}) {
         Buffer.from(`:${viewModel.locale}:${viewModel.theme}`)
       ])),
     profileCardRendererVersion: "http-test-renderer-1",
+    ensureCardStyleMedia: options.ensureCardStyleMedia,
     publicationService
   });
 
@@ -1976,6 +2166,44 @@ async function publishMediaFixture(mediaStore, options = {}) {
     handle,
     ownerId,
     publicationId: "profile_media_fixture",
+    publishedAt: "2026-07-22T00:01:00.000Z",
+    representations
+  });
+}
+
+async function publishThemeMediaFixture(mediaStore, options = {}) {
+  const ownerId = options.ownerId ?? "owner_media";
+  const handle = options.handle ?? "postmelee";
+  const presentationDigest = createProfileMediaRevisionDigest(
+    Buffer.from("presentation-v1")
+  );
+  const representations = {};
+  for (const theme of ["dark", "light"]) {
+    representations[theme] = {};
+    for (const locale of ["en", "ko"]) {
+      const body = Buffer.from(`media:${theme}:${locale}`);
+      const revision = createProfileMediaRevisionDigest(body);
+      const etag = `"${revision}"`;
+      await mediaStore.putRevision({
+        body,
+        contractVersion: 4,
+        createdAt: "2026-07-22T00:00:00.000Z",
+        etag,
+        locale,
+        ownerId,
+        presentationDigest,
+        revision,
+        theme
+      });
+      representations[theme][locale] = { etag, revision };
+    }
+  }
+  return mediaStore.publishRevision({
+    contractVersion: 4,
+    handle,
+    ownerId,
+    presentationDigest,
+    publicationId: "profile_media_theme_fixture",
     publishedAt: "2026-07-22T00:01:00.000Z",
     representations
   });

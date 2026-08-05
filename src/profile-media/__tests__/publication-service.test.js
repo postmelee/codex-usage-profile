@@ -14,7 +14,7 @@ import {
   createProfilePublicationService
 } from "../index.js";
 
-test("publishes both locale revisions before exposing public visibility", async () => {
+test("publishes all theme and locale revisions before exposing public visibility", async () => {
   const fixture = createFixture();
 
   const result = await fixture.service.updateVisibility({
@@ -29,6 +29,16 @@ test("publishes both locale revisions before exposing public visibility", async 
     handle: OWNER.handle,
     locale: "ko"
   });
+  const lightEnglish = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER.handle,
+    locale: "en",
+    theme: "light"
+  });
+  const lightKorean = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER.handle,
+    locale: "ko",
+    theme: "light"
+  });
 
   assert.equal(result.operation, "publish");
   assert.equal(result.idempotent, false);
@@ -38,11 +48,23 @@ test("publishes both locale revisions before exposing public visibility", async 
   assert.equal(fixture.store.getLatestSnapshotByOwnerId(OWNER.id).visibility,
     PROFILE_VISIBILITY.PUBLIC);
   const lifetimeTokens = sampleAccountUsageReadResult.summary.lifetimeTokens;
-  assert.deepEqual(english.body, Buffer.from(`png:en:${lifetimeTokens}`));
-  assert.deepEqual(korean.body, Buffer.from(`png:ko:${lifetimeTokens}`));
+  assert.deepEqual(english.body, Buffer.from(`png:dark:en:${lifetimeTokens}`));
+  assert.deepEqual(korean.body, Buffer.from(`png:dark:ko:${lifetimeTokens}`));
+  assert.deepEqual(
+    lightEnglish.body,
+    Buffer.from(`png:light:en:${lifetimeTokens}`)
+  );
+  assert.deepEqual(
+    lightKorean.body,
+    Buffer.from(`png:light:ko:${lifetimeTokens}`)
+  );
   assert.equal(english.publicationId, korean.publicationId);
-  assert.equal(english.representations.en.etag, english.etag);
-  assert.equal(english.representations.ko.etag, korean.etag);
+  assert.equal(english.publicationId, lightEnglish.publicationId);
+  assert.equal(english.contractVersion, 4);
+  assert.equal(english.representations.dark.en.etag, english.etag);
+  assert.equal(english.representations.dark.ko.etag, korean.etag);
+  assert.equal(english.representations.light.en.etag, lightEnglish.etag);
+  assert.equal(english.representations.light.ko.etag, lightKorean.etag);
 });
 
 test("keeps an exact public request idempotent and repairs a missing stable publication", async () => {
@@ -62,6 +84,95 @@ test("keeps an exact public request idempotent and repairs a missing stable publ
     await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle }),
     null
   );
+});
+
+test("converges a public owner to v4 variants and can roll back an uncommitted setting", async () => {
+  const fixture = createFixture();
+  const first = await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
+  fixture.store.saveLatestUsage({
+    ...fixture.store.getLatestUsageByOwnerId(OWNER.id),
+    uploadedAt: "2026-07-22T02:00:00.000Z",
+    usage: {
+      ...sampleAccountUsageReadResult,
+      summary: {
+        ...sampleAccountUsageReadResult.summary,
+        lifetimeTokens: sampleAccountUsageReadResult.summary.lifetimeTokens + 1
+      }
+    }
+  });
+  const lightStyle = {
+    schemaVersion: 1,
+    theme: "light",
+    effect: { preset: "none", version: 1 }
+  };
+
+  const prepared = await fixture.service.ensurePublishedCardVariants({
+    owner: fixture.store.getOwnerById(OWNER.id),
+    ownerId: OWNER.id,
+    cardStyle: lightStyle
+  });
+  const staged = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER.handle,
+    theme: "light"
+  });
+
+  assert.equal(prepared.idempotent, false);
+  assert.equal(staged.contractVersion, 4);
+  assert.equal(staged.publicationId, prepared.publication.publicationId);
+  assert.equal(staged.presentationDigest, first.publication.presentationDigest);
+  assert.equal(await prepared.rollback(), "succeeded");
+  const restored = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER.handle
+  });
+  assert.equal(restored.publicationId, first.publication.publicationId);
+  assert.equal(restored.presentationDigest, first.publication.presentationDigest);
+});
+
+test("upgrades a legacy public publication to four v4 representations", async () => {
+  const fixture = createFixture();
+  const owner = fixture.store.getOwnerById(OWNER.id);
+  fixture.store.saveOwner({ ...owner, visibility: PROFILE_VISIBILITY.PUBLIC });
+  const cards = {};
+  for (const locale of ["en", "ko"]) {
+    cards[locale] = await fixture.cardService.renderOwnerCard({
+      ownerId: OWNER.id,
+      locale,
+      theme: "dark"
+    });
+    await fixture.mediaStore.putRevision({
+      ...cards[locale],
+      createdAt: "2026-07-22T00:30:00.000Z",
+      locale,
+      ownerId: OWNER.id
+    });
+  }
+  await fixture.mediaStore.publishRevision({
+    handle: OWNER.handle,
+    ownerId: OWNER.id,
+    publicationId: "profile_media_legacy",
+    publishedAt: "2026-07-22T00:30:00.000Z",
+    representations: Object.fromEntries(["en", "ko"].map((locale) => [
+      locale,
+      { etag: cards[locale].etag, revision: cards[locale].revision }
+    ]))
+  });
+
+  const result = await fixture.service.ensurePublishedCardVariants({
+    owner: fixture.store.getOwnerById(OWNER.id),
+    ownerId: OWNER.id,
+    cardStyle: owner.cardStyle
+  });
+  const publication = await fixture.mediaStore.getPublishedCard({
+    handle: OWNER.handle,
+    theme: "light"
+  });
+
+  assert.equal(result.idempotent, false);
+  assert.equal(publication.contractVersion, 4);
+  assert.deepEqual(Object.keys(publication.representations).sort(), [
+    "dark",
+    "light"
+  ]);
 });
 
 test("repairs a public publication whose stable metadata is invalid", async () => {
@@ -311,13 +422,16 @@ test("unpublishes only stable state and reads the owner before visibility CAS", 
   );
   assert.equal(result.visibility, PROFILE_VISIBILITY.PRIVATE);
   assert.equal(await fixture.mediaStore.getPublishedCard({ handle: OWNER.handle }), null);
-  for (const locale of ["en", "ko"]) {
-    const representation = published.representations[locale];
-    assert.notEqual(await fixture.mediaStore.getRevision({
-      ownerId: OWNER.id,
-      locale,
-      revision: representation.revision
-    }), null);
+  for (const theme of ["dark", "light"]) {
+    for (const locale of ["en", "ko"]) {
+      const representation = published.representations[theme][locale];
+      assert.notEqual(await fixture.mediaStore.getRevision({
+        ownerId: OWNER.id,
+        locale,
+        revision: representation.revision,
+        theme
+      }), null);
+    }
   }
 });
 
@@ -347,7 +461,8 @@ function createFixture(options = {}) {
     store,
     fetchImpl: async () => { throw new Error("network disabled in test"); },
     renderPng: async (viewModel) => Buffer.from(
-      `png:${viewModel.locale}:${viewModel.usage.summary.lifetimeTokens}`
+      `png:${viewModel.theme}:${viewModel.locale}:` +
+      `${viewModel.usage.summary.lifetimeTokens}`
     )
   });
 

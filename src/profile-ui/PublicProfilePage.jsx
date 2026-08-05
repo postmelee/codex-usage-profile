@@ -37,6 +37,15 @@ function ReadyPublicProfile({ profile }) {
   const { locale, t } = useLocale();
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
+  const cardUrl = buildLocalizedCardUrl(
+    profile.selectedPublicCardUrl ?? profile.publicCardUrl,
+    profile.cardLocale ?? locale,
+    profile.cardStyle?.theme
+  ) ?? buildLocalizedCardUrl(
+    profile.publicCardUrl,
+    profile.cardLocale ?? locale,
+    profile.cardStyle?.theme
+  );
 
   return (
     <div className="public-profile-stage">
@@ -59,7 +68,7 @@ function ReadyPublicProfile({ profile }) {
           aria-describedby="public-profile-title"
           className="public-profile-card"
           height="612"
-          src={buildLocalizedCardUrl(profile.publicCardUrl, locale)}
+          src={cardUrl}
           width="998"
         />
       </section>

@@ -13,8 +13,11 @@ import {
   selectProfileMediaCleanupCandidates
 } from "../maintenance-contract.js";
 import {
+  PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
+  PROFILE_MEDIA_STORE_CONTRACT_VERSION,
   PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_SUPPORTED_LOCALES,
+  PROFILE_MEDIA_SUPPORTED_THEMES,
   createProfileMediaStableKey
 } from "../media-store-contract.js";
 import { createR2BindingProfileMediaStore } from "./store.js";
@@ -57,11 +60,13 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
       ownerId,
       prefix: `${PROFILE_MEDIA_REVISION_PREFIX}${ownerId}/revisions/`
     });
+    const stableObjectKeys = await listOwnerStableObjectKeys(handle);
     return deepFreeze({
       ownerId,
       handle,
       revisions,
-      stable: serializeStableState(stable)
+      stable: serializeStableState(stable),
+      stableObjectKeys
     });
   }
 
@@ -69,14 +74,12 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
     const manifest = await listOwnerManifest(planOptions);
     const createdAt = normalizeIsoDate(planOptions.createdAt ?? now());
     const contentDigest = await createProfileMaintenanceDigest(manifest);
-    const stableCount =
-      manifest.stable.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.MISSING ? 0 : 1;
     return deepFreeze({
       manifest,
       summary: createProfileMaintenanceSummary({
         contentDigest,
         createdAt,
-        objectCount: manifest.revisions.length + stableCount,
+        objectCount: manifest.revisions.length + manifest.stableObjectKeys.length,
         operation: "delete-account",
         ownerCount: 1
       })
@@ -301,11 +304,20 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
       const head = await bucket.head(parsed.key);
       if (!head) continue;
       const metadata = normalizeMetadata(head.customMetadata);
+      const contractVersion = Number(metadata["contract-version"] ?? 3);
+      const theme = metadata.theme ?? "dark";
       if (
+        ![
+          PROFILE_MEDIA_LEGACY_CONTRACT_VERSION,
+          PROFILE_MEDIA_STORE_CONTRACT_VERSION
+        ].includes(contractVersion) ||
         metadata.kind !== "revision" ||
         metadata["owner-id"] !== parsed.ownerId ||
         metadata.locale !== parsed.locale ||
-        metadata.revision !== parsed.revision
+        metadata.revision !== parsed.revision ||
+        theme !== parsed.theme ||
+        (contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
+          !/^[A-Za-z0-9_-]{43}$/.test(metadata["presentation-digest"] ?? ""))
       ) {
         throw maintenanceError(
           "invalid",
@@ -313,15 +325,18 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
         );
       }
       revisions.push(Object.freeze({
+        contractVersion,
         createdAt: normalizeIsoDate(metadata["created-at"]),
         etag: `"${metadata.etag}"`,
         key: parsed.key,
         lastModified: parsed.lastModified.toISOString(),
         locale: parsed.locale,
         ownerId: parsed.ownerId,
+        presentationDigest: metadata["presentation-digest"] ?? null,
         revision: parsed.revision,
         size: Number(head.size ?? parsed.size ?? 0),
-        storageEtag: storageEtag(head)
+        storageEtag: storageEtag(head),
+        theme: parsed.theme
       }));
     }
     return revisions.sort((left, right) => left.key.localeCompare(right.key));
@@ -332,14 +347,25 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
     const states = [];
     const revisionKeys = [];
     for (const object of stableObjects) {
-      if (!isProfileMediaStableKey(object.key)) continue;
+      if (!isAuthorityStableKey(object.key)) continue;
       const handle = object.key.split("/").at(-2);
       const state = await readStableState(handle);
       const serialized = serializeStableState(state);
       states.push(serialized);
       if (serialized.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) {
-        for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
-          revisionKeys.push(serialized.publication.representations[locale].revisionKey);
+        const publication = serialized.publication;
+        const themes = publication.contractVersion ===
+          PROFILE_MEDIA_STORE_CONTRACT_VERSION
+          ? PROFILE_MEDIA_SUPPORTED_THEMES
+          : ["dark"];
+        for (const theme of themes) {
+          const representations = publication.contractVersion ===
+            PROFILE_MEDIA_STORE_CONTRACT_VERSION
+            ? publication.representations[theme]
+            : publication.representations;
+          for (const locale of PROFILE_MEDIA_SUPPORTED_LOCALES) {
+            revisionKeys.push(representations[locale].revisionKey);
+          }
         }
       }
     }
@@ -377,6 +403,16 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
       }
     } while (cursor);
     return objects;
+  }
+
+  async function listOwnerStableObjectKeys(handle) {
+    const objects = await listObjects(`${PROFILE_MEDIA_STABLE_PREFIX}${handle}/`);
+    const keys = [];
+    for (const object of objects) {
+      if (!isProfileMediaStableKey(object.key)) continue;
+      if (await bucket.head(object.key)) keys.push(object.key);
+    }
+    return keys.sort();
   }
 
   function readStableState(handle) {
@@ -417,25 +453,45 @@ function serializeStableState(state) {
 
 function sanitizePublication(value) {
   if (!value) return null;
+  const isV4 = value.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
+  const representations = isV4
+    ? Object.fromEntries(PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
+      theme,
+      sanitizeRepresentations(value.representations[theme], theme)
+    ]))
+    : sanitizeRepresentations(value.representations, "dark");
   return {
+    contractVersion: value.contractVersion,
+    format: value.format,
     handle: value.handle,
     ownerId: value.ownerId,
+    presentationDigest: value.presentationDigest,
     publicationId: value.publicationId,
     publishedAt: value.publishedAt,
-    representations: Object.fromEntries(
-      PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
-        const representation = value.representations[locale];
-        return [locale, {
-          etag: representation.etag,
-          locale,
-          revision: representation.revision,
-          revisionKey: representation.revisionKey
-        }];
-      })
-    ),
+    representations,
     stableKey: value.stableKey,
+    stableKeys: value.stableKeys,
     storageEtag: value.storageEtag
   };
+}
+
+function sanitizeRepresentations(value, theme) {
+  return Object.fromEntries(PROFILE_MEDIA_SUPPORTED_LOCALES.map((locale) => {
+    const representation = value[locale];
+    return [locale, {
+      etag: representation.etag,
+      format: representation.format,
+      locale,
+      presentationDigest: representation.presentationDigest,
+      revision: representation.revision,
+      revisionKey: representation.revisionKey,
+      theme
+    }];
+  }));
+}
+
+function isAuthorityStableKey(key) {
+  return /^cards\/v2\/public\/[a-z0-9]+(?:-[a-z0-9]+)*\/card\.png$/.test(key);
 }
 
 function assertExpectedPlan(summary, options) {

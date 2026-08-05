@@ -35,6 +35,11 @@ Task #51 Stage 6의 repository HEAD 차이는 README와 운영 문서·보고서
 deployable source가 바뀌지 않았으므로 새 saved version을 만들지 않고 검증된
 version 7을 유지했다.
 
+Task #74 deploy candidate는 owner `card_style`·`card_locale` additive migration과
+media contract v4를 포함한다. 이 candidate는 local artifact 검증까지만 완료한 뒤
+별도 Gate에서 owner-only saved version으로 배포한다. 이 문서의 current production
+값은 그 Gate가 완료될 때까지 version 7 baseline을 계속 뜻한다.
+
 ## 요청과 신뢰 경계
 
 ```text
@@ -91,10 +96,11 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 | CLI login 교환 | `cliLoginChallenge.id` | approved challenge마다 token digest를 정확히 하나 발급 |
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
+| 카드 설정 변경 | `owner.id` | canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고 공개 owner는 필요한 media 변형 준비 뒤 commit |
 
 부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호한다. 읽기와 목록 API는 owner scope를 우회할 수 없다. shared Account Usage rate limit도 D1 row의 atomic window update를 사용하며 raw token을 key나 record로 저장하지 않는다.
 
-위 다섯 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility와 rollback을 검증한다. Stage 5에서는 실제 hosted duplicate submit/exchange도 한 결과만 commit했다.
+위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
@@ -102,24 +108,27 @@ fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/pos
 
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
-- contract version: `3`
-- immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
-- stable public object: `cards/v2/public/{handle}/card.png`
-- locale: `en`, `ko`를 하나의 publication metadata로 함께 가리킨다. query가 없거나 지원하지 않는 locale은 `en`으로 fallback한다.
+- contract version: `4` (`3`은 query 없는 dark legacy reader만 지원)
+- dark immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
+- light immutable revision: `cards/v2/owners/{ownerId}/revisions/light/{locale}/{revision}.png`
+- dark stable authority: `cards/v2/public/{handle}/card.png`
+- light staged stable: `cards/v2/public/{handle}/themes/light/card.png`
+- theme: `dark`, `light`; query 부재는 dark, 다른 값은 fail-closed다.
+- locale: `en`, `ko`; query 부재는 en이다.
 - content type: `image/png`
 - cache policy: `public, no-cache, must-revalidate`
 - stable state: `publication` 또는 `unpublished` tombstone
-- validation metadata: owner, handle, publication id, locale별 immutable key/revision/application ETag, created/published timestamp
+- validation metadata: owner, handle, publication id, presentation digest, format, theme·locale별 immutable key/revision/application ETag, created/published timestamp
 
 revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted application ETag도 같은 정규화 값을 사용한다. storage ETag는 S3/R2 conditional copy와 body 일관성 검증에만 사용하고 HTTP ETag로 노출하지 않는다.
 
-canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-binding/)의 native `R2Bucket` 구현이다. `putRevision`은 create-only conditional write를 사용한다. Publish는 `en`, `ko` immutable revision을 검증한 뒤 stable key에 `en` body와 두 locale pointer metadata를 조건부 materialize한다. 같은 revision과 bytes의 재시도는 idempotent이고 다른 bytes/metadata는 conflict다.
+canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-binding/)의 native `R2Bucket` 구현이다. `putRevision`은 create-only conditional write를 사용한다. Publish는 dark/light × en/ko 네 immutable revision을 검증하고 light stable을 stage한 뒤 dark stable authority를 마지막 CAS commit point로 materialize한다. 같은 revision과 bytes의 재시도는 idempotent이고 다른 bytes/metadata는 conflict다.
 
-`GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. stable publication/locale revision이 없거나 stable state가 tombstone이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+`GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. dark는 query 없는 legacy 경로와 `theme=dark`, light는 `theme=light`로 선택한다. light 응답은 dark authority가 가리키는 publication id·revision과 light stable metadata/body가 모두 일치할 때만 제공한다. stable publication/theme/locale revision이 없거나 stable state가 tombstone이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
 
 stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
-Public 전환은 두 locale revision과 stable materialization을 완료한 뒤 D1 visibility CAS를 commit한다. Unpublish는 native R2 `delete`의 conditional precondition 부재 때문에 stable object를 물리 삭제하지 않고, 직전 storage ETag가 일치할 때만 tombstone으로 교체한 뒤 D1 visibility를 private으로 commit한다. immutable revision은 retention 대상으로 남는다.
+Public 전환은 네 revision, light stable stage와 dark authority commit을 완료한 뒤 D1 visibility CAS를 commit한다. Unpublish는 dark authority를 직전 storage ETag 조건의 tombstone으로 바꿔 두 theme를 먼저 닫은 뒤 D1 visibility를 private으로 commit한다. light stable과 immutable revision은 retention 대상으로 남지만 authority가 없으면 public serving되지 않는다.
 
 D1 CAS가 실패하면 자신이 쓴 stable publication/tombstone의 storage ETag가 그대로일 때만 조건부 보상한다. 더 최신 publication을 덮거나 tombstone으로 바꾸지 못한다. 보상으로 일관성을 증명할 수 없으면 generic 503과 internal repair-required 결과로 fail closed한다.
 
@@ -133,6 +142,7 @@ Sites Worker는 [`worker-renderer.js`](../src/profile-card/worker-renderer.js)�
 
 - output: 결정적 1497×918 PNG
 - locale: `en`, `ko`
+- theme: `dark`, `light`; normalized presentation registry의 static `none@1` 효과만 materialize
 - application revision/ETag: 최종 PNG digest
 - avatar: HTTPS allowlist, timeout/body-size/content-type 제한 뒤 실패 시 initial fallback
 - private preview: on-demand/no-store
@@ -232,12 +242,13 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
-3. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
-4. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
-5. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
-6. application rollback은 이전 saved version deployment로 수행한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
-7. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
-8. fallback 전환 시 기존 Cloud Run artifact를 배포하고 Neon/S3-compatible R2 설정을 연결한다. fallback 때문에 Sites 또는 Cloud Run의 CORS/cookie scope를 확대하지 않는다.
+3. Task #74 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
+4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
+5. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
+6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
+7. application rollback은 이전 saved version deployment로 수행한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
+8. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
+9. fallback 전환 시 기존 Cloud Run artifact를 배포하고 Neon/S3-compatible R2 설정을 연결한다. fallback 때문에 Sites 또는 Cloud Run의 CORS/cookie scope를 확대하지 않는다.
 
 Cloud Run fallback은 계속 `0.0.0.0:$PORT`, production file/memory store 거부, explicit migration, dependency readiness와 previous revision rollback 계약을 유지한다.
 
@@ -276,7 +287,7 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - self-service 계정 삭제 UI는 아직 제품 기능이 아니다. owner 요청은
   operator가 export와 exact owner/handle/digest/count를 확인한 뒤
   `delete-account --apply`로 처리한다.
-- public stable object와 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 stable metadata가 참조하는 모든 key, owner+locale별 최근 5개, 생성 후 90일 이내를 보호한다. 나머지만 orphan candidate다.
+- dark authority, light stable과 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 authority metadata가 참조하는 모든 key, owner+theme+locale별 최근 5개, 생성 후 90일 이내를 보호한다. authority가 없는 light stable과 나머지만 orphan candidate다.
 - `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
 - 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.
 - 자동 cleanup schedule은 MVP 범위에서 두지 않는다. 90일/최근 5개 운영 값을
@@ -287,7 +298,7 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - D1 migration은 최소 한 saved-version rollback 구간 동안 backward
   compatible해야 한다. production data lifecycle 전에 실제 export,
   disposable restore/repair와 exact digest/count 일치를 검증했다.
-- R2는 stable/tombstone과 immutable revision을 함께 export할 수 있어야 한다. cleanup apply 전에 export/복구 가능성을 확인한다.
+- R2는 dark authority/tombstone, light stable과 네 theme·locale immutable revision을 함께 export할 수 있어야 한다. cleanup apply 전에 export/복구 가능성을 확인한다.
 - fallback Postgres의 `npm run migrate:postgres -- down`, Neon backup/PITR와 seeding rollback은 계속 보존하지만 Sites D1 backup을 대신하지 않는다.
 - Task #49/#51의 test owner, usage, session, token과 media는 승인된 cleanup 뒤
   0건이다. Task #45 fresh-owner QA도 private submit, temporary publish/unpublish,
@@ -329,11 +340,11 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### local real runtime/contract에서 검증됨
 
-- real-workerd D1 migration, store, shared rate limit과 다섯 named atomic operation
+- real-workerd D1 migration, store, shared rate limit과 named atomic operation
 - D1 duplicate callback/exchange, concurrent submit/visibility와 failure rollback
-- native R2 contract v3 revision/stable/tombstone, conditional write/read와 failure/concurrency matrix
+- native R2 contract v3 legacy dark reader와 v4 theme·locale revision/dual stable/tombstone, conditional write/read와 failure/concurrency matrix
 - publication service의 D1 CAS 보상, newer publication 비침범과 repair-required fail closed
-- Worker renderer의 1497×918 결정성, `en`/`ko`, avatar success/fallback과 browser/CLI full-stack
+- Worker renderer의 1497×918 결정성, dark/light × en/ko, avatar success/fallback과 browser/CLI full-stack
 - Worker hosted import graph의 Node/native/Postgres/S3 credential 부재
 - 기존 Node/Cloud Run/Postgres/S3-compatible fallback build와 contract 회귀
 - orphan cleanup dry-run/apply guard와 stable tombstone 보존

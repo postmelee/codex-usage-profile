@@ -156,6 +156,47 @@ test("S3 adapter classifies malformed stable metadata as invalid", async () => {
   );
 });
 
+test("S3 adapter serves coherent light variants and fails closed on drift", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createThemeIdentity();
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(identity.representations[theme].en);
+    await store.putRevision(identity.representations[theme].ko);
+  }
+  await store.publishRevision(themePublicationInput(identity));
+
+  const light = await store.getPublishedCard({
+    handle: identity.handle,
+    locale: "ko",
+    theme: "light"
+  });
+  assert.equal(light.contractVersion, 4);
+  assert.equal(light.theme, "light");
+  assert.deepEqual(light.body, identity.representations.light.ko.body);
+  assert.equal(
+    light.stableKey,
+    createProfileMediaStableKey({ handle: identity.handle, theme: "light" })
+  );
+
+  const lightKey = light.stableKey;
+  client.objects.get(lightKey).Metadata["publication-id"] = "stale";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle, theme: "light" }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.INVALID
+  );
+
+  client.objects.delete(lightKey);
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle, theme: "light" }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND
+  );
+});
+
 const integrationConfig = resolveTestProfileMediaStoreOptions(process.env);
 test("S3 adapter satisfies contract against configured endpoint", {
   skip: integrationConfig.enabled ? false : integrationConfig.reason
@@ -262,7 +303,34 @@ function createTestIdentity() {
   };
 }
 
-function createRevision(ownerId, locale, body) {
+function createThemeIdentity() {
+  const suffix = randomUUID().replaceAll("-", "");
+  const ownerId = `owner_${suffix}`;
+  const handle = `media-${suffix}`;
+  const presentationDigest = createHash("sha256")
+    .update(`presentation-${suffix}`)
+    .digest("base64url");
+  return {
+    handle,
+    ownerId,
+    presentationDigest,
+    publicationId: `publication_${suffix}`,
+    representations: Object.fromEntries(["dark", "light"].map((theme) => [
+      theme,
+      Object.fromEntries(["en", "ko"].map((locale) => [
+        locale,
+        createRevision(
+          ownerId,
+          locale,
+          Buffer.from(`${theme}-${locale}-${suffix}`),
+          { contractVersion: 4, presentationDigest, theme }
+        )
+      ]))
+    ]))
+  };
+}
+
+function createRevision(ownerId, locale, body, overrides = {}) {
   const revision = createHash("sha256").update(body).digest("base64url");
   return {
     body,
@@ -270,7 +338,28 @@ function createRevision(ownerId, locale, body) {
     etag: `"${revision}"`,
     locale,
     ownerId,
-    revision
+    revision,
+    ...overrides
+  };
+}
+
+function themePublicationInput(identity, overrides = {}) {
+  return {
+    contractVersion: 4,
+    handle: identity.handle,
+    ownerId: identity.ownerId,
+    presentationDigest: identity.presentationDigest,
+    publicationId: overrides.publicationId ?? identity.publicationId,
+    publishedAt: "2026-07-22T02:00:00.000Z",
+    representations: Object.fromEntries(
+      Object.entries(identity.representations).map(([theme, locales]) => [
+        theme,
+        Object.fromEntries(Object.entries(locales).map(([locale, revision]) => [
+          locale,
+          { etag: revision.etag, revision: revision.revision }
+        ]))
+      ])
+    )
   };
 }
 

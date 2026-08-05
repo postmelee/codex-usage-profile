@@ -16,7 +16,9 @@ export const MAX_SITES_PRODUCTION_ARTIFACT_BYTES = 12_000_000;
 const EXPECTED_MIGRATIONS = Object.freeze([
   "0001_profile_backend.sql",
   "0002_account_usage_rate_limits.sql",
-  "0003_cli_login_intent.sql"
+  "0003_cli_login_intent.sql",
+  "0004_card_style.sql",
+  "0005_card_locale.sql"
 ]);
 const FORBIDDEN_ARTIFACT_PATTERNS = Object.freeze([
   Object.freeze({
