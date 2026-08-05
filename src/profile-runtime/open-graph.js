@@ -1,8 +1,8 @@
 export const PROFILE_OPEN_GRAPH_SITE_NAME = "Codex Usage Profile";
 export const PROFILE_OPEN_GRAPH_LOCALES = Object.freeze(["en", "ko"]);
 export const DEFAULT_PROFILE_OPEN_GRAPH_LOCALE = "en";
-export const PROFILE_SOCIAL_IMAGE_WIDTH = 1200;
-export const PROFILE_SOCIAL_IMAGE_HEIGHT = 630;
+export const PROFILE_SOCIAL_IMAGE_WIDTH = 2400;
+export const PROFILE_SOCIAL_IMAGE_HEIGHT = 1260;
 export const PROFILE_SOCIAL_IMAGE_TYPE = "image/png";
 
 const OPEN_GRAPH_LOCALE_TAGS = Object.freeze({

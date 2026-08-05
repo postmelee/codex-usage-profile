@@ -1,6 +1,9 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
-import { computeSocialCanvasLayout } from "./social-canvas.js";
+import {
+  SOCIAL_OUTPUT_SCALE,
+  computeSocialCanvasLayout
+} from "./social-canvas.js";
 import { getCardThemePalette } from "./theme.js";
 
 export const WORKER_CARD_RENDERER_VERSION =
@@ -71,7 +74,7 @@ export function createWorkerProfileCardRenderer(options = {}) {
   ) {
     return renderSvg(
       createWorkerProfileSocialCardSvg(viewModel, renderOptions),
-      { mode: "original" }
+      { mode: "zoom", value: SOCIAL_OUTPUT_SCALE }
     );
   };
 

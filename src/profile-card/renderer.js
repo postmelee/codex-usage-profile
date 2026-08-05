@@ -63,8 +63,9 @@ export async function renderProfileSocialCardPng(viewModel, options = {}) {
   const palette = getCardThemePalette(options.theme ?? viewModel.theme);
   const layout = computeSocialCanvasLayout();
 
-  const canvas = createCanvas(layout.canvasWidth, layout.canvasHeight);
+  const canvas = createCanvas(layout.outputWidth, layout.outputHeight);
   const context = canvas.getContext("2d");
+  context.scale(layout.outputScale, layout.outputScale);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 

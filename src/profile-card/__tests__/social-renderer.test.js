@@ -8,6 +8,9 @@ import { renderProfileSocialCardPng } from "../renderer.js";
 import {
   SOCIAL_CANVAS_HEIGHT,
   SOCIAL_CANVAS_WIDTH,
+  SOCIAL_OUTPUT_HEIGHT,
+  SOCIAL_OUTPUT_SCALE,
+  SOCIAL_OUTPUT_WIDTH,
   computeSocialCanvasLayout
 } from "../social-canvas.js";
 import { CARD_THEME_PALETTES } from "../theme.js";
@@ -36,7 +39,7 @@ function createViewModel(locale = "ko") {
   });
 }
 
-test("renders the social card as a 1200x630 PNG", async () => {
+test("renders the social card at twice the 1200x630 layout", async () => {
   const png = await renderProfileSocialCardPng(createViewModel(), {
     avatarSource: AVATAR_SOURCE
   });
@@ -44,8 +47,10 @@ test("renders the social card as a 1200x630 PNG", async () => {
   assert.equal(png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE), true);
 
   const image = await loadImage(png);
-  assert.equal(image.width, SOCIAL_CANVAS_WIDTH);
-  assert.equal(image.height, SOCIAL_CANVAS_HEIGHT);
+  assert.equal(image.width, SOCIAL_OUTPUT_WIDTH);
+  assert.equal(image.height, SOCIAL_OUTPUT_HEIGHT);
+  assert.equal(SOCIAL_OUTPUT_WIDTH, SOCIAL_CANVAS_WIDTH * SOCIAL_OUTPUT_SCALE);
+  assert.equal(SOCIAL_OUTPUT_HEIGHT, SOCIAL_CANVAS_HEIGHT * SOCIAL_OUTPUT_SCALE);
 });
 
 test("leaves the padding around the card transparent", async () => {
@@ -166,8 +171,15 @@ async function drawToContext(png) {
   return context;
 }
 
+// Coordinates are layout units; the rendered PNG is SOCIAL_OUTPUT_SCALE times
+// larger, so reads are mapped into output pixels here.
 function readPixel(context, x, y) {
-  const { data } = context.getImageData(Math.round(x), Math.round(y), 1, 1);
+  const { data } = context.getImageData(
+    Math.round(x * SOCIAL_OUTPUT_SCALE),
+    Math.round(y * SOCIAL_OUTPUT_SCALE),
+    1,
+    1
+  );
   return [data[0], data[1], data[2], data[3]];
 }
 

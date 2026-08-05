@@ -87,7 +87,10 @@ test("uses the operator social image on fallback when a handle is configured", (
     readTag(document, "og:image"),
     `${ORIGIN}/u/postmelee/social.png`
   );
-  assert.equal(readTag(document, "og:image:width"), "1200");
+  assert.equal(
+    readTag(document, "og:image:width"),
+    String(PROFILE_SOCIAL_IMAGE_WIDTH)
+  );
   assert.equal(readTag(document, "twitter:card"), "summary_large_image");
   assert.equal(
     readTag(document, "twitter:image"),

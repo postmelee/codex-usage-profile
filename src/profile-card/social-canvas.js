@@ -2,6 +2,9 @@ export const SOCIAL_CARD_LOGICAL_WIDTH = 499;
 export const SOCIAL_CARD_LOGICAL_HEIGHT = 306;
 export const SOCIAL_CANVAS_WIDTH = 1200;
 export const SOCIAL_CANVAS_HEIGHT = 630;
+export const SOCIAL_OUTPUT_SCALE = 2;
+export const SOCIAL_OUTPUT_WIDTH = SOCIAL_CANVAS_WIDTH * SOCIAL_OUTPUT_SCALE;
+export const SOCIAL_OUTPUT_HEIGHT = SOCIAL_CANVAS_HEIGHT * SOCIAL_OUTPUT_SCALE;
 export const SOCIAL_CANVAS_MIN_HORIZONTAL_PADDING = 120;
 export const SOCIAL_CANVAS_MIN_VERTICAL_PADDING = 20;
 export const SOCIAL_CARD_ASPECT_RATIO =
@@ -37,11 +40,19 @@ export function computeSocialCanvasLayout(options = {}) {
     : availableHeight * SOCIAL_CARD_ASPECT_RATIO;
   const cardHeight = cardWidth / SOCIAL_CARD_ASPECT_RATIO;
 
+  const outputScale = requirePositiveNumber(
+    options.outputScale ?? SOCIAL_OUTPUT_SCALE,
+    "outputScale"
+  );
+
   return Object.freeze({
     canvasHeight,
     canvasWidth,
     cardHeight,
     cardWidth,
+    outputHeight: canvasHeight * outputScale,
+    outputScale,
+    outputWidth: canvasWidth * outputScale,
     cardX: (canvasWidth - cardWidth) / 2,
     cardY: (canvasHeight - cardHeight) / 2,
     scale: cardWidth / SOCIAL_CARD_LOGICAL_WIDTH

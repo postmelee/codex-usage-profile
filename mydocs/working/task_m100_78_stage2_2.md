@@ -67,7 +67,7 @@ curl -X PATCH .../api/profile -d '{"visibility":"private"}'
 - OK. `npm test` 전체 675개 중 669 pass, 0 fail, 6 skipped
 - OK. `git diff --check` 경고 없음
 - OK. 발행 전 `social.png` 404
-- OK. 발행 후 200, `image/png`, 81878 bytes, ETag와 `public, no-cache, must-revalidate`
+- OK. 발행 후 200, `image/png`, ETag와 `public, no-cache, must-revalidate`. 출력 배율 2배 적용 후 2400x1260, 204929 bytes
 - OK. `If-None-Match` 재검증 304
 - OK. HEAD 200에 본문 0 bytes
 - OK. 카드 설정을 light/en으로 저장하자 같은 URL이 새 ETag와 82142 bytes로 갱신. 육안으로 light 테마와 영문 라벨 확인
