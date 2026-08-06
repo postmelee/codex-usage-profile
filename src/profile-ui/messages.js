@@ -127,6 +127,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.fetching": "Fetching the latest published card.",
     "profile.public.loading": "Loading public profile",
     "profile.public.notAvailable": "This public profile is not available.",
+    "profile.public.ownerPrivateTitle": "Your card is still private",
+    "profile.public.ownerPrivateDescription":
+      "Publish it to share this link. Visitors see this page once it is public.",
+    "profile.public.publishFailed": "Could not publish the card. Try again.",
     "profile.reasoning.high": "High",
     "profile.reasoning.low": "Low",
     "profile.reasoning.medium": "Medium",
@@ -389,6 +393,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.fetching": "최신 공개 카드를 불러오고 있습니다.",
     "profile.public.loading": "공개 프로필 불러오는 중",
     "profile.public.notAvailable": "이 공개 프로필을 사용할 수 없습니다.",
+    "profile.public.ownerPrivateTitle": "카드가 아직 비공개입니다",
+    "profile.public.ownerPrivateDescription":
+      "공개하면 이 링크를 공유할 수 있습니다. 방문자는 공개된 뒤에만 이 화면을 봅니다.",
+    "profile.public.publishFailed": "카드를 공개하지 못했습니다. 다시 시도해 주세요.",
     "profile.reasoning.high": "높음",
     "profile.reasoning.low": "낮음",
     "profile.reasoning.medium": "중간",

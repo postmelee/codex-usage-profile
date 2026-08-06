@@ -102,8 +102,10 @@ test("loads a public Account Usage profile", async () => {
 });
 
 test("maps missing, private, invalid, and failed responses to one unavailable state", async () => {
+  // The requested handle comes from the URL, so it stays on the unavailable
+  // state. The page uses it to recognise an owner viewing their own link.
   const unavailable = {
-    handle: null,
+    handle: "hidden",
     profile: null,
     source: "api",
     status: "unavailable"
@@ -144,5 +146,5 @@ test("maps missing, private, invalid, and failed responses to one unavailable st
   assert.deepEqual(await loadPublicProfileRoute(
     new URL("http://localhost/u/failed"),
     { client: { async getPublicProfile() { throw new Error("network"); } } }
-  ), unavailable);
+  ), { ...unavailable, handle: "failed" });
 });

@@ -555,7 +555,6 @@ button {
 }
 
 .home-card-preview,
-.public-profile-card,
 .share-card-preview {
   aspect-ratio: 499 / 306;
   display: block;
@@ -1349,10 +1348,6 @@ button {
   overflow-wrap: anywhere;
 }
 
-.public-profile-card {
-  margin-top: 28px;
-}
-
 .public-profile-state {
   align-self: center;
   margin-top: 90px;
@@ -1361,6 +1356,16 @@ button {
 
 .public-profile-state.is-loading .profile-state-indicator {
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+.public-profile-state.is-private-owner {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.public-profile-state.is-private-owner p {
+  margin: 0;
 }
 
 .card-profile-message {
