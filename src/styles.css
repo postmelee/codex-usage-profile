@@ -1307,6 +1307,10 @@ button {
   }
 }
 
+.public-profile-view:has(.public-profile-owner-banner) {
+  padding-top: 20px;
+}
+
 .public-profile-view {
   align-items: flex-start;
   background: var(--content-background);
@@ -1386,10 +1390,10 @@ button {
   gap: 16px;
   justify-content: space-between;
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   padding: 16px 20px;
   position: sticky;
-  top: calc(var(--profile-header-height, 52px) + 12px);
+  top: calc(var(--profile-header-height, 52px) + 8px);
   z-index: 30;
 }
 
