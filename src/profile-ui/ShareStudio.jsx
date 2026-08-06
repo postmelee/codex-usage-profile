@@ -13,6 +13,7 @@ import {
   formatShareStudioPlatformMessage,
   getShareStudioCopy
 } from "./shareStudio.js";
+import { useCardHandoffMotion } from "./useCardHandoffMotion.js";
 
 export function ShareStudio({
   cardLocale,
@@ -30,23 +31,12 @@ export function ShareStudio({
 }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
-  const closingRef = useRef(false);
-  const handoffTimerRef = useRef(null);
-  const motionAnimationRef = useRef(null);
-  const motionCardRef = useRef(null);
-  const motionTimerRef = useRef(null);
-  const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
   const previewImageRef = useRef(null);
-  const revealedSourceRef = useRef(null);
-  const revealedSourceStyleRef = useRef(null);
-  const requestCloseRef = useRef(null);
-  const resizeFrameRef = useRef(null);
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
   const [toast, setToast] = useState(null);
-  const [transitionPhase, setTransitionPhase] = useState("preparing");
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
     () => buildLocalizedCardUrl(
@@ -72,13 +62,23 @@ export function ShareStudio({
     && typeof document !== "undefined"
   );
 
-  onCloseRef.current = onClose;
-  requestCloseRef.current = requestClose;
+  const {
+    cardRef: motionCardRef,
+    phase: transitionPhase,
+    requestClose,
+    requestCloseRef,
+    settleAtTarget
+  } = useCardHandoffMotion({
+    active: canRender,
+    onClose,
+    restartKey: imageUrl,
+    sourceCardRef,
+    sourceRect
+  });
 
   useLayoutEffect(() => {
     if (!canRender) return undefined;
 
-    closingRef.current = false;
     previousFocusRef.current = document.activeElement;
     setPreviewFailed(false);
     setSelectedSocialPlatform(null);
@@ -125,9 +125,7 @@ export function ShareStudio({
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      globalThis.clearTimeout(handoffTimerRef.current);
       globalThis.clearTimeout(toastTimerRef.current);
-      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
       body.style.overflow = previousBodyOverflow;
       if (scrollContainer) scrollContainer.style.overflow = previousScrollOverflow;
       if (appFrame) {
@@ -141,124 +139,8 @@ export function ShareStudio({
       if (previousFocusRef.current?.isConnected) {
         previousFocusRef.current.focus?.();
       }
-      if (revealedSourceRef.current?.isConnected) {
-        if (revealedSourceStyleRef.current === null) {
-          revealedSourceRef.current.removeAttribute("style");
-        } else {
-          revealedSourceRef.current.setAttribute(
-            "style",
-            revealedSourceStyleRef.current
-          );
-        }
-      }
-      revealedSourceRef.current = null;
-      revealedSourceStyleRef.current = null;
     };
   }, [canRender]);
-
-  useLayoutEffect(() => {
-    if (!canRender) return undefined;
-
-    const card = motionCardRef.current;
-    if (!card) return undefined;
-
-    const reduceMotion = prefersReducedMotion();
-    const targetRect = card.getBoundingClientRect();
-    const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect);
-    const sourceTransform = !reduceMotion
-      ? buildRectTransform(resolvedSourceRect, targetRect)
-      : null;
-    const duration = sourceTransform ? getOpenDuration(sourceTransform.distance) : 280;
-    const frames = reduceMotion
-      ? [
-        { opacity: 0 },
-        { opacity: 1 }
-      ]
-      : sourceTransform
-      ? [
-        { opacity: 1, transform: sourceTransform.value },
-        { opacity: 1, transform: IDENTITY_TRANSFORM }
-      ]
-      : [
-        {
-          opacity: 0,
-          transform: "translate3d(0, 12px, 0) scale(0.985)"
-        },
-        { opacity: 1, transform: IDENTITY_TRANSFORM }
-      ];
-
-    setTransitionPhase("opening");
-    card.dataset.motionOrigin = sourceTransform ? "source" : "target";
-    delete card.dataset.motionFallback;
-
-    if (typeof card.animate !== "function") {
-      setTransitionPhase("open");
-      return undefined;
-    }
-
-    const animation = card.animate(frames, {
-      duration: reduceMotion ? 140 : duration,
-      easing: "cubic-bezier(0.2, 0, 0, 1)",
-      fill: "both"
-    });
-    motionAnimationRef.current = animation;
-    const finishOpening = () => {
-      if (
-        motionAnimationRef.current !== animation
-        || closingRef.current
-      ) {
-        return;
-      }
-      setTransitionPhase("open");
-    };
-    animation.finished.then(finishOpening).catch(() => {});
-    motionTimerRef.current = globalThis.setTimeout(
-      finishOpening,
-      (reduceMotion ? 140 : duration) + 80
-    );
-
-    return () => {
-      globalThis.clearTimeout(motionTimerRef.current);
-      if (motionAnimationRef.current === animation) {
-        animation.cancel();
-        motionAnimationRef.current = null;
-      }
-    };
-  }, [canRender, imageUrl, sourceCardRef, sourceRect]);
-
-  useLayoutEffect(() => {
-    if (!canRender) return undefined;
-
-    function handleViewportChange() {
-      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
-      resizeFrameRef.current = globalThis.requestAnimationFrame?.(
-        () => settleMotionAtTarget("viewport-change")
-      );
-    }
-
-    globalThis.addEventListener?.("resize", handleViewportChange);
-    globalThis.addEventListener?.("orientationchange", handleViewportChange);
-
-    return () => {
-      globalThis.cancelAnimationFrame?.(resizeFrameRef.current);
-      globalThis.removeEventListener?.("resize", handleViewportChange);
-      globalThis.removeEventListener?.("orientationchange", handleViewportChange);
-    };
-  }, [canRender]);
-
-  useLayoutEffect(() => {
-    if (!canRender || transitionPhase !== "handoff") return undefined;
-
-    const duration = prefersReducedMotion() ? 80 : SOURCE_HANDOFF_DURATION;
-    handoffTimerRef.current = globalThis.setTimeout(
-      () => onCloseRef.current?.(),
-      duration + 40
-    );
-
-    return () => {
-      globalThis.clearTimeout(handoffTimerRef.current);
-    };
-  }, [canRender, transitionPhase]);
 
   if (!canRender) return null;
 
@@ -301,133 +183,9 @@ export function ShareStudio({
     );
   }
 
-  function requestClose() {
-    if (closingRef.current) return;
-    closingRef.current = true;
-    setToast(null);
-    setTransitionPhase("closing");
-    globalThis.clearTimeout(handoffTimerRef.current);
-    globalThis.clearTimeout(motionTimerRef.current);
-
-    const card = motionCardRef.current;
-    const reduceMotion = prefersReducedMotion();
-    if (!card || typeof card.animate !== "function") {
-      beginSourceHandoff(card, reduceMotion);
-      return;
-    }
-
-    const currentStyle = getComputedStyle(card);
-    const currentTransform = currentStyle.transform === "none"
-      ? IDENTITY_TRANSFORM
-      : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
-
-    motionAnimationRef.current?.cancel();
-    motionAnimationRef.current = null;
-    const targetRect = card.getBoundingClientRect();
-    const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect, true);
-    const sourceTransform = !reduceMotion
-      ? buildRectTransform(resolvedSourceRect, targetRect)
-      : null;
-    const duration = sourceTransform ? 280 : 180;
-    const frames = reduceMotion
-      ? [
-        { opacity: currentOpacity },
-        { opacity: 0 }
-      ]
-      : [
-        { opacity: currentOpacity, transform: currentTransform },
-        {
-          opacity: sourceTransform ? 1 : 0,
-          transform: sourceTransform?.value ?? IDENTITY_TRANSFORM
-        }
-      ];
-    const animation = card.animate(frames, {
-      duration: reduceMotion ? 110 : duration,
-      easing: "cubic-bezier(0.3, 0, 1, 1)",
-      fill: "both"
-    });
-    motionAnimationRef.current = animation;
-
-    let finished = false;
-    const finishClosing = () => {
-      if (finished) return;
-      finished = true;
-      beginSourceHandoff(card, reduceMotion);
-    };
-    animation.finished.then(finishClosing).catch(() => {});
-    motionTimerRef.current = globalThis.setTimeout(
-      finishClosing,
-      (reduceMotion ? 110 : duration) + 80
-    );
-  }
-
-  function beginSourceHandoff(card, reduceMotion) {
-    globalThis.clearTimeout(motionTimerRef.current);
-
-    const source = sourceCardRef?.current;
-    if (
-      !source?.isConnected
-      || source.dataset.shareTransitionActive !== "true"
-    ) {
-      onCloseRef.current?.();
-      return;
-    }
-
-    setTransitionPhase("handoff");
-    revealedSourceRef.current = source;
-    revealedSourceStyleRef.current = source.getAttribute("style");
-    const previousStyle = revealedSourceStyleRef.current?.trim();
-    source.setAttribute(
-      "style",
-      `${previousStyle ? `${previousStyle};` : ""}opacity: 1;`
-    );
-
-    const duration = reduceMotion ? 80 : SOURCE_HANDOFF_DURATION;
-    if (!card || typeof card.animate !== "function") {
-      return;
-    }
-
-    const currentStyle = getComputedStyle(card);
-    const currentTransform = currentStyle.transform === "none"
-      ? IDENTITY_TRANSFORM
-      : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
-    const frames = reduceMotion
-      ? [
-        { opacity: currentOpacity },
-        { opacity: 0 }
-      ]
-      : [
-        { opacity: currentOpacity, transform: currentTransform },
-        { opacity: 0, transform: currentTransform }
-      ];
-    const animation = card.animate(frames, {
-      duration,
-      easing: "cubic-bezier(0.3, 0, 1, 1)",
-      fill: "both"
-    });
-    motionAnimationRef.current = animation;
-  }
-
-  function settleMotionAtTarget(reason) {
-    if (closingRef.current) return;
-
-    globalThis.clearTimeout(motionTimerRef.current);
-    motionAnimationRef.current?.cancel();
-    motionAnimationRef.current = null;
-
-    const card = motionCardRef.current;
-    if (card) {
-      card.dataset.motionFallback = reason;
-      card.dataset.motionOrigin = "target";
-    }
-    setTransitionPhase("open");
-  }
-
   function handlePreviewError() {
     setPreviewFailed(true);
-    settleMotionAtTarget("preview-error");
+    settleAtTarget("preview-error");
   }
 
   return createPortal(
@@ -790,63 +548,7 @@ function getFocusableElements(container) {
   ));
 }
 
-const IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
 const SHARE_INSTRUCTIONS_CLOSE_DURATION = 120;
 const SHARE_INSTRUCTIONS_ID = "share-studio-social-instructions";
 const SHARE_INSTRUCTIONS_OPEN_DURATION = 160;
-const SOURCE_HANDOFF_DURATION = 120;
 const TOAST_DURATION = 3200;
-
-function buildRectTransform(source, target) {
-  if (!isValidRect(source) || !isValidRect(target)) return null;
-
-  const translateX = source.left - target.left;
-  const translateY = source.top - target.top;
-  const scaleX = source.width / target.width;
-  const scaleY = source.height / target.height;
-
-  if (
-    !Number.isFinite(translateX)
-    || !Number.isFinite(translateY)
-    || !Number.isFinite(scaleX)
-    || !Number.isFinite(scaleY)
-    || scaleX <= 0
-    || scaleY <= 0
-  ) {
-    return null;
-  }
-
-  return {
-    distance: Math.hypot(translateX, translateY),
-    value: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`
-  };
-}
-
-function getOpenDuration(distance) {
-  return Math.round(Math.min(440, Math.max(320, 320 + (distance * 0.3))));
-}
-
-function isValidRect(rect) {
-  return Boolean(
-    rect
-    && Number.isFinite(rect.left)
-    && Number.isFinite(rect.top)
-    && Number.isFinite(rect.width)
-    && Number.isFinite(rect.height)
-    && rect.width > 0
-    && rect.height > 0
-  );
-}
-
-function prefersReducedMotion() {
-  return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
-
-function resolveSourceRect(sourceCardRef, snapshot, preferLive = false) {
-  const source = sourceCardRef?.current;
-  const liveRect = source?.isConnected ? source.getBoundingClientRect() : null;
-
-  if (!isValidRect(liveRect)) return null;
-  if (preferLive) return liveRect;
-  return isValidRect(snapshot) ? snapshot : liveRect;
-}
