@@ -3845,3 +3845,90 @@ button {
     grid-template-columns: repeat(2, 60px);
   }
 }
+
+.public-card-intro-backdrop {
+  align-items: center;
+  backdrop-filter: blur(18px);
+  background: var(--overlay-scrim);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: hidden;
+  padding: max(48px, env(safe-area-inset-top)) 24px max(48px, env(safe-area-inset-bottom));
+  position: fixed;
+  z-index: 100;
+}
+
+.public-card-intro-backdrop.is-closing,
+.public-card-intro-backdrop.is-handoff {
+  backdrop-filter: none;
+  background: transparent;
+  transition: background 240ms cubic-bezier(0.3, 0, 1, 1);
+}
+
+.public-card-intro {
+  align-content: center;
+  display: grid;
+  gap: 24px;
+  justify-items: center;
+  max-width: 100%;
+  position: relative;
+  width: min(100%, 720px);
+}
+
+.public-card-intro-title {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.public-card-intro-card {
+  transform-style: preserve-3d;
+  width: 100%;
+}
+
+.public-card-intro-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.public-card-intro-close {
+  position: absolute;
+  right: 0;
+  top: -44px;
+}
+
+.public-card-intro-backdrop.is-closing .public-card-intro-title,
+.public-card-intro-backdrop.is-closing .public-card-intro-actions,
+.public-card-intro-backdrop.is-closing .public-card-intro-close,
+.public-card-intro-backdrop.is-handoff .public-card-intro-title,
+.public-card-intro-backdrop.is-handoff .public-card-intro-actions,
+.public-card-intro-backdrop.is-handoff .public-card-intro-close {
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.3, 0, 1, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-card-intro-backdrop.is-closing,
+  .public-card-intro-backdrop.is-handoff {
+    transition: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .public-card-intro-close {
+    right: 4px;
+    top: -40px;
+  }
+
+  .public-card-intro-title {
+    font-size: 20px;
+  }
+}

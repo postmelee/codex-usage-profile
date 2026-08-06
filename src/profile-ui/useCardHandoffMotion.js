@@ -14,6 +14,8 @@ export const CARD_HANDOFF_PHASES = Object.freeze({
 export function useCardHandoffMotion(options = {}) {
   const {
     active,
+    introDuration = 280,
+    introFrames = null,
     onClose,
     restartKey,
     sourceCardRef,
@@ -67,11 +69,15 @@ export function useCardHandoffMotion(options = {}) {
     const reduceMotion = prefersReducedMotion();
     const targetRect = card.getBoundingClientRect();
     const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect);
-    const sourceTransform = !reduceMotion
+    // Intro frames win over a measurable source rect: the handoff target is
+    // already in the DOM below the fold, but the opening is not a handoff.
+    const sourceTransform = !reduceMotion && !introFrames
       ? buildRectTransform(resolvedSourceRect, targetRect)
       : null;
     const duration = sourceTransform
       ? getOpenDuration(sourceTransform.distance)
+      : introFrames
+      ? introDuration
       : 280;
     const frames = reduceMotion
       ? [
@@ -83,7 +89,7 @@ export function useCardHandoffMotion(options = {}) {
         { opacity: 1, transform: sourceTransform.value },
         { opacity: 1, transform: CARD_HANDOFF_IDENTITY_TRANSFORM }
       ]
-      : [
+      : introFrames ?? [
         {
           opacity: 0,
           transform: "translate3d(0, 12px, 0) scale(0.985)"

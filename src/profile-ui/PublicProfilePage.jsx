@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx";
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
+import { PublicCardIntro } from "./PublicCardIntro.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { buildAccountLoginHref, getAccountOwner } from "./accountUi.js";
@@ -29,7 +30,12 @@ export function PublicProfilePage({
     >
       <section className="public-profile-view" aria-label={t("profile.public.ariaLabel")}>
         {status === "ready" && profile ? (
-          <PublicProfileStage profile={profile} />
+          <PublicProfileStage
+            authState={authState}
+            client={client}
+            intro
+            profile={profile}
+          />
         ) : (
           <PublicProfileState
             authState={authState}
@@ -44,8 +50,18 @@ export function PublicProfilePage({
   );
 }
 
-function PublicProfileStage({ banner = null, cardUrl, preview = false, profile }) {
+function PublicProfileStage({
+  authState = null,
+  banner = null,
+  cardUrl,
+  client = null,
+  intro = false,
+  preview = false,
+  profile
+}) {
   const { locale, t } = useLocale();
+  const cardRef = useRef(null);
+  const [introOpen, setIntroOpen] = useState(intro);
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
   const resolvedCardUrl = cardUrl ?? (
@@ -81,11 +97,27 @@ function PublicProfileStage({ banner = null, cardUrl, preview = false, profile }
         <div className="profile-card-preview-stage">
           <MarketingCardPreview
             alt={t("profile.card.alt.public", { name: displayName })}
+            cardRef={cardRef}
             sourceKind="owner"
             src={resolvedCardUrl}
+            transitionSuspended={introOpen}
           />
         </div>
       </section>
+
+      {intro ? (
+        <PublicCardIntro
+          cardAlt={t("profile.card.alt.public", { name: displayName })}
+          cardUrl={resolvedCardUrl}
+          createCardHref={authState?.status === "authenticated"
+            ? "/profile"
+            : buildAccountLoginHref(client)}
+          onClose={() => setIntroOpen(false)}
+          open={introOpen}
+          ownerName={displayName}
+          targetCardRef={cardRef}
+        />
+      ) : null}
     </div>
   );
 }
