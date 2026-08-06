@@ -1378,11 +1378,12 @@ button {
   flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
   margin-bottom: 28px;
   padding: 16px 20px;
   position: sticky;
-  top: 12px;
-  z-index: 5;
+  top: calc(var(--profile-header-height, 52px) + 12px);
+  z-index: 30;
 }
 
 .public-profile-owner-banner-copy {
