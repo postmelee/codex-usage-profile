@@ -35,6 +35,14 @@ Stage: 4
 
 안내 배너는 `sticky`이며 상단 오프셋을 `--profile-header-height`에 맞춰 헤더 아래에 붙이고, `z-index`를 헤더보다 낮게 두어 겹칠 때 헤더가 이긴다.
 
+## 방문자 unavailable 화면
+
+미존재 handle과 비공개 handle은 반드시 같은 화면이어야 한다. 구분해서 보여주면 handle 존재 여부를 알아내는 수단이 되고, 서버 응답을 동일하게 맞춰둔 조치가 무의미해진다. 따라서 원인을 특정하지 않고 두 가능성을 함께 적는다.
+
+기존 화면에는 로딩용 `profile-state-indicator` 원이 unavailable 상태에도 남아 있었다. 애니메이션은 `is-loading`에서만 붙으므로 여기서는 의미 없는 회색 원이었다. 제거했다.
+
+막다른 화면 대신 카드 생성 CTA와 홈 링크를 둔다. 이 화면은 공유 링크를 타고 들어온 사람이 도달하는 자리이므로 유입 경로로 쓰는 편이 낫다. CTA는 로그인 상태면 `/profile`, 아니면 GitHub 로그인으로 보낸다.
+
 ## 소유자 판별 방식
 
 `authState`의 세션 owner handle과 경로 handle을 클라이언트에서 비교한다. `/api/profiles/public/{handle}` 응답은 그대로 두었다. 서버 응답을 소유자 여부로 분기하면 비공개와 미존재를 구분할 수 있게 되어 handle 열거 오라클이 된다.

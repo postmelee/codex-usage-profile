@@ -4,7 +4,7 @@ import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx"
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
-import { getAccountOwner } from "./accountUi.js";
+import { buildAccountLoginHref, getAccountOwner } from "./accountUi.js";
 import { buildLocalizedCardUrl } from "./cardShare.js";
 
 export function PublicProfilePage({
@@ -109,21 +109,33 @@ function PublicProfileState({
     );
   }
 
-  const copy = status === "loading"
-    ? {
-        title: t("profile.public.loading"),
-        message: t("profile.public.fetching")
-      }
-    : {
-        title: t("profile.error.unavailable"),
-        message: t("profile.public.notAvailable")
-      };
+  if (status === "loading") {
+    return (
+      <div className="public-profile-state is-loading">
+        <div className="profile-state-indicator" aria-hidden="true" />
+        <h1>{t("profile.public.loading")}</h1>
+        <p>{t("profile.public.fetching")}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={`public-profile-state is-${status}`}>
-      <div className="profile-state-indicator" aria-hidden="true" />
-      <h1>{copy.title}</h1>
-      <p>{copy.message}</p>
+    <div className="public-profile-state is-unavailable">
+      <h1>{t("profile.public.unavailableTitle")}</h1>
+      <p>{t("profile.public.unavailableDescription")}</p>
+      <div className="public-profile-state-actions">
+        <a
+          className="primary-command"
+          href={authState?.status === "authenticated"
+            ? "/profile"
+            : buildAccountLoginHref(client)}
+        >
+          {t("profile.public.createYourCard")}
+        </a>
+        <a className="secondary-command" href="/">
+          {t("common.nav.home")}
+        </a>
+      </div>
     </div>
   );
 }

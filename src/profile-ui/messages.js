@@ -127,6 +127,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.fetching": "Fetching the latest published card.",
     "profile.public.loading": "Loading public profile",
     "profile.public.notAvailable": "This public profile is not available.",
+    "profile.public.unavailableTitle": "This card cannot be shown",
+    "profile.public.unavailableDescription":
+      "The link may be wrong, or the card may not be published yet.",
+    "profile.public.createYourCard": "Create your Codex card",
     "profile.public.ownerPrivateTitle": "Your card is still private",
     "profile.public.ownerPreviewDescription":
       "This is exactly what visitors see once you publish. Only you can see it now.",
@@ -396,6 +400,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.fetching": "최신 공개 카드를 불러오고 있습니다.",
     "profile.public.loading": "공개 프로필 불러오는 중",
     "profile.public.notAvailable": "이 공개 프로필을 사용할 수 없습니다.",
+    "profile.public.unavailableTitle": "이 카드를 볼 수 없습니다",
+    "profile.public.unavailableDescription":
+      "링크가 잘못되었거나, 카드가 아직 공개되지 않았습니다.",
+    "profile.public.createYourCard": "내 Codex 카드 만들기",
     "profile.public.ownerPrivateTitle": "카드가 아직 비공개입니다",
     "profile.public.ownerPreviewDescription":
       "공개하면 방문자에게 이 화면이 그대로 보입니다. 지금은 나에게만 보입니다.",

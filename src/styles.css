@@ -1369,6 +1369,20 @@ button {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.public-profile-state.is-unavailable {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.public-profile-state-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .public-profile-state.is-private-owner {
   display: grid;
   gap: 16px;
