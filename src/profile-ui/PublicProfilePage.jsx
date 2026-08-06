@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx";
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
@@ -29,7 +29,7 @@ export function PublicProfilePage({
     >
       <section className="public-profile-view" aria-label={t("profile.public.ariaLabel")}>
         {status === "ready" && profile ? (
-          <ReadyPublicProfile profile={profile} />
+          <PublicProfileStage profile={profile} />
         ) : (
           <PublicProfileState
             authState={authState}
@@ -44,22 +44,26 @@ export function PublicProfilePage({
   );
 }
 
-function ReadyPublicProfile({ profile }) {
+function PublicProfileStage({ banner = null, cardUrl, profile }) {
   const { locale, t } = useLocale();
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
-  const cardUrl = buildLocalizedCardUrl(
-    profile.selectedPublicCardUrl ?? profile.publicCardUrl,
-    profile.cardLocale ?? locale,
-    profile.cardStyle?.theme
-  ) ?? buildLocalizedCardUrl(
-    profile.publicCardUrl,
-    profile.cardLocale ?? locale,
-    profile.cardStyle?.theme
+  const resolvedCardUrl = cardUrl ?? (
+    buildLocalizedCardUrl(
+      profile.selectedPublicCardUrl ?? profile.publicCardUrl,
+      profile.cardLocale ?? locale,
+      profile.cardStyle?.theme
+    ) ?? buildLocalizedCardUrl(
+      profile.publicCardUrl,
+      profile.cardLocale ?? locale,
+      profile.cardStyle?.theme
+    )
   );
 
   return (
     <div className="public-profile-stage">
+      {banner}
+
       <AccountUsageProfile
         headingId="public-profile-title"
         owner={owner}
@@ -78,7 +82,7 @@ function ReadyPublicProfile({ profile }) {
           <MarketingCardPreview
             alt={t("profile.card.alt.public", { name: displayName })}
             sourceKind="owner"
-            src={cardUrl}
+            src={resolvedCardUrl}
           />
         </div>
       </section>
@@ -94,11 +98,10 @@ function PublicProfileState({
   status
 }) {
   const { t } = useLocale();
-  const isOwner = isOwnHandle(authState, handle);
 
-  if (status !== "loading" && isOwner) {
+  if (status !== "loading" && isOwnHandle(authState, handle)) {
     return (
-      <PrivateOwnerNotice
+      <PrivateOwnerPreview
         authState={authState}
         client={client}
         onAuthStateChange={onAuthStateChange}
@@ -125,13 +128,32 @@ function PublicProfileState({
   );
 }
 
-function PrivateOwnerNotice({ authState, client, onAuthStateChange }) {
+function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
   const { t } = useLocale();
-  const [state, setState] = useState({ error: null, status: "idle" });
+  const [profileState, setProfileState] = useState({
+    profile: null,
+    status: "loading"
+  });
+  const [publishState, setPublishState] = useState({
+    error: null,
+    status: "idle"
+  });
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    client.getOwnerProfile().then((profile) => {
+      if (isCurrent) setProfileState({ profile, status: "ready" });
+    }).catch(() => {
+      if (isCurrent) setProfileState({ profile: null, status: "error" });
+    });
+
+    return () => { isCurrent = false; };
+  }, [client]);
 
   async function publish() {
-    if (state.status === "submitting") return;
-    setState({ error: null, status: "submitting" });
+    if (publishState.status === "submitting") return;
+    setPublishState({ error: null, status: "submitting" });
 
     try {
       const profile = await client.updateProfileVisibility("public");
@@ -143,27 +165,73 @@ function PrivateOwnerNotice({ authState, client, onAuthStateChange }) {
       }
       globalThis.location?.reload?.();
     } catch {
-      setState({ error: "profile.public.publishFailed", status: "error" });
+      setPublishState({
+        error: "profile.public.publishFailed",
+        status: "error"
+      });
     }
   }
 
+  const banner = (
+    <PrivateOwnerBanner
+      error={publishState.error}
+      onPublish={publish}
+      submitting={publishState.status === "submitting"}
+    />
+  );
+  const profile = profileState.profile;
+
+  if (profileState.status === "loading") {
+    return (
+      <div className="public-profile-state is-loading">
+        <div className="profile-state-indicator" aria-hidden="true" />
+        <h1>{t("profile.public.loading")}</h1>
+        <p>{t("profile.public.fetching")}</p>
+      </div>
+    );
+  }
+
+  if (!profile?.usage) {
+    return (
+      <div className="public-profile-state is-private-owner">
+        <h1>{t("profile.public.ownerPrivateTitle")}</h1>
+        <p>{t("profile.public.ownerNoUsage")}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="public-profile-state is-private-owner">
-      <h1>{t("profile.public.ownerPrivateTitle")}</h1>
-      <p>{t("profile.public.ownerPrivateDescription")}</p>
+    <PublicProfileStage
+      banner={banner}
+      cardUrl={client.buildOwnerCardPreviewUrl?.({
+        locale: profile.cardLocale ?? "en",
+        theme: profile.cardStyle?.theme ?? "dark"
+      }) ?? null}
+      profile={profile}
+    />
+  );
+}
+
+function PrivateOwnerBanner({ error, onPublish, submitting }) {
+  const { t } = useLocale();
+
+  return (
+    <div className="public-profile-owner-banner" role="status">
+      <div className="public-profile-owner-banner-copy">
+        <strong>{t("profile.public.ownerPrivateTitle")}</strong>
+        <span>{t("profile.public.ownerPreviewDescription")}</span>
+        {error ? (
+          <span className="public-profile-owner-banner-error">{t(error)}</span>
+        ) : null}
+      </div>
       <button
         className="primary-command"
-        disabled={state.status === "submitting"}
-        onClick={publish}
+        disabled={submitting}
+        onClick={onPublish}
         type="button"
       >
-        {state.status === "submitting"
-          ? t("profile.card.publishing")
-          : t("profile.card.publish")}
+        {submitting ? t("profile.card.publishing") : t("profile.card.publish")}
       </button>
-      {state.error ? (
-        <p className="home-status is-error" role="status">{t(state.error)}</p>
-      ) : null}
     </div>
   );
 }

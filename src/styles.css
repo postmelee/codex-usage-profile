@@ -1368,6 +1368,52 @@ button {
   margin: 0;
 }
 
+.public-profile-owner-banner {
+  align-items: center;
+  backdrop-filter: blur(12px);
+  background: var(--content-background-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  padding: 16px 20px;
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+}
+
+.public-profile-owner-banner-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.public-profile-owner-banner-copy strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.public-profile-owner-banner-copy span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.public-profile-owner-banner-error {
+  color: var(--status-danger);
+}
+
+@media (max-width: 760px) {
+  .public-profile-owner-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .card-profile-message {
   align-self: flex-start;
   display: grid;

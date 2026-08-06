@@ -12,7 +12,7 @@ Stage: 4
 
 | 파일 | 변경 요약 |
 |---|---|
-| `src/profile-ui/PublicProfilePage.jsx` | raw `<img>`를 `MarketingCardPreview`로 교체, 비공개 소유자 안내와 공개 전환 CTA 추가 |
+| `src/profile-ui/PublicProfilePage.jsx` | raw `<img>`를 `MarketingCardPreview`로 교체, 비공개 소유자에게 실제 공개 화면 미리보기와 sticky 안내 배너 제공 |
 | `src/profile-ui/publicProfileRoutes.js` | unavailable 상태에 요청 handle 보존 |
 | `src/profile-ui/messages.js` | ko/en 메시지 3개 추가 |
 | `src/App.jsx` | `handle` 전달 |
@@ -22,6 +22,14 @@ Stage: 4
 ## 동작 변경 1건
 
 `loadPublicProfileRoute`가 unavailable 상태에서 handle을 `null`로 버렸다. 소유자가 자기 링크를 열었는지 판단하려면 요청 handle이 필요하므로 보존하도록 바꿨다. handle은 URL에서 온 값이라 서버가 새로 알려주는 정보가 없고, 노출 경로도 늘지 않는다. 관련 테스트 단언을 갱신하고 이유를 주석으로 남겼다.
+
+## 비공개 소유자 화면 구성
+
+초안은 안내 문구와 버튼만 있는 빈 화면이었다. 작업지시자 지적대로 그 화면은 "공개하면 무엇이 보이는지"를 전혀 알려주지 못하므로, 실제 공개 화면을 그대로 렌더하고 안내와 공개 버튼을 상단 sticky 배너로 얹는 구성으로 바꿨다.
+
+미리보기 데이터는 공개 API가 아니라 소유자 본인 엔드포인트에서 가져온다. 비공개 상태에서는 `/api/profiles/public/{handle}`가 404이므로 `client.getOwnerProfile()`을 쓰고, 카드 이미지도 공개 URL 대신 세션 인증 기반 private preview(`client.buildOwnerCardPreviewUrl`)를 사용한다. 공개 API 응답과 공개 미디어 계약은 그대로 두었다.
+
+사용량을 아직 제출하지 않아 미리볼 카드가 없으면 안내 문구만 표시한다.
 
 ## 소유자 판별 방식
 
@@ -45,7 +53,9 @@ git diff --check
 - OK. `/u/postmelee` 카드 실측 600x368. `/profile`과 동일하다
 - OK. `HOVER-TILT` 요소와 `data-tilt-enabled="true"`, BorderBeam(`.home-card-beam`) 적용됨
 - OK. `data-card-source="true"` 훅 확보. Stage 5 인계 모션이 쓸 수 있다
-- OK. 비공개 전환 후 소유자에게 "카드가 아직 비공개입니다" 안내와 `카드 공개` 버튼 노출
+- OK. 비공개 전환 후 소유자에게 실제 공개 화면(프로필 헤더, 지표, 히트맵, 카드)이 그대로 렌더되고 상단에 안내 배너가 표시됨
+- OK. 배너가 `position: sticky`로 스크롤 시 상단 12px에 고정됨. 스크롤 473px 시점에 `top: 12`로 확인
+- OK. 미리보기 카드가 `/api/profile/card.png?locale=ko&theme=dark`에서 1497x918로 로드됨. 공개 카드 URL은 비공개 상태라 404이므로 소유자 preview 경로를 사용한다
 - OK. 버튼 실행 시 공개로 전환되고, 재조회 후 카드 화면으로 바뀌며 `social.png`가 200을 반환
 - OK. 비공개 상태에서 문서 title이 사이트 기본값으로 폴백. 공개 후 `postmelee's Codex card`로 복귀
 

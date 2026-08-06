@@ -128,8 +128,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.loading": "Loading public profile",
     "profile.public.notAvailable": "This public profile is not available.",
     "profile.public.ownerPrivateTitle": "Your card is still private",
-    "profile.public.ownerPrivateDescription":
-      "Publish it to share this link. Visitors see this page once it is public.",
+    "profile.public.ownerPreviewDescription":
+      "This is exactly what visitors see once you publish. Only you can see it now.",
+    "profile.public.ownerNoUsage":
+      "Submit your Codex usage first, then publish to share this link.",
     "profile.public.publishFailed": "Could not publish the card. Try again.",
     "profile.reasoning.high": "High",
     "profile.reasoning.low": "Low",
@@ -394,8 +396,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "profile.public.loading": "공개 프로필 불러오는 중",
     "profile.public.notAvailable": "이 공개 프로필을 사용할 수 없습니다.",
     "profile.public.ownerPrivateTitle": "카드가 아직 비공개입니다",
-    "profile.public.ownerPrivateDescription":
-      "공개하면 이 링크를 공유할 수 있습니다. 방문자는 공개된 뒤에만 이 화면을 봅니다.",
+    "profile.public.ownerPreviewDescription":
+      "공개하면 방문자에게 이 화면이 그대로 보입니다. 지금은 나에게만 보입니다.",
+    "profile.public.ownerNoUsage":
+      "먼저 Codex 사용량을 제출한 뒤 공개하면 이 링크를 공유할 수 있습니다.",
     "profile.public.publishFailed": "카드를 공개하지 못했습니다. 다시 시도해 주세요.",
     "profile.reasoning.high": "높음",
     "profile.reasoning.low": "낮음",
