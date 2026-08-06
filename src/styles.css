@@ -1360,7 +1360,7 @@ button {
 }
 
 .public-profile-state {
-  align-self: center;
+  align-self: start;
   margin-top: 90px;
   width: min(100%, 520px);
 }
@@ -1372,7 +1372,8 @@ button {
 .public-profile-state.is-unavailable {
   display: grid;
   gap: 12px;
-  justify-items: start;
+  justify-items: center;
+  text-align: center;
 }
 
 .public-profile-state-actions {
@@ -1380,6 +1381,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  justify-content: center;
   margin-top: 12px;
 }
 
