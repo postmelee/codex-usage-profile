@@ -1155,6 +1155,13 @@ button {
   color: var(--status-success);
 }
 
+.visibility-status.is-preview {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  padding: 2px 10px;
+}
+
 .profile-card-preview-stage {
   display: grid;
   justify-items: center;

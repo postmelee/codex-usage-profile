@@ -44,7 +44,7 @@ export function PublicProfilePage({
   );
 }
 
-function PublicProfileStage({ banner = null, cardUrl, profile }) {
+function PublicProfileStage({ banner = null, cardUrl, preview = false, profile }) {
   const { locale, t } = useLocale();
   const owner = profile.owner;
   const displayName = owner.displayName || owner.githubLogin || owner.handle;
@@ -73,8 +73,8 @@ function PublicProfileStage({ banner = null, cardUrl, profile }) {
       <section className="profile-card-section" aria-labelledby="public-card-title">
         <header className="card-profile-heading">
           <h2 id="public-card-title">{t("profile.card.sharedTitle")}</h2>
-          <span className="visibility-status is-public">
-            {t("profile.visibility.public")}
+          <span className={`visibility-status is-${preview ? "preview" : "public"}`}>
+            {t(preview ? "profile.visibility.preview" : "profile.visibility.public")}
           </span>
         </header>
 
@@ -207,6 +207,7 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
         locale: profile.cardLocale ?? "en",
         theme: profile.cardStyle?.theme ?? "dark"
       }) ?? null}
+      preview
       profile={profile}
     />
   );
