@@ -75,16 +75,30 @@ test("builds allowlisted external share composition URLs", () => {
 
   assert.deepEqual(targets.map(({ id, label }) => ({ id, label })), [
     { id: "x", label: "X" },
+    { id: "threads", label: "Threads" },
     { id: "linkedin", label: "LinkedIn" },
+    { id: "facebook", label: "Facebook" },
     { id: "reddit", label: "Reddit" }
   ]);
 
-  const [x, linkedIn, reddit] = targets.map((target) => new URL(target.href));
+  const [x, threads, linkedIn, facebook, reddit] = targets
+    .map((target) => new URL(target.href));
   assert.equal(x.origin, "https://x.com");
   assert.equal(x.pathname, "/intent/post");
   assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
   assert.equal(x.searchParams.get("url"), profileUrl);
   assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
+
+  assert.equal(threads.origin, "https://www.threads.net");
+  assert.equal(threads.pathname, "/intent/post");
+  assert.equal(threads.searchParams.get("url"), profileUrl);
+  assert.deepEqual([...threads.searchParams.keys()].sort(), ["text", "url"]);
+
+  // Facebook's sharer only accepts the link; prefilled text is not allowed.
+  assert.equal(facebook.origin, "https://www.facebook.com");
+  assert.equal(facebook.pathname, "/sharer/sharer.php");
+  assert.equal(facebook.searchParams.get("u"), profileUrl);
+  assert.deepEqual([...facebook.searchParams.keys()], ["u"]);
 
   assert.equal(linkedIn.origin, "https://www.linkedin.com");
   assert.equal(linkedIn.pathname, "/feed/");

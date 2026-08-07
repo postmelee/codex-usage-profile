@@ -1922,7 +1922,7 @@ test.describe("Home and share card flow", () => {
           right: bounds.right
         };
       }));
-    expect(mobileTargets).toHaveLength(4);
+    expect(mobileTargets).toHaveLength(6);
     for (const target of mobileTargets) {
       expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0);
@@ -2112,7 +2112,7 @@ test.describe("Home and share card flow", () => {
     expect(fallbackTitleBox.top ?? fallbackTitleBox.y).toBeGreaterThanOrEqual(0);
     await expect(page.getByTestId("share-studio-card-motion"))
       .toHaveAttribute("data-motion-fallback", "preview-error");
-    await expect(page.locator(".share-studio-primary-action")).toHaveCount(4);
+    await expect(page.locator(".share-studio-primary-action")).toHaveCount(6);
 
     const composer = page.getByRole("link", { name: "Share on Reddit" });
     await expect(composer).toHaveAttribute("target", "_blank");

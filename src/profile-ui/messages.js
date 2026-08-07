@@ -275,8 +275,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "share.shareLink": "Share link",
     "share.shareLinkCopied": "Share link copied",
     "share.shareLinkCopyFailed": "Could not copy the share link",
+    "share.shareFacebook": "Share on Facebook",
     "share.shareLinkedIn": "Share on LinkedIn",
     "share.shareReddit": "Share on Reddit",
+    "share.shareThreads": "Share on Threads",
     "share.shareX": "Share on X",
     "share.socialText": "See my Codex usage activity.",
     "share.title": "Share activity"
@@ -555,8 +557,10 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "share.shareLink": "공유 링크",
     "share.shareLinkCopied": "공유 링크를 복사했습니다",
     "share.shareLinkCopyFailed": "공유 링크를 복사하지 못했습니다",
+    "share.shareFacebook": "Facebook에 공유",
     "share.shareLinkedIn": "LinkedIn에 공유",
     "share.shareReddit": "Reddit에 공유",
+    "share.shareThreads": "Threads에 공유",
     "share.shareX": "X에 공유",
     "share.socialText": "나의 Codex 사용량 활동을 확인해 보세요.",
     "share.title": "활동 공유하기"

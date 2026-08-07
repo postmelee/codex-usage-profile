@@ -152,8 +152,6 @@ export function ShareStudio({
     }
   }
 
-  // Kept alongside ShareInstructions: the image-copy path is unwired today but
-  // stays available for a future flow that attaches the PNG directly.
   async function copyImage() {
     try {
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
@@ -295,6 +293,12 @@ export function ShareStudio({
               success: copy.imageUrlCopied
             })}
             copyLabel={copy.copyImageUrl}
+            value={imageUrl}
+          />
+          <ShareValue
+            copyLabel={copy.copyImage}
+            label={copy.copyImage}
+            onCopy={copyImage}
             value={imageUrl}
           />
           {onMakePrivate ? (

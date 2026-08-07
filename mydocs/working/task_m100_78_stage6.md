@@ -38,7 +38,25 @@ Share Studio의 공유 수단을 용도 순서로 재배치하고, 소셜 작성
 
 기존에는 소셜 버튼을 누르면 `이미지 복사 → 작성 창 열기 → 붙여넣기` 3단계 안내 패널이 펼쳐졌다. 공유 링크가 없던 시절의 우회 경로였다. 공유 링크가 생겼으므로 버튼을 링크로 바꿔 해당 서비스의 작성 창이 바로 열리게 했다. 작성 창에는 로케일에 맞는 문구와 공유 링크가 채워진다.
 
-`ShareInstructions` 컴포넌트와 `copyImage`는 삭제하지 않고 연결만 끊었다. 카카오톡처럼 URL 미리보기가 통하지 않는 표면에서 이미지 첨부 경로가 다시 필요할 수 있다. 두 곳 모두 보존 이유를 주석으로 남겼다.
+`ShareInstructions` 컴포넌트는 삭제하지 않고 연결만 끊었다. 카카오톡처럼 URL 미리보기가 통하지 않는 표면에서 3단계 안내가 다시 필요할 수 있다. 보존 이유를 주석으로 남겼다.
+
+`copyImage`는 안내 패널 대신 보조 액션 행에 `이미지 복사`로 다시 노출했다. 패널을 없애면서 접근 경로가 사라졌는데, 이미지 자체를 첨부하려는 사용자에게는 여전히 필요한 기능이다.
+
+## 공유 대상 확장
+
+X, LinkedIn, Reddit에 Threads와 Facebook을 추가해 다섯 곳이 되었다. 순서는 카드 공유가 잘 통하는 순으로 X, Threads, LinkedIn, Facebook, Reddit이다.
+
+| 대상 | 작성 창 | 채워지는 값 |
+|---|---|---|
+| X | `x.com/intent/post` | `text`, `url` |
+| Threads | `threads.net/intent/post` | `text`, `url` |
+| LinkedIn | `linkedin.com/feed/` | `text`, `shareUrl` |
+| Facebook | `facebook.com/sharer/sharer.php` | `u` |
+| Reddit | `reddit.com/submit` | `title`, `url` |
+
+Facebook의 sharer는 링크만 받는다. 플랫폼 정책상 문구를 미리 채울 수 없으므로 `u`만 전달한다. 나머지는 로케일에 맞는 문구가 함께 들어간다.
+
+Threads와 Facebook 아이콘을 `BrandLogo`에 추가했다.
 
 ## 검증 결과
 

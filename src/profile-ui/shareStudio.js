@@ -26,11 +26,13 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   readmeCopyFailed: "share.readmeCopyFailed",
   save: "share.save",
   saveAriaLabel: "share.saveAriaLabel",
+  shareFacebook: "share.shareFacebook",
   shareLinkedIn: "share.shareLinkedIn",
   shareLink: "share.shareLink",
   shareLinkCopied: "share.shareLinkCopied",
   shareLinkCopyFailed: "share.shareLinkCopyFailed",
   shareReddit: "share.shareReddit",
+  shareThreads: "share.shareThreads",
   shareX: "share.shareX",
   socialText: "share.socialText",
   title: "share.title"
@@ -47,8 +49,10 @@ export function getShareStudioCopy(locale = "en") {
     ...Object.fromEntries(Object.entries(SHARE_MESSAGE_IDS).map(([key, id]) => (
       [key, formatMessage(normalizedLocale, id)]
     ))),
+    facebook: "Facebook",
     linkedin: "LinkedIn",
     reddit: "Reddit",
+    threads: "Threads",
     x: "X"
   });
 }
@@ -99,6 +103,16 @@ export function buildShareTargets(options = {}) {
       }
     }),
     createTarget({
+      baseUrl: "https://www.threads.net/intent/post",
+      id: "threads",
+      label: copy.threads,
+      accessibleLabel: copy.shareThreads,
+      params: {
+        text: copy.socialText,
+        url: profileUrl
+      }
+    }),
+    createTarget({
       baseUrl: "https://www.linkedin.com/feed/",
       id: "linkedin",
       label: copy.linkedin,
@@ -107,6 +121,16 @@ export function buildShareTargets(options = {}) {
         shareActive: "true",
         shareUrl: profileUrl,
         text: copy.socialText
+      }
+    }),
+    createTarget({
+      // Facebook's sharer only accepts the link; prefilled text is not allowed.
+      baseUrl: "https://www.facebook.com/sharer/sharer.php",
+      id: "facebook",
+      label: copy.facebook,
+      accessibleLabel: copy.shareFacebook,
+      params: {
+        u: profileUrl
       }
     }),
     createTarget({
