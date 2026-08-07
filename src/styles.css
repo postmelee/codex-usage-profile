@@ -3870,10 +3870,10 @@ button {
   align-content: center;
   display: grid;
   gap: 24px;
-  justify-items: center;
+  justify-items: stretch;
   max-width: 100%;
   position: relative;
-  width: min(100%, 720px);
+  width: min(100%, 600px);
 }
 
 .public-card-intro-title {
@@ -3886,8 +3886,19 @@ button {
   text-align: center;
 }
 
+/* The motion wrapper must match the visible card exactly: the handoff maps
+   this element's rect onto the target card, so any inset would distort it. */
 .public-card-intro-card {
+  display: flex;
+  margin-inline: auto;
   transform-style: preserve-3d;
+  width: min(100%, 600px);
+}
+
+.public-card-intro-card .home-card-tilt {
+  display: block;
+  margin: 0;
+  max-width: 100%;
   width: 100%;
 }
 

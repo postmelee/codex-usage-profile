@@ -121,9 +121,8 @@ export function PublicCardIntro({
   if (!canRender) return null;
 
   function handleClose() {
-    // The handoff target sits below the fold on first entry, so bring it into
-    // view before the card animates back to it.
-    scrollTargetIntoView(targetCardRef?.current);
+    // The page stays where it is: the card travels down to its resting slot,
+    // sliding out of view rather than dragging the viewport with it.
     requestClose();
   }
 
@@ -177,19 +176,6 @@ export function PublicCardIntro({
     </div>,
     document.body
   );
-}
-
-function scrollTargetIntoView(target) {
-  if (!target?.isConnected) return;
-
-  const rect = target.getBoundingClientRect();
-  const viewportHeight = globalThis.innerHeight ?? 0;
-  if (rect.top >= 0 && rect.bottom <= viewportHeight) return;
-
-  target.scrollIntoView({
-    behavior: prefersReducedMotion() ? "auto" : "instant",
-    block: "center"
-  });
 }
 
 function getFocusableElements(container) {
