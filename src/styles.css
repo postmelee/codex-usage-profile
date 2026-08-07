@@ -4056,11 +4056,13 @@ button {
   width: 100%;
 }
 
+/* A deterministic two-column to one-column switch. Wrapping a flex row left
+   the meta block stranded and right-aligned at middle widths. */
 .site-footer-inner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  justify-content: space-between;
+  align-items: start;
+  display: grid;
+  gap: 24px 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin-inline: auto;
   padding: 32px max(24px, calc((100vw - 1180px) / 2));
   width: 100%;
@@ -4091,7 +4093,6 @@ button {
 }
 
 .site-footer-meta {
-  align-items: flex-end;
   display: grid;
   gap: 8px;
   justify-items: end;
@@ -4123,13 +4124,19 @@ button {
   margin: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .site-footer-inner {
-    padding: 28px 20px;
+    gap: 20px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .site-footer-meta {
-    align-items: flex-start;
     justify-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .site-footer-inner {
+    padding: 28px 20px;
   }
 }
