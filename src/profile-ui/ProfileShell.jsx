@@ -1,6 +1,9 @@
 import { AccountMenu } from "./AccountMenu.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 
+export const PROJECT_GITHUB_URL =
+  "https://github.com/postmelee/codex-usage-profile";
+
 export function ProfileShell({
   authState,
   children,
@@ -38,6 +41,15 @@ export function ProfileShell({
                 {t("common.share")}
               </button>
             ) : null}
+            <a
+              aria-label={t("common.nav.githubLabel")}
+              className="profile-topbar-github"
+              href={PROJECT_GITHUB_URL}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {t("common.nav.github")}
+            </a>
             <AccountMenu
               authState={authState}
               client={client}

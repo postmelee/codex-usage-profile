@@ -567,7 +567,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".profile-topbar-title")).toHaveAttribute("href", "/");
     await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-size", "14px");
     await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-weight", "700");
-    await expect(page.locator(".profile-topbar-title")).toHaveText("Codex Usage");
+    await expect(page.locator(".profile-topbar-title")).toHaveText("Codex Usage Profile");
     await expect(page.getByRole("heading", { name: "Codex usage profile" })).toBeVisible();
     await expect(page.getByText(
       "Keep one shareable card up to date with the Codex usage you submit."
@@ -1205,7 +1205,10 @@ test.describe("Home and share card flow", () => {
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Codex Usage", exact: true })).toBeFocused();
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Open the project on GitHub" }))
+      .toBeFocused();
     await page.keyboard.press("Tab");
     const accountButton = page.getByRole("button", { name: "Account menu for postmelee" });
     await expect(accountButton).toBeFocused();
@@ -1353,7 +1356,7 @@ test.describe("Home and share card flow", () => {
       )).toBe(false);
     }
 
-    await expect(page.getByRole("link", { name: "Codex Usage", exact: true }))
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true }))
       .toHaveAttribute("href", "/");
     await page.getByRole("button", { name: "Account menu for postmelee" }).click();
     await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
@@ -1399,7 +1402,7 @@ test.describe("Home and share card flow", () => {
 
     await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
     await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
-    await expect(page.getByRole("link", { name: "Codex Usage" }))
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true }))
       .toHaveAttribute("href", "/");
     await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
@@ -1446,7 +1449,7 @@ test.describe("Home and share card flow", () => {
     )).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy command" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
-    await expect(page.getByRole("link", { name: "Profile" }))
+    await expect(page.getByRole("link", { name: "Profile", exact: true }))
       .toHaveAttribute("href", "/profile");
     await expect(page.locator(".device-success")).toHaveCSS(
       "animation-name",

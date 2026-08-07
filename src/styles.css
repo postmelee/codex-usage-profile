@@ -233,6 +233,20 @@ button {
   outline-offset: 3px;
 }
 
+.profile-topbar-github {
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 8px;
+  text-decoration: none;
+}
+
+.profile-topbar-github:hover,
+.profile-topbar-github:focus-visible {
+  color: var(--text-primary);
+}
+
 .profile-topbar-leading {
   align-items: center;
   display: flex;
@@ -3547,7 +3561,21 @@ button {
     gap: 10px;
   }
 
-  .profile-topbar-leading {
+  .profile-topbar-github {
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 8px;
+  text-decoration: none;
+}
+
+.profile-topbar-github:hover,
+.profile-topbar-github:focus-visible {
+  color: var(--text-primary);
+}
+
+.profile-topbar-leading {
     gap: 8px;
   }
 

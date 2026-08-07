@@ -83,6 +83,15 @@ git diff --check
 - **unavailable 문구 변경 1건**: `Profile unavailable`에서 `This card cannot be shown`으로 바뀌었다. 새 문구와 카드 생성 CTA 존재를 단언하도록 갱신했다.
 - **안내 패널 제거로 6건**: 소셜 버튼이 링크가 되면서 패널을 펼치는 단언이 모두 무효가 됐다. 패널 존재만 검증하던 "Korean third instruction step" 테스트는 삭제하고, 나머지는 패널 부재와 작성 창 링크 속성을 단언하도록 바꿨다. 공유 링크 복사 단언도 추가했다.
 
+## 헤더 보정
+
+작업지시자 요청으로 두 가지를 바꿨다.
+
+- 헤더 왼쪽 브랜드명을 `Codex Usage`에서 `Codex Usage Profile`로 바꿨다. 홈 히어로 제목과 같은 이름이 되어 서비스 이름이 한 번에 읽힌다.
+- 계정 메뉴 왼쪽에 프로젝트 GitHub 링크를 추가했다. 새 탭으로 열고 `rel="noopener noreferrer"`를 붙인다. 저장소 URL은 `ProfileShell`의 `PROJECT_GITHUB_URL` 상수로 둔다.
+
+e2e에서 3건이 영향을 받아 갱신했다. 브랜드 문구 단언, 헤더에 링크가 늘면서 생긴 `Profile` 링크 이름 중복, 그리고 Tab 순서에 GitHub 링크가 끼어든 부분이다.
+
 ## 잔여 위험
 
 - Workers와 Node 프로덕션 런타임의 실제 응답 대조는 배포 산출물이 필요해 아직 하지 않았다.
