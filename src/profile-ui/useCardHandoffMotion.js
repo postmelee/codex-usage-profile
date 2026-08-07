@@ -14,6 +14,7 @@ export const CARD_HANDOFF_PHASES = Object.freeze({
 export function useCardHandoffMotion(options = {}) {
   const {
     active,
+    closeEasing = "cubic-bezier(0.3, 0, 1, 1)",
     introDuration = 280,
     introFrames = null,
     onClose,
@@ -207,7 +208,7 @@ export function useCardHandoffMotion(options = {}) {
       ];
     const animation = card.animate(frames, {
       duration: reduceMotion ? 110 : duration,
-      easing: "cubic-bezier(0.3, 0, 1, 1)",
+      easing: closeEasing,
       fill: "both"
     });
     animationRef.current = animation;
