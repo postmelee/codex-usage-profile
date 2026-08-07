@@ -35,7 +35,6 @@ export function ShareStudio({
   const previewImageRef = useRef(null);
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
-  const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
   const [toast, setToast] = useState(null);
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
@@ -81,7 +80,6 @@ export function ShareStudio({
 
     previousFocusRef.current = document.activeElement;
     setPreviewFailed(false);
-    setSelectedSocialPlatform(null);
     setToast(null);
 
     const body = document.body;
@@ -154,6 +152,8 @@ export function ShareStudio({
     }
   }
 
+  // Kept alongside ShareInstructions: the image-copy path is unwired today but
+  // stays available for a future flow that attaches the PNG directly.
   async function copyImage() {
     try {
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
@@ -249,13 +249,7 @@ export function ShareStudio({
 
         <div aria-label={copy.destinations} className="share-studio-primary-actions">
           {shareTargets.map((target, index) => (
-            <ShareDestination
-              active={selectedSocialPlatform === target.id}
-              index={index}
-              key={target.id}
-              onSelect={() => setSelectedSocialPlatform(target.id)}
-              target={target}
-            />
+            <ShareDestination index={index} key={target.id} target={target} />
           ))}
           <a
             aria-label={copy.saveAriaLabel}
@@ -271,18 +265,6 @@ export function ShareStudio({
             <span>{copy.save}</span>
           </a>
         </div>
-
-        {selectedSocialPlatform ? (
-          <ShareInstructions
-            copy={copy}
-            locale={locale}
-            onCopy={copyImage}
-            onDismiss={() => setSelectedSocialPlatform(null)}
-            target={shareTargets.find(
-              (target) => target.id === selectedSocialPlatform
-            )}
-          />
-        ) : null}
 
         <div className="share-studio-secondary">
           {publicProfileUrl ? (
@@ -333,26 +315,30 @@ export function ShareStudio({
   );
 }
 
-function ShareDestination({ active, index, onSelect, target }) {
+function ShareDestination({ index, target }) {
   return (
-    <button
-      aria-controls={active ? SHARE_INSTRUCTIONS_ID : undefined}
-      aria-expanded={active}
+    <a
       aria-label={target.accessibleLabel}
-      aria-pressed={active}
-      className={`share-studio-primary-action${active ? " is-active" : ""}`}
-      onClick={onSelect}
+      className="share-studio-primary-action"
+      href={target.href}
+      rel="noopener noreferrer"
       style={{ "--share-action-index": index }}
-      type="button"
+      target="_blank"
     >
       <span className="share-studio-action-icon">
         <BrandLogo name={target.id} />
       </span>
       <span>{target.label}</span>
-    </button>
+    </a>
   );
 }
 
+// Retained but intentionally unwired. This panel guided users through copying
+// the PNG and pasting it into a composer, which was the only way to share
+// before the Open Graph share link existed. Social buttons now open the
+// composer with the link prefilled. Kept for a future flow that needs the
+// image-attachment path (for example KakaoTalk, which does not accept a URL
+// preview for every surface).
 function ShareInstructions({ copy, locale, onCopy, onDismiss, target }) {
   const dismissTimerRef = useRef(null);
   const dismissedRef = useRef(false);
