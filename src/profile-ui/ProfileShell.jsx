@@ -1,5 +1,6 @@
 import { AccountMenu } from "./AccountMenu.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
+import { SiteFooter } from "./SiteFooter.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 
@@ -68,6 +69,7 @@ export function ProfileShell({
           <h1 className="sr-only">{title ?? t("common.nav.profile")}</h1>
         ) : null}
         {children}
+        <SiteFooter githubUrl={PROJECT_GITHUB_URL} />
       </main>
     </div>
   );

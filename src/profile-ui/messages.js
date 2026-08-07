@@ -54,6 +54,13 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "device.title": "Authorize device",
     "device.userCode": "User code",
     "device.viewSetupGuide": "View setup guide",
+    "footer.copyright": "© 2026 postmelee",
+    "footer.description":
+      "Turn the Codex usage you submit into a card you can share.",
+    "footer.license": "MIT License",
+    "footer.linksLabel": "Project links",
+    "footer.privacy":
+      "Only aggregated usage is sent. Prompts, responses, and credentials stay on your device.",
     "home.accountUnavailable": "Account unavailable",
     "home.cardUnavailable": "Card unavailable",
     "home.checkingAccount": "Checking account",
@@ -340,6 +347,13 @@ export const MESSAGE_CATALOGS = Object.freeze({
     "device.title": "기기 승인",
     "device.userCode": "사용자 코드",
     "device.viewSetupGuide": "설정 가이드 보기",
+    "footer.copyright": "© 2026 postmelee",
+    "footer.description":
+      "제출한 Codex 사용량으로 공유 가능한 카드를 만듭니다.",
+    "footer.license": "MIT License",
+    "footer.linksLabel": "프로젝트 링크",
+    "footer.privacy":
+      "집계된 사용량만 전송되며, 프롬프트·응답·인증정보는 기기에 남습니다.",
     "home.accountUnavailable": "계정을 사용할 수 없음",
     "home.cardUnavailable": "카드를 사용할 수 없음",
     "home.checkingAccount": "계정 확인 중",

@@ -2949,7 +2949,12 @@ test.describe("Public profile", () => {
       name: "Loading public profile"
     }))
       .toBeVisible();
-    await expect(page.getByText("postmelee", { exact: false })).toHaveCount(0);
+    // Scoped to the profile region: the footer carries a constant author
+    // credit, which is identical on every page and reveals nothing about the
+    // handle being loaded.
+    await expect(
+      page.locator(".public-profile-view").getByText("postmelee", { exact: false })
+    ).toHaveCount(0);
 
     releaseResponse();
     await dismissCardIntro(page);
