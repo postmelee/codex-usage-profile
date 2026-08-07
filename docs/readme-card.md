@@ -9,17 +9,38 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 3. CLI `submit`으로 Codex 사용량을 전송한다. credential이 없으면 browser 승인을 먼저 진행하고 같은 명령에서 제출을 계속한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
 4. `/profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다. 이 설정은 사이트 화면 모드와 별개이며 사용량을 다시 제출하지 않아도 된다.
 5. **Publish card**를 선택해 프로필을 public으로 전환한다.
-6. 상단 **Share**에서 Share Studio를 열고 저장된 테마·언어의 stable 이미지 URL 또는 README Markdown을 복사하거나 **저장**으로 PNG를 내려받는다.
-7. X, LinkedIn 또는 Reddit을 선택하면 Share Studio가 PNG 이미지 복사와 browser 작성 창 열기를 안내한다. 복사한 이미지는 열린 게시물 작성 창에 직접 붙여넣는다.
-8. Markdown을 GitHub profile 또는 repository README에 삽입한다.
+6. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공하며 **저장**으로 PNG를 내려받을 수 있다.
+7. SNS에 붙여넣을 때는 **공유 링크**를 사용한다. `https://{origin}/u/{handle}` 형식이며 X, Threads, 카카오톡이 링크 미리보기에 카드 이미지와 설명을 표시한다.
+8. X, LinkedIn 또는 Reddit 버튼을 선택하면 해당 서비스의 작성 창이 공유 링크와 함께 열린다. 이미지를 직접 첨부하고 싶으면 Share Studio의 **이미지 복사** 안내를 따른다.
+9. README에는 **README Markdown**을 복사해 GitHub profile 또는 repository README에 삽입한다.
 
 ```md
 ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
-Private으로 되돌리면 공개 카드 endpoint는 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
+Private으로 되돌리면 공개 카드 endpoint와 공유 링크의 소셜 이미지가 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
 
-소셜 공유 action은 provider API나 OAuth를 호출해 이미지를 자동 업로드 또는 게시하지 않는다. 브라우저 Clipboard API와 각 서비스의 작성 화면만 사용하며 private preview URL이나 credential을 외부 provider query에 전달하지 않는다.
+## 공유 링크와 링크 미리보기
+
+`https://{origin}/u/{handle}`은 카드 소유자의 공개 프로필 화면이자 SNS 링크 미리보기의 대상이다. 서버가 이 문서의 `<head>`에 handle별 Open Graph와 Twitter Card 메타데이터를 주입한다.
+
+| 항목 | 값 |
+|---|---|
+| `og:title` | `{handle}'s Codex card` |
+| `og:description` | 서비스 안내 문구 (`?locale`에 따라 한국어/영어) |
+| `og:image` | `https://{origin}/u/{handle}/social.png?v={revision}` |
+| 이미지 크기 | 2400x1260 (1.91:1 미리보기 규격의 2배 해상도) |
+| `twitter:card` | `summary_large_image` |
+
+소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 같은 URL의 이미지가 갱신된다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
+
+README용 `/u/{handle}/card.png`는 1497x918 원본 그대로이며 이번 변경으로 URL이나 응답이 달라지지 않는다.
+
+비공개 handle과 존재하지 않는 handle은 구분 없이 사이트 기본 메타데이터로 폴백한다. 응답으로 handle 존재 여부를 알 수 없다.
+
+플랫폼은 미리보기를 자체 서버에 캐시하므로 카드를 갱신해도 기존 미리보기가 한동안 남을 수 있다. 카카오는 [OG 캐시 관리 도구](https://developers.kakao.com/tool)로 초기화할 수 있다.
+
+소셜 공유 action은 provider API나 OAuth를 호출해 이미지를 자동 업로드 또는 게시하지 않는다. 브라우저 Clipboard API와 각 서비스의 작성 화면만 사용하며, 작성 창에는 공개 공유 링크만 전달한다. private preview URL이나 credential은 외부 provider query에 넣지 않는다.
 
 ## CLI 연결
 

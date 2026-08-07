@@ -62,7 +62,7 @@ test("builds the canonical Sites public profile URL", () => {
       "https://profiles.example.test/ignored?view=settings",
       "postmelee"
     ),
-    "https://profiles.example.test/?profile=postmelee"
+    "https://profiles.example.test/u/postmelee"
   );
   assert.equal(buildPublicProfileShareUrl("javascript:alert(1)", "postmelee"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", "../owner"), null);
@@ -70,7 +70,7 @@ test("builds the canonical Sites public profile URL", () => {
 });
 
 test("builds allowlisted external share composition URLs", () => {
-  const profileUrl = "https://profiles.example.test/?profile=postmelee";
+  const profileUrl = "https://profiles.example.test/u/postmelee";
   const targets = buildShareTargets({ locale: "ko-KR", profileUrl });
 
   assert.deepEqual(targets.map(({ id, label }) => ({ id, label })), [
@@ -83,7 +83,8 @@ test("builds allowlisted external share composition URLs", () => {
   assert.equal(x.origin, "https://x.com");
   assert.equal(x.pathname, "/intent/post");
   assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
-  assert.deepEqual([...x.searchParams.keys()], ["text"]);
+  assert.equal(x.searchParams.get("url"), profileUrl);
+  assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
 
   assert.equal(linkedIn.origin, "https://www.linkedin.com");
   assert.equal(linkedIn.pathname, "/feed/");
@@ -92,7 +93,11 @@ test("builds allowlisted external share composition URLs", () => {
     linkedIn.searchParams.get("text"),
     "나의 Codex 사용량 활동을 확인해 보세요."
   );
-  assert.deepEqual([...linkedIn.searchParams.keys()].sort(), ["shareActive", "text"]);
+  assert.equal(linkedIn.searchParams.get("shareUrl"), profileUrl);
+  assert.deepEqual(
+    [...linkedIn.searchParams.keys()].sort(),
+    ["shareActive", "shareUrl", "text"]
+  );
 
   assert.equal(reddit.origin, "https://www.reddit.com");
   assert.equal(reddit.pathname, "/submit");
@@ -100,11 +105,12 @@ test("builds allowlisted external share composition URLs", () => {
     reddit.searchParams.get("title"),
     "나의 Codex 사용량 활동을 확인해 보세요."
   );
-  assert.deepEqual([...reddit.searchParams.keys()], ["title"]);
+  assert.equal(reddit.searchParams.get("url"), profileUrl);
+  assert.deepEqual([...reddit.searchParams.keys()].sort(), ["title", "url"]);
 });
 
 test("rejects non-http and missing public profile targets", () => {
   assert.deepEqual(buildShareTargets({ profileUrl: null }), []);
   assert.deepEqual(buildShareTargets({ profileUrl: "data:text/plain,hello" }), []);
-  assert.deepEqual(buildShareTargets({ profileUrl: "/?profile=postmelee" }), []);
+  assert.deepEqual(buildShareTargets({ profileUrl: "/u/postmelee" }), []);
 });

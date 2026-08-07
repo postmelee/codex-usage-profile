@@ -119,6 +119,7 @@ test.describe("theme surfaces", () => {
     await page.getByRole("button", { name: "Close Share Studio" }).click();
 
     await page.goto(SITES_PROFILE_ROUTE);
+    await dismissCardIntro(page);
     await expect(page.locator(".public-profile-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
 
     await page.goto("/sites.html");
@@ -418,6 +419,7 @@ test.describe("Stage 4 locale contract", () => {
 
     await mockPublicProfile(page);
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator('section[aria-label="Public Codex profile"]'))
       .toBeVisible();
@@ -432,6 +434,7 @@ test.describe("Stage 4 locale contract", () => {
     await mockPublicProfile(page);
     await mockCardImages(page);
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     await expect(page.locator("html")).toHaveAttribute("lang", "ko");
     await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
@@ -1326,6 +1329,7 @@ test.describe("Home and share card flow", () => {
 
     for (const path of ["/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
+      await dismissCardIntro(page);
       await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
       await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
@@ -3046,6 +3050,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(SITES_PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     await expect(page.getByRole("heading", {
       level: 1,
@@ -3094,6 +3099,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
     await expect(card).toBeVisible();
@@ -3113,6 +3119,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     const target = page.getByRole("grid", { name: "Daily token activity" })
       .locator('[data-date="2026-06-11"]');
@@ -3153,6 +3160,7 @@ test.describe("Public profile", () => {
     await expect(page.getByText("postmelee", { exact: false })).toHaveCount(0);
 
     releaseResponse();
+    await dismissCardIntro(page);
     await expect(page.getByRole("heading", {
       level: 1,
       name: "Post Melee"
@@ -3173,15 +3181,30 @@ test.describe("Public profile", () => {
 
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "Profile unavailable"
+      name: "This card cannot be shown"
     }))
       .toBeVisible();
-    await expect(page.getByText("This public profile is not available."))
+    await expect(page.getByText(
+      "The link may be wrong, or the card may not be published yet."
+    ))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Create your Codex card" }))
       .toBeVisible();
     await expect(page.getByText("private-or-missing", { exact: false })).toHaveCount(0);
-    await expect(page.locator(".public-profile-card")).toHaveCount(0);
+    await expect(page.locator(".home-card-preview")).toHaveCount(0);
   });
 });
+
+// The intro modal covers the public profile on every entry and makes the page
+// inert, so tests that assert on the profile itself dismiss it first. The close
+// control is matched by class so the helper works in every locale.
+async function dismissCardIntro(page) {
+  const intro = page.getByTestId("public-card-intro-backdrop");
+  await intro.waitFor({ state: "attached", timeout: 5000 }).catch(() => {});
+  if (await intro.count() === 0) return;
+  await page.locator(".public-card-intro-close").click();
+  await expect(intro).toHaveCount(0);
+}
 
 async function mockAnonymousAccount(page) {
   await page.route("**/api/auth/me", (route) => fulfillJson(route, {

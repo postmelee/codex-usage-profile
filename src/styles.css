@@ -1405,7 +1405,7 @@ button {
   flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-floating);
   margin-bottom: 24px;
   padding: 16px 20px;
   position: sticky;
@@ -1901,6 +1901,11 @@ button {
 
 .share-studio-privacy-action {
   margin-left: 4px;
+}
+
+.share-studio-secondary-action.is-primary {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .share-studio-secondary-action:hover,

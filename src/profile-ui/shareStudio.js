@@ -5,6 +5,7 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   close: "share.close",
   copyImage: "share.copyImage",
   copyImageUrl: "share.copyImageUrl",
+  copyShareLink: "share.copyShareLink",
   copyReadme: "share.copyReadme",
   destinations: "share.destinations",
   dismissInstructions: "share.dismissInstructions",
@@ -26,6 +27,9 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   save: "share.save",
   saveAriaLabel: "share.saveAriaLabel",
   shareLinkedIn: "share.shareLinkedIn",
+  shareLink: "share.shareLink",
+  shareLinkCopied: "share.shareLinkCopied",
+  shareLinkCopyFailed: "share.shareLinkCopyFailed",
   shareReddit: "share.shareReddit",
   shareX: "share.shareX",
   socialText: "share.socialText",
@@ -70,10 +74,11 @@ export function buildPublicProfileShareUrl(origin, handle) {
   const url = normalizeHttpUrl(origin);
   if (!url) return null;
 
-  url.pathname = "/";
+  // The canonical share target is the Open Graph route, so link previews on X,
+  // Threads and KakaoTalk resolve the card image and description.
+  url.pathname = `/u/${encodeURIComponent(normalizedHandle)}`;
   url.search = "";
   url.hash = "";
-  url.searchParams.set("profile", normalizedHandle);
   return url.toString();
 }
 
@@ -89,7 +94,8 @@ export function buildShareTargets(options = {}) {
       label: copy.x,
       accessibleLabel: copy.shareX,
       params: {
-        text: copy.socialText
+        text: copy.socialText,
+        url: profileUrl
       }
     }),
     createTarget({
@@ -99,6 +105,7 @@ export function buildShareTargets(options = {}) {
       accessibleLabel: copy.shareLinkedIn,
       params: {
         shareActive: "true",
+        shareUrl: profileUrl,
         text: copy.socialText
       }
     }),
@@ -108,7 +115,8 @@ export function buildShareTargets(options = {}) {
       label: copy.reddit,
       accessibleLabel: copy.shareReddit,
       params: {
-        title: copy.socialText
+        title: copy.socialText,
+        url: profileUrl
       }
     })
   ];

@@ -285,15 +285,18 @@ export function ShareStudio({
         ) : null}
 
         <div className="share-studio-secondary">
-          <ShareValue
-            label={copy.imageUrl}
-            onCopy={() => copyValue(imageUrl, {
-              error: copy.imageUrlCopyFailed,
-              success: copy.imageUrlCopied
-            })}
-            copyLabel={copy.copyImageUrl}
-            value={imageUrl}
-          />
+          {publicProfileUrl ? (
+            <ShareValue
+              copyLabel={copy.copyShareLink}
+              label={copy.shareLink}
+              onCopy={() => copyValue(publicProfileUrl, {
+                error: copy.shareLinkCopyFailed,
+                success: copy.shareLinkCopied
+              })}
+              primary
+              value={publicProfileUrl}
+            />
+          ) : null}
           <ShareValue
             label={copy.readme}
             onCopy={() => copyValue(markdown, {
@@ -302,6 +305,15 @@ export function ShareStudio({
             })}
             copyLabel={copy.copyReadme}
             value={markdown}
+          />
+          <ShareValue
+            label={copy.imageUrl}
+            onCopy={() => copyValue(imageUrl, {
+              error: copy.imageUrlCopyFailed,
+              success: copy.imageUrlCopied
+            })}
+            copyLabel={copy.copyImageUrl}
+            value={imageUrl}
           />
           {onMakePrivate ? (
             <button
@@ -525,11 +537,11 @@ function ShareToast({ copy, kind, message, onDismiss }) {
   );
 }
 
-function ShareValue({ copyLabel, label, onCopy, value }) {
+function ShareValue({ copyLabel, label, onCopy, primary = false, value }) {
   return (
     <button
       aria-label={copyLabel}
-      className="share-studio-secondary-action"
+      className={`share-studio-secondary-action${primary ? " is-primary" : ""}`}
       onClick={onCopy}
       title={value}
       type="button"
