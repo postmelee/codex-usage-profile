@@ -1,5 +1,6 @@
 import { AccountMenu } from "./AccountMenu.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
+import { ThemeToggle } from "./ThemeToggle.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 
 export const PROJECT_GITHUB_URL =
@@ -52,6 +53,7 @@ export function ProfileShell({
                 {t("common.share")}
               </button>
             ) : null}
+            <ThemeToggle />
             <AccountMenu
               authState={authState}
               client={client}

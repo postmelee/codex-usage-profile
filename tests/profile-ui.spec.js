@@ -1210,6 +1210,9 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("link", { name: "Open the project on GitHub" }))
       .toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Switch to light theme" }))
+      .toBeFocused();
+    await page.keyboard.press("Tab");
     const accountButton = page.getByRole("button", { name: "Account menu for postmelee" });
     await expect(accountButton).toBeFocused();
     await page.keyboard.press("Tab");
