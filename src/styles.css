@@ -255,19 +255,77 @@ button {
   appearance: none;
   background: transparent;
   border: 0;
-  border-radius: 8px;
-  color: var(--text-secondary);
+  border-radius: 999px;
   cursor: pointer;
   display: inline-flex;
-  height: 32px;
-  justify-content: center;
   padding: 0;
-  width: 32px;
 }
 
-.profile-topbar-theme:hover,
-.profile-topbar-theme:focus-visible {
+.profile-topbar-theme-track {
+  align-items: center;
+  background: var(--content-background-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  display: inline-flex;
+  height: 26px;
+  justify-content: space-between;
+  padding: 0 5px;
+  position: relative;
+  width: 48px;
+}
+
+.profile-topbar-theme-icon {
+  align-items: center;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-topbar-theme[aria-checked="false"] .is-sun,
+.profile-topbar-theme[aria-checked="true"] .is-moon {
   color: var(--text-primary);
+}
+
+.profile-topbar-theme-knob {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  height: 20px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+  width: 20px;
+}
+
+.profile-topbar-theme[aria-checked="true"] .profile-topbar-theme-knob {
+  transform: translateX(22px);
+}
+
+.profile-topbar-theme:hover .profile-topbar-theme-track,
+.profile-topbar-theme:focus-visible .profile-topbar-theme-track {
+  border-color: var(--border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-topbar-theme-knob {
+    transition: none;
+  }
+}
+
+/* Theme swaps flip every surface at once, so colour transitions are enabled
+   only while a swap is in flight. Leaving them on permanently would slow every
+   hover and interfere with the card motion work. */
+:root[data-theme-animating] *,
+:root[data-theme-animating] *::before,
+:root[data-theme-animating] *::after {
+  transition:
+    background-color 240ms ease,
+    border-color 240ms ease,
+    color 240ms ease,
+    fill 240ms ease !important;
 }
 
 .profile-topbar-leading {
@@ -3580,51 +3638,14 @@ button {
 
   .profile-shell--fullscreen .profile-topbar {
     height: 48px;
-    padding-inline: 16px;
+    padding-inline: 20px;
   }
 
   .profile-actions {
     gap: 10px;
   }
 
-  .profile-topbar-github {
-  align-items: center;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 500;
-  gap: 6px;
-  padding: 6px 8px;
-  text-decoration: none;
-}
-
-.profile-topbar-github:hover,
-.profile-topbar-github:focus-visible {
-  color: var(--text-primary);
-}
-
-.profile-topbar-theme {
-  align-items: center;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  padding: 0;
-  width: 32px;
-}
-
-.profile-topbar-theme:hover,
-.profile-topbar-theme:focus-visible {
-  color: var(--text-primary);
-}
-
-.profile-topbar-leading {
+  .profile-topbar-leading {
     gap: 8px;
   }
 
