@@ -213,7 +213,7 @@ button {
   background: var(--topbar-background);
   border-bottom: 1px solid var(--border-subtle);
   height: var(--profile-header-height);
-  padding-inline: max(24px, calc((100vw - 1180px) / 2));
+  padding-inline: max(24px, calc((100vw - 920px) / 2));
   width: 100%;
 }
 
@@ -234,10 +234,13 @@ button {
 }
 
 .profile-topbar-github {
+  align-items: center;
   border-radius: 6px;
   color: var(--text-secondary);
+  display: inline-flex;
   font-size: 13px;
   font-weight: 500;
+  gap: 6px;
   padding: 6px 8px;
   text-decoration: none;
 }
@@ -3562,10 +3565,13 @@ button {
   }
 
   .profile-topbar-github {
+  align-items: center;
   border-radius: 6px;
   color: var(--text-secondary);
+  display: inline-flex;
   font-size: 13px;
   font-weight: 500;
+  gap: 6px;
   padding: 6px 8px;
   text-decoration: none;
 }
