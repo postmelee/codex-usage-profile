@@ -541,7 +541,12 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
 
 async function buildLocalSmokeArtifact() {
   const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-  await execFileAsync(executable, ["run", "build:sites-fullstack"], {
+  await execFileAsync(executable, [
+    "run",
+    "build:sites-fullstack",
+    "--",
+    OUTPUT_ROOT
+  ], {
     cwd: REPOSITORY_ROOT,
     env: {
       ...process.env,
