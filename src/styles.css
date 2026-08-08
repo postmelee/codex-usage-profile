@@ -4082,10 +4082,14 @@ button {
   margin: 0;
 }
 
-.site-footer-brand {
+/* The extra gap belongs to the brand alone. Raising the container gap would
+   also split the two paragraphs, which read as one block. Scoped past
+   `.site-footer-about p` so the shared margin reset does not win. */
+.site-footer-about .site-footer-brand {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
+  margin-bottom: 4px;
 }
 
 .site-footer-privacy {
