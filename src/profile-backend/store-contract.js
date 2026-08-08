@@ -1,6 +1,6 @@
 import { assertProfileBackendAtomicOperations } from "./atomic-operations.js";
 
-export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 2;
+export const PROFILE_BACKEND_STORE_CONTRACT_VERSION = 3;
 
 // Store methods may return a value or a Promise. Callers must `await` every
 // method so the same service code works against the synchronous memory/file
@@ -25,6 +25,7 @@ export const PROFILE_BACKEND_STORE_METHODS = Object.freeze([
   "getOwnerByHandle",
   "getOwnerById",
   "getOwnerByProviderIdentity",
+  "getPublicProfileSummaryByHandle",
   "getSession",
   "getSubmittedDeviceById",
   "getSubmittedDeviceByOwnerAndKey",

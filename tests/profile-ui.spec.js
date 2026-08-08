@@ -119,6 +119,7 @@ test.describe("theme surfaces", () => {
     await page.getByRole("button", { name: "Close Share Studio" }).click();
 
     await page.goto(SITES_PROFILE_ROUTE);
+    await dismissCardIntro(page);
     await expect(page.locator(".public-profile-view")).toHaveCSS("background-color", "rgb(255, 255, 255)");
 
     await page.goto("/sites.html");
@@ -418,6 +419,7 @@ test.describe("Stage 4 locale contract", () => {
 
     await mockPublicProfile(page);
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator('section[aria-label="Public Codex profile"]'))
       .toBeVisible();
@@ -432,6 +434,7 @@ test.describe("Stage 4 locale contract", () => {
     await mockPublicProfile(page);
     await mockCardImages(page);
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     await expect(page.locator("html")).toHaveAttribute("lang", "ko");
     await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
@@ -564,7 +567,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".profile-topbar-title")).toHaveAttribute("href", "/");
     await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-size", "14px");
     await expect(page.locator(".profile-topbar-title")).toHaveCSS("font-weight", "700");
-    await expect(page.locator(".profile-topbar-title")).toHaveText("Codex Usage");
+    await expect(page.locator(".profile-topbar-title")).toHaveText("Codex Usage Profile");
     await expect(page.getByRole("heading", { name: "Codex usage profile" })).toBeVisible();
     await expect(page.getByText(
       "Keep one shareable card up to date with the Codex usage you submit."
@@ -1202,7 +1205,13 @@ test.describe("Home and share card flow", () => {
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Codex Usage", exact: true })).toBeFocused();
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Open the project on GitHub" }))
+      .toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("switch", { name: "Switch to light theme" }))
+      .toBeFocused();
     await page.keyboard.press("Tab");
     const accountButton = page.getByRole("button", { name: "Account menu for postmelee" });
     await expect(accountButton).toBeFocused();
@@ -1326,6 +1335,7 @@ test.describe("Home and share card flow", () => {
 
     for (const path of ["/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
+      await dismissCardIntro(page);
       await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
       await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
       await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
@@ -1349,7 +1359,7 @@ test.describe("Home and share card flow", () => {
       )).toBe(false);
     }
 
-    await expect(page.getByRole("link", { name: "Codex Usage", exact: true }))
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true }))
       .toHaveAttribute("href", "/");
     await page.getByRole("button", { name: "Account menu for postmelee" }).click();
     await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
@@ -1395,7 +1405,7 @@ test.describe("Home and share card flow", () => {
 
     await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
     await expect(page.locator(".profile-shell")).toHaveClass(/profile-shell--fullscreen/);
-    await expect(page.getByRole("link", { name: "Codex Usage" }))
+    await expect(page.getByRole("link", { name: "Codex Usage Profile", exact: true }))
       .toHaveAttribute("href", "/");
     await expect(page.getByRole("button", { name: "Share profile" })).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1, name: "Authorize device" }))
@@ -1442,7 +1452,7 @@ test.describe("Home and share card flow", () => {
     )).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy command" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
-    await expect(page.getByRole("link", { name: "Profile" }))
+    await expect(page.getByRole("link", { name: "Profile", exact: true }))
       .toHaveAttribute("href", "/profile");
     await expect(page.locator(".device-success")).toHaveCSS(
       "animation-name",
@@ -1718,29 +1728,17 @@ test.describe("Home and share card flow", () => {
       ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
       ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
     ];
-    for (const [name, platform, origin, pathname] of socialTargets) {
-      const button = page.getByRole("button", { name });
-      await button.click();
-      await expect(button).toHaveAttribute("aria-pressed", "true");
-      await expect(page.getByRole("heading", { name: `Share to ${platform}` }))
-        .toBeVisible();
-      await expect(page.getByText("Paste image into the post", { exact: true }))
-        .toBeVisible();
-      await expect(page.locator(".share-studio-instructions")).toHaveCSS(
-        "max-height",
-        "none"
-      );
-      await expect(page.locator(".share-studio-instructions")).toHaveCSS(
-        "clip-path",
-        "inset(0px round 9px)"
-      );
-      const link = page.getByRole("link", { name: `Open ${platform} composer` });
+    // Social destinations open the composer directly with the share link.
+    for (const [name, , origin, pathname] of socialTargets) {
+      const link = page.getByRole("link", { name });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
       expect(href.pathname).toBe(pathname);
+      expect(href.search).toContain("postmelee");
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
     await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
       "viewBox",
       "0 0 20 20"
@@ -1754,14 +1752,14 @@ test.describe("Home and share card flow", () => {
       "0 0 20 20"
     );
     await page.screenshot({
-      path: testInfo.outputPath("share-social-instructions.png")
+      path: testInfo.outputPath("share-social-destinations.png")
     });
-    await page.getByRole("button", { name: "Copy image", exact: true }).click();
-    await expect(page.getByText("Copied image", { exact: true })).toBeVisible();
-    expect(await page.evaluate(async () => {
-      const [item] = await navigator.clipboard.read();
-      return item.types;
-    })).toContain("image/png");
+
+    await page.getByRole("button", { name: "Copy share link" }).click();
+    await expect(page.getByText("Share link copied")).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "http://127.0.0.1:5173/u/postmelee"
+    );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
@@ -1862,154 +1860,6 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("share-wide-desktop.png") });
   });
 
-  test("Share Studio renders the Korean third instruction step", async ({ page }, testInfo) => {
-    await useKoreanLocale(page);
-    await mockAuthenticatedAccount(page);
-    await page.route("**/api/profile", (route) => fulfillJson(route, {
-      data: ownerProfile("public"),
-      ok: true
-    }));
-    await mockCardImages(page);
-
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/");
-    await page.getByRole("button", { name: "공유", exact: true }).click();
-
-    await expect(page.getByRole("dialog", { name: "활동 공유하기" })).toBeVisible();
-    const redditButton = page.getByRole("button", { name: "Reddit에 공유" });
-    await expect(redditButton).toHaveCSS("opacity", "1");
-    await redditButton.click();
-    await expect(
-      page.getByText("게시물에 이미지를 붙여넣으세요", { exact: true })
-    ).toBeVisible();
-    const instructions = page.locator(".share-studio-instructions");
-    const instructionMotion = await instructions.evaluate((element) => {
-      const animation = element.getAnimations().find(
-        (candidate) => candidate.animationName === "share-studio-instructions-in"
-      );
-      const timing = animation?.effect?.getTiming();
-      const keyframes = animation?.effect?.getKeyframes() ?? [];
-      const title = document.querySelector(".share-studio-title");
-      const sampleLayout = (time) => {
-        if (animation) animation.currentTime = time;
-        const panelStyle = getComputedStyle(element);
-        return {
-          panelSpace: element.getBoundingClientRect().height
-            + Number.parseFloat(panelStyle.marginTop),
-          titleY: title?.getBoundingClientRect().y ?? Number.NaN
-        };
-      };
-      animation?.pause();
-      const layoutSamples = animation
-        ? [sampleLayout(0), sampleLayout(80), sampleLayout(159)]
-        : [];
-      if (animation) animation.currentTime = 80;
-      return {
-        clipPaths: keyframes.map((keyframe) => keyframe.clipPath),
-        duration: timing?.duration,
-        easings: keyframes.map((keyframe) => keyframe.easing),
-        layoutSamples,
-        transforms: keyframes.map((keyframe) => keyframe.transform)
-      };
-    });
-    expect(instructionMotion.duration).toBe(160);
-    expect(instructionMotion.easings[0]).toBe("ease-out");
-    expect(instructionMotion.clipPaths[0]).toContain("100%");
-    expect(instructionMotion.clipPaths.at(-1)).toBe("inset(0px round 9px)");
-    expect(instructionMotion.transforms[0]).toContain("-6px");
-    expect(instructionMotion.layoutSamples).toHaveLength(3);
-    const [openingStart, openingMiddle, openingEnd] = instructionMotion.layoutSamples;
-    expect(openingStart.panelSpace).toBeLessThan(openingMiddle.panelSpace);
-    expect(openingMiddle.panelSpace).toBeLessThan(openingEnd.panelSpace);
-    expect(openingStart.titleY).toBeGreaterThan(openingMiddle.titleY);
-    expect(openingMiddle.titleY).toBeGreaterThan(openingEnd.titleY);
-    const panelProgress = (
-      (openingMiddle.panelSpace - openingStart.panelSpace)
-      / (openingEnd.panelSpace - openingStart.panelSpace)
-    );
-    const titleProgress = (
-      (openingStart.titleY - openingMiddle.titleY)
-      / (openingStart.titleY - openingEnd.titleY)
-    );
-    expect(Math.abs(panelProgress - titleProgress)).toBeLessThanOrEqual(0.03);
-    await page.screenshot({
-      path: testInfo.outputPath("share-korean-instructions-opening-synced.png")
-    });
-    await instructions.evaluate((element) => {
-      element.getAnimations().find(
-        (candidate) => candidate.animationName === "share-studio-instructions-in"
-      )?.play();
-    });
-    await expect(instructions).toHaveCSS("max-height", "none");
-    await expect(instructions).toHaveCSS("overflow", "visible");
-    await expect(instructions).toHaveCSS("opacity", "1");
-    await expect(instructions).toHaveCSS(
-      "clip-path",
-      "inset(0px round 9px)"
-    );
-    const instructionBounds = await instructions.evaluate((element) => {
-      const panel = element.getBoundingClientRect();
-      const thirdStep = element.querySelector(".share-studio-step-copy")
-        ?.getBoundingClientRect();
-      return {
-        panelBottom: panel.bottom,
-        thirdStepBottom: thirdStep?.bottom ?? Number.POSITIVE_INFINITY
-      };
-    });
-    expect(instructionBounds.thirdStepBottom).toBeLessThanOrEqual(
-      instructionBounds.panelBottom
-    );
-    await page.screenshot({
-      path: testInfo.outputPath("share-korean-third-step.png")
-    });
-
-    await page.getByRole("button", { name: "공유 안내 닫기" }).click();
-    await expect(instructions).toHaveClass(/\bis-closing\b/);
-    const instructionExitMotion = await instructions.evaluate((element) => {
-      const animation = element.getAnimations().find(
-        (candidate) => candidate.animationName === "share-studio-instructions-out"
-      );
-      const timing = animation?.effect?.getTiming();
-      const keyframes = animation?.effect?.getKeyframes() ?? [];
-      return {
-        clipPaths: keyframes.map((keyframe) => keyframe.clipPath),
-        duration: timing?.duration,
-        easings: keyframes.map((keyframe) => keyframe.easing),
-        transforms: keyframes.map((keyframe) => keyframe.transform)
-      };
-    });
-    expect(instructionExitMotion.duration).toBe(120);
-    expect(instructionExitMotion.easings[0]).toBe("ease-in");
-    expect(instructionExitMotion.clipPaths[0]).toBe("inset(0px round 9px)");
-    expect(instructionExitMotion.clipPaths.at(-1)).toContain("100%");
-    expect(instructionExitMotion.transforms.at(-1)).toContain("-6px");
-    const instructionExitMidpoint = await instructions.evaluate((element) => {
-      const animation = element.getAnimations().find(
-        (candidate) => candidate.animationName === "share-studio-instructions-out"
-      );
-      animation?.pause();
-      if (animation) animation.currentTime = 60;
-      const style = getComputedStyle(element);
-      return {
-        clipPath: style.clipPath,
-        opacity: Number.parseFloat(style.opacity)
-      };
-    });
-    expect(instructionExitMidpoint.clipPath).not.toContain("100%");
-    expect(instructionExitMidpoint.opacity).toBeGreaterThan(0);
-    expect(instructionExitMidpoint.opacity).toBeLessThan(1);
-    await page.screenshot({
-      path: testInfo.outputPath("share-korean-instructions-closing.png")
-    });
-    await page.evaluate(() => {
-      document.querySelector(".share-studio-instructions")?.getAnimations().find(
-        (candidate) => candidate.animationName === "share-studio-instructions-out"
-      )?.play();
-    });
-    await expect(instructions).toBeHidden();
-    await expect(redditButton).toHaveAttribute("aria-expanded", "false");
-  });
-
   test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await mockAuthenticatedAccount(page);
@@ -2078,7 +1928,7 @@ test.describe("Home and share card flow", () => {
           right: bounds.right
         };
       }));
-    expect(mobileTargets).toHaveLength(4);
+    expect(mobileTargets).toHaveLength(6);
     for (const target of mobileTargets) {
       expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0);
@@ -2105,48 +1955,8 @@ test.describe("Home and share card flow", () => {
         (element) => element.getBoundingClientRect().height
       ));
     expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
-    await page.getByRole("button", { name: "Share on Reddit" }).click();
-    await expect(page.getByRole("heading", { name: "Share to Reddit" })).toBeVisible();
-    const instructions = page.locator(".share-studio-instructions");
-    await expect(instructions).toHaveCSS("max-height", "none");
-    await expect(instructions).toHaveCSS("opacity", "1");
-    await expect(instructions).toHaveCSS("overflow", "visible");
-    await expect(instructions).toHaveCSS(
-      "clip-path",
-      "inset(0px round 9px)"
-    );
-    const compactInstructions = await instructions.evaluate((element) => {
-      const stepAction = element.querySelector(".share-studio-step-action");
-      const touchExtension = getComputedStyle(stepAction, "::before");
-      const rowBounds = Array.from(element.querySelectorAll("li")).map(
-        (row) => row.getBoundingClientRect()
-      );
-      return {
-        panelHeight: element.getBoundingClientRect().height,
-        rowCenterGaps: rowBounds.slice(1).map((row, index) => (
-          (row.top + (row.height / 2))
-          - (rowBounds[index].top + (rowBounds[index].height / 2))
-        )),
-        rowHeights: rowBounds.map((row) => row.height),
-        stepActionHeight: stepAction.getBoundingClientRect().height,
-        stepFontSize: getComputedStyle(stepAction).fontSize,
-        titleFontSize: getComputedStyle(element.querySelector("h3")).fontSize,
-        touchBottom: touchExtension.bottom,
-        touchTop: touchExtension.top
-      };
-    });
-    expect(compactInstructions.panelHeight).toBeLessThanOrEqual(180);
-    expect(compactInstructions.rowHeights).toEqual([32, 32, 32]);
-    expect(compactInstructions.rowCenterGaps).toEqual([44, 44]);
-    expect(compactInstructions.stepActionHeight).toBeLessThanOrEqual(30);
-    expect(compactInstructions.stepFontSize).toBe("13px");
-    expect(compactInstructions.titleFontSize).toBe("13px");
-    expect(compactInstructions.touchTop).toBe("-8px");
-    expect(compactInstructions.touchBottom).toBe("-8px");
-    expect(await page.evaluate(
-      () => document.body.scrollWidth > document.documentElement.clientWidth
-    )).toBe(false);
-    await instructions.scrollIntoViewIfNeeded();
+    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+
     await page.screenshot({
       path: testInfo.outputPath("share-mobile-with-instructions.png")
     });
@@ -2203,10 +2013,9 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".share-studio-secondary")).toHaveCSS("opacity", "1");
     await page.screenshot({ path: testInfo.outputPath("share-studio-short.png") });
 
-    await page.getByRole("button", { name: "Share on Reddit" }).click();
-    const thirdStep = page.getByText("Paste image into the post", { exact: true });
-    await thirdStep.scrollIntoViewIfNeeded();
-    await expect(thirdStep).toBeVisible();
+    const redditLink = page.getByRole("link", { name: "Share on Reddit" });
+    await redditLink.scrollIntoViewIfNeeded();
+    await expect(redditLink).toBeVisible();
 
     await page.getByRole("button", { name: "Close Share Studio" }).click();
     await page.setViewportSize({ width: 1180, height: 620 });
@@ -2250,18 +2059,8 @@ test.describe("Home and share card flow", () => {
     expect(reducedMotion.actionIconTransition).toBe("0s");
     expect(reducedMotion.spatialKeyframes).toEqual([]);
 
-    await page.getByRole("button", { name: "Share on Reddit" }).click();
-    const instructions = page.locator(".share-studio-instructions");
-    await expect(instructions).toBeVisible();
-    await expect(instructions).toHaveCSS("opacity", "1");
-    const instructionKeyframes = await instructions.evaluate((element) => (
-      element.getAnimations().flatMap(
-        (animation) => animation.effect?.getKeyframes?.() ?? []
-      )
-    ));
-    expect(instructionKeyframes.every(
-      (keyframe) => !keyframe.transform || keyframe.transform === "none"
-    )).toBe(true);
+    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+
     await page.screenshot({
       path: testInfo.outputPath("share-studio-reduced-motion.png")
     });
@@ -2319,13 +2118,10 @@ test.describe("Home and share card flow", () => {
     expect(fallbackTitleBox.top ?? fallbackTitleBox.y).toBeGreaterThanOrEqual(0);
     await expect(page.getByTestId("share-studio-card-motion"))
       .toHaveAttribute("data-motion-fallback", "preview-error");
-    await expect(page.locator(".share-studio-primary-action")).toHaveCount(4);
+    await expect(page.locator(".share-studio-primary-action")).toHaveCount(6);
 
-    await page.getByRole("button", { name: "Share on Reddit" }).click();
-    const composer = page.getByRole("link", { name: "Open Reddit composer" });
+    const composer = page.getByRole("link", { name: "Share on Reddit" });
     await expect(composer).toHaveAttribute("target", "_blank");
-    await page.getByRole("button", { name: "Copy image", exact: true }).click();
-    await expect(page.getByText("Failed to copy image", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Could not copy image URL", { exact: true }))
       .toBeVisible();
@@ -3046,6 +2842,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(SITES_PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     await expect(page.getByRole("heading", {
       level: 1,
@@ -3094,6 +2891,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     const card = page.getByRole("img", { name: "Codex usage card for Post Melee" });
     await expect(card).toBeVisible();
@@ -3113,6 +2911,7 @@ test.describe("Public profile", () => {
     await mockCardImages(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
 
     const target = page.getByRole("grid", { name: "Daily token activity" })
       .locator('[data-date="2026-06-11"]');
@@ -3150,9 +2949,15 @@ test.describe("Public profile", () => {
       name: "Loading public profile"
     }))
       .toBeVisible();
-    await expect(page.getByText("postmelee", { exact: false })).toHaveCount(0);
+    // Scoped to the profile region: the footer carries a constant author
+    // credit, which is identical on every page and reveals nothing about the
+    // handle being loaded.
+    await expect(
+      page.locator(".public-profile-view").getByText("postmelee", { exact: false })
+    ).toHaveCount(0);
 
     releaseResponse();
+    await dismissCardIntro(page);
     await expect(page.getByRole("heading", {
       level: 1,
       name: "Post Melee"
@@ -3173,15 +2978,30 @@ test.describe("Public profile", () => {
 
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "Profile unavailable"
+      name: "This card cannot be shown"
     }))
       .toBeVisible();
-    await expect(page.getByText("This public profile is not available."))
+    await expect(page.getByText(
+      "The link may be wrong, or the card may not be published yet."
+    ))
+      .toBeVisible();
+    await expect(page.getByRole("link", { name: "Create your Codex card" }))
       .toBeVisible();
     await expect(page.getByText("private-or-missing", { exact: false })).toHaveCount(0);
-    await expect(page.locator(".public-profile-card")).toHaveCount(0);
+    await expect(page.locator(".home-card-preview")).toHaveCount(0);
   });
 });
+
+// The intro modal covers the public profile on every entry and makes the page
+// inert, so tests that assert on the profile itself dismiss it first. The close
+// control is matched by class so the helper works in every locale.
+async function dismissCardIntro(page) {
+  const intro = page.getByTestId("public-card-intro-backdrop");
+  await intro.waitFor({ state: "attached", timeout: 5000 }).catch(() => {});
+  if (await intro.count() === 0) return;
+  await page.locator(".public-card-intro-close").click();
+  await expect(intro).toHaveCount(0);
+}
 
 async function mockAnonymousAccount(page) {
   await page.route("**/api/auth/me", (route) => fulfillJson(route, {

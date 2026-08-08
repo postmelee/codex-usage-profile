@@ -963,6 +963,7 @@ test("updates versioned owner card settings and validates the exact payload", as
   assert.equal(fixture.store.getOwnerById("owner_1").cardLocale, "ko");
   assert.equal(ensureCalls.length, 1);
   assert.equal(ensureCalls[0].owner.id, "owner_1");
+  assert.equal(ensureCalls[0].cardLocale, "ko");
 
   const localeOnly = await requestJson(
     fixture.handler,
@@ -977,7 +978,10 @@ test("updates versioned owner card settings and validates the exact payload", as
     localeOnly.body.data.selectedPublicCardUrl,
     `${BASE_URL}/u/postmelee/card.png?theme=light`
   );
-  assert.equal(ensureCalls.length, 1);
+  // A locale-only change still prepares media because the single social image
+  // is rendered from the saved card locale.
+  assert.equal(ensureCalls.length, 2);
+  assert.equal(ensureCalls[1].cardLocale, "en");
 
   assert.equal(injected.status, 400);
   assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
@@ -1344,6 +1348,65 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
   const missing = await requestJson(fixture.handler, "GET", "/u/missing/card.png");
   assert.equal(hiddenAgain.status, 404);
   assert.deepEqual(hiddenAgain.body, missing.body);
+});
+
+test("revalidates a public social card through the store without a response body", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  const publication = await publishThemeMediaFixture(baseMediaStore);
+  const socialBody = Buffer.from("social-media");
+  const socialRevision = createProfileMediaRevisionDigest(socialBody);
+  await baseMediaStore.putSocialCard({
+    body: socialBody,
+    contentType: "image/png",
+    createdAt: "2026-07-22T00:02:00.000Z",
+    etag: `"${socialRevision}"`,
+    handle: publication.handle,
+    ownerId: publication.ownerId,
+    presentationDigest: publication.presentationDigest,
+    publicationId: publication.publicationId,
+    revision: socialRevision
+  });
+  const mediaCalls = [];
+  const mediaStore = wrapMediaStore(baseMediaStore, {}, mediaCalls);
+  const handler = createProfileBackendHttpHandler({
+    store: createMemoryProfileBackendStore(),
+    mediaStore,
+    cardService: {},
+    publicationService: {}
+  });
+
+  const first = await requestResponse(
+    handler,
+    "GET",
+    "/u/postmelee/social.png"
+  );
+  const etag = first.headers.get("etag");
+  mediaCalls.length = 0;
+  const notModified = await requestResponse(
+    handler,
+    "GET",
+    "/u/postmelee/social.png",
+    "",
+    { "if-none-match": etag }
+  );
+
+  assert.equal(first.status, 200);
+  assert.deepEqual(Buffer.from(await first.arrayBuffer()), socialBody);
+  assert.equal(notModified.status, 304);
+  assert.equal((await notModified.arrayBuffer()).byteLength, 0);
+  assert.deepEqual(mediaCalls, [
+    ["getPublishedCard", {
+      handle: "postmelee",
+      includeBody: false,
+      locale: "en",
+      theme: "dark"
+    }],
+    ["getSocialCard", {
+      handle: "postmelee",
+      ifNoneMatch: etag,
+      includeBody: true
+    }]
+  ]);
 });
 
 test("serves public cards without reading the structured store or renderer", async () => {
@@ -2090,6 +2153,7 @@ function createFixture(options = {}) {
         Buffer.from([0x89, 0x50, 0x4e, 0x47]),
         Buffer.from(`:${viewModel.locale}:${viewModel.theme}`)
       ])),
+    profileCardRenderSocialPng: options.profileCardRenderSocialPng,
     profileCardRendererVersion: "http-test-renderer-1",
     ensureCardStyleMedia: options.ensureCardStyleMedia,
     publicationService
@@ -2211,11 +2275,14 @@ async function publishThemeMediaFixture(mediaStore, options = {}) {
 
 function wrapMediaStore(base, overrides = {}, calls = null) {
   return Object.fromEntries([
+    "deleteSocialCard",
+    "getSocialCard",
     "getPublishedCard",
     "getRevision",
     "inspectStableCard",
     "publishRevision",
     "putRevision",
+    "putSocialCard",
     "unpublishCard"
   ].map((method) => [method, async (...args) => {
     if (calls) calls.push([method, ...args]);

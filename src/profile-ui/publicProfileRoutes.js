@@ -34,13 +34,19 @@ export async function loadPublicProfileRoute(location, options = {}) {
   try {
     const profile = await options.client.getPublicProfile(route.handle);
     if (!isPublicProfile(profile)) {
-      return createState("unavailable", null, null);
+      return createUnavailableState(route.handle);
     }
 
     return createState("ready", profile.owner.handle, profile);
   } catch {
-    return createState("unavailable", null, null);
+    return createUnavailableState(route.handle);
   }
+}
+
+// The requested handle comes from the URL, so keeping it on the unavailable
+// state leaks nothing and lets the page recognise its own owner.
+function createUnavailableState(handle) {
+  return createState("unavailable", handle ?? null, null);
 }
 
 function createState(status, handle, profile) {

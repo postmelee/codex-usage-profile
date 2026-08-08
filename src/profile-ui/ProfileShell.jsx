@@ -1,5 +1,11 @@
 import { AccountMenu } from "./AccountMenu.jsx";
+import { BrandLogo } from "./BrandLogo.jsx";
+import { SiteFooter } from "./SiteFooter.jsx";
+import { ThemeToggle } from "./ThemeToggle.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
+
+export const PROJECT_GITHUB_URL =
+  "https://github.com/postmelee/codex-usage-profile";
 
 export function ProfileShell({
   authState,
@@ -26,6 +32,16 @@ export function ProfileShell({
         <header className="profile-topbar">
           <div className="profile-topbar-leading">
             <a className="profile-topbar-title" href="/">{t("app.brand")}</a>
+            <a
+              aria-label={t("common.nav.githubLabel")}
+              className="profile-topbar-github"
+              href={PROJECT_GITHUB_URL}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <BrandLogo name="github" size={16} />
+              <span>{t("common.nav.github")}</span>
+            </a>
           </div>
           <div className="profile-actions" aria-label={t("common.nav.pageActions")}>
             {showShare ? (
@@ -38,6 +54,7 @@ export function ProfileShell({
                 {t("common.share")}
               </button>
             ) : null}
+            <ThemeToggle />
             <AccountMenu
               authState={authState}
               client={client}
@@ -52,6 +69,7 @@ export function ProfileShell({
           <h1 className="sr-only">{title ?? t("common.nav.profile")}</h1>
         ) : null}
         {children}
+        <SiteFooter githubUrl={PROJECT_GITHUB_URL} />
       </main>
     </div>
   );

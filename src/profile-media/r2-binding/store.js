@@ -12,6 +12,7 @@ import {
   PROFILE_MEDIA_SUPPORTED_THEMES,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
+  createProfileMediaSocialKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
   getProfileMediaThemeRepresentations,
@@ -19,6 +20,7 @@ import {
   normalizeProfileMediaLocale,
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
+  normalizeProfileMediaSocialRecord,
   normalizeProfileMediaTheme
 } from "../media-store-contract.js";
 
@@ -75,6 +77,103 @@ export function createR2BindingProfileMediaStore(options = {}) {
         revisionKey,
         theme: normalizeProfileMediaTheme(getOptions.theme)
       });
+    },
+
+    async getSocialCard(getOptions = {}) {
+      const handle = normalizeHandle(getOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      const includeBody = getOptions.includeBody !== false;
+      const metadataFirst = typeof getOptions.ifNoneMatch === "string";
+      let object;
+      try {
+        object = includeBody && !metadataFirst
+          ? await bucket.get(socialKey)
+          : await bucket.head(socialKey);
+      } catch (error) {
+        throw unavailable("read social media", error);
+      }
+      if (!object) return null;
+
+      let body = includeBody && !metadataFirst
+        ? await readR2Body(object, "social media")
+        : null;
+      let record = socialRecordFromObject(object, { body, handle, socialKey });
+      let notModified = matchesProfileMediaIfNoneMatch(
+        getOptions.ifNoneMatch,
+        record.etag
+      );
+      if (notModified) return { ...record, body: null, notModified: true };
+      if (!includeBody) return { ...record, notModified: false };
+
+      if (metadataFirst) {
+        try {
+          object = await bucket.get(socialKey);
+        } catch (error) {
+          throw unavailable("read social media", error);
+        }
+        if (!object) return null;
+        body = await readR2Body(object, "social media");
+        record = socialRecordFromObject(object, { body, handle, socialKey });
+        notModified = matchesProfileMediaIfNoneMatch(
+          getOptions.ifNoneMatch,
+          record.etag
+        );
+      }
+      return {
+        ...record,
+        body: notModified ? null : record.body,
+        notModified
+      };
+    },
+
+    async putSocialCard(putOptions = {}) {
+      const record = normalizeProfileMediaSocialRecord(putOptions);
+      if (createProfileMediaRevisionDigest(record.body) !== record.revision) {
+        throw createProfileMediaStoreError(
+          PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+          "social media does not match body digest"
+        );
+      }
+
+      let created;
+      const onlyIf = socialOnlyIf(putOptions);
+      try {
+        created = await bucket.put(record.socialKey, record.body, {
+          customMetadata: socialMetadata(record),
+          httpMetadata: mediaHttpMetadata(),
+          ...(onlyIf ? { onlyIf } : {})
+        });
+      } catch (error) {
+        throw unavailable("write social media", error);
+      }
+      if (Object.hasOwn(putOptions, "expectedStorageEtag") && !created) {
+        throw stableConflict();
+      }
+
+      const { body, ...metadata } = record;
+      return {
+        ...metadata,
+        storageEtag: requireStorageEtag(created)
+      };
+    },
+
+    async deleteSocialCard(deleteOptions = {}) {
+      const handle = normalizeHandle(deleteOptions.handle);
+      const socialKey = createProfileMediaSocialKey({ handle });
+      let existing;
+      try {
+        existing = await bucket.head(socialKey);
+      } catch (error) {
+        throw unavailable("inspect social media", error);
+      }
+      if (!existing) return { deleted: false, handle };
+
+      try {
+        await bucket.delete(socialKey);
+      } catch (error) {
+        throw unavailable("delete social media", error);
+      }
+      return { deleted: true, handle };
     },
 
     async inspectStableCard(inspectOptions = {}) {
@@ -716,6 +815,62 @@ function samePublicationAuthority(left, right) {
     left.contractVersion === right.contractVersion;
 }
 
+function socialMetadata(record) {
+  return {
+    [METADATA_KIND]: "social",
+    [METADATA_CONTRACT_VERSION]: String(PROFILE_MEDIA_STORE_CONTRACT_VERSION),
+    [METADATA_OWNER_ID]: record.ownerId,
+    [METADATA_HANDLE]: record.handle,
+    [METADATA_FORMAT]: PROFILE_MEDIA_FORMAT,
+    [METADATA_REVISION]: record.revision,
+    [METADATA_ETAG]: record.revision,
+    [METADATA_PRESENTATION_DIGEST]: record.presentationDigest,
+    [METADATA_PUBLICATION_ID]: record.publicationId,
+    [METADATA_CREATED_AT]: record.createdAt
+  };
+}
+
+function socialRecordFromObject(object, expected) {
+  const metadata = object.customMetadata ?? {};
+  if (metadata[METADATA_KIND] !== "social") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object has an unexpected kind"
+    );
+  }
+  assertHttpMetadata(object, mediaHttpMetadata());
+
+  const revision = metadata[METADATA_REVISION];
+  if (typeof revision !== "string" || revision === "") {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object is missing its revision"
+    );
+  }
+  if (expected.body && createProfileMediaRevisionDigest(expected.body) !== revision) {
+    throw createProfileMediaStoreError(
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      "social media object does not match its revision"
+    );
+  }
+
+  const record = {
+    cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
+    contentType: PROFILE_MEDIA_CONTENT_TYPE,
+    createdAt: metadata[METADATA_CREATED_AT],
+    etag: `"${revision}"`,
+    handle: expected.handle,
+    ownerId: metadata[METADATA_OWNER_ID],
+    presentationDigest: metadata[METADATA_PRESENTATION_DIGEST],
+    publicationId: metadata[METADATA_PUBLICATION_ID],
+    revision,
+    socialKey: expected.socialKey,
+    storageEtag: requireStorageEtag(object)
+  };
+  if (expected.body) record.body = expected.body;
+  return record;
+}
+
 function mediaHttpMetadata() {
   return {
     cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
@@ -727,6 +882,17 @@ function stableOnlyIf(state) {
   return state.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.MISSING
     ? { etagDoesNotMatch: "*" }
     : { etagMatches: state.storageEtag };
+}
+
+function socialOnlyIf(options) {
+  if (!Object.hasOwn(options, "expectedStorageEtag")) return null;
+  const expected = options.expectedStorageEtag;
+  if (expected !== null && (typeof expected !== "string" || expected === "")) {
+    throw new TypeError("expectedStorageEtag must be a non-empty string or null");
+  }
+  return expected === null
+    ? { etagDoesNotMatch: "*" }
+    : { etagMatches: expected };
 }
 
 function assertExpectedStorageEtag(state, options) {

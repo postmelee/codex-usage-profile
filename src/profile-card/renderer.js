@@ -8,6 +8,7 @@ import {
   loadImage
 } from "@napi-rs/canvas";
 
+import { computeSocialCanvasLayout } from "./social-canvas.js";
 import {
   CARD_THEME_PALETTES,
   getCardThemePalette
@@ -52,13 +53,37 @@ export async function renderProfileCardPng(viewModel, options = {}) {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
+  await drawCard(context, viewModel, options, palette);
+
+  return canvas.encode("png");
+}
+
+export async function renderProfileSocialCardPng(viewModel, options = {}) {
+  registerCardFonts();
+  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
+  const layout = computeSocialCanvasLayout();
+
+  const canvas = createCanvas(layout.outputWidth, layout.outputHeight);
+  const context = canvas.getContext("2d");
+  context.scale(layout.outputScale, layout.outputScale);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  context.save();
+  context.translate(layout.cardX, layout.cardY);
+  context.scale(layout.scale, layout.scale);
+  await drawCard(context, viewModel, options, palette);
+  context.restore();
+
+  return canvas.encode("png");
+}
+
+async function drawCard(context, viewModel, options, palette) {
   drawCardBackground(context, palette);
   await drawHeader(context, viewModel.header, options, palette);
   drawCodexLabel(context, palette);
   drawHeatmap(context, viewModel.heatmap, palette);
   drawStats(context, viewModel.stats, palette);
-
-  return canvas.encode("png");
 }
 
 export function registerCardFonts() {

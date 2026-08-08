@@ -12,6 +12,8 @@ import { createProfilePublicationService } from "../profile-media/publication-se
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
+  PROFILE_MEDIA_DEFAULT_LOCALE,
+  PROFILE_MEDIA_DEFAULT_THEME,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaStableKey,
   normalizeProfileMediaTheme
@@ -117,6 +119,7 @@ export function createProfileBackendHttpHandler(options = {}) {
     async (ensureOptions) => publicationService?.ensurePublishedCardVariants?.({
       ownerId: ensureOptions.owner.id,
       owner: ensureOptions.owner,
+      cardLocale: ensureOptions.cardLocale,
       cardStyle: ensureOptions.cardStyle
     })
   );
@@ -126,6 +129,7 @@ export function createProfileBackendHttpHandler(options = {}) {
     now,
     fetchImpl: options.profileCardFetchImpl ?? options.fetchImpl,
     renderPng: options.profileCardRenderPng,
+    renderSocialPng: options.profileCardRenderSocialPng,
     rendererVersion: options.profileCardRendererVersion,
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
@@ -566,6 +570,22 @@ export function createProfileBackendHttpHandler(options = {}) {
 
         return okResponse({
           snapshot: serializeLatestSnapshot(record)
+        });
+      }
+
+      const publicSocialMatch = url.pathname.match(/^\/u\/([^/]+)\/social\.png$/);
+      if (publicSocialMatch && ["GET", "HEAD"].includes(request.method.toUpperCase())) {
+        const method = request.method.toUpperCase();
+        const card = await readPublishedSocialCard({
+          mediaStore,
+          handle: decodePublicCardHandle(publicSocialMatch[1]),
+          ifNoneMatch: request.headers.get("if-none-match"),
+          includeBody: method === "GET"
+        });
+        return cardPngResponse(card, {
+          cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
+          contentType: PROFILE_MEDIA_CONTENT_TYPE,
+          head: method === "HEAD"
         });
       }
 
@@ -1335,6 +1355,70 @@ async function readPublishedMediaCard(options) {
     throw publicCardNotFoundError();
   }
   return card;
+}
+
+async function readPublishedSocialCard(options) {
+  if (
+    !options.mediaStore ||
+    typeof options.mediaStore.getSocialCard !== "function" ||
+    typeof options.mediaStore.getPublishedCard !== "function"
+  ) {
+    throw publicCardNotFoundError();
+  }
+
+  let authority;
+  let social;
+  try {
+    authority = await options.mediaStore.getPublishedCard({
+      handle: options.handle,
+      includeBody: false,
+      locale: PROFILE_MEDIA_DEFAULT_LOCALE,
+      theme: PROFILE_MEDIA_DEFAULT_THEME
+    });
+    social = authority
+      ? await options.mediaStore.getSocialCard({
+        handle: options.handle,
+        ifNoneMatch: options.ifNoneMatch,
+        includeBody: options.includeBody
+      })
+      : null;
+  } catch (error) {
+    if ([
+      PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+      PROFILE_MEDIA_STORE_ERROR_CODES.INVALID,
+      PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND
+    ].includes(error?.code)) {
+      throw publicCardNotFoundError();
+    }
+    throw createProfileMediaUnavailableError();
+  }
+
+  if (
+    !authority ||
+    !social ||
+    typeof social.etag !== "string" ||
+    social.ownerId !== authority.ownerId ||
+    social.publicationId !== authority.publicationId
+  ) {
+    throw publicCardNotFoundError();
+  }
+  const notModified = social.notModified === true;
+  if (
+    options.includeBody &&
+    !notModified &&
+    !(
+      (Buffer.isBuffer(social.body) || social.body instanceof Uint8Array) &&
+      social.body.byteLength > 0
+    )
+  ) {
+    throw publicCardNotFoundError();
+  }
+
+  return {
+    body: notModified || !options.includeBody ? null : social.body,
+    etag: social.etag,
+    notModified
+  };
 }
 
 function readPublicCardTheme(value) {

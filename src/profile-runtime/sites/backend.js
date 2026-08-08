@@ -194,5 +194,7 @@ function isPublicProfileRoute(pathname, method) {
   if (!["GET", "HEAD"].includes(method)) return false;
   return pathname.startsWith("/api/profiles/public/") ||
     pathname.startsWith("/api/snapshots/public/") ||
-    /^\/u\/[^/]+\/card\.png$/.test(pathname);
+    /^\/u\/[^/]+\/card\.png$/.test(pathname) ||
+    /^\/u\/[^/]+\/social\.png$/.test(pathname) ||
+    /^\/u\/[^/]+$/.test(pathname);
 }

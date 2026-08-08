@@ -33,6 +33,49 @@ export const PROFILE_MEDIA_STORE_METHODS = Object.freeze([
   "unpublishCard"
 ]);
 
+export const PROFILE_MEDIA_SOCIAL_STORE_METHODS = Object.freeze([
+  "deleteSocialCard",
+  "getSocialCard",
+  "putSocialCard"
+]);
+
+export function supportsProfileMediaSocialCard(store) {
+  return Boolean(store) && PROFILE_MEDIA_SOCIAL_STORE_METHODS.every(
+    (method) => typeof store[method] === "function"
+  );
+}
+
+export function createProfileMediaSocialKey(options = {}) {
+  const handle = requireProfileMediaHandle(options.handle);
+  return `cards/v2/public/${handle}/social.png`;
+}
+
+export function normalizeProfileMediaSocialRecord(options = {}) {
+  const handle = requireProfileMediaHandle(options.handle);
+  const ownerId = requireKeySegment(options.ownerId, "ownerId");
+  const revision = requireRevision(options.revision);
+
+  return {
+    body: normalizeBody(options.body),
+    cacheControl: requireNonEmptyString(
+      options.cacheControl ?? PROFILE_MEDIA_CACHE_CONTROL,
+      "cacheControl"
+    ),
+    contentType: requireContentType(options.contentType),
+    createdAt: normalizeIsoDate(options.createdAt),
+    etag: requireApplicationEtag(options.etag, revision),
+    handle,
+    ownerId,
+    presentationDigest: requireRevision(
+      options.presentationDigest,
+      "presentationDigest"
+    ),
+    publicationId: requireKeySegment(options.publicationId, "publicationId"),
+    revision,
+    socialKey: createProfileMediaSocialKey({ handle })
+  };
+}
+
 export function createProfileMediaRevisionKey(options = {}) {
   const ownerId = requireKeySegment(options.ownerId, "ownerId");
   const locale = normalizeProfileMediaLocale(options.locale, { fallback: false });
@@ -225,9 +268,45 @@ export function createMemoryProfileMediaStore() {
   const revisions = new Map();
   const stableByHandle = new Map();
   const lightStableByHandle = new Map();
+  const socialByHandle = new Map();
   let nextStorageRevision = 1;
 
   return {
+    async getSocialCard(options = {}) {
+      const handle = requireProfileMediaHandle(options.handle);
+      const record = socialByHandle.get(handle);
+      if (!record) return null;
+      const notModified = matchesProfileMediaIfNoneMatch(
+        options.ifNoneMatch,
+        record.etag
+      );
+      const result = cloneSocialRecord(
+        record,
+        options.includeBody !== false && !notModified
+      );
+      result.notModified = notModified;
+      if (notModified) result.body = null;
+      return result;
+    },
+
+    async putSocialCard(options = {}) {
+      const record = normalizeProfileMediaSocialRecord(options);
+      const previous = socialByHandle.get(record.handle) ?? null;
+      assertExpectedStorageEtag(previous, options);
+      const stored = {
+        ...record,
+        storageEtag: createMemoryStorageEtag(nextStorageRevision++)
+      };
+      socialByHandle.set(record.handle, cloneSocialRecord(stored, true));
+      return cloneSocialRecord(stored, false);
+    },
+
+    async deleteSocialCard(options = {}) {
+      const handle = requireProfileMediaHandle(options.handle);
+      const existed = socialByHandle.delete(handle);
+      return { deleted: existed, handle };
+    },
+
     async getPublishedCard(options = {}) {
       const handle = requireProfileMediaHandle(options.handle);
       const theme = normalizeProfileMediaTheme(options.theme);
@@ -344,6 +423,7 @@ export function createMemoryProfileMediaStore() {
         return null;
       }
       const storageEtag = createMemoryStorageEtag(nextStorageRevision++);
+      socialByHandle.delete(handle);
       stableByHandle.set(handle, {
         handle,
         kind: PROFILE_MEDIA_STABLE_STATE_KINDS.UNPUBLISHED,
@@ -364,6 +444,16 @@ export function createMemoryProfileMediaStore() {
       };
     }
   };
+}
+
+function cloneSocialRecord(record, includeBody) {
+  const clone = { ...record };
+  if (includeBody) {
+    clone.body = normalizeBody(record.body);
+  } else {
+    delete clone.body;
+  }
+  return clone;
 }
 
 export function createProfileMediaStoreError(code, message, options = {}) {

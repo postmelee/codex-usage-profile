@@ -135,6 +135,7 @@ export function App() {
     <PublicProfilePage
       authState={authState}
       client={profileApiClient}
+      handle={publicRoute.handle}
       onAuthStateChange={handleAuthStateChange}
       profile={publicRoute.profile}
       status={publicRoute.status}

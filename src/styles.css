@@ -190,6 +190,8 @@ button {
 
 .profile-shell--fullscreen {
   --profile-header-height: 52px;
+  display: flex;
+  flex-direction: column;
   height: auto;
   min-height: 100dvh;
   overflow: visible;
@@ -231,6 +233,101 @@ button {
 .profile-shell--fullscreen .profile-topbar-title:focus-visible {
   outline: 1px solid var(--focus-ring);
   outline-offset: 3px;
+}
+
+.profile-topbar-github {
+  align-items: center;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 6px;
+  padding: 6px 8px;
+  text-decoration: none;
+}
+
+.profile-topbar-github:hover,
+.profile-topbar-github:focus-visible {
+  color: var(--text-primary);
+}
+
+.profile-topbar-theme {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  padding: 0;
+}
+
+.profile-topbar-theme-track {
+  align-items: center;
+  background: var(--content-background-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  display: inline-flex;
+  height: 26px;
+  justify-content: space-between;
+  padding: 0 5px;
+  position: relative;
+  width: 48px;
+}
+
+.profile-topbar-theme-icon {
+  align-items: center;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-topbar-theme[aria-checked="false"] .is-sun,
+.profile-topbar-theme[aria-checked="true"] .is-moon {
+  color: var(--text-primary);
+}
+
+.profile-topbar-theme-knob {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  height: 20px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 200ms cubic-bezier(0.2, 0, 0, 1);
+  width: 20px;
+}
+
+.profile-topbar-theme[aria-checked="true"] .profile-topbar-theme-knob {
+  transform: translateX(22px);
+}
+
+.profile-topbar-theme:hover .profile-topbar-theme-track,
+.profile-topbar-theme:focus-visible .profile-topbar-theme-track {
+  border-color: var(--border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-topbar-theme-knob {
+    transition: none;
+  }
+}
+
+/* Theme swaps flip every surface at once, so colour transitions are enabled
+   only while a swap is in flight. Leaving them on permanently would slow every
+   hover and interfere with the card motion work. */
+:root[data-theme-animating] *,
+:root[data-theme-animating] *::before,
+:root[data-theme-animating] *::after {
+  transition:
+    background-color 240ms ease,
+    border-color 240ms ease,
+    color 240ms ease,
+    fill 240ms ease !important;
 }
 
 .profile-topbar-leading {
@@ -555,7 +652,6 @@ button {
 }
 
 .home-card-preview,
-.public-profile-card,
 .share-card-preview {
   aspect-ratio: 499 / 306;
   display: block;
@@ -1156,6 +1252,13 @@ button {
   color: var(--status-success);
 }
 
+.visibility-status.is-preview {
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  padding: 2px 10px;
+}
+
 .profile-card-preview-stage {
   display: grid;
   justify-items: center;
@@ -1301,6 +1404,10 @@ button {
   }
 }
 
+.public-profile-view:has(.public-profile-owner-banner) {
+  padding-top: 20px;
+}
+
 .public-profile-view {
   align-items: flex-start;
   background: var(--content-background);
@@ -1349,18 +1456,87 @@ button {
   overflow-wrap: anywhere;
 }
 
-.public-profile-card {
-  margin-top: 28px;
-}
-
 .public-profile-state {
-  align-self: center;
+  align-self: start;
   margin-top: 90px;
   width: min(100%, 520px);
 }
 
 .public-profile-state.is-loading .profile-state-indicator {
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+.public-profile-state.is-unavailable {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+
+.public-profile-state-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.public-profile-state.is-private-owner {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.public-profile-state.is-private-owner p {
+  margin: 0;
+}
+
+.public-profile-owner-banner {
+  align-items: center;
+  backdrop-filter: blur(12px);
+  background: var(--content-background-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  box-shadow: var(--shadow-floating);
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  position: sticky;
+  top: calc(var(--profile-header-height, 52px) + 8px);
+  z-index: 30;
+}
+
+.public-profile-owner-banner-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.public-profile-owner-banner-copy strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.public-profile-owner-banner-copy span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.public-profile-owner-banner-error {
+  color: var(--status-danger);
+}
+
+@media (max-width: 760px) {
+  .public-profile-owner-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .card-profile-message {
@@ -1627,9 +1803,12 @@ button {
 }
 
 .brand-logo {
-  color: var(--share-action-text);
   display: block;
   flex: 0 0 auto;
+}
+
+.share-studio-action-icon .brand-logo {
+  color: var(--share-action-text);
   height: 20px;
   width: 20px;
 }
@@ -1822,6 +2001,11 @@ button {
 
 .share-studio-privacy-action {
   margin-left: 4px;
+}
+
+.share-studio-secondary-action.is-primary {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .share-studio-secondary-action:hover,
@@ -3456,7 +3640,7 @@ button {
 
   .profile-shell--fullscreen .profile-topbar {
     height: 48px;
-    padding-inline: 16px;
+    padding-inline: 20px;
   }
 
   .profile-actions {
@@ -3764,5 +3948,199 @@ button {
 @media (max-width: 360px) {
   .share-studio-primary-actions {
     grid-template-columns: repeat(2, 60px);
+  }
+}
+
+.public-card-intro-backdrop {
+  align-items: center;
+  backdrop-filter: blur(18px);
+  background: var(--overlay-scrim);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: hidden;
+  padding: max(48px, env(safe-area-inset-top)) 24px max(48px, env(safe-area-inset-bottom));
+  position: fixed;
+  z-index: 100;
+}
+
+.public-card-intro-backdrop.is-closing,
+.public-card-intro-backdrop.is-handoff {
+  backdrop-filter: none;
+  background: transparent;
+  transition: background 240ms cubic-bezier(0.3, 0, 1, 1);
+}
+
+.public-card-intro {
+  align-content: center;
+  display: grid;
+  gap: 24px;
+  justify-items: stretch;
+  max-width: 100%;
+  position: relative;
+  width: min(100%, 600px);
+}
+
+.public-card-intro-title {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* The motion wrapper must match the visible card exactly: the handoff maps
+   this element's rect onto the target card, so any inset would distort it. */
+.public-card-intro-card {
+  display: flex;
+  margin-inline: auto;
+  transform-style: preserve-3d;
+  width: min(100%, 600px);
+}
+
+.public-card-intro-card .home-card-tilt {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.public-card-intro-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.public-card-intro-close {
+  position: absolute;
+  right: 0;
+  top: -44px;
+}
+
+.public-card-intro-backdrop.is-closing .public-card-intro-title,
+.public-card-intro-backdrop.is-closing .public-card-intro-actions,
+.public-card-intro-backdrop.is-closing .public-card-intro-close,
+.public-card-intro-backdrop.is-handoff .public-card-intro-title,
+.public-card-intro-backdrop.is-handoff .public-card-intro-actions,
+.public-card-intro-backdrop.is-handoff .public-card-intro-close {
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.3, 0, 1, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-card-intro-backdrop.is-closing,
+  .public-card-intro-backdrop.is-handoff {
+    transition: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .public-card-intro-close {
+    right: 4px;
+    top: -40px;
+  }
+
+  .public-card-intro-title {
+    font-size: 20px;
+  }
+}
+
+.site-footer {
+  background: var(--content-background);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
+  width: 100%;
+}
+
+/* A deterministic two-column to one-column switch. Wrapping a flex row left
+   the meta block stranded and right-aligned at middle widths. */
+.site-footer-inner {
+  align-items: start;
+  display: grid;
+  gap: 24px 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-inline: auto;
+  padding: 32px max(24px, calc((100vw - 1180px) / 2));
+  width: 100%;
+}
+
+.site-footer-about {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+  min-width: 0;
+}
+
+.site-footer-about p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+  margin: 0;
+}
+
+/* The extra gap belongs to the brand alone. Raising the container gap would
+   also split the two paragraphs, which read as one block. Scoped past
+   `.site-footer-about p` so the shared margin reset does not win. */
+.site-footer-about .site-footer-brand {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.site-footer-privacy {
+  color: var(--text-tertiary);
+}
+
+.site-footer-meta {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.site-footer-links {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.site-footer-links a {
+  align-items: center;
+  color: var(--text-secondary);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.site-footer-links a:hover,
+.site-footer-links a:focus-visible {
+  color: var(--text-primary);
+}
+
+.site-footer-copyright {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .site-footer-inner {
+    gap: 20px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-footer-meta {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .site-footer-inner {
+    padding: 28px 20px;
   }
 }

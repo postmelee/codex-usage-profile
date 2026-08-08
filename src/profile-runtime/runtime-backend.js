@@ -4,7 +4,8 @@ import {
 } from "../profile-backend/index.js";
 import {
   CARD_RENDERER_VERSION,
-  renderProfileCardPng
+  renderProfileCardPng,
+  renderProfileSocialCardPng
 } from "../profile-card/renderer.js";
 import { createMemoryProfileMediaStore } from "../profile-media/index.js";
 import {
@@ -39,6 +40,7 @@ export function createProfileRuntimeBackendHandler(options = {}) {
     publicBaseUrl: config.publicBaseUrl,
     secureCookies: config.secureCookies,
     profileCardRenderPng: renderProfileCardPng,
+    profileCardRenderSocialPng: renderProfileSocialCardPng,
     profileCardRendererVersion: CARD_RENDERER_VERSION,
     ...backendOptions
   });

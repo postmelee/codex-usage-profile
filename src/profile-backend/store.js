@@ -147,6 +147,28 @@ export function createMemoryProfileBackendStore(initialState = {}) {
       return id ? clone(ownersById.get(id)) : null;
     },
 
+    getPublicProfileSummaryByHandle(handle) {
+      const ownerId = ownerIdByHandle.get(handle);
+      const owner = ownerId ? ownersById.get(ownerId) : null;
+      const usage = ownerId ? latestUsagesByOwnerId.get(ownerId) : null;
+      if (
+        !owner ||
+        owner.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        !usage ||
+        usage.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        usage.handle !== owner.handle
+      ) {
+        return null;
+      }
+
+      return {
+        cardLocale: owner.cardLocale,
+        handle: owner.handle,
+        ownerUpdatedAt: owner.updatedAt ?? null,
+        uploadedAt: usage.uploadedAt
+      };
+    },
+
     listOwners() {
       return Array.from(ownersById.values(), clone);
     },

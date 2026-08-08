@@ -44,12 +44,19 @@ export function isApiRoutePath(pathname, apiPrefix = DEFAULT_API_PREFIX) {
 }
 
 export function isProfileBackendRoutePath(pathname, apiPrefix = DEFAULT_API_PREFIX) {
-  return isApiRoutePath(pathname, apiPrefix) || isPublicCardRoutePath(pathname);
+  return isApiRoutePath(pathname, apiPrefix) ||
+    isPublicCardRoutePath(pathname) ||
+    isPublicSocialCardRoutePath(pathname);
 }
 
 export function isPublicCardRoutePath(pathname) {
   const normalizedPathname = requirePathname(pathname);
   return /^\/u\/[^/]+\/card\.png$/.test(normalizedPathname);
+}
+
+export function isPublicSocialCardRoutePath(pathname) {
+  const normalizedPathname = requirePathname(pathname);
+  return /^\/u\/[^/]+\/social\.png$/.test(normalizedPathname);
 }
 
 export function normalizeApiPrefix(value = DEFAULT_API_PREFIX) {

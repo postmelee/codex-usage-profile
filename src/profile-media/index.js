@@ -16,6 +16,7 @@ export {
   createProfileMediaObjectKeys,
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
+  createProfileMediaSocialKey,
   createProfileMediaStableKey,
   createProfileMediaStoreError,
   getProfileMediaThemeRepresentations,
@@ -23,7 +24,9 @@ export {
   normalizeProfileMediaLocale,
   normalizeProfileMediaTheme,
   normalizeProfileMediaPublicationInput,
-  normalizeProfileMediaRevisionRecord
+  normalizeProfileMediaRevisionRecord,
+  normalizeProfileMediaSocialRecord,
+  supportsProfileMediaSocialCard
 } from "./media-store-contract.js";
 
 export {
@@ -46,6 +49,7 @@ export {
   DEFAULT_PROFILE_MEDIA_RETENTION_DAYS,
   PROFILE_MEDIA_REVISION_PREFIX,
   PROFILE_MEDIA_STABLE_PREFIX,
+  isProfileMediaSocialKey,
   isProfileMediaStableKey,
   parseProfileMediaRevisionObject,
   selectProfileMediaCleanupCandidates
