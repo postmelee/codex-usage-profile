@@ -35,10 +35,13 @@ Task #51 Stage 6의 repository HEAD 차이는 README와 운영 문서·보고서
 deployable source가 바뀌지 않았으므로 새 saved version을 만들지 않고 검증된
 version 7을 유지했다.
 
-Task #74 deploy candidate는 owner `card_style`·`card_locale` additive migration과
-media contract v4를 포함한다. 이 candidate는 local artifact 검증까지만 완료한 뒤
-별도 Gate에서 owner-only saved version으로 배포한다. 이 문서의 current production
-값은 그 Gate가 완료될 때까지 version 7 baseline을 계속 뜻한다.
+현재 `devel`의 누적 deploy candidate는 Task #74의 owner
+`card_style`·`card_locale` additive migration과 media contract v4 위에 Task #78의
+`/u/{handle}` Open Graph document, 2400x1260 `social.png`, Share Studio와 structured
+store contract v3 public summary projection을 포함한다. 이 누적 candidate는
+local·PR 검증까지만 완료했으며 실제 Sites owner-only/public smoke는 아직 수행하지
+않았다. 별도 Gate에서 같은 commit을 owner-only saved version으로 배포해 검증하기
+전까지 이 문서의 current production 값은 version 7 baseline을 계속 뜻한다.
 
 ## 요청과 신뢰 경계
 
@@ -87,6 +90,11 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 [`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
+이 contract v3 projection과 `/u/{handle}` document read path는 Task #78 누적 후보의
+local·PR 검증 상태다. current production version 7의 공개 HTML은
+`/?profile={handle}` compatibility route를 사용하며, 후보의 production D1 query와
+cache 동작은 owner-only/public smoke 전에는 hosted 검증 완료로 간주하지 않는다.
+
 canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1/)의 D1 구현이다. schema와 ordered migration은 [`db/migrations/`](../db/migrations/)에 있고 Sites artifact의 `.openai/drizzle/`에 package된다. D1 adapter는 prepared statement, conditional update와 batch를 사용하며 process memory lock으로 원자성을 보완하지 않는다.
 
 | 연산 | 직렬화 키 | 필수 결과 |
@@ -110,6 +118,10 @@ fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/pos
 
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
+아래 media contract v4 theme·social 항목은 Task #74·#78 누적 후보 기준이다.
+current production version 7은 기존 stable README card 계약을 유지하며 후보 배포
+전에는 `social.png`나 light theme가 production에 존재한다고 가정하지 않는다.
+
 - contract version: `4` (`3`은 query 없는 dark legacy reader만 지원)
 - dark immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
 - light immutable revision: `cards/v2/owners/{ownerId}/revisions/light/{locale}/{revision}.png`
@@ -129,6 +141,13 @@ revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted applicatio
 canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-binding/)의 native `R2Bucket` 구현이다. `putRevision`은 create-only conditional write를 사용한다. Publish는 dark/light × en/ko 네 immutable revision을 검증하고 light stable을 stage한 뒤 dark stable authority를 마지막 CAS commit point로 materialize한다. 같은 revision과 bytes의 재시도는 idempotent이고 다른 bytes/metadata는 conflict다.
 
 `GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. dark는 query 없는 legacy 경로와 `theme=dark`, light는 `theme=light`로 선택한다. light 응답은 dark authority가 가리키는 publication id·revision과 light stable metadata/body가 모두 일치할 때만 제공한다. stable publication/theme/locale revision이 없거나 stable state가 tombstone이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+
+누적 후보의 `GET|HEAD /u/{handle}/social.png`는 handle당 하나인 2400x1260 stable
+object를 제공한다. `If-None-Match`가 application ETag와 일치하면 object body를
+읽지 않고 `304`를 반환한다. dark authority와 social publication이 일치하지
+않거나 private/unpublished/missing이면 존재 여부를 숨기는 `404`, provider
+장애이면 generic `503 media_unavailable`을 반환한다. 이 route의 local·PR contract
+검증은 완료됐지만 production R2/HTTP smoke는 아직 수행하지 않았다.
 
 stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
@@ -246,7 +265,7 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
-3. Task #74 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
+3. Task #74·#78 누적 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
 5. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
 6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
@@ -355,7 +374,7 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- public npm `codex-usage-profile@0.1.0` provenance/integrity와 production 기본
+- public npm `codex-usage-profile@0.1.1` provenance/integrity와 production 기본
   origin 소비자 검증 유지
 - Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
   완료 상태 유지
