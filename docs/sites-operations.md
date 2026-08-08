@@ -6,8 +6,11 @@
 fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
 범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
-public HTML profile은 `/?profile={handle}`, stable README card는
-`/u/{handle}/card.png`를 사용한다.
+현재 saved version 7의 public HTML profile은 `/?profile={handle}`, stable
+README card는 `/u/{handle}/card.png`를 사용한다. Task #74·#78 누적 배포
+후보의 canonical share/OG 문서는 `/u/{handle}`, social preview는
+`/u/{handle}/social.png`다. 이 두 후보 surface는 owner-only와 public smoke가
+완료되기 전까지 production link로 안내하지 않는다.
 
 ## 현재 production baseline
 
@@ -99,8 +102,9 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
-   Task #74 candidate는 D1 migration `1..5`와 `0004_card_style.sql`,
-   `0005_card_locale.sql`이 누락·중복 없이 manifest 순서로 포함돼야 한다.
+   현재 `devel`의 Task #74·#78 누적 candidate는 D1 migration `1..5`와
+   `0004_card_style.sql`, `0005_card_locale.sql`이 누락·중복 없이 manifest
+   순서로 포함돼야 한다.
 4. temporary `PROFILE_MAINTENANCE_MODE=enabled`와 새 operator secret을
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
@@ -125,8 +129,13 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `200`인지 확인한다. 이 전환이나 확인이 실패하면 다음 단계로 진행하지
    않는다.
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
-   private preview, 카드 dark/light·en/ko 저장, 네 public PNG의 GET/HEAD/304,
-   query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다.
+   private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
+   query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
+   User-Agent로 `/u/{handle}` HTML의 canonical·`og:url`·`og:image`와
+   Twitter Card metadata를 확인하고, `/u/{handle}/social.png`의
+   GET/HEAD/If-None-Match 304와 2400x1260 응답을 검증한다. private·missing
+   handle은 동일한 기본 OG/unavailable HTML을 반환하고 README/social PNG는
+   같은 404로 닫혀 존재 여부를 드러내지 않아야 한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -213,8 +222,12 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
-   query 없는 dark와 dark/light × en/ko 네 PNG의 `GET|HEAD|304`, 설정 저장 뒤
-   `selectedPublicCardUrl` 전환, unpublish 전 조합 404를 순서대로 확인한다.
+   query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
+   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/u/{handle}` HTML의
+   canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
+   `GET|HEAD|304`·2400x1260을 확인한다. private 및 missing 상태에서 HTML이 같은
+   기본 metadata/unavailable 화면으로 닫히고 social PNG가 같은 404인지 검증한
+   뒤 unpublish 후 모든 README/social PNG 조합 404를 확인한다.
 4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
    owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
    Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가
@@ -223,9 +236,12 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. canonical public HTML 확인은
-`/?profile={handle}`을 사용하며 extension 없는 `/u/{handle}` deep link를
-production link로 배포하지 않는다.
+계속하지 않는다. 현재 saved version 7 baseline의 public HTML 확인은
+`/?profile={handle}`을 사용한다. Task #74·#78 누적 후보가 위 owner-only와 public
+smoke를 모두 통과한 뒤에는 extension 없는 `/u/{handle}`을 canonical production
+share link로 승격하고, `/?profile={handle}`은 SPA compatibility 진입점으로만
+유지한다. 해당 saved version 배포와 smoke 전에는 `/u/{handle}`을 production
+link로 안내하지 않는다.
 
 ## 로그와 quota stop
 
