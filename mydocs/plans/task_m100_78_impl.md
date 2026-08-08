@@ -320,6 +320,47 @@ git diff --check
 Task #78 Stage 6: Share Studio 액션 재구성과 공유 문서 갱신
 ```
 
+## Stage 7 — PR 리뷰 보정
+
+PR #80 리뷰에서 확인한 정합성·캐시·조회 비용 4건을 보정한다. 작업지시자가 같은 스레드에서 리뷰 코멘트를 먼저 등록한 뒤 보정과 보정 코멘트까지 진행하도록 승인했다.
+
+### 산출물
+
+- `src/profile-card/service-core.js`, `src/profile-media/publication-service.js` — 카드 설정 CAS 성공 이후에만 stable social 이미지를 조건부 commit
+- `src/profile-media/media-store-contract.js`, `r2-binding/store.js`, `s3/store.js` — social storage ETag와 조건부 read/write 계약
+- `src/profile-backend/http.js` — `If-None-Match`를 media store로 전달하고 304 본문 검증 생략
+- `src/profile-runtime/open-graph.js`, `public-profile-resolver.js` — owner·usage 복합 밀리초 이미지 리비전
+- memory/file/D1/Postgres structured store — `getPublicProfileSummaryByHandle` projection, contract v3
+- `docs/production-hosting.md` — contract v3와 공개 프로필 단일 JOIN 조회 계약 현행화
+- 관련 단위·통합 테스트와 `mydocs/working/task_m100_78_stage7.md`
+
+### 변경 내용
+
+1. social bytes는 설정 저장 전에 렌더링하되 stable object를 쓰지 않는다. owner 설정 CAS에 성공한 요청만 준비 시점의 storage ETag를 조건으로 commit한다. 경합 중 storage ETag가 바뀌면 owner와 usage revision을 다시 확인하고 현재 요청이 여전히 최신일 때만 bounded retry한다.
+2. `og:image?v=`는 owner `updatedAt`과 usage `uploadedAt` 중 최신 시각의 밀리초 epoch를 사용한다. 같은 초 안의 연속 설정 저장도 URL이 달라진다.
+3. social conditional GET은 HEAD/metadata로 application ETag를 먼저 비교하고, 일치하면 R2/S3 body를 읽지 않은 채 304를 반환한다.
+4. 공개 문서 resolver는 provider-neutral projection 메서드 하나만 호출한다. D1과 Postgres는 owner/latest usage를 한 JOIN statement로 읽는다.
+
+### 검증
+
+```bash
+npm test
+npm run test:e2e
+npm run build
+git diff --check
+```
+
+- DB CAS 강제 실패 뒤 social ETag/body와 owner 설정이 모두 이전 값인지 확인
+- 동시에 같은 설정을 저장한 두 요청 중 승자 한 요청만 social PUT을 수행하는지 확인
+- R2/S3 조건부 hit가 HEAD 한 번으로 끝나고 GET을 호출하지 않는지 확인
+- D1/Postgres projection이 JOIN statement 한 번만 실행하는지 확인
+
+### 커밋
+
+```text
+Task #78 Stage 7: PR 리뷰 정합성·캐시·조회 비용 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -338,15 +379,16 @@ Task #78 Stage 6: Share Studio 액션 재구성과 공유 문서 갱신
 - Stage 3은 Stage 1의 문서 핸들러와 Stage 2의 `social.png` 경로가 모두 있어야 실제 응답을 검증할 수 있다.
 - Stage 5.2는 Stage 4의 `MarketingCardPreview` 교체와 Stage 5.1의 훅 추출이 끝난 뒤 진행한다.
 - Stage 6의 실플랫폼 확인은 배포 이후에만 가능하므로, 배포 전에는 크롤러 UA 응답 확인까지만 수행한다.
+- Stage 7은 PR 리뷰 코멘트 등록 뒤 진행하며, 보정 커밋 push와 새 CI 통과 후 보정 코멘트를 등록한다.
 
 ## 위험과 대응
 
 - **Share Studio 회귀**: Stage 5.1을 기능 변경 없는 추출로 한정하고, 홈과 `/profile` 동작 확인을 통과한 뒤에만 5.2로 넘어간다.
 - **세 런타임 불일치**: 태그 생성과 주입을 공통 모듈에 두고 런타임별로는 `loadIndexHtml`만 다르게 주입한다. Stage 3에서 세 응답을 대조한다.
 - **라우팅 경계 훼손**: `isProfileBackendRoutePath`는 `looksLikeStaticAsset`과 공유되므로 수정하지 않는다. Stage 1과 Stage 3 검증에 해당 파일 무변경 확인을 포함한다.
-- **D1 hot path**: OG HTML은 공개 카드 PNG와 달리 D1을 탄다. 조회를 단일 인덱스 읽기로 제한하고 짧은 edge 캐시를 둔다.
+- **D1 hot path**: OG HTML은 공개 카드 PNG와 달리 D1을 탄다. `getPublicProfileSummaryByHandle` projection이 owner/latest usage를 한 JOIN statement로 읽고 짧은 edge 캐시를 둔다.
 - **owner-only 노출**: 공개를 닫은 상태에서 OG 썸네일이 노출되지 않도록 Stage 3에서 차단 목록을 확장하고 모드별 응답을 검증한다.
-- **소셜 이미지 갱신 누락**: 갱신을 기존 `publishOwnerCard` 경로에 편입해 publish·설정 저장·refresh가 항상 같은 경로를 지나게 한다.
+- **소셜 이미지 갱신 누락**: 설정 저장은 social 준비 → owner CAS → storage ETag 조건부 commit 순서로 고정한다. 실패·패배 요청은 stable social object를 쓰지 않는다.
 - **미디어 키 하위 호환**: 기존 `card` format 키를 먼저 고정한 뒤 `social` format을 추가한다. cleanup 판정에서 기존 객체가 orphan으로 오인되지 않는지 dry-run으로 확인한다.
 - **handle 열거 오라클**: Stage 4 검증에 비공개와 미존재 응답 동일성 대조를 포함한다.
 - **플랫폼 캐시**: Stage 6 실측은 신규 공유 또는 캐시 초기화 이후에 수행한다.

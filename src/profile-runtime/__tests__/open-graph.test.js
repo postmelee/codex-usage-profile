@@ -33,7 +33,7 @@ function createProfile(overrides = {}) {
   return {
     cardLocale: "ko",
     handle: "postmelee",
-    uploadedAt: UPLOADED_AT,
+    imageRevisionAt: UPLOADED_AT,
     ...overrides
   };
 }
@@ -57,7 +57,7 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   assert.equal(readTag(document, "og:site_name"), PROFILE_OPEN_GRAPH_SITE_NAME);
   assert.equal(
     readTag(document, "og:image"),
-    `${ORIGIN}/u/postmelee/social.png?v=1781168700`
+    `${ORIGIN}/u/postmelee/social.png?v=1781168700000`
   );
   assert.equal(
     readTag(document, "og:image:width"),
@@ -175,6 +175,23 @@ test("keeps the image url independent of the requested locale", () => {
   assert.match(readTag(korean, "og:image"), /social\.png\?v=\d+$/);
 });
 
+test("changes the image URL for a millisecond settings revision", () => {
+  const before = buildProfileOpenGraphDocument({
+    handle: "postmelee",
+    origin: ORIGIN,
+    profile: createProfile({ imageRevisionAt: UPLOADED_AT })
+  });
+  const after = buildProfileOpenGraphDocument({
+    handle: "postmelee",
+    origin: ORIGIN,
+    profile: createProfile({
+      imageRevisionAt: "2026-06-11T09:05:00.001Z"
+    })
+  });
+
+  assert.notEqual(readTag(after, "og:image"), readTag(before, "og:image"));
+});
+
 test("escapes html special characters in rendered tags", () => {
   const document = buildProfileOpenGraphDocument({
     handle: "a\"b&c",
@@ -243,7 +260,7 @@ test("builds urls for handles that need encoding", () => {
   );
   assert.equal(
     buildSocialImageUrl(ORIGIN, "foo bar", UPLOADED_AT),
-    `${ORIGIN}/u/foo%20bar/social.png?v=1781168700`
+    `${ORIGIN}/u/foo%20bar/social.png?v=1781168700000`
   );
 });
 
@@ -254,8 +271,12 @@ test("rejects unsupported handles and origins", () => {
   assert.throws(() => buildPublicProfileUrl("ftp://x.test", "a"), TypeError);
 });
 
-test("converts uploadedAt into a second precision revision token", () => {
-  assert.equal(toRevisionToken(UPLOADED_AT), 1781168700);
+test("converts a revision date into a millisecond precision token", () => {
+  assert.equal(toRevisionToken(UPLOADED_AT), 1781168700000);
+  assert.notEqual(
+    toRevisionToken("2026-06-11T09:05:00.001Z"),
+    toRevisionToken(UPLOADED_AT)
+  );
   assert.throws(() => toRevisionToken("not-a-date"), TypeError);
 });
 

@@ -7,12 +7,14 @@ import {
 } from "../public-profile-resolver.js";
 
 const UPLOADED_AT = "2026-06-11T09:05:00.000Z";
+const OWNER_UPDATED_AT = "2026-06-11T09:06:00.001Z";
 
 function createStore(overrides = {}) {
   const owner = {
     cardLocale: "ko",
     handle: "postmelee",
     id: "owner_1",
+    updatedAt: OWNER_UPDATED_AT,
     visibility: PROFILE_VISIBILITY.PUBLIC,
     ...overrides.owner
   };
@@ -24,24 +26,42 @@ function createStore(overrides = {}) {
     ...overrides.usage
   };
 
+  let calls = 0;
   return {
-    async getOwnerByHandle(handle) {
-      return handle === owner.handle ? owner : null;
+    get calls() {
+      return calls;
     },
-    async getLatestUsageByOwnerId(ownerId) {
-      return ownerId === owner.id ? usage : null;
+    async getPublicProfileSummaryByHandle(handle) {
+      calls += 1;
+      if (
+        handle !== owner.handle ||
+        owner.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        !usage ||
+        usage.visibility !== PROFILE_VISIBILITY.PUBLIC ||
+        usage.handle !== owner.handle
+      ) {
+        return null;
+      }
+      return {
+        cardLocale: owner.cardLocale,
+        handle: owner.handle,
+        ownerUpdatedAt: owner.updatedAt,
+        uploadedAt: usage.uploadedAt
+      };
     }
   };
 }
 
-test("resolves the minimal summary the document handler needs", async () => {
-  const resolve = createStorePublicProfileResolver(createStore());
+test("resolves the minimal summary with one store projection call", async () => {
+  const store = createStore();
+  const resolve = createStorePublicProfileResolver(store);
 
   assert.deepEqual(await resolve("postmelee"), {
     cardLocale: "ko",
     handle: "postmelee",
-    uploadedAt: UPLOADED_AT
+    imageRevisionAt: OWNER_UPDATED_AT
   });
+  assert.equal(store.calls, 1);
 });
 
 test("returns null for unknown, private, and incoherent profiles", async () => {

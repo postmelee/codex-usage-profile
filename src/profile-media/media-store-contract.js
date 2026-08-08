@@ -276,13 +276,29 @@ export function createMemoryProfileMediaStore() {
       const handle = requireProfileMediaHandle(options.handle);
       const record = socialByHandle.get(handle);
       if (!record) return null;
-      return cloneSocialRecord(record, options.includeBody !== false);
+      const notModified = matchesProfileMediaIfNoneMatch(
+        options.ifNoneMatch,
+        record.etag
+      );
+      const result = cloneSocialRecord(
+        record,
+        options.includeBody !== false && !notModified
+      );
+      result.notModified = notModified;
+      if (notModified) result.body = null;
+      return result;
     },
 
     async putSocialCard(options = {}) {
       const record = normalizeProfileMediaSocialRecord(options);
-      socialByHandle.set(record.handle, cloneSocialRecord(record, true));
-      return cloneSocialRecord(record, false);
+      const previous = socialByHandle.get(record.handle) ?? null;
+      assertExpectedStorageEtag(previous, options);
+      const stored = {
+        ...record,
+        storageEtag: createMemoryStorageEtag(nextStorageRevision++)
+      };
+      socialByHandle.set(record.handle, cloneSocialRecord(stored, true));
+      return cloneSocialRecord(stored, false);
     },
 
     async deleteSocialCard(options = {}) {

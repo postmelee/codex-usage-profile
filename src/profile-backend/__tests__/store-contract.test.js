@@ -21,7 +21,7 @@ test("memory and file stores satisfy the executable structured-store surface", (
   const filePath = join(mkdtempSync(join(tmpdir(), "cup-contract-")), "store.json");
   const fileStore = createFileProfileBackendStore({ filePath });
 
-  assert.equal(PROFILE_BACKEND_STORE_CONTRACT_VERSION, 2);
+  assert.equal(PROFILE_BACKEND_STORE_CONTRACT_VERSION, 3);
   assert.equal(typeof memoryStore.atomic.completeOAuthCallback, "function");
   assert.equal(typeof fileStore.atomic.submitAccountUsage, "function");
   assert.equal(assertProfileBackendStoreContract(memoryStore), memoryStore);

@@ -97,9 +97,10 @@ export function createS3ProfileMediaStore(options = {}) {
       const handle = normalizeHandle(getOptions.handle);
       const socialKey = createProfileMediaSocialKey({ handle });
       const includeBody = getOptions.includeBody !== false;
+      const metadataFirst = typeof getOptions.ifNoneMatch === "string";
 
       try {
-        const response = includeBody
+        let response = includeBody && !metadataFirst
           ? await send(new GetObjectCommand({
             Bucket: bucket,
             Key: socialKey
@@ -108,11 +109,41 @@ export function createS3ProfileMediaStore(options = {}) {
             Bucket: bucket,
             Key: socialKey
           }), "read social media");
-        return socialRecordFromResponse(response, {
-          body: includeBody ? await readSdkBody(response.Body) : null,
+        let record = socialRecordFromResponse(response, {
+          body: includeBody && !metadataFirst
+            ? await readSdkBody(response.Body)
+            : null,
           handle,
           socialKey
         });
+        let notModified = matchesProfileMediaIfNoneMatch(
+          getOptions.ifNoneMatch,
+          record.etag
+        );
+        if (notModified) return { ...record, body: null, notModified: true };
+        if (!includeBody) return { ...record, notModified: false };
+
+        if (metadataFirst) {
+          response = await send(new GetObjectCommand({
+            Bucket: bucket,
+            IfMatch: record.storageEtag,
+            Key: socialKey
+          }), "read social media");
+          record = socialRecordFromResponse(response, {
+            body: await readSdkBody(response.Body),
+            handle,
+            socialKey
+          });
+          notModified = matchesProfileMediaIfNoneMatch(
+            getOptions.ifNoneMatch,
+            record.etag
+          );
+        }
+        return {
+          ...record,
+          body: notModified ? null : record.body,
+          notModified
+        };
       } catch (error) {
         if (error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND) return null;
         throw error;
@@ -128,17 +159,22 @@ export function createS3ProfileMediaStore(options = {}) {
         );
       }
 
-      await send(new PutObjectCommand({
+      const conditionalHeaders = socialConditionalHeaders(putOptions);
+      const response = await send(new PutObjectCommand({
         Body: record.body,
         Bucket: bucket,
         CacheControl: record.cacheControl,
         ContentType: record.contentType,
+        ...conditionalHeaders,
         Key: record.socialKey,
         Metadata: socialMetadata(record)
       }), "write social media");
 
       const { body, ...metadata } = record;
-      return metadata;
+      return {
+        ...metadata,
+        storageEtag: requireStorageEtag(response.ETag)
+      };
     },
 
     async deleteSocialCard(deleteOptions = {}) {
@@ -527,7 +563,8 @@ function socialRecordFromResponse(response, expected) {
     presentationDigest: metadata[METADATA_PRESENTATION_DIGEST],
     publicationId: metadata[METADATA_PUBLICATION_ID],
     revision,
-    socialKey: expected.socialKey
+    socialKey: expected.socialKey,
+    storageEtag: requireStorageEtag(response.ETag)
   };
   if (expected.body) record.body = expected.body;
   return record;
@@ -823,6 +860,17 @@ function assertExpectedStorageEtag(stable, options) {
       "stable media storage revision changed"
     );
   }
+}
+
+function socialConditionalHeaders(options) {
+  if (!Object.hasOwn(options, "expectedStorageEtag")) return {};
+  const expected = options.expectedStorageEtag;
+  if (expected !== null && (typeof expected !== "string" || expected === "")) {
+    throw new TypeError("expectedStorageEtag must be a non-empty string or null");
+  }
+  return expected === null
+    ? { IfNoneMatch: "*" }
+    : { IfMatch: expected };
 }
 
 function assertResponseMediaHeaders(response) {

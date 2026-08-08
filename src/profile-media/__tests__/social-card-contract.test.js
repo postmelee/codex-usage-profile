@@ -98,6 +98,7 @@ test("memory store keeps exactly one social object per handle", async () => {
 
   assert.equal(Buffer.from(second.body).equals(nextBody), true);
   assert.notEqual(second.etag, first.etag);
+  assert.notEqual(second.storageEtag, first.storageEtag);
 });
 
 test("memory store can omit the social body for metadata reads", async () => {
@@ -111,6 +112,32 @@ test("memory store can omit the social body for metadata reads", async () => {
 
   assert.equal(metadata.body, undefined);
   assert.equal(typeof metadata.etag, "string");
+});
+
+test("memory store handles conditional reads and writes without stale bodies", async () => {
+  const store = createMemoryProfileMediaStore();
+  const first = await store.putSocialCard(createInput());
+
+  const notModified = await store.getSocialCard({
+    handle: HANDLE,
+    ifNoneMatch: first.etag
+  });
+  assert.equal(notModified.notModified, true);
+  assert.equal(notModified.body, null);
+
+  const nextBody = Buffer.from("conditional-update");
+  await assert.rejects(
+    () => store.putSocialCard(createInput({
+      body: nextBody,
+      expectedStorageEtag: "stale"
+    })),
+    (error) => error.code === "conflict"
+  );
+  const updated = await store.putSocialCard(createInput({
+    body: nextBody,
+    expectedStorageEtag: first.storageEtag
+  }));
+  assert.notEqual(updated.storageEtag, first.storageEtag);
 });
 
 test("memory store deletes the social object explicitly and on unpublish", async () => {

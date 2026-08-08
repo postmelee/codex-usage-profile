@@ -8,7 +8,7 @@ import {
   usageFixture
 } from "./_d1-test-fixture.js";
 
-test("D1 store satisfies contract v2 without a generic transaction", async (t) => {
+test("D1 store satisfies contract v3 without a generic transaction", async (t) => {
   const fixture = await createD1TestFixture();
   t.after(() => fixture.dispose());
   await fixture.migrate();
@@ -17,6 +17,37 @@ test("D1 store satisfies contract v2 without a generic transaction", async (t) =
     hasAtomic: true,
     hasTransaction: false
   });
+});
+
+test("D1 reads the public profile document projection with one joined query", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  const owner = ownerFixture({
+    visibility: "public",
+    cardLocale: "ko",
+    updatedAt: "2026-07-23T00:02:00.001Z"
+  });
+  const usage = usageFixture({
+    visibility: "public",
+    uploadedAt: "2026-07-23T00:01:00.000Z"
+  });
+  await fixture.rpc("saveOwner", owner);
+  await fixture.rpc("saveLatestUsage", usage);
+
+  assert.deepEqual(
+    await fixture.rpc("getPublicProfileSummaryByHandle", owner.handle),
+    {
+      cardLocale: "ko",
+      handle: owner.handle,
+      ownerUpdatedAt: owner.updatedAt,
+      uploadedAt: usage.uploadedAt
+    }
+  );
+  assert.equal(
+    await fixture.rpc("getPublicProfileSummaryByHandle", "missing"),
+    null
+  );
 });
 
 test("D1 store readiness rejects missing versions but permits higher versions", async (t) => {

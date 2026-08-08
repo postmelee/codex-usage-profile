@@ -1,32 +1,34 @@
-import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeCardLocale } from "../profile-card/presentation.js";
 
 export function createStorePublicProfileResolver(store) {
   if (
     !store ||
-    typeof store.getOwnerByHandle !== "function" ||
-    typeof store.getLatestUsageByOwnerId !== "function"
+    typeof store.getPublicProfileSummaryByHandle !== "function"
   ) {
-    throw new TypeError("store must expose public profile lookups");
+    throw new TypeError("store must expose a public profile summary lookup");
   }
 
   return async function resolvePublicProfileSummary(handle) {
-    const owner = await store.getOwnerByHandle(handle);
-    if (!owner || owner.visibility !== PROFILE_VISIBILITY.PUBLIC) return null;
-
-    const usageRecord = await store.getLatestUsageByOwnerId(owner.id);
-    if (
-      !usageRecord ||
-      usageRecord.visibility !== PROFILE_VISIBILITY.PUBLIC ||
-      usageRecord.handle !== owner.handle
-    ) {
-      return null;
-    }
+    const summary = await store.getPublicProfileSummaryByHandle(handle);
+    if (!summary) return null;
 
     return {
-      cardLocale: normalizeCardLocale(owner.cardLocale),
-      handle: owner.handle,
-      uploadedAt: usageRecord.uploadedAt
+      cardLocale: normalizeCardLocale(summary.cardLocale),
+      handle: summary.handle,
+      imageRevisionAt: latestRevisionAt(
+        summary.ownerUpdatedAt,
+        summary.uploadedAt
+      )
     };
   };
+}
+
+function latestRevisionAt(...values) {
+  const times = values
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => new Date(value).getTime());
+  if (times.length === 0 || times.some((time) => !Number.isFinite(time))) {
+    throw new TypeError("public profile summary has an invalid revision date");
+  }
+  return new Date(Math.max(...times)).toISOString();
 }

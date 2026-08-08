@@ -101,14 +101,21 @@ export function createProfilePublicationService(options = {}) {
           presentationDigest
         );
       if (publicationMatches) {
-        await writeSocialCard({
+        const socialOptions = {
           cardLocale: publishOptions.cardLocale ?? owner.cardLocale,
           cardStyle,
           createdAt: toIsoString(now()),
           owner,
           presentationDigest,
-          publicationId: current.publication.publicationId
-        });
+          publicationId: current.publication.publicationId,
+          usageRecord
+        };
+        const socialPreparation = publishOptions.prepareOnly === true
+          ? await prepareSocialCard(socialOptions)
+          : null;
+        if (publishOptions.prepareOnly !== true) {
+          await writeSocialCard(socialOptions);
+        }
         return {
           owner,
           usageRecord,
@@ -117,7 +124,8 @@ export function createProfilePublicationService(options = {}) {
           operation: publishOptions.onlyIfAlreadyPublic === true
             ? "refresh"
             : "publish",
-          publication: current.publication
+          publication: current.publication,
+          socialPreparation
         };
       }
 
@@ -147,14 +155,21 @@ export function createProfilePublicationService(options = {}) {
 
       const publication = await mediaStore.publishRevision(publicationInput);
       mediaMutation.writtenStorageEtag = publication.storageEtag;
-      await writeSocialCard({
+      const socialOptions = {
         cardLocale: publishOptions.cardLocale ?? owner.cardLocale,
         cardStyle,
         createdAt,
         owner,
         presentationDigest,
-        publicationId: publicationInput.publicationId
-      });
+        publicationId: publicationInput.publicationId,
+        usageRecord
+      };
+      const socialPreparation = publishOptions.prepareOnly === true
+        ? await prepareSocialCard(socialOptions)
+        : null;
+      if (publishOptions.prepareOnly !== true) {
+        await writeSocialCard(socialOptions);
+      }
       if (publishOptions.prepareOnly === true) {
         return {
           owner,
@@ -163,7 +178,8 @@ export function createProfilePublicationService(options = {}) {
           idempotent: false,
           operation: "prepare",
           publication,
-          mediaMutation
+          mediaMutation,
+          socialPreparation
         };
       }
       const profile = await updateStructuredVisibility(
@@ -192,7 +208,11 @@ export function createProfilePublicationService(options = {}) {
       throw new TypeError("owner does not match ownerId");
     }
     if (owner.visibility !== PROFILE_VISIBILITY.PUBLIC) {
-      return { idempotent: true, rollback: async () => "not_needed" };
+      return {
+        commit: async () => "not_needed",
+        idempotent: true,
+        rollback: async () => "not_needed"
+      };
     }
 
     const result = await publishOwnerCard({
@@ -204,6 +224,12 @@ export function createProfilePublicationService(options = {}) {
     });
     return {
       ...result,
+      commit: result.socialPreparation
+        ? async (commitOptions = {}) => commitPreparedSocialCard(
+          result.socialPreparation,
+          commitOptions.owner
+        )
+        : async () => "not_needed",
       rollback: result.mediaMutation
         ? async () => compensateMediaMutation(result.mediaMutation)
         : async () => "not_needed"
@@ -245,6 +271,12 @@ export function createProfilePublicationService(options = {}) {
   }
 
   async function writeSocialCard(options) {
+    const prepared = await prepareSocialCard(options);
+    if (!prepared) return null;
+    return mediaStore.putSocialCard(prepared.input);
+  }
+
+  async function prepareSocialCard(options) {
     if (
       !supportsProfileMediaSocialCard(mediaStore) ||
       typeof cardService.renderOwnerSocialCard !== "function" ||
@@ -263,17 +295,109 @@ export function createProfilePublicationService(options = {}) {
       theme: staticStyle.theme
     });
 
-    return mediaStore.putSocialCard({
-      body: card.body,
-      contentType: PROFILE_MEDIA_CONTENT_TYPE,
-      createdAt: options.createdAt,
-      etag: card.etag,
+    const current = await mediaStore.getSocialCard({
       handle: options.owner.handle,
-      ownerId: options.owner.id,
-      presentationDigest: options.presentationDigest,
-      publicationId: options.publicationId,
-      revision: card.revision
+      includeBody: false
     });
+    if (current && current.ownerId !== options.owner.id) {
+      throw createProfileMediaStoreError(
+        PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
+        "stable social media handle belongs to another owner"
+      );
+    }
+
+    return {
+      expectedStorageEtag: current?.storageEtag ?? null,
+      input: {
+        body: card.body,
+        contentType: PROFILE_MEDIA_CONTENT_TYPE,
+        createdAt: options.createdAt,
+        etag: card.etag,
+        handle: options.owner.handle,
+        ownerId: options.owner.id,
+        presentationDigest: options.presentationDigest,
+        publicationId: options.publicationId,
+        revision: card.revision
+      },
+      usageUploadedAt: options.usageRecord?.uploadedAt ?? null
+    };
+  }
+
+  async function commitPreparedSocialCard(preparation, committedOwner) {
+    if (!preparation) return "not_needed";
+    if (
+      !committedOwner ||
+      committedOwner.id !== preparation.input.ownerId ||
+      typeof committedOwner.updatedAt !== "string"
+    ) {
+      throw new TypeError("committed owner revision is required");
+    }
+
+    let expectedStorageEtag = preparation.expectedStorageEtag;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!await isPreparedSocialRevisionCurrent(preparation, committedOwner)) {
+        return "superseded";
+      }
+
+      let current;
+      try {
+        current = await mediaStore.getSocialCard({
+          handle: preparation.input.handle,
+          includeBody: false
+        });
+      } catch {
+        throw createProfileMediaUnavailableError({
+          details: { operation: "commit_social_media" }
+        });
+      }
+      if (socialRecordMatches(current, preparation.input)) {
+        return "idempotent";
+      }
+
+      if (attempt > 0) expectedStorageEtag = current?.storageEtag ?? null;
+      try {
+        await mediaStore.putSocialCard({
+          ...preparation.input,
+          expectedStorageEtag
+        });
+      } catch (error) {
+        if (error?.code === PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT) continue;
+        try {
+          const written = await mediaStore.getSocialCard({
+            handle: preparation.input.handle,
+            includeBody: false
+          });
+          if (socialRecordMatches(written, preparation.input)) {
+            return await isPreparedSocialRevisionCurrent(
+              preparation,
+              committedOwner
+            ) ? "succeeded" : "superseded";
+          }
+        } catch {
+          // The generic media-unavailable response below is the safe fallback.
+        }
+        throw createProfileMediaUnavailableError({
+          details: { operation: "commit_social_media" }
+        });
+      }
+
+      return await isPreparedSocialRevisionCurrent(preparation, committedOwner)
+        ? "succeeded"
+        : "superseded";
+    }
+
+    throw createProfileMediaUnavailableError({
+      details: { operation: "commit_social_media", reason: "conflict" }
+    });
+  }
+
+  async function isPreparedSocialRevisionCurrent(preparation, committedOwner) {
+    const [owner, usageRecord] = await Promise.all([
+      requireOwner(store, committedOwner.id),
+      store.getLatestUsageByOwnerId(committedOwner.id)
+    ]);
+    return owner.updatedAt === committedOwner.updatedAt &&
+      (usageRecord?.uploadedAt ?? null) === preparation.usageUploadedAt;
   }
 
   async function removeSocialCard(handle) {
@@ -521,6 +645,17 @@ function publicationMatchesCards(
           representation?.etag === cards[theme][locale].etag;
       })
     )
+  );
+}
+
+function socialRecordMatches(record, input) {
+  return Boolean(
+    record &&
+    record.ownerId === input.ownerId &&
+    record.publicationId === input.publicationId &&
+    record.presentationDigest === input.presentationDigest &&
+    record.revision === input.revision &&
+    record.etag === input.etag
   );
 }
 

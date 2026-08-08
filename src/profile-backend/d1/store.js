@@ -13,7 +13,8 @@ import {
 } from "../errors.js";
 
 import {
-  PROFILE_BACKEND_STORE_SCHEMA_VERSION
+  PROFILE_BACKEND_STORE_SCHEMA_VERSION,
+  PROFILE_VISIBILITY
 } from "../store-values.js";
 import {
   D1_MIGRATION_VERSIONS
@@ -261,6 +262,22 @@ export function createD1ProfileBackendStore(options = {}) {
         "auth_provider = ? AND provider_user_id = ?",
         [authProvider, providerUserId]
       );
+    },
+    async getPublicProfileSummaryByHandle(handle) {
+      const row = await prepare(
+        "SELECT owner.card_locale AS card_locale, owner.handle AS handle, " +
+        "owner.updated_at AS owner_updated_at, usage.uploaded_at AS uploaded_at " +
+        "FROM owners owner JOIN latest_usages usage ON usage.owner_id = owner.id " +
+        "WHERE owner.handle = ? AND owner.visibility = ? " +
+        "AND usage.visibility = ? AND usage.handle = owner.handle LIMIT 1",
+        [handle, PROFILE_VISIBILITY.PUBLIC, PROFILE_VISIBILITY.PUBLIC]
+      ).first();
+      return row ? {
+        cardLocale: normalizeCardLocale(row.card_locale),
+        handle: row.handle,
+        ownerUpdatedAt: row.owner_updated_at ?? null,
+        uploadedAt: row.uploaded_at
+      } : null;
     },
     getSession(id) {
       return getOne(SESSION, "id = ?", [id]);

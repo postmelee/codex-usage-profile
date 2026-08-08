@@ -85,7 +85,7 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 ## Structured Store Contract
 
-[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v2와 production adapter의 다섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다.
+[`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
 canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1/)의 D1 구현이다. schema와 ordered migration은 [`db/migrations/`](../db/migrations/)에 있고 Sites artifact의 `.openai/drizzle/`에 package된다. D1 adapter는 prepared statement, conditional update와 batch를 사용하며 process memory lock으로 원자성을 보완하지 않는다.
 
@@ -96,11 +96,13 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 | CLI login 교환 | `cliLoginChallenge.id` | approved challenge마다 token digest를 정확히 하나 발급 |
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
-| 카드 설정 변경 | `owner.id` | canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고 공개 owner는 필요한 media 변형 준비 뒤 commit |
+| 카드 설정 변경 | `owner.id` | media bytes 준비 뒤 canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고, 성공한 owner revision만 stable social object를 storage ETag 조건부 commit |
 
 부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호한다. 읽기와 목록 API는 owner scope를 우회할 수 없다. shared Account Usage rate limit도 D1 row의 atomic window update를 사용하며 raw token을 key나 record로 저장하지 않는다.
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
+
+`/u/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. `og:image?v=`는 두 시각 중 최신 값을 밀리초 정밀도로 사용하므로 사용량 갱신과 카드 theme·locale 저장이 모두 캐시 키를 바꾼다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
@@ -117,6 +119,8 @@ fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/pos
 - locale: `en`, `ko`; query 부재는 en이다.
 - content type: `image/png`
 - cache policy: `public, no-cache, must-revalidate`
+- social stable object: `cards/v2/public/{handle}/social.png`; 카드 설정 저장은 owner CAS 성공 뒤 storage ETag 조건부 교체
+- social conditional GET: application ETag를 metadata로 먼저 비교하고 일치하면 object body를 읽지 않은 채 304
 - stable state: `publication` 또는 `unpublished` tombstone
 - validation metadata: owner, handle, publication id, presentation digest, format, theme·locale별 immutable key/revision/application ETag, created/published timestamp
 

@@ -88,6 +88,7 @@ export function createProfileCardServiceCore(options = {}) {
         defaultWhenMissing: false
       });
       const usageRecord = await store.getLatestUsageByOwnerId(current.id);
+      const updatedAt = nextOwnerRevisionTimestamp(current.updatedAt, now());
 
       let mediaPreparation = null;
       const presentationChanged = serializeCardStyle(current.cardStyle) !==
@@ -112,13 +113,16 @@ export function createProfileCardServiceCore(options = {}) {
           expectedOwnerUpdatedAt: current.updatedAt ?? null,
           cardLocale,
           cardStyle,
-          updatedAt: nextOwnerRevisionTimestamp(current.updatedAt, now())
+          updatedAt
         });
       } catch (error) {
         if (typeof mediaPreparation?.rollback === "function") {
           await mediaPreparation.rollback();
         }
         throw error;
+      }
+      if (typeof mediaPreparation?.commit === "function") {
+        await mediaPreparation.commit({ owner: result.owner });
       }
       return {
         owner: result.owner,

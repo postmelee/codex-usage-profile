@@ -83,9 +83,10 @@ export function createR2BindingProfileMediaStore(options = {}) {
       const handle = normalizeHandle(getOptions.handle);
       const socialKey = createProfileMediaSocialKey({ handle });
       const includeBody = getOptions.includeBody !== false;
+      const metadataFirst = typeof getOptions.ifNoneMatch === "string";
       let object;
       try {
-        object = includeBody
+        object = includeBody && !metadataFirst
           ? await bucket.get(socialKey)
           : await bucket.head(socialKey);
       } catch (error) {
@@ -93,10 +94,36 @@ export function createR2BindingProfileMediaStore(options = {}) {
       }
       if (!object) return null;
 
-      const body = includeBody
+      let body = includeBody && !metadataFirst
         ? await readR2Body(object, "social media")
         : null;
-      return socialRecordFromObject(object, { body, handle, socialKey });
+      let record = socialRecordFromObject(object, { body, handle, socialKey });
+      let notModified = matchesProfileMediaIfNoneMatch(
+        getOptions.ifNoneMatch,
+        record.etag
+      );
+      if (notModified) return { ...record, body: null, notModified: true };
+      if (!includeBody) return { ...record, notModified: false };
+
+      if (metadataFirst) {
+        try {
+          object = await bucket.get(socialKey);
+        } catch (error) {
+          throw unavailable("read social media", error);
+        }
+        if (!object) return null;
+        body = await readR2Body(object, "social media");
+        record = socialRecordFromObject(object, { body, handle, socialKey });
+        notModified = matchesProfileMediaIfNoneMatch(
+          getOptions.ifNoneMatch,
+          record.etag
+        );
+      }
+      return {
+        ...record,
+        body: notModified ? null : record.body,
+        notModified
+      };
     },
 
     async putSocialCard(putOptions = {}) {
@@ -108,17 +135,26 @@ export function createR2BindingProfileMediaStore(options = {}) {
         );
       }
 
+      let created;
+      const onlyIf = socialOnlyIf(putOptions);
       try {
-        await bucket.put(record.socialKey, record.body, {
+        created = await bucket.put(record.socialKey, record.body, {
           customMetadata: socialMetadata(record),
-          httpMetadata: mediaHttpMetadata()
+          httpMetadata: mediaHttpMetadata(),
+          ...(onlyIf ? { onlyIf } : {})
         });
       } catch (error) {
         throw unavailable("write social media", error);
       }
+      if (Object.hasOwn(putOptions, "expectedStorageEtag") && !created) {
+        throw stableConflict();
+      }
 
       const { body, ...metadata } = record;
-      return metadata;
+      return {
+        ...metadata,
+        storageEtag: requireStorageEtag(created)
+      };
     },
 
     async deleteSocialCard(deleteOptions = {}) {
@@ -828,7 +864,8 @@ function socialRecordFromObject(object, expected) {
     presentationDigest: metadata[METADATA_PRESENTATION_DIGEST],
     publicationId: metadata[METADATA_PUBLICATION_ID],
     revision,
-    socialKey: expected.socialKey
+    socialKey: expected.socialKey,
+    storageEtag: requireStorageEtag(object)
   };
   if (expected.body) record.body = expected.body;
   return record;
@@ -845,6 +882,17 @@ function stableOnlyIf(state) {
   return state.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.MISSING
     ? { etagDoesNotMatch: "*" }
     : { etagMatches: state.storageEtag };
+}
+
+function socialOnlyIf(options) {
+  if (!Object.hasOwn(options, "expectedStorageEtag")) return null;
+  const expected = options.expectedStorageEtag;
+  if (expected !== null && (typeof expected !== "string" || expected === "")) {
+    throw new TypeError("expectedStorageEtag must be a non-empty string or null");
+  }
+  return expected === null
+    ? { etagDoesNotMatch: "*" }
+    : { etagMatches: expected };
 }
 
 function assertExpectedStorageEtag(state, options) {

@@ -16,7 +16,6 @@ import {
   PROFILE_MEDIA_DEFAULT_THEME,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaStableKey,
-  matchesProfileMediaIfNoneMatch,
   normalizeProfileMediaTheme
 } from "../profile-media/media-store-contract.js";
 import { resolveGitHubIdentityFromCode } from "./auth.js";
@@ -1379,6 +1378,7 @@ async function readPublishedSocialCard(options) {
     social = authority
       ? await options.mediaStore.getSocialCard({
         handle: options.handle,
+        ifNoneMatch: options.ifNoneMatch,
         includeBody: options.includeBody
       })
       : null;
@@ -1393,11 +1393,19 @@ async function readPublishedSocialCard(options) {
     throw createProfileMediaUnavailableError();
   }
 
-  if (!authority || !social || typeof social.etag !== "string") {
+  if (
+    !authority ||
+    !social ||
+    typeof social.etag !== "string" ||
+    social.ownerId !== authority.ownerId ||
+    social.publicationId !== authority.publicationId
+  ) {
     throw publicCardNotFoundError();
   }
+  const notModified = social.notModified === true;
   if (
     options.includeBody &&
+    !notModified &&
     !(
       (Buffer.isBuffer(social.body) || social.body instanceof Uint8Array) &&
       social.body.byteLength > 0
@@ -1406,10 +1414,6 @@ async function readPublishedSocialCard(options) {
     throw publicCardNotFoundError();
   }
 
-  const notModified = matchesProfileMediaIfNoneMatch(
-    options.ifNoneMatch,
-    social.etag
-  );
   return {
     body: notModified || !options.includeBody ? null : social.body,
     etag: social.etag,

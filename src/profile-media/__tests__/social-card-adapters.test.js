@@ -35,19 +35,34 @@ function createInput(overrides = {}) {
 
 function createR2Store() {
   const objects = new Map();
+  const calls = [];
+  let nextStorageRevision = 1;
   const bucket = {
     async get(key) {
+      calls.push("get");
       return objects.get(key) ?? null;
     },
     async head(key) {
+      calls.push("head");
       const object = objects.get(key);
       return object ? { ...object, body: null } : null;
     },
     async put(key, body, options = {}) {
+      calls.push("put");
+      const previous = objects.get(key) ?? null;
+      if (
+        (options.onlyIf?.etagDoesNotMatch === "*" && previous) ||
+        (
+          options.onlyIf?.etagMatches &&
+          options.onlyIf.etagMatches !== previous?.etag
+        )
+      ) {
+        return null;
+      }
       const object = {
         arrayBuffer: async () => Buffer.from(body),
         customMetadata: options.customMetadata,
-        etag: `storage-${objects.size + 1}`,
+        etag: `storage-${nextStorageRevision++}`,
         httpMetadata: options.httpMetadata,
         key
       };
@@ -55,35 +70,63 @@ function createR2Store() {
       return object;
     },
     async delete(key) {
+      calls.push("delete");
       objects.delete(key);
     }
   };
 
-  return { objects, store: createR2BindingProfileMediaStore({ bucket }) };
+  return {
+    calls,
+    objects,
+    store: createR2BindingProfileMediaStore({ bucket })
+  };
 }
 
 function createS3Store() {
   const objects = new Map();
+  const calls = [];
+  let nextStorageRevision = 1;
   const client = {
     async send(command) {
       const name = command.constructor.name;
       const key = command.input.Key;
+      calls.push(name);
 
       if (name === "PutObjectCommand") {
+        const previous = objects.get(key) ?? null;
+        if (
+          (command.input.IfNoneMatch === "*" && previous) ||
+          (
+            command.input.IfMatch &&
+            command.input.IfMatch !== previous?.ETag
+          )
+        ) {
+          throw createPreconditionError();
+        }
+        const ETag = `"storage-${nextStorageRevision++}"`;
         objects.set(key, {
           Body: command.input.Body,
           CacheControl: command.input.CacheControl,
           ContentType: command.input.ContentType,
+          ETag,
           Metadata: command.input.Metadata
         });
-        return {};
+        return { ETag };
       }
       if (name === "GetObjectCommand" || name === "HeadObjectCommand") {
         const object = objects.get(key);
         if (!object) throw createMissingKeyError();
+        if (command.input.IfMatch && command.input.IfMatch !== object.ETag) {
+          throw createPreconditionError();
+        }
         return name === "GetObjectCommand"
-          ? { Body: object.Body, Metadata: object.Metadata }
-          : { Metadata: object.Metadata };
+          ? { ...object }
+          : {
+              CacheControl: object.CacheControl,
+              ContentType: object.ContentType,
+              ETag: object.ETag,
+              Metadata: object.Metadata
+            };
       }
       if (name === "DeleteObjectCommand") {
         objects.delete(key);
@@ -94,6 +137,7 @@ function createS3Store() {
   };
 
   return {
+    calls,
     objects,
     store: createS3ProfileMediaStore({ bucket: "media", client })
   };
@@ -103,6 +147,13 @@ function createMissingKeyError() {
   const error = new Error("missing key");
   error.name = "NoSuchKey";
   error.$metadata = { httpStatusCode: 404 };
+  return error;
+}
+
+function createPreconditionError() {
+  const error = new Error("precondition failed");
+  error.name = "PreconditionFailed";
+  error.$metadata = { httpStatusCode: 412 };
   return error;
 }
 
@@ -154,6 +205,50 @@ for (const [name, createStore] of ADAPTERS) {
 
     assert.equal(metadata.body, undefined);
     assert.equal(metadata.etag, `"${REVISION}"`);
+  });
+
+  test(`${name} store returns a conditional hit without reading the body`, async () => {
+    const { calls, store } = createStore();
+    await store.putSocialCard(createInput());
+    const metadata = await store.getSocialCard({
+      handle: HANDLE,
+      includeBody: false
+    });
+    calls.length = 0;
+
+    const notModified = await store.getSocialCard({
+      handle: HANDLE,
+      ifNoneMatch: metadata.etag,
+      includeBody: true
+    });
+
+    assert.equal(notModified.notModified, true);
+    assert.equal(notModified.body, null);
+    assert.deepEqual(calls, [name === "s3" ? "HeadObjectCommand" : "head"]);
+  });
+
+  test(`${name} store conditionally replaces the stable social object`, async () => {
+    const { store } = createStore();
+    const first = await store.putSocialCard(createInput());
+    const nextBody = Buffer.from("conditional-update");
+
+    await assert.rejects(
+      () => store.putSocialCard(createInput({
+        body: nextBody,
+        expectedStorageEtag: "stale-storage-etag"
+      })),
+      (error) => error.code === "conflict"
+    );
+    assert.equal(
+      Buffer.from((await store.getSocialCard({ handle: HANDLE })).body).equals(BODY),
+      true
+    );
+
+    const updated = await store.putSocialCard(createInput({
+      body: nextBody,
+      expectedStorageEtag: first.storageEtag
+    }));
+    assert.notEqual(updated.storageEtag, first.storageEtag);
   });
 
   test(`${name} store deletes the social object idempotently`, async () => {

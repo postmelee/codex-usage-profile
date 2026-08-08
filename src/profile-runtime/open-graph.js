@@ -63,7 +63,7 @@ export function buildProfileOpenGraphDocument(options = {}) {
   const imageUrl = buildSocialImageUrl(
     origin,
     profile.handle,
-    profile.uploadedAt
+    profile.imageRevisionAt
   );
   const socialTitle = `${profile.handle}'s Codex card`;
   const imageAlt = locale === "ko"
@@ -200,20 +200,20 @@ export function buildPublicProfileUrl(origin, handle) {
   ).toString();
 }
 
-export function buildSocialImageUrl(origin, handle, uploadedAt) {
+export function buildSocialImageUrl(origin, handle, revisionAt) {
   const url = new URL(`${buildPublicProfileUrl(origin, handle)}/social.png`);
-  if (uploadedAt !== undefined && uploadedAt !== null) {
-    url.searchParams.set("v", String(toRevisionToken(uploadedAt)));
+  if (revisionAt !== undefined && revisionAt !== null) {
+    url.searchParams.set("v", String(toRevisionToken(revisionAt)));
   }
   return url.toString();
 }
 
-export function toRevisionToken(uploadedAt) {
-  const time = new Date(uploadedAt).getTime();
+export function toRevisionToken(revisionAt) {
+  const time = new Date(revisionAt).getTime();
   if (!Number.isFinite(time)) {
-    throw new TypeError("uploadedAt must be a valid date");
+    throw new TypeError("revisionAt must be a valid date");
   }
-  return Math.floor(time / 1000);
+  return time;
 }
 
 function metaTag(attribute, key, content) {
@@ -255,7 +255,7 @@ function normalizeProfileSummary(value) {
       ? value.cardLocale
       : DEFAULT_PROFILE_OPEN_GRAPH_LOCALE,
     handle: normalizeHandle(value.handle),
-    uploadedAt: value.uploadedAt
+    imageRevisionAt: value.imageRevisionAt ?? value.uploadedAt
   });
 }
 

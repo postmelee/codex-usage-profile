@@ -45,6 +45,9 @@ function createFixture(options = {}) {
         owner: ensureOptions.owner,
         cardLocale: ensureOptions.cardLocale,
         cardStyle: ensureOptions.cardStyle
+      }).then(async (preparation) => {
+        await options.afterPrepare?.(preparation);
+        return preparation;
       })
     ),
     fetchImpl: async () => { throw new Error("network disabled in test"); },
@@ -120,6 +123,75 @@ test("saving new card settings refreshes the same social object", async () => {
   assert.equal(after.socialKey, before.socialKey);
   assert.equal(Buffer.from(after.body).toString(), "social:light:en");
   assert.notEqual(after.etag, before.etag);
+});
+
+test("a failed card-settings CAS leaves the stable social object unchanged", async () => {
+  const { cardService, mediaStore, service, store } = createFixture();
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const before = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const originalUpdate = store.atomic.updateCardSettings;
+  store.atomic.updateCardSettings = async () => {
+    throw new Error("forced card settings conflict");
+  };
+
+  await assert.rejects(
+    () => cardService.updateCardSettings({
+      ownerId: OWNER.id,
+      cardLocale: "en",
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    }),
+    /forced card settings conflict/
+  );
+  store.atomic.updateCardSettings = originalUpdate;
+
+  const after = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  assert.equal(after.etag, before.etag);
+  assert.equal(Buffer.from(after.body).toString(), "social:dark:ko");
+  assert.equal((await store.getOwnerById(OWNER.id)).cardLocale, "ko");
+});
+
+test("only the winning concurrent card-settings request commits social media", async () => {
+  let waiting = 0;
+  let release;
+  const barrier = new Promise((resolve) => { release = resolve; });
+  const fixture = createFixture({
+    async afterPrepare() {
+      waiting += 1;
+      if (waiting === 2) release();
+      await barrier;
+    }
+  });
+  const { cardService, mediaStore, service } = fixture;
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const putSocialCard = mediaStore.putSocialCard.bind(mediaStore);
+  let commitWrites = 0;
+  mediaStore.putSocialCard = async (options) => {
+    commitWrites += 1;
+    return putSocialCard(options);
+  };
+  const update = () => cardService.updateCardSettings({
+    ownerId: OWNER.id,
+    cardLocale: "en",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "dark",
+      effect: { preset: "none", version: 1 }
+    }
+  });
+
+  const results = await Promise.allSettled([update(), update()]);
+  assert.equal(results.filter(({ status }) => status === "fulfilled").length, 1);
+  assert.equal(results.filter(({ status }) => status === "rejected").length, 1);
+  assert.equal(commitWrites, 1);
+  assert.equal(
+    Buffer.from((await mediaStore.getSocialCard({ handle: OWNER.handle })).body)
+      .toString(),
+    "social:dark:en"
+  );
 });
 
 test("unpublishing removes the social object", async () => {
