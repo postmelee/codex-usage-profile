@@ -169,6 +169,84 @@ test("operator CLI readiness rejects extra options and unsafe responses", async 
   );
 });
 
+test("operator CLI migrate sends no identity or SQL and validates bounded output", async () => {
+  const requests = [];
+  const output = [];
+  const result = await runSitesProfileMaintenanceCli([
+    "migrate",
+    "--origin", ORIGIN
+  ], {
+    environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+    fetchImpl: async (_url, init) => {
+      requests.push(init);
+      return jsonResponse({
+        ok: true,
+        summary: {
+          appliedVersions: [1, 2, 3, 4, 5],
+          newlyAppliedVersions: [3, 4, 5],
+          operation: "migrate"
+        }
+      });
+    },
+    stdout: (line) => output.push(line)
+  });
+
+  assert.deepEqual(JSON.parse(requests[0].body), { operation: "migrate" });
+  assert.deepEqual(result.summary, {
+    appliedVersions: [1, 2, 3, 4, 5],
+    newlyAppliedVersions: [3, 4, 5],
+    operation: "migrate"
+  });
+  assert.deepEqual(JSON.parse(output[0]), result.summary);
+  assert.doesNotMatch(
+    `${requests[0].body}\n${output.join("\n")}`,
+    /owner|handle|usage|token|session|credential|sql|r2/i
+  );
+});
+
+test("operator CLI migrate rejects extra options and unsafe output", async () => {
+  let fetches = 0;
+  for (const extra of [
+    ["--apply"],
+    ["--owner-id", OWNER_ID],
+    ["--retention-days", "30"]
+  ]) {
+    await assert.rejects(
+      runSitesProfileMaintenanceCli([
+        "migrate",
+        "--origin", ORIGIN,
+        ...extra
+      ], {
+        environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+        fetchImpl: async () => {
+          fetches += 1;
+          return jsonResponse({ ok: true });
+        },
+        stdout: () => {}
+      }),
+      /migrate/
+    );
+  }
+  assert.equal(fetches, 0);
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli(["migrate", "--origin", ORIGIN], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async () => jsonResponse({
+        ok: true,
+        summary: {
+          appliedVersions: [1, 2, 3],
+          newlyAppliedVersions: [3],
+          operation: "migrate",
+          ownerId: OWNER_ID
+        }
+      }),
+      stdout: () => {}
+    }),
+    (error) => error.code === "invalid_response"
+  );
+});
+
 test("operator CLI bounds an unresponsive request without leaking context", async () => {
   const output = [];
   let signal;

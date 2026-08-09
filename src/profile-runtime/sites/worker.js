@@ -81,6 +81,7 @@ async function handleProfileSitesRequest(
       database: config.database,
       fetchImpl: options.fetchImpl ?? globalThis.fetch,
       media: config.media,
+      migrations: options.migrations,
       profileCardRenderPng: options.profileCardRenderPng,
       profileCardRendererVersion: options.profileCardRendererVersion
     })(request);

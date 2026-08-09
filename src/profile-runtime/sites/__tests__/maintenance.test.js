@@ -5,6 +5,9 @@ import {
   createProfileMaintenanceSummary
 } from "../../../profile-backend/maintenance-contract.js";
 import {
+  D1_MIGRATION_MANIFEST
+} from "../../../profile-backend/d1/migration-manifest.js";
+import {
   createProfileSitesMaintenanceHandler,
   createProfileSitesMaintenanceService
 } from "../maintenance.js";
@@ -222,6 +225,90 @@ test("maintenance readiness fails closed without provider details", async () => 
   const providerBody = await providerResponse.text();
   assert.match(providerBody, /maintenance_unavailable/);
   assert.doesNotMatch(providerBody, /SQL|private-owner|usage|token/i);
+});
+
+test("maintenance migration applies only the exact manifest and is idempotent", async () => {
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  let appliedVersions = [1, 2];
+  let applyCalls = 0;
+  const fixture = await createServiceFixture({
+    database: { batch() {}, prepare() {} },
+    migrations: candidateMigrations(),
+    inspectD1MigrationReadiness: async () => migrationState(
+      appliedVersions,
+      expectedVersions
+    ),
+    migrateD1Database: async (_database, options) => {
+      applyCalls += 1;
+      assert.deepEqual(
+        options.migrations.map(({ version, name }) => ({ version, name })),
+        D1_MIGRATION_MANIFEST.map(({ version, name }) => ({ version, name }))
+      );
+      const newlyApplied = expectedVersions.filter(
+        (version) => !appliedVersions.includes(version)
+      );
+      appliedVersions = [...expectedVersions];
+      return { appliedVersions, newlyApplied };
+    }
+  });
+  const handler = createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  });
+
+  const first = await handler(maintenanceRequest({ operation: "migrate" }));
+  assert.equal(first.status, 200);
+  assert.deepEqual(await first.json(), {
+    ok: true,
+    summary: {
+      appliedVersions: expectedVersions,
+      newlyAppliedVersions: [3, 4, 5],
+      operation: "migrate"
+    }
+  });
+
+  const repeated = await handler(maintenanceRequest({ operation: "migrate" }));
+  assert.equal(repeated.status, 200);
+  assert.deepEqual((await repeated.json()).summary.newlyAppliedVersions, []);
+  assert.equal(applyCalls, 2);
+
+  const extraPayload = await handler(maintenanceRequest({
+    operation: "migrate",
+    ownerId: "private-owner"
+  }));
+  assert.equal(extraPayload.status, 400);
+  assert.doesNotMatch(await extraPayload.text(), /private-owner|sql|token/i);
+});
+
+test("maintenance migration rejects unexpected versions before mutation", async () => {
+  let applyCalls = 0;
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  const fixture = await createServiceFixture({
+    database: { batch() {}, prepare() {} },
+    migrations: candidateMigrations(),
+    inspectD1MigrationReadiness: async () => migrationState(
+      [...expectedVersions, 99],
+      expectedVersions
+    ),
+    migrateD1Database: async () => {
+      applyCalls += 1;
+      throw new Error("must not run");
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    error: {
+      code: "maintenance_conflict",
+      message: "Maintenance plan is stale or conflicts"
+    }
+  });
+  assert.equal(applyCalls, 0);
 });
 
 test("account deletion fails closed after tombstone and private transition", async () => {
@@ -469,6 +556,9 @@ async function createServiceFixture(options = {}) {
     database: options.database ?? { batch() {}, prepare() {} },
     media: { delete() {}, head() {}, list() {} },
     mediaStore,
+    migrations: options.migrations,
+    inspectD1MigrationReadiness: options.inspectD1MigrationReadiness,
+    migrateD1Database: options.migrateD1Database,
     store,
     d1Maintenance,
     r2Maintenance,
@@ -493,6 +583,15 @@ async function createServiceFixture(options = {}) {
 
 function createStubService() {
   return {
+    async migrate() {
+      return {
+        summary: {
+          appliedVersions: [1, 2, 3],
+          newlyAppliedVersions: [],
+          operation: "migrate"
+        }
+      };
+    },
     async readiness() {
       return {
         summary: {
@@ -517,6 +616,36 @@ function createStubService() {
       };
     }
   };
+}
+
+function candidateMigrations() {
+  return D1_MIGRATION_MANIFEST.map(({ version, name }) => ({
+    version,
+    name,
+    sql: `SELECT ${version}`
+  }));
+}
+
+function migrationState(appliedVersions, expectedVersions) {
+  const expected = new Set(expectedVersions);
+  const applied = new Set(appliedVersions);
+  return {
+    appliedVersions: [...appliedVersions],
+    expectedVersions: [...expectedVersions],
+    missingVersions: expectedVersions.filter((version) => !applied.has(version)),
+    unexpectedVersions: appliedVersions.filter((version) => !expected.has(version)),
+    readyExact:
+      appliedVersions.length === expectedVersions.length &&
+      appliedVersions.every((version, index) => version === expectedVersions[index])
+  };
+}
+
+function maintenanceRequest(payload) {
+  return new Request(MAINTENANCE_URL, {
+    method: "POST",
+    headers: authorizedHeaders(),
+    body: JSON.stringify(payload)
+  });
 }
 
 function readinessDatabase(versions, options = {}) {

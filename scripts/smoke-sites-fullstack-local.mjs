@@ -11,6 +11,12 @@ import { promisify } from "node:util";
 import { Miniflare } from "miniflare";
 
 import {
+  D1_MIGRATION_MANIFEST
+} from "../src/profile-backend/d1/migration-manifest.js";
+import {
+  migrateD1Database
+} from "../src/profile-backend/d1/migration-runner.js";
+import {
   loginWithDeviceCode
 } from "../packages/codex-usage-profile-cli/src/device-login.js";
 import {
@@ -93,12 +99,23 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   try {
     const ready = await miniflare.ready;
     const origin = ready.origin;
+    const migrationDatabase = await miniflare.getD1Database("DB");
+    await migrateD1Database(migrationDatabase, {
+      migrations: await loadLocalMigrations(
+        D1_MIGRATION_MANIFEST.slice(0, 2)
+      ),
+      now: () => new Date("2026-07-24T00:00:00.000Z")
+    });
     const maintenanceDisabled = await requestMaintenance(origin, {
       operation: "retention",
       retentionDays: 90,
       recentRevisions: 5
     });
     assert.equal(maintenanceDisabled.response.status, 404);
+    const migrationDisabled = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(migrationDisabled.response.status, 404);
     const maintenanceEnabled = await requestJson(
       origin,
       "POST",
@@ -120,9 +137,39 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       }
     });
 
-    const migrated = await requestJson(origin, "POST", "/__local/migrate");
+    await migrationDatabase.prepare(
+      "INSERT INTO schema_migrations (version, name, applied_at) " +
+        "VALUES (99, 'unexpected_test', '2026-07-24T00:00:00.000Z')"
+    ).run();
+    const unexpectedMigration = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(unexpectedMigration.response.status, 409);
+    assert.deepEqual(
+      await readMigrationVersions(migrationDatabase),
+      [1, 2, 99]
+    );
+    await migrationDatabase.prepare(
+      "DELETE FROM schema_migrations WHERE version = 99"
+    ).run();
+
+    const migrated = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
     assert.equal(migrated.response.status, 200);
-    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3, 4, 5]);
+    assert.deepEqual(migrated.body, {
+      ok: true,
+      summary: {
+        appliedVersions: [1, 2, 3, 4, 5],
+        newlyAppliedVersions: [3, 4, 5],
+        operation: "migrate"
+      }
+    });
+    const repeatedMigration = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(repeatedMigration.response.status, 200);
+    assert.deepEqual(repeatedMigration.body.summary.newlyAppliedVersions, []);
 
     const readiness = await requestMaintenance(origin, {
       operation: "readiness"
@@ -537,6 +584,21 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   } finally {
     await miniflare.dispose();
   }
+}
+
+async function loadLocalMigrations(manifest) {
+  return Promise.all(manifest.map(async ({ file, name, version }) => ({
+    version,
+    name,
+    sql: await readFile(resolve(REPOSITORY_ROOT, file), "utf8")
+  })));
+}
+
+async function readMigrationVersions(database) {
+  const result = await database.prepare(
+    "SELECT version FROM schema_migrations ORDER BY version"
+  ).all();
+  return result.results.map(({ version }) => Number(version));
 }
 
 async function buildLocalSmokeArtifact() {

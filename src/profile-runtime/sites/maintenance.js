@@ -9,6 +9,12 @@ import {
   createD1ProfileMaintenance
 } from "../../profile-backend/d1/maintenance.js";
 import {
+  D1_MIGRATION_MANIFEST
+} from "../../profile-backend/d1/migration-manifest.js";
+import {
+  migrateD1Database
+} from "../../profile-backend/d1/migration-runner.js";
+import {
   inspectD1MigrationReadiness
 } from "../../profile-backend/d1/store.js";
 import { createProfileCardServiceCore } from "../../profile-card/service-core.js";
@@ -115,6 +121,7 @@ export function createProfileSitesMaintenanceService(options = {}) {
   const now = options.now ?? (() => new Date());
   const inspectReadiness = options.inspectD1MigrationReadiness ??
     inspectD1MigrationReadiness;
+  const applyMigrations = options.migrateD1Database ?? migrateD1Database;
   const createId = options.createId ??
     ((prefix) => `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`);
   const d1 = options.d1Maintenance ?? createD1ProfileMaintenance({
@@ -147,6 +154,7 @@ export function createProfileSitesMaintenanceService(options = {}) {
   return Object.freeze({
     deleteAccount,
     exportOwner,
+    migrate,
     planOwner,
     readiness,
     repairPublication,
@@ -168,6 +176,39 @@ export function createProfileSitesMaintenanceService(options = {}) {
         expectedVersions: result.expectedVersions,
         operation: "readiness",
         ready: true
+      })
+    });
+  }
+
+  async function migrate() {
+    const before = await inspectReadiness(dependencies.database);
+    if (before.unexpectedVersions.length > 0) {
+      throw maintenanceError(
+        "conflict",
+        "D1 contains a migration version outside the candidate manifest"
+      );
+    }
+    const migrations = requireExactD1Migrations(options.migrations);
+    const applied = await applyMigrations(dependencies.database, {
+      migrations,
+      now
+    });
+    const after = await inspectReadiness(dependencies.database);
+    if (after.readyExact !== true) {
+      throw maintenanceError(
+        PROFILE_SITES_MIGRATION_NOT_READY_CODE,
+        "D1 migration readiness did not match after apply"
+      );
+    }
+    const newlyAppliedVersions = normalizeAppliedMigrationVersions(
+      applied?.newlyApplied,
+      after.appliedVersions
+    );
+    return Object.freeze({
+      summary: Object.freeze({
+        appliedVersions: after.appliedVersions,
+        newlyAppliedVersions,
+        operation: "migrate"
       })
     });
   }
@@ -468,8 +509,11 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
     throw new TypeError("maintenance payload must be an object");
   }
   switch (payload.operation) {
+    case "migrate":
+      assertIdentitylessPayload(payload, "migrate");
+      return service.migrate();
     case "readiness":
-      assertReadinessPayload(payload);
+      assertIdentitylessPayload(payload, "readiness");
       return service.readiness();
     case "plan":
       return service.planOwner(payload);
@@ -488,13 +532,53 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
   }
 }
 
-function assertReadinessPayload(payload) {
+function assertIdentitylessPayload(payload, operation) {
   if (
     Object.keys(payload).length !== 1 ||
-    payload.operation !== "readiness"
+    payload.operation !== operation
   ) {
-    throw new TypeError("readiness accepts only the operation field");
+    throw new TypeError(`${operation} accepts only the operation field`);
   }
+}
+
+function requireExactD1Migrations(value) {
+  if (!Array.isArray(value) || value.length !== D1_MIGRATION_MANIFEST.length) {
+    throw new TypeError("exact D1 migrations are required");
+  }
+  return Object.freeze(value.map((migration, index) => {
+    const expected = D1_MIGRATION_MANIFEST[index];
+    if (
+      !migration ||
+      typeof migration !== "object" ||
+      Array.isArray(migration) ||
+      Object.keys(migration).sort().join(",") !== "name,sql,version" ||
+      migration.version !== expected.version ||
+      migration.name !== expected.name ||
+      typeof migration.sql !== "string" ||
+      migration.sql.trim() === ""
+    ) {
+      throw new TypeError("D1 migrations do not match the candidate manifest");
+    }
+    return migration;
+  }));
+}
+
+function normalizeAppliedMigrationVersions(value, appliedVersions) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("D1 migration result is invalid");
+  }
+  const allowed = new Set(appliedVersions);
+  const normalized = [...value];
+  if (
+    normalized.some((version, index) =>
+      !Number.isSafeInteger(version) ||
+      !allowed.has(version) ||
+      (index > 0 && version <= normalized[index - 1])
+    )
+  ) {
+    throw new TypeError("D1 migration result is invalid");
+  }
+  return Object.freeze(normalized);
 }
 
 function isAuthorizedMaintenanceRequest(request, config) {

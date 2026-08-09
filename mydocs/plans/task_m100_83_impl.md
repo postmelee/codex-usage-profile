@@ -162,6 +162,35 @@ Task #83 Stage 2: exact Sites candidate와 archive preflight
 
 ## Stage 3 — Gate A owner-only 배포와 전체 기능 smoke
 
+### Gate A 1차 실행 관찰과 source 보정 Gate
+
+2026-08-08 version 8 protected bridge는 service `maintenance`에서 anonymous
+root/health `200`, 기존 profile/card와 일반 backend `503`을 확인했고 access를
+즉시 owner-only로 복원했다. 그러나 read-only readiness는
+`migration_not_ready`로 중단됐다. 실패 뒤 environment revision 61의
+maintenance disabled/operator secret absent/service `normal`, owner 1명·추가
+user/group 0명 owner-only와 version 8을 다시 private deploy했다.
+
+Sites deployment 성공만으로 application `schema_migrations`가 exact `1..5`가
+되지 않으므로 기능 smoke를 진행하지 않는다. 승인된 source 보정을 Stage 3
+안에서 먼저 수행한다.
+
+- production Worker entry가 `D1_MIGRATION_MANIFEST`의 exact SQL 5개를 Vite raw
+  module로 bundle하고 maintenance service에만 주입한다.
+- operator CLI에 `migrate` command를 추가한다. payload는 exact
+  `{ operation: "migrate" }`만 허용하며 owner/data selector와 arbitrary SQL은
+  받지 않는다.
+- service는 apply 전에 current versions를 read-only 검사해 unexpected version을
+  거부하고, existing idempotent D1 runner로 missing known migration만 순서대로
+  적용한다. 결과는 applied/newly-applied version 배열만 반환한다.
+- maintenance enabled, exact bearer, same-origin, bounded JSON과 generic error
+  경계를 그대로 사용한다. disabled route는 계속 `404`다.
+- local real-workerd에서 `1..2 → 1..5`, 재실행 no-op, unexpected version 무변경,
+  인증/maintenance 실패와 readiness 후속 성공을 검증한다.
+- source 보정 뒤 전체 test/E2E/production build/verifier/package를 다시 실행하고,
+  새 exact source/새 saved version으로 Gate A deployment를 재개한다. version 8은
+  source 보정 전 owner-only rollback target으로 유지한다.
+
 ### Gate A 승인 입력
 
 원격 mutation 전에 다음 read-only 상태와 exact 변경 범위를 제시한다.
@@ -169,9 +198,9 @@ Task #83 Stage 2: exact Sites candidate와 archive preflight
 - Site project/title/canonical URL, 현재 access policy와 public revision
 - 현재 saved version/deployment/source, environment revision과 secret을 제외한 key 존재 상태
 - service `normal`, maintenance disabled, operator secret absent baseline
-- Stage 2 candidate commit, clean status, build/verifier 결과, archive digest/count/size
+- source 보정 candidate commit, clean status, build/verifier 결과, archive digest/count/size
 - 현재 D1 applied migration과 적용할 `3..5`, expected final `[1,2,3,4,5]`
-- migration `3..5`의 saved version 7 backward-compatibility 근거와 application rollback target
+- migration `3..5`의 saved version 8 backward-compatibility 근거와 application rollback target
 - owner-only custom policy의 owner 1명, 추가 user/group 0개 exact rollback 값
 - production OAuth callback과 runtime key 변경/유지 목록. secret plaintext는 표시하지 않음
 - disposable QA owner/profile/token/session/usage/media 범위와 종료 cleanup count
@@ -186,7 +215,7 @@ Gate A 승인 전에는 access, environment, D1/R2, source repository, version/d
 외부 상태 변경:
 
 - existing Site의 owner-only access policy
-- exact Stage 2 commit source와 그 source의 saved version/deployment
+- exact source 보정 commit과 그 source의 saved version/deployment
 - D1 migration `3..5`
 - temporary maintenance mode/operator secret과 최종 disabled/secret-absent environment
 - disposable QA owner/profile/token/session/usage/media
@@ -197,23 +226,33 @@ Gate A 승인 전에는 access, environment, D1/R2, source repository, version/d
 
 수정:
 
-- hosted smoke에서 확인된 blocker를 해결하는 source 변경이 필요하면 Stage 3을 완료하지 않고 구현계획 보정 승인을 요청한다.
+- `src/profile-runtime/sites/worker-entry.js`
+- `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/sites/maintenance.js`
+- `src/profile-runtime/sites/__tests__/maintenance.test.js`
+- `src/profile-runtime/sites/__tests__/_full-stack-worker-harness.js`
+- `scripts/sites-profile-maintenance.mjs`
+- `scripts/__tests__/sites-profile-maintenance.test.js`
+- `scripts/smoke-sites-fullstack-local.mjs`
+- `docs/sites-operations.md`
 
 ### 실행 순서
 
 1. Gate A 승인 시점의 Site/access/environment/version/quota를 다시 read-only 확인한다.
 2. production public access를 승인된 custom owner-only policy로 전환하고 anonymous platform gate를 확인한다.
-3. temporary source credential로 Stage 2 exact commit을 push한다. credential은 URL, Git config, log와 문서에 저장하지 않는다.
+3. temporary source credential로 source 보정 exact commit을 push한다. credential은 URL, Git config, log와 문서에 저장하지 않는다.
 4. exact commit에서 production build와 두 verifier를 재실행하고 Sites helper로 새 archive를 package한다.
 5. source commit과 archive를 사용해 saved version을 한 번 저장하고 private deployment를 시작한다. 동일 version/deployment id를 terminal status까지 조회한다.
-6. maintenance mode를 temporary enabled로 두고 operator secret을 설정한 environment revision을 candidate에 적용한다.
-7. package의 migration `3..5` 적용 결과를 확인하고 protected readiness를 실행한다. `appliedVersions`와 `expectedVersions`가 exact `[1,2,3,4,5]`가 아니면 중단한다.
-8. readiness 성공 직후 maintenance disabled와 operator secret absent environment로 복원한다. operator route `404`, `/healthz` `200`을 확인한다.
-9. owner-only 안에서 OAuth/session/logout, packed CLI login/approve/exchange/submit/status/revoke, private preview와 card settings를 검증한다.
-10. publish 뒤 dark/light × en/ko README PNG와 social PNG의 GET/HEAD/If-None-Match 304, canonical/OG/Twitter metadata를 확인한다.
-11. private·missing handle이 같은 HTML fallback과 PNG `404`인지 대조하고 unpublish 뒤 모든 stable media가 404인지 확인한다.
-12. recent error event에 query/credential/identity/usage bytes가 없음을 확인한다.
-13. disposable profile을 private으로 두고 token/session을 revoke하며 Gate B에 필요한 최소 QA state만 승인된 범위로 남긴다.
+6. source 보정 candidate의 maintenance mode와 새 operator secret에 service `maintenance`를 함께 설정해 private deploy한다. `/healthz`와 operator route 외 backend가 generic `503`인지 확인한 뒤 access를 짧게 public으로 전환한다.
+7. identity-less maintenance CLI `migrate`를 한 번 실행하고 바로 read-only `readiness`를 실행한다. `appliedVersions`와 `expectedVersions`가 exact `[1,2,3,4,5]`가 아니면 즉시 owner-only로 닫고 중단한다.
+8. readiness 결과와 무관하게 먼저 access를 owner-only로 복원한다. 이어서 maintenance disabled, operator secret absent, service `normal`로 복원해 같은 version을 private deploy하고 operator route `404`, `/healthz` `200`을 확인한다.
+9. 기존 production 소유자 데이터는 읽기 외에 사용하지 않는다. 별도 disposable GitHub 계정의 로그인 준비를 확인하고 service `owner-only`를 private deploy해 모든 public profile/card/social route가 동일 `404`인지 먼저 확인한다.
+10. access를 짧게 public으로 전환해 packed CLI login/approve/exchange/submit/status/revoke와 OAuth/session/logout을 disposable 계정으로 검증한다. 이 bridge에서는 runtime `owner-only`가 기존·QA public profile/media를 계속 `404`로 닫아야 한다.
+11. CLI bridge 직후 먼저 access를 owner-only로 복원하고 service `normal`을 private deploy한다. owner-authenticated browser 안에서 disposable 계정의 private preview와 card settings를 검증한다.
+12. disposable profile publish 뒤 dark/light × en/ko README PNG와 social PNG의 GET/HEAD/If-None-Match 304, canonical/OG/Twitter metadata를 owner-authenticated 요청으로 확인한다.
+13. private·missing handle이 같은 HTML fallback과 PNG `404`인지 대조하고 unpublish 뒤 모든 stable media가 404인지 확인한다.
+14. recent error event에 query/credential/identity/usage bytes가 없음을 확인한다.
+15. disposable profile을 private으로 두고 token/session을 revoke하며 Gate B에 필요한 최소 QA state만 승인된 범위로 남긴다.
 
 ### 검증
 
@@ -221,6 +260,8 @@ Gate A 승인 전에는 access, environment, D1/R2, source repository, version/d
 npm run build:production
 npm run verify:sites-fullstack
 npm run verify:sites-production
+npm run sites:profile-maintenance -- migrate \
+  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
 npm run sites:profile-maintenance -- readiness \
   --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
 git diff --check
@@ -228,7 +269,7 @@ git diff --check
 
 remote contract:
 
-- deployment `succeeded`, saved version source == Stage 2 candidate commit
+- deployment `succeeded`, saved version source == source 보정 candidate commit
 - `appliedVersions == expectedVersions == [1,2,3,4,5]`
 - maintenance disabled, operator secret absent, operator route `404`, health `200`
 - OAuth/session/logout와 packed CLI submit/revoke 성공
@@ -362,7 +403,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - **runtime 파일 오삭제**: exact manifest만 제거하고 다른 `.vite` entry와 Worker asset은 보존하며 focused byte-identity test를 둔다.
 - **finalizer 미실행 경로**: production/local smoke가 쓰는 build script를 감사하고 alternate output caller를 focused test로 고정한다.
 - **verifier 우회**: verifier source와 absolute path pattern을 보호하고 producer 보정 뒤 실제 검증 성공만 수용한다.
-- **provenance drift**: Stage 3에서 Stage 2 commit을 다시 build/package하고 saved version source와 exact-match시킨다.
+- **provenance drift**: Stage 3에서 source 보정 commit을 다시 build/package하고 saved version source와 exact-match시킨다.
 - **migration rollback**: `3..5` backward compatibility와 backup 가능성을 Gate A에 제시하며 schema downgrade를 금지한다.
 - **remote credential/data 노출**: secret은 hosted environment에만 두고 bounded status/count/digest만 문서화한다.
 - **Gate B public 잔류**: 실패 원인 분석보다 owner-only 복원을 먼저 수행하고 anonymous gate를 재확인한다.

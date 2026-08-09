@@ -109,15 +109,20 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
    끝까지 조회한다.
-5. owner-only access가 유지된 상태에서 protected read-only readiness를 먼저
-   실행한다.
+5. owner-only access가 유지된 상태에서 protected migration을 실행한 뒤
+   read-only readiness로 exact 결과를 확인한다. `migrate`는 manifest에 포함된
+   pending migration만 적용하며 owner selector나 SQL을 입력으로 받지 않는다.
 
    ```bash
+   npm run sites:profile-maintenance -- migrate \
+     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
    npm run sites:profile-maintenance -- readiness \
      --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
    ```
 
-   응답은 `operation=readiness`, `ready=true`이고 `expectedVersions`와
+   migrate 응답은 `appliedVersions`, `newlyAppliedVersions`, `operation=migrate`
+   외 필드를 포함하지 않아야 한다. readiness 응답은 `operation=readiness`,
+   `ready=true`이고 `expectedVersions`와
    `appliedVersions`가 순서까지 정확히 같아야 한다. owner/usage/token/session,
    SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
    `schema_migrations` table이 아직 없거나 expected version이 누락된 상태는
