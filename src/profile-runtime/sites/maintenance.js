@@ -49,6 +49,44 @@ const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8"
 });
+const HOSTED_D1_MIGRATION_COLUMNS = Object.freeze({
+  3: Object.freeze({
+    column: "intent",
+    defaultValue: null,
+    notNull: 0,
+    table: "cli_login_challenges",
+    tableInfoSql: "PRAGMA table_info(cli_login_challenges)",
+    tableSqlFragment:
+      "intent TEXT CHECK (intent IS NULL OR intent IN ('login', 'submit'))"
+  }),
+  4: Object.freeze({
+    column: "card_style",
+    defaultValue:
+      `'${JSON.stringify({
+        effect: { preset: "none", version: 1 },
+        schemaVersion: 1,
+        theme: "dark"
+      })}'`,
+    notNull: 1,
+    table: "owners",
+    tableInfoSql: "PRAGMA table_info(owners)",
+    tableSqlFragment:
+      "card_style TEXT NOT NULL " +
+      "DEFAULT '{\"effect\":{\"preset\":\"none\",\"version\":1}," +
+      "\"schemaVersion\":1,\"theme\":\"dark\"}' " +
+      "CHECK (json_valid(card_style))"
+  }),
+  5: Object.freeze({
+    column: "card_locale",
+    defaultValue: "'en'",
+    notNull: 1,
+    table: "owners",
+    tableInfoSql: "PRAGMA table_info(owners)",
+    tableSqlFragment:
+      "card_locale TEXT NOT NULL DEFAULT 'en' " +
+      "CHECK (card_locale IN ('en', 'ko'))"
+  })
+});
 
 export function createProfileSitesMaintenanceHandler(options = {}) {
   const config = options.config ?? {};
@@ -122,6 +160,8 @@ export function createProfileSitesMaintenanceService(options = {}) {
   const inspectReadiness = options.inspectD1MigrationReadiness ??
     inspectD1MigrationReadiness;
   const applyMigrations = options.migrateD1Database ?? migrateD1Database;
+  const reconcileMigrations = options.reconcileHostedD1Migrations ??
+    reconcileHostedD1Migrations;
   const createId = options.createId ??
     ((prefix) => `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`);
   const d1 = options.d1Maintenance ?? createD1ProfileMaintenance({
@@ -189,8 +229,13 @@ export function createProfileSitesMaintenanceService(options = {}) {
       );
     }
     const migrations = requireExactD1Migrations(options.migrations);
-    const applied = await applyMigrations(dependencies.database, {
+    const runnableMigrations = await reconcileMigrations(
+      dependencies.database,
       migrations,
+      before.appliedVersions
+    );
+    const applied = await applyMigrations(dependencies.database, {
+      migrations: runnableMigrations,
       now
     });
     const after = await inspectReadiness(dependencies.database);
@@ -561,6 +606,63 @@ function requireExactD1Migrations(value) {
     }
     return migration;
   }));
+}
+
+async function reconcileHostedD1Migrations(
+  database,
+  migrations,
+  appliedVersions
+) {
+  const applied = new Set(appliedVersions);
+  const runnable = [];
+  for (const migration of migrations) {
+    const specification = HOSTED_D1_MIGRATION_COLUMNS[migration.version];
+    if (applied.has(migration.version) || !specification) {
+      runnable.push(migration);
+      continue;
+    }
+
+    const columnResult = await database.prepare(
+      specification.tableInfoSql
+    ).all();
+    const column = (columnResult.results ?? []).find(
+      (row) => row.name === specification.column
+    );
+    if (!column) {
+      runnable.push(migration);
+      continue;
+    }
+
+    const tableResult = await database.prepare(
+      "SELECT sql FROM sqlite_master " +
+        "WHERE type = 'table' AND name = ? LIMIT 1"
+    ).bind(specification.table).all();
+    const tableSql = tableResult.results?.[0]?.sql;
+    if (
+      String(column.type).toUpperCase() !== "TEXT" ||
+      Number(column.notnull) !== specification.notNull ||
+      (column.dflt_value ?? null) !== specification.defaultValue ||
+      typeof tableSql !== "string" ||
+      !normalizeSql(tableSql).includes(
+        normalizeSql(specification.tableSqlFragment)
+      )
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 schema does not match the candidate migration"
+      );
+    }
+    runnable.push(Object.freeze({
+      name: migration.name,
+      sql: "",
+      version: migration.version
+    }));
+  }
+  return Object.freeze(runnable);
+}
+
+function normalizeSql(value) {
+  return value.replace(/\s+/gu, " ").trim().toLowerCase();
 }
 
 function normalizeAppliedMigrationVersions(value, appliedVersions) {

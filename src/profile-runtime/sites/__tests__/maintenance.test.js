@@ -238,6 +238,7 @@ test("maintenance migration applies only the exact manifest and is idempotent", 
       appliedVersions,
       expectedVersions
     ),
+    reconcileHostedD1Migrations: async (_database, migrations) => migrations,
     migrateD1Database: async (_database, options) => {
       applyCalls += 1;
       assert.deepEqual(
@@ -308,6 +309,61 @@ test("maintenance migration rejects unexpected versions before mutation", async 
       message: "Maintenance plan is stale or conflicts"
     }
   });
+  assert.equal(applyCalls, 0);
+});
+
+test("maintenance migration rejects hosted schema drift before mutation", async () => {
+  let applyCalls = 0;
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  const database = {
+    batch() {},
+    prepare(sql) {
+      if (sql.startsWith("SELECT sql FROM sqlite_master")) {
+        return {
+          bind(table) {
+            assert.equal(table, "cli_login_challenges");
+            return {
+              async all() {
+                return { results: [{ sql: "CREATE TABLE drifted ()" }] };
+              }
+            };
+          }
+        };
+      }
+      assert.equal(sql, "PRAGMA table_info(cli_login_challenges)");
+      return {
+        async all() {
+          return {
+            results: [{
+              dflt_value: null,
+              name: "intent",
+              notnull: 0,
+              type: "INTEGER"
+            }]
+          };
+        }
+      };
+    }
+  };
+  const fixture = await createServiceFixture({
+    database,
+    migrations: candidateMigrations(),
+    inspectD1MigrationReadiness: async () => migrationState(
+      [1, 2],
+      expectedVersions
+    ),
+    migrateD1Database: async () => {
+      applyCalls += 1;
+      throw new Error("must not run");
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, "maintenance_conflict");
   assert.equal(applyCalls, 0);
 });
 
@@ -559,6 +615,7 @@ async function createServiceFixture(options = {}) {
     migrations: options.migrations,
     inspectD1MigrationReadiness: options.inspectD1MigrationReadiness,
     migrateD1Database: options.migrateD1Database,
+    reconcileHostedD1Migrations: options.reconcileHostedD1Migrations,
     store,
     d1Maintenance,
     r2Maintenance,

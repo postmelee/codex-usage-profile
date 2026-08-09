@@ -14,7 +14,8 @@ import {
   D1_MIGRATION_MANIFEST
 } from "../src/profile-backend/d1/migration-manifest.js";
 import {
-  migrateD1Database
+  migrateD1Database,
+  splitSqlStatements
 } from "../src/profile-backend/d1/migration-runner.js";
 import {
   loginWithDeviceCode
@@ -106,6 +107,17 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       ),
       now: () => new Date("2026-07-24T00:00:00.000Z")
     });
+    const hostedPhysicalMigrations = await loadLocalMigrations(
+      D1_MIGRATION_MANIFEST.slice(2)
+    );
+    for (const migration of hostedPhysicalMigrations) {
+      await migrationDatabase.batch(
+        splitSqlStatements(migration.sql).map((sql) =>
+          migrationDatabase.prepare(sql)
+        )
+      );
+    }
+    const hostedSchemaBefore = await readHostedSchema(migrationDatabase);
     const maintenanceDisabled = await requestMaintenance(origin, {
       operation: "retention",
       retentionDays: 90,
@@ -165,6 +177,10 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
         operation: "migrate"
       }
     });
+    assert.deepEqual(
+      await readHostedSchema(migrationDatabase),
+      hostedSchemaBefore
+    );
     const repeatedMigration = await requestMaintenance(origin, {
       operation: "migrate"
     });
@@ -599,6 +615,15 @@ async function readMigrationVersions(database) {
     "SELECT version FROM schema_migrations ORDER BY version"
   ).all();
   return result.results.map(({ version }) => Number(version));
+}
+
+async function readHostedSchema(database) {
+  const result = await database.prepare(
+    "SELECT name, sql FROM sqlite_master " +
+      "WHERE type = 'table' AND name IN ('cli_login_challenges', 'owners') " +
+      "ORDER BY name"
+  ).all();
+  return result.results.map(({ name, sql }) => ({ name, sql }));
 }
 
 async function buildLocalSmokeArtifact() {

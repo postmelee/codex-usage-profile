@@ -191,6 +191,22 @@ Sites deployment 성공만으로 application `schema_migrations`가 exact `1..5`
   새 exact source/새 saved version으로 Gate A deployment를 재개한다. version 8은
   source 보정 전 owner-only rollback target으로 유지한다.
 
+version 9 첫 protected `migrate`는 generic `maintenance_unavailable`로 실패했고,
+access revision 31 owner-only와 environment revision 63의 maintenance disabled,
+operator secret absent, service `normal`로 즉시 복원해 같은 version을 private
+deploy했다. local missing-schema 경로는 통과했으므로 Sites package migration이
+물리 column을 선적용하고 application metadata만 누락한 hosted 상태를 별도로
+보정한다.
+
+- missing metadata `3..5`에 대해 known table column의 type, nullability, default,
+  CHECK fragment를 read-only 검사한다.
+- physical contract가 exact-match하면 SQL을 재실행하지 않고 metadata row만
+  idempotent runner로 기록한다. column이 없으면 bundled SQL을 실행한다.
+- column이 있으나 contract가 다르면 mutation 전 `maintenance_conflict`로
+  중단한다. provider SQL이나 schema 원문은 응답·로그에 반환하지 않는다.
+- real-workerd smoke는 `1..2` metadata + physical `3..5` 상태에서 metadata
+  reconciliation, 재실행 no-op, unexpected version 무변경을 검증한다.
+
 ### Gate A 승인 입력
 
 원격 mutation 전에 다음 read-only 상태와 exact 변경 범위를 제시한다.
