@@ -52,24 +52,13 @@ const JSON_HEADERS = Object.freeze({
 const HOSTED_D1_MIGRATION_COLUMNS = Object.freeze({
   3: Object.freeze({
     column: "intent",
-    defaultValue: null,
-    notNull: 0,
     table: "cli_login_challenges",
-    tableInfoSql: "PRAGMA table_info(cli_login_challenges)",
     tableSqlFragment:
       "intent TEXT CHECK (intent IS NULL OR intent IN ('login', 'submit'))"
   }),
   4: Object.freeze({
     column: "card_style",
-    defaultValue:
-      `'${JSON.stringify({
-        effect: { preset: "none", version: 1 },
-        schemaVersion: 1,
-        theme: "dark"
-      })}'`,
-    notNull: 1,
     table: "owners",
-    tableInfoSql: "PRAGMA table_info(owners)",
     tableSqlFragment:
       "card_style TEXT NOT NULL " +
       "DEFAULT '{\"effect\":{\"preset\":\"none\",\"version\":1}," +
@@ -78,10 +67,7 @@ const HOSTED_D1_MIGRATION_COLUMNS = Object.freeze({
   }),
   5: Object.freeze({
     column: "card_locale",
-    defaultValue: "'en'",
-    notNull: 1,
     table: "owners",
-    tableInfoSql: "PRAGMA table_info(owners)",
     tableSqlFragment:
       "card_locale TEXT NOT NULL DEFAULT 'en' " +
       "CHECK (card_locale IN ('en', 'ko'))"
@@ -622,28 +608,32 @@ async function reconcileHostedD1Migrations(
       continue;
     }
 
-    const columnResult = await database.prepare(
-      specification.tableInfoSql
-    ).all();
-    const column = (columnResult.results ?? []).find(
-      (row) => row.name === specification.column
-    );
-    if (!column) {
-      runnable.push(migration);
-      continue;
-    }
-
     const tableResult = await database.prepare(
       "SELECT sql FROM sqlite_master " +
         "WHERE type = 'table' AND name = ? LIMIT 1"
     ).bind(specification.table).all();
     const tableSql = tableResult.results?.[0]?.sql;
+    if (typeof tableSql !== "string") {
+      if (!applied.has(1)) {
+        runnable.push(migration);
+        continue;
+      }
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 table is missing for the candidate migration"
+      );
+    }
+    const normalizedTableSql = normalizeSql(tableSql);
+    const columnPattern = new RegExp(
+      `\\b${specification.column.toLowerCase()}\\b`,
+      "u"
+    );
+    if (!columnPattern.test(normalizedTableSql)) {
+      runnable.push(migration);
+      continue;
+    }
     if (
-      String(column.type).toUpperCase() !== "TEXT" ||
-      Number(column.notnull) !== specification.notNull ||
-      (column.dflt_value ?? null) !== specification.defaultValue ||
-      typeof tableSql !== "string" ||
-      !normalizeSql(tableSql).includes(
+      !normalizedTableSql.includes(
         normalizeSql(specification.tableSqlFragment)
       )
     ) {

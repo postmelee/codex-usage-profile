@@ -206,6 +206,10 @@ deploy했다. local missing-schema 경로는 통과했으므로 Sites package mi
   중단한다. provider SQL이나 schema 원문은 응답·로그에 반환하지 않는다.
 - real-workerd smoke는 `1..2` metadata + physical `3..5` 상태에서 metadata
   reconciliation, 재실행 no-op, unexpected version 무변경을 검증한다.
+- deployed D1에서 provider-sensitive `PRAGMA table_info` 경로가 generic
+  unavailable로 중단된 뒤에도 owner-only/revision 65 safe baseline을 복원했다.
+  readiness와 같은 `sqlite_master` read 경계에서 normalized exact column DDL
+  fragment를 판정하도록 inspection을 축소한다.
 
 ### Gate A 승인 입력
 

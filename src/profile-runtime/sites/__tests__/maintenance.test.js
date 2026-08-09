@@ -318,28 +318,18 @@ test("maintenance migration rejects hosted schema drift before mutation", async 
   const database = {
     batch() {},
     prepare(sql) {
-      if (sql.startsWith("SELECT sql FROM sqlite_master")) {
-        return {
-          bind(table) {
-            assert.equal(table, "cli_login_challenges");
-            return {
-              async all() {
-                return { results: [{ sql: "CREATE TABLE drifted ()" }] };
-              }
-            };
-          }
-        };
-      }
-      assert.equal(sql, "PRAGMA table_info(cli_login_challenges)");
+      assert.match(sql, /^SELECT sql FROM sqlite_master/u);
       return {
-        async all() {
+        bind(table) {
+          assert.equal(table, "cli_login_challenges");
           return {
-            results: [{
-              dflt_value: null,
-              name: "intent",
-              notnull: 0,
-              type: "INTEGER"
-            }]
+            async all() {
+              return {
+                results: [{
+                  sql: "CREATE TABLE cli_login_challenges (intent INTEGER)"
+                }]
+              };
+            }
           };
         }
       };
