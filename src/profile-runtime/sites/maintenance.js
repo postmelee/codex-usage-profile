@@ -12,7 +12,8 @@ import {
   D1_MIGRATION_MANIFEST
 } from "../../profile-backend/d1/migration-manifest.js";
 import {
-  migrateD1Database
+  migrateD1Database,
+  splitSqlStatements
 } from "../../profile-backend/d1/migration-runner.js";
 import {
   inspectD1MigrationReadiness
@@ -656,8 +657,16 @@ async function reconcileHostedD1Migrations(
   const applied = new Set(appliedVersions);
   const runnable = [];
   for (const migration of migrations) {
+    if (applied.has(migration.version)) continue;
+    if (migration.version <= 2) {
+      runnable.push(await reconcileHostedD1BaseMigration(
+        database,
+        migration
+      ));
+      continue;
+    }
     const specification = HOSTED_D1_MIGRATION_COLUMNS[migration.version];
-    if (applied.has(migration.version) || !specification) {
+    if (!specification) {
       runnable.push(migration);
       continue;
     }
@@ -703,6 +712,85 @@ async function reconcileHostedD1Migrations(
     }));
   }
   return Object.freeze(runnable);
+}
+
+async function reconcileHostedD1BaseMigration(database, migration) {
+  const objects = splitSqlStatements(migration.sql).map((sql) => {
+    const match = /^CREATE (TABLE|INDEX) ([a-z][a-z0-9_]*)\b/iu.exec(sql);
+    if (!match) {
+      throw new TypeError("Hosted D1 base migration must contain only schema objects");
+    }
+    return Object.freeze({
+      name: match[2],
+      sql,
+      type: match[1].toLowerCase()
+    });
+  });
+  const stored = [];
+  for (const object of objects) {
+    const result = await database.prepare(
+      "SELECT type, name, sql FROM sqlite_master " +
+        "WHERE type = ? AND name = ? LIMIT 1"
+    ).bind(object.type, object.name).all();
+    stored.push(result.results?.[0] ?? null);
+  }
+  const presentCount = stored.filter(Boolean).length;
+  if (presentCount === 0) return migration;
+  if (presentCount !== objects.length) {
+    throw maintenanceError(
+      "conflict",
+      "Hosted D1 base schema is only partially applied"
+    );
+  }
+  for (let index = 0; index < objects.length; index += 1) {
+    const object = objects[index];
+    const actual = stored[index];
+    if (
+      actual.type !== object.type ||
+      actual.name !== object.name ||
+      typeof actual.sql !== "string"
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 base schema does not match the candidate migration"
+      );
+    }
+    const actualSql = object.type === "table"
+      ? stripHostedD1ColumnFragments(object.name, actual.sql)
+      : normalizeSql(actual.sql);
+    if (
+      actualSql !== normalizeSql(object.sql)
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 base schema does not match the candidate migration"
+      );
+    }
+  }
+  return Object.freeze({
+    name: migration.name,
+    sql: "",
+    version: migration.version
+  });
+}
+
+function stripHostedD1ColumnFragments(table, value) {
+  let normalized = normalizeSql(value);
+  for (const specification of Object.values(HOSTED_D1_MIGRATION_COLUMNS)) {
+    if (specification.table !== table) continue;
+    normalized = normalized.replace(
+      normalizeSql(specification.tableSqlFragment),
+      ""
+    );
+  }
+  let collapsed = normalized;
+  do {
+    normalized = collapsed;
+    collapsed = normalized.replace(/,\s*,/gu, ",");
+  } while (collapsed !== normalized);
+  return normalizeSql(
+    collapsed.replace(/\(\s*,/gu, "(").replace(/,\s*\)/gu, ")")
+  );
 }
 
 function normalizeSql(value) {

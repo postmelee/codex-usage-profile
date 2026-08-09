@@ -125,9 +125,15 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `ready=true`이고 `expectedVersions`와
    `appliedVersions`가 순서까지 정확히 같아야 한다. owner/usage/token/session,
    SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
+   Sites가 package migration의 physical schema를 먼저 적용하고 application
+   `schema_migrations` metadata를 남기지 않은 경우, migration 1·2의 모든
+   explicit table/index DDL과 migration 3~5의 additive column contract가
+   candidate와 exact-match할 때만 metadata-only로 reconcile한다. 일부 object만
+   있거나 drift가 있으면 mutation 전 `maintenance_conflict`로 중단한다.
    `schema_migrations` table이 아직 없거나 expected version이 누락된 상태는
-   `migration_not_ready`로 중단한다. 실제 D1/provider 조회 장애는 세부 원문을
-   노출하지 않는 `maintenance_unavailable`로 중단한다.
+   `migration_not_ready`로 중단한다. 실제 D1/provider 장애는 inspection,
+   reconciliation, apply, verification 또는 exact manifest version의 bounded
+   code만 반환하고 SQL/provider 원문을 노출하지 않는다.
 6. readiness 성공 직후 `PROFILE_MAINTENANCE_MODE=disabled`로 바꾸고 operator
    secret을 제거한 environment를 같은 source saved version에 적용한다.
    owner-only access를 유지하면서 operator route가 generic `404`, `/healthz`가

@@ -448,6 +448,52 @@ test("maintenance migration bounds the exact failed apply kind and version", asy
   }
 });
 
+test("maintenance migration rejects a partially hosted base schema", async () => {
+  let applyCalls = 0;
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  const migrations = candidateMigrations();
+  migrations[0].sql =
+    "CREATE TABLE owners (id TEXT); CREATE TABLE sessions (id TEXT)";
+  const database = {
+    batch() {},
+    prepare(sql) {
+      assert.match(sql, /^SELECT type, name, sql FROM sqlite_master/u);
+      return {
+        bind(type, name) {
+          return {
+            async all() {
+              return {
+                results: name === "owners"
+                  ? [{ type, name, sql: "CREATE TABLE owners (id TEXT)" }]
+                  : []
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+  const fixture = await createServiceFixture({
+    database,
+    migrations,
+    inspectD1MigrationReadiness: async () => migrationState(
+      [],
+      expectedVersions
+    ),
+    migrateD1Database: async () => {
+      applyCalls += 1;
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, "maintenance_conflict");
+  assert.equal(applyCalls, 0);
+});
+
 test("maintenance migration rejects hosted schema drift before mutation", async () => {
   let applyCalls = 0;
   const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);

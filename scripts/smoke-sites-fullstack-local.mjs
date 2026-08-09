@@ -14,8 +14,7 @@ import {
   D1_MIGRATION_MANIFEST
 } from "../src/profile-backend/d1/migration-manifest.js";
 import {
-  migrateD1Database,
-  splitSqlStatements
+  migrateD1Database
 } from "../src/profile-backend/d1/migration-runner.js";
 import {
   loginWithDeviceCode
@@ -102,21 +101,10 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     const origin = ready.origin;
     const migrationDatabase = await miniflare.getD1Database("DB");
     await migrateD1Database(migrationDatabase, {
-      migrations: await loadLocalMigrations(
-        D1_MIGRATION_MANIFEST.slice(0, 2)
-      ),
+      migrations: await loadLocalMigrations(D1_MIGRATION_MANIFEST),
       now: () => new Date("2026-07-24T00:00:00.000Z")
     });
-    const hostedPhysicalMigrations = await loadLocalMigrations(
-      D1_MIGRATION_MANIFEST.slice(2)
-    );
-    for (const migration of hostedPhysicalMigrations) {
-      await migrationDatabase.batch(
-        splitSqlStatements(migration.sql).map((sql) =>
-          migrationDatabase.prepare(sql)
-        )
-      );
-    }
+    await migrationDatabase.prepare("DELETE FROM schema_migrations").run();
     const hostedSchemaBefore = await readHostedSchema(migrationDatabase);
     const maintenanceDisabled = await requestMaintenance(origin, {
       operation: "retention",
@@ -159,7 +147,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(unexpectedMigration.response.status, 409);
     assert.deepEqual(
       await readMigrationVersions(migrationDatabase),
-      [1, 2, 99]
+      [99]
     );
     await migrationDatabase.prepare(
       "DELETE FROM schema_migrations WHERE version = 99"
@@ -173,7 +161,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       ok: true,
       summary: {
         appliedVersions: [1, 2, 3, 4, 5],
-        newlyAppliedVersions: [3, 4, 5],
+        newlyAppliedVersions: [1, 2, 3, 4, 5],
         operation: "migrate"
       }
     });

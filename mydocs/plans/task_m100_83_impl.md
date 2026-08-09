@@ -222,6 +222,13 @@ deploy했다. local missing-schema 경로는 통과했으므로 Sites package mi
   initialize/read와 exact version별 batch 시작만 알리는 callback을 사용하고,
   reconciliation 결과의 SQL 적용/metadata-only 여부와 결합한 bounded code만
   반환한다. SQL 및 provider 오류 원문은 계속 반환하지 않는다.
+- version 13은 anonymous `/healthz` JSON 200 전파 확인 뒤
+  `migration_apply_sql_v1_unavailable`을 반환했다. access revision 41 owner-only와
+  environment revision 73 disabled/secret-absent/service `normal`을 복원했다.
+  hosted physical schema 1~5·application metadata 0 상태를 새 local real-workerd
+  fixture로 재현하고, base migration 1·2의 explicit table/index DDL 전체와 later
+  additive column fragment를 exact-match한 경우에만 metadata-only reconciliation을
+  허용한다. partial/drift schema는 metadata mutation 전 conflict로 중단한다.
 
 ### Gate A 승인 입력
 
