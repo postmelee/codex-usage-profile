@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEFAULT_D1_MIGRATIONS,
   loadD1Migrations,
+  migrateD1Database,
   splitSqlStatements
 } from "../d1/migrate.js";
 import {
@@ -67,4 +68,49 @@ test("migration splitter gives prepare exactly one statement at a time", () => {
     splitSqlStatements("-- comment\nCREATE TABLE a (id TEXT);\nINSERT INTO a VALUES ('1');"),
     ["CREATE TABLE a (id TEXT)", "INSERT INTO a VALUES ('1')"]
   );
+});
+
+test("D1 migration runner reports only bounded execution progress", async () => {
+  const progress = [];
+  const database = {
+    prepare(sql) {
+      const statement = {
+        bind() {
+          return statement;
+        },
+        async all() {
+          return { results: [] };
+        },
+        async run() {
+          return { success: true };
+        }
+      };
+      assert.equal(typeof sql, "string");
+      return statement;
+    },
+    async batch(statements) {
+      assert.equal(statements.length, 2);
+      return statements.map(() => ({ success: true }));
+    }
+  };
+
+  await migrateD1Database(database, {
+    migrations: [{
+      name: "one",
+      sql: "SELECT 1",
+      version: 1
+    }],
+    now: () => new Date("2026-08-09T00:00:00.000Z"),
+    onProgress(value) {
+      progress.push(value);
+    }
+  });
+
+  assert.deepEqual(progress, [
+    { phase: "initialize" },
+    { phase: "read" },
+    { phase: "prepare", version: 1 },
+    { phase: "batch", version: 1 }
+  ]);
+  assert.equal(progress.every(Object.isFrozen), true);
 });

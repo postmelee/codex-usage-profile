@@ -216,6 +216,12 @@ deploy했다. local missing-schema 경로는 통과했으므로 Sites package mi
   inspection, reconciliation, apply, verification 네 경계를 고정된 503 코드로만
   식별한다. provider 오류·SQL·schema·identity 원문은 반환하지 않으며,
   `maintenance_conflict`와 `migration_not_ready` 응답 계약은 유지한다.
+- version 12에서 고정 단계 코드는 `migration_apply_unavailable`을 확인했다. access
+  revision 37 owner-only와 environment revision 69 disabled/secret-absent/service
+  `normal`을 즉시 복원했다. 다음 후보는 migration runner가 mutation 전
+  initialize/read와 exact version별 batch 시작만 알리는 callback을 사용하고,
+  reconciliation 결과의 SQL 적용/metadata-only 여부와 결합한 bounded code만
+  반환한다. SQL 및 provider 오류 원문은 계속 반환하지 않는다.
 
 ### Gate A 승인 입력
 

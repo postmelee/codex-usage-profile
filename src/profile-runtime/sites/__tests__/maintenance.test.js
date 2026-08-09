@@ -401,6 +401,53 @@ test("maintenance migration reports only bounded stage failures", async () => {
   }
 });
 
+test("maintenance migration bounds the exact failed apply kind and version", async () => {
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  for (const item of [
+    {
+      code: "migration_apply_sql_v3_unavailable",
+      reconcile: async (_database, migrations) => migrations
+    },
+    {
+      code: "migration_apply_metadata_v3_unavailable",
+      reconcile: async (_database, migrations) => migrations.map(
+        (migration) => migration.version === 3
+          ? { ...migration, sql: "" }
+          : migration
+      )
+    }
+  ]) {
+    const fixture = await createServiceFixture({
+      database: { batch() {}, prepare() {} },
+      migrations: candidateMigrations(),
+      inspectD1MigrationReadiness: async () => migrationState(
+        [1, 2],
+        expectedVersions
+      ),
+      reconcileHostedD1Migrations: item.reconcile,
+      migrateD1Database: async (_database, options) => {
+        options.onProgress({ phase: "batch", version: 3 });
+        throw new Error("provider SQL includes private-owner token bytes");
+      }
+    });
+    const response = await createProfileSitesMaintenanceHandler({
+      config: enabledConfig(),
+      service: fixture.service
+    })(maintenanceRequest({ operation: "migrate" }));
+    const body = await response.text();
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(JSON.parse(body), {
+      ok: false,
+      error: {
+        code: item.code,
+        message: "Maintenance migration apply failed"
+      }
+    });
+    assert.doesNotMatch(body, /provider|private-owner|token|includes|bytes/i);
+  }
+});
+
 test("maintenance migration rejects hosted schema drift before mutation", async () => {
   let applyCalls = 0;
   const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);

@@ -49,6 +49,8 @@ const PROFILE_SITES_MIGRATION_STAGE_CODES = Object.freeze([
   "migration_inspection_unavailable",
   "migration_reconciliation_unavailable",
   "migration_apply_unavailable",
+  "migration_apply_initialize_unavailable",
+  "migration_apply_read_unavailable",
   "migration_verification_unavailable"
 ]);
 
@@ -128,7 +130,7 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
           PROFILE_SITES_MIGRATION_NOT_READY_CODE
         );
       }
-      if (PROFILE_SITES_MIGRATION_STAGE_CODES.includes(error?.code)) {
+      if (isMigrationStageCode(error?.code)) {
         return maintenanceResponse(503, error.code);
       }
       if (error instanceof TypeError || error?.code === "invalid") {
@@ -250,14 +252,18 @@ export function createProfileSitesMaintenanceService(options = {}) {
       );
     }
     let applied;
+    let applyProgress = Object.freeze({ phase: "unknown" });
     try {
       applied = await applyMigrations(dependencies.database, {
         migrations: runnableMigrations,
-        now
+        now,
+        onProgress(progress) {
+          applyProgress = progress;
+        }
       });
     } catch (cause) {
       throw maintenanceError(
-        "migration_apply_unavailable",
+        migrationApplyFailureCode(applyProgress, runnableMigrations),
         "D1 migration apply is unavailable",
         cause
       );
@@ -721,6 +727,35 @@ function normalizeAppliedMigrationVersions(value, appliedVersions) {
   return Object.freeze(normalized);
 }
 
+function isMigrationStageCode(value) {
+  return PROFILE_SITES_MIGRATION_STAGE_CODES.includes(value) ||
+    /^migration_apply_(?:metadata|sql)_v[1-5]_unavailable$/u.test(
+      value ?? ""
+    );
+}
+
+function migrationApplyFailureCode(progress, migrations) {
+  if (progress?.phase === "initialize") {
+    return "migration_apply_initialize_unavailable";
+  }
+  if (progress?.phase === "read") {
+    return "migration_apply_read_unavailable";
+  }
+  if (
+    ["prepare", "batch"].includes(progress?.phase) &&
+    Number.isSafeInteger(progress?.version)
+  ) {
+    const migration = migrations.find(
+      (candidate) => candidate.version === progress.version
+    );
+    if (migration) {
+      const kind = migration.sql.trim() === "" ? "metadata" : "sql";
+      return `migration_apply_${kind}_v${migration.version}_unavailable`;
+    }
+  }
+  return "migration_apply_unavailable";
+}
+
 function isAuthorizedMaintenanceRequest(request, config) {
   if (
     config.maintenanceEnabled !== true ||
@@ -978,6 +1013,9 @@ function maintenanceResponse(status, code) {
 }
 
 function maintenanceMessage(code) {
+  if (code.startsWith("migration_apply_")) {
+    return "Maintenance migration apply failed";
+  }
   return {
     invalid_request: "Maintenance request is invalid",
     maintenance_conflict: "Maintenance plan is stale or conflicts",
