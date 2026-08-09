@@ -62,7 +62,7 @@ test("builds the canonical Sites public profile URL", () => {
       "https://profiles.example.test/ignored?view=settings",
       "postmelee"
     ),
-    "https://profiles.example.test/u/postmelee"
+    "https://profiles.example.test/?profile=postmelee"
   );
   assert.equal(buildPublicProfileShareUrl("javascript:alert(1)", "postmelee"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", "../owner"), null);

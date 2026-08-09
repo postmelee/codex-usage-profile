@@ -194,14 +194,17 @@ function buildLocaleTags(locale) {
 
 export function buildPublicProfileUrl(origin, handle) {
   const normalizedHandle = normalizeHandle(handle);
-  return new URL(
-    `/u/${encodeURIComponent(normalizedHandle)}`,
-    normalizeOrigin(origin)
-  ).toString();
+  const url = new URL("/", normalizeOrigin(origin));
+  url.searchParams.set("profile", normalizedHandle);
+  return url.toString();
 }
 
 export function buildSocialImageUrl(origin, handle, revisionAt) {
-  const url = new URL(`${buildPublicProfileUrl(origin, handle)}/social.png`);
+  const normalizedHandle = normalizeHandle(handle);
+  const url = new URL(
+    `/u/${encodeURIComponent(normalizedHandle)}/social.png`,
+    normalizeOrigin(origin)
+  );
   if (revisionAt !== undefined && revisionAt !== null) {
     url.searchParams.set("v", String(toRevisionToken(revisionAt)));
   }

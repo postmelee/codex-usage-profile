@@ -1758,7 +1758,7 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy share link" }).click();
     await expect(page.getByText("Share link copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/u/postmelee"
+      "http://127.0.0.1:5173/?profile=postmelee"
     );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();

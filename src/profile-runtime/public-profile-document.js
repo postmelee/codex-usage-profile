@@ -17,6 +17,7 @@ const PUBLIC_PROFILE_DOCUMENT_HEADERS = Object.freeze({
 
 const PUBLIC_PROFILE_DOCUMENT_METHODS = Object.freeze(["GET", "HEAD"]);
 const PUBLIC_PROFILE_DOCUMENT_PATH_RE = /^\/u\/([^/]+)$/;
+const UNSUPPORTED_HANDLE_RE = new RegExp("[\\u0000-\\u001f\\u007f/?#]");
 
 export function readPublicProfileDocumentHandle(pathname) {
   if (typeof pathname !== "string" || pathname === "") return null;
@@ -35,8 +36,20 @@ export function readPublicProfileDocumentHandle(pathname) {
     return null;
   }
 
-  const normalized = handle.trim();
-  return normalized === "" ? null : normalized;
+  return normalizePublicProfileDocumentHandle(handle);
+}
+
+export function readPublicProfileDocumentRequestHandle(request) {
+  if (!request || typeof request.url !== "string") return null;
+
+  const url = new URL(request.url);
+  const pathHandle = readPublicProfileDocumentHandle(url.pathname);
+  if (pathHandle !== null) return pathHandle;
+  if (url.pathname !== "/") return null;
+
+  const queryHandles = url.searchParams.getAll("profile");
+  if (queryHandles.length !== 1) return null;
+  return normalizePublicProfileDocumentHandle(queryHandles[0]);
 }
 
 export function isPublicProfileDocumentRequest(request) {
@@ -47,7 +60,7 @@ export function isPublicProfileDocumentRequest(request) {
     return false;
   }
 
-  return readPublicProfileDocumentHandle(new URL(request.url).pathname) !== null;
+  return readPublicProfileDocumentRequestHandle(request) !== null;
 }
 
 export function createPublicProfileDocumentHandler(options = {}) {
@@ -64,7 +77,7 @@ export function createPublicProfileDocumentHandler(options = {}) {
     if (!isPublicProfileDocumentRequest(request)) return null;
 
     const url = new URL(request.url);
-    const handle = readPublicProfileDocumentHandle(url.pathname);
+    const handle = readPublicProfileDocumentRequestHandle(request);
     const origin = publicBaseUrl ?? url.origin;
     const profile = await resolveProfileSummary(resolveProfile, handle);
 
@@ -103,6 +116,21 @@ export function createPublicProfileDocumentHandler(options = {}) {
   };
 }
 
+function normalizePublicProfileDocumentHandle(value) {
+  if (typeof value !== "string") return null;
+
+  const handle = value.trim();
+  if (
+    handle === "" ||
+    handle.length > 100 ||
+    UNSUPPORTED_HANDLE_RE.test(handle)
+  ) {
+    return null;
+  }
+
+  return handle;
+}
+
 async function resolveProfileSummary(resolveProfile, handle) {
   let profile;
   try {
@@ -115,7 +143,8 @@ async function resolveProfileSummary(resolveProfile, handle) {
   if (typeof profile.handle !== "string" || profile.handle.trim() === "") {
     return null;
   }
-  if (!Number.isFinite(new Date(profile.uploadedAt).getTime())) return null;
+  const imageRevisionAt = profile.imageRevisionAt ?? profile.uploadedAt;
+  if (!Number.isFinite(new Date(imageRevisionAt).getTime())) return null;
 
   return profile;
 }

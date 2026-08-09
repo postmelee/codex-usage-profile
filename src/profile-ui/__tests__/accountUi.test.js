@@ -109,6 +109,22 @@ test("builds account login redirect URLs", () => {
   );
 });
 
+test("preserves the Sites profile query through GitHub login", () => {
+  const client = {
+    buildGitHubLoginUrl(options) {
+      return `/login?redirect_to=${encodeURIComponent(options.redirectTo)}`;
+    }
+  };
+
+  assert.equal(
+    buildAccountLoginHref(client, {
+      pathname: "/",
+      search: "?profile=meleeisdeveloping"
+    }),
+    "/login?redirect_to=%2F%3Fprofile%3Dmeleeisdeveloping"
+  );
+});
+
 test("maps account auth error query parameters to user-facing copy", () => {
   assert.deepEqual(
     getAccountAuthError({

@@ -143,7 +143,10 @@ async function handleSitesPublicProfileDocument(request, context) {
     loadIndexHtml: async (documentRequest) => {
       const response = await context.environment.ASSETS.fetch(new Request(
         new URL(INDEX_PATH, documentRequest.url),
-        documentRequest
+        {
+          headers: documentRequest.headers,
+          method: "GET"
+        }
       ));
       return response.ok ? response.text() : null;
     },

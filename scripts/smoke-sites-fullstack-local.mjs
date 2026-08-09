@@ -361,6 +361,36 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(publicProfile.response.status, 200);
     assert.equal(publicProfile.body.data.owner.handle, "local-owner");
 
+    const publicDocument = await fetch(new URL(
+      "/?profile=local-owner",
+      origin
+    ));
+    const publicDocumentHtml = await publicDocument.text();
+    assert.equal(publicDocument.status, 200);
+    assert.match(
+      publicDocumentHtml,
+      /<link rel="canonical" href="[^"]+\?profile=local-owner" \/>/
+    );
+    assert.match(
+      publicDocumentHtml,
+      /<meta property="og:url" content="[^"]+\?profile=local-owner" \/>/
+    );
+    assert.match(
+      publicDocumentHtml,
+      /<meta property="og:image" content="[^"]+\/u\/local-owner\/social\.png\?v=\d+" \/>/
+    );
+
+    const publicDocumentHead = await fetch(new URL(
+      "/?profile=local-owner",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(publicDocumentHead.status, 200);
+    assert.equal((await publicDocumentHead.arrayBuffer()).byteLength, 0);
+    assert.equal(
+      publicDocumentHead.headers.get("content-type"),
+      "text/html; charset=utf-8"
+    );
+
     const publicCard = await fetch(new URL(
       "/u/local-owner/card.png?locale=ko",
       origin
@@ -582,7 +612,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 42,
+      routesVerified: 44,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {

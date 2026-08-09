@@ -334,19 +334,96 @@ remote contract:
 Task #83 Stage 3: owner-only Sites candidate와 전체 smoke
 ```
 
+## Stage 3.7 — Sites 호환 공유 문서 경로 보정
+
+### Gate B 1차 실패와 복원 증적
+
+2026-08-09 별도 승인된 Gate B에서 access를 public revision 46으로 전환했다.
+anonymous landing `200`, private API `401`, missing public API·README·social media
+`404`는 통과했지만 `/u/{handle}`과 trailing slash 변형은 모두 `Location: /`의
+`307`이었다. canonical/OG/Twitter initial HTML과 revision을 측정할 수 없으므로
+OAuth·submit·publish mutation 전에 release blocker로 중단했다.
+
+access를 즉시 custom owner-only revision 47로 복원했고 owner 1명, 추가
+user/group/external visitor 0명을 재확인했다. environment revision 77은 service
+`normal`, maintenance disabled/secret-absent를 유지하며 anonymous health `401`,
+protected health `200`, operator route `404`다. 새 token/session/usage/media mutation은
+없었다. protected read-only 진단에서 `/?profile={handle}`은 `200`,
+`/u/{handle}.html`과 `/u/{handle}/index.html`은 `404`였다.
+
+### 승인된 보정 설계
+
+1. public profile document request는 기존 `/u/{handle}` GET/HEAD와 함께 root의
+   exact `profile` query를 인식한다. 빈 값, 중복/추가 path, invalid handle과
+   card/social media path는 계속 거부한다.
+2. canonical HTML share URL은 실제 Sites front door가 Worker에 전달하는
+   `/?profile={handle}`로 생성한다. locale은 별도 query로 추가되더라도 canonical은
+   handle만 포함한다.
+3. `og:image`와 Twitter image는 HTML URL에 경로를 이어 붙이지 않고 기존
+   `/u/{handle}/social.png?v={revision}`을 독립 생성한다. README 카드 URL과 ETag,
+   stable R2 key는 변경하지 않는다.
+4. Share Studio의 복사·X·Threads·LinkedIn·Facebook·Reddit 대상은 같은 query
+   share URL을 사용한다. 공개 화면에서 GitHub OAuth를 시작하면 기존
+   current-location redirect가 query를 그대로 보존한다.
+5. Node/dev는 기존 `/u/{handle}` 문서도 계속 처리한다. 이 경로는 Sites에서
+   public 링크로 안내하지 않을 뿐 하위 호환 source 계약을 삭제하지 않는다.
+6. 공식 문서는 Gate B 실측 사실과 Sites용 query canonical을 반영하되 Gate C 전
+   README CTA와 영구 public 상태는 활성화하지 않는다.
+
+### 예상 변경 파일
+
+- `src/profile-runtime/public-profile-document.js`
+- `src/profile-runtime/open-graph.js`
+- `src/profile-runtime/__tests__/public-profile-document.test.js`
+- `src/profile-runtime/__tests__/open-graph.test.js`
+- `src/profile-runtime/sites/backend.js`
+- `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/sites/__tests__/backend.test.js`
+- `src/profile-runtime/sites/__tests__/full-stack.test.js`
+- `src/profile-ui/shareStudio.js`
+- `src/profile-ui/__tests__/shareStudio.test.js`
+- `src/profile-ui/__tests__/accountUi.test.js`
+- `scripts/smoke-sites-fullstack-local.mjs`
+- `tests/profile-ui.spec.js`
+- `docs/sites-operations.md`
+- `docs/production-hosting.md`
+- `docs/readme-card.md`
+- `README.md`
+- `mydocs/working/task_m100_83_stage3_7.md`
+
+### 검증
+
+- query/path GET·HEAD 판별, POST/media/invalid query 폴스루
+- public query document의 canonical·`og:url`·Twitter metadata와
+  `/u/{handle}/social.png?v=` 분리
+- private/missing query HTML의 byte-identical fallback
+- Share Studio target 전체가 encoded `/?profile={handle}` 사용
+- current-location OAuth redirect가 query를 보존
+- real Worker·D1·R2·ASSETS full-stack smoke에서 public query GET/HEAD와
+  handle별 metadata를 검증
+- focused Node tests, 전체 test/E2E/build/full-stack/production artifact 검증
+- source commit 뒤 새 owner-only saved version에서 protected query HTML `200`과
+  `/u/{handle}` front-door `307` 경계를 함께 확인
+
+### 커밋
+
+```text
+Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정
+```
+
 ## Stage 4 — Gate B public cache 실측과 baseline 원복
 
 ### Gate B 승인 입력
 
 public access를 열기 전에 다음을 제시한다.
 
-- Stage 3 saved version/deployment/source와 protected readiness exact-match 증적
-- owner-only Sites gate에서 `/u/{handle}`가 `/`로 `307` 전환되어 Stage 4 public access에서
-  canonical/OG/Twitter·private/missing HTML 폴백을 실측해야 한다는 승인된 handoff
+- Stage 3.7 saved version/deployment/source와 protected readiness exact-match 증적
+- Gate B 1차 `/u/{handle} → /` `307` 실패, 즉시 owner-only 복원과
+  `/?profile={handle}` 보정의 protected `200` 증적
 - current owner-only access policy와 public으로 바꿀 exact access, 즉시 복원할 owner-only 값
 - maintenance disabled, operator secret absent, operator route `404`, health `200`
 - disposable test profile/private state, 일회용 token/session과 종료 cleanup scope
-- 측정할 exact `/u/{handle}`·README/social URL과 redacted 관찰 항목
+- 측정할 exact `/?profile={handle}`·README/social URL과 redacted 관찰 항목
 - 반복 GET/HEAD 및 submit 전·직후·경과 후 측정 순서
 - success/failure 모두 public에서 즉시 owner-only로 복원하는 절차
 - current plan/quota와 추가 결제·자동 초과 과금 표시
@@ -376,7 +453,7 @@ Gate B 승인 전에는 access를 public으로 변경하지 않는다.
 2. public access로 전환한다.
 3. anonymous landing, private API `401/403`, private/missing profile/card/social `404`와 동일 HTML fallback을 확인한다.
 4. OAuth/CLI submit과 publish를 수행하고 README PNG 4변형, social PNG, canonical HTML/metadata 공개 계약을 확인한다.
-5. 같은 `/u/{handle}`에 GET/HEAD를 반복하며 timestamp와 bounded `CF-Cache-Status`, `Age`, `x-request-id`, `Cache-Control`, `og:image?v=`만 기록한다.
+5. 같은 `/?profile={handle}`에 GET/HEAD를 반복하며 timestamp와 bounded `CF-Cache-Status`, `Age`, `x-request-id`, `Cache-Control`, `og:image?v=`만 기록한다.
 6. 다음 usage submit 전, 직후, 짧은 경과 후 HTML `og:image?v=`와 social PNG ETag/304를 대조한다.
 7. cache header가 없거나 always dynamic이어도 application revision이 즉시 갱신되고 privacy/publish 계약이 맞으면 비차단으로 분류한다.
 8. stale HTML이 private 전환 뒤 공개되거나 다른 handle 응답이 섞이거나 revision이 계약 시간 안에 갱신되지 않으면 release blocker로 분류하고 후속 공개를 중단한다.
@@ -428,6 +505,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   - `Task #83 Stage 1: Sites production artifact local path 제거`
   - `Task #83 Stage 2: exact Sites candidate와 archive preflight`
   - `Task #83 Stage 3: owner-only Sites candidate와 전체 smoke`
+  - `Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
 
 ## 단계 의존성
@@ -435,7 +513,10 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - Stage 1은 이 구현계획서 승인 뒤에만 시작한다.
 - Stage 2는 Stage 1 산출물·검증·완료보고서 승인 후 진행한다.
 - Stage 3은 Stage 2 완료보고서 승인과 별도 Gate A 승인 후 진행한다.
-- Stage 4는 Stage 3 완료보고서 승인과 별도 Gate B 승인 후 진행한다.
+- Stage 3.7은 Stage 4 Gate B 1차 blocker와 owner-only 복원 뒤 작업지시자의
+  계획 보정·source 수정 승인으로 진행한다.
+- Stage 4 재시도는 Stage 3.7 완료보고서 승인, 새 owner-only saved version의
+  protected query HTML 검증과 별도 Gate B 재승인 후 진행한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
@@ -448,6 +529,9 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - **migration rollback**: `3..5` backward compatibility와 backup 가능성을 Gate A에 제시하며 schema downgrade를 금지한다.
 - **remote credential/data 노출**: secret은 hosted environment에만 두고 bounded status/count/digest만 문서화한다.
 - **Gate B public 잔류**: 실패 원인 분석보다 owner-only 복원을 먼저 수행하고 anonymous gate를 재확인한다.
+- **Sites front-door 경로 불일치**: local Worker `/u/{handle}` 성공은 production
+  share 계약으로 인정하지 않는다. query route의 protected/public initial HTML을
+  별도로 검증하고 media URL과 HTML URL builder를 분리한다.
 - **cache 오판**: timestamp, HTML revision, social ETag와 cache header를 함께 기록하고 application correctness와 최적화를 분리한다.
 - **quota/과금 변화**: 각 Gate 직전 plan 표시를 확인하고 추가 결제·자동 초과 과금 요구 시 mutation을 중단한다.
 
@@ -456,7 +540,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - Cloudflare Vite build가 manifest를 소비한 뒤 실행되는 별도 post-build finalizer 방식
 - finalizer가 exact manifest만 제거하고 다른 runtime/build entry는 보존하는 fail-closed 범위
 - production verifier와 Worker·renderer·D1/R2 제품 source를 Stage 1 보호 대상으로 두는 결정
-- 4개 Stage의 산출물, 검증 명령과 exact 커밋 메시지
+- 4개 Stage와 Stage 3.7 보정의 산출물, 검증 명령과 exact 커밋 메시지
 - Stage 3 Gate A와 Stage 4 Gate B의 승인 입력·중단·원복 절차
 - saved version source는 Stage 2 application candidate, 이후 보고서 commit은 document-only HEAD로 구분하는 provenance 정책
 - Gate B 결과를 release blocker와 비차단 cache 최적화로 나누는 판단 기준

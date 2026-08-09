@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 한 번 복사한 공개 이미지 URL을 GitHub README에 유지할 수 있고, 이후 사용량 제출이 성공하면 같은 URL이 최신 카드로 다시 렌더링된다.
 
 > [!IMPORTANT]
-> 현재 production은 saved version 7 기준으로 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면을 제공한다. `/u/{handle}` canonical 공유 문서, `/u/{handle}/social.png`, 카드 theme 선택과 Share Studio는 Task #74·#78 누적 배포 후보이며 아직 production smoke를 통과하지 않았다. 이 절의 다음 배포 기능은 후보가 실제 배포될 때까지 production CTA로 사용하지 않는다.
+> 현재 production은 saved version 7 기준으로 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면을 제공한다. 같은 query URL의 동적 canonical/OG 문서, `/u/{handle}/social.png`, 카드 theme 선택과 Share Studio는 Task #74·#78 누적 배포 후보이며 아직 production smoke를 통과하지 않았다. extension 없는 `/u/{handle}`은 실제 Sites public Gate에서 `/`로 전환되어 공유 링크로 사용하지 않는다. 이 절의 다음 배포 기능은 후보가 실제 배포될 때까지 production CTA로 사용하지 않는다.
 
 ## 현재 production 사용자 흐름
 
@@ -25,15 +25,15 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 
 1. `/profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
 2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공하며 **저장**으로 PNG를 내려받을 수 있다.
-3. SNS에는 `https://{origin}/u/{handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
+3. SNS에는 `https://{origin}/?profile={handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
 4. X, LinkedIn 또는 Reddit 버튼은 해당 서비스의 작성 창을 공유 링크와 함께 연다. provider API나 OAuth로 자동 게시하지 않는다.
 5. README에는 **README Markdown**을 사용하고, 이미지를 직접 첨부할 때만 Share Studio의 **이미지 복사** 안내를 따른다.
 
-후보 배포 뒤 private으로 전환하면 README card와 social image는 같은 존재 비노출 `404`를 반환한다. `/u/{handle}` HTML은 비공개와 미존재를 구분하지 않는 기본 메타데이터와 unavailable 화면으로 닫힌다.
+후보 배포 뒤 private으로 전환하면 README card와 social image는 같은 존재 비노출 `404`를 반환한다. `/?profile={handle}` HTML은 비공개와 미존재를 구분하지 않는 기본 메타데이터와 unavailable 화면으로 닫힌다.
 
 ## 다음 배포 후보의 공유 링크와 링크 미리보기
 
-후보 배포와 production smoke가 완료되면 `https://{origin}/u/{handle}`은 카드 소유자의 canonical 공개 프로필 화면이자 SNS 링크 미리보기 대상이 된다. 서버가 이 문서의 `<head>`에 handle별 Open Graph와 Twitter Card 메타데이터를 주입한다. 현재 saved version 7 production에서는 이 extension 없는 경로가 `/`로 redirect되므로 공유 링크로 배포하지 않는다.
+후보 배포와 production smoke가 완료되면 `https://{origin}/?profile={handle}`은 카드 소유자의 canonical 공개 프로필 화면이자 SNS 링크 미리보기 대상이 된다. 서버가 이 문서의 `<head>`에 handle별 Open Graph와 Twitter Card 메타데이터를 주입한다. extension 없는 `/u/{handle}`은 실제 Sites front door에서 `/`로 redirect되므로 공유 링크로 배포하지 않는다.
 
 | 항목 | 값 |
 |---|---|
@@ -105,11 +105,10 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 
 | Surface | URL | 상태 | 역할 |
 |---|---|---|---|
-| 공개 프로필 호환 진입점 | `/?profile={handle}` | 현재 production | saved version 7에서 공개 카드와 사용량 요약을 표시한다. 다음 후보 배포 뒤에도 SPA compatibility 용도로만 유지하며 canonical 공유 링크로 표기하지 않는다. |
-| canonical 공유 프로필 | `/u/{handle}` | 다음 배포 | handle별 OG/Twitter metadata가 주입되는 공개 HTML이다. owner-only·public smoke 뒤 production 공유 링크로 승격한다. |
+| 공개 프로필·canonical 공유 | `/?profile={handle}` | 현재 production·다음 배포 보강 | saved version 7에서 공개 카드와 사용량 요약을 표시한다. 다음 후보는 같은 URL의 initial HTML에 handle별 OG/Twitter metadata를 주입하고 owner-only·public smoke 뒤 공유 링크로 승격한다. |
 | 공개 JSON | `/api/profiles/public/{handle}` | 현재 production | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
 | README PNG | `/u/{handle}/card.png` | 현재 production | README에 삽입하는 1497x918 stable image endpoint다. |
-| social PNG | `/u/{handle}/social.png` | 다음 배포 | `/u/{handle}`의 2400x1260 링크 미리보기 이미지다. |
+| social PNG | `/u/{handle}/social.png` | 다음 배포 | query canonical 문서의 2400x1260 링크 미리보기 이미지다. |
 
 profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON은 `404`를 반환한다. Publish가 완료되지 않았거나 private 전환으로 stable object가 제거됐거나 locale metadata/revision이 불완전하면 공개 PNG도 owner 존재 여부를 노출하지 않는 동일한 `404`를 반환한다. R2 provider·timeout·bucket 장애는 내부 storage 정보를 포함하지 않는 `503 media_unavailable`과 `Retry-After: 5`를 반환하므로 일시 장애를 미published 결과로 캐시하지 않는다. 공개 HTML은 로그인 여부를 노출하지 않는 unavailable 상태를 표시한다.
 
