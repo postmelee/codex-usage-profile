@@ -77,6 +77,33 @@ test("reads the handle from the Sites-compatible profile query", () => {
   );
 });
 
+test("reads the handle from the Worker-routed API share path", () => {
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/postmelee`)
+    ),
+    "postmelee"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/foo%20bar/`)
+    ),
+    "foo bar"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/one/more`)
+    ),
+    null
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/foo%2Fbar`)
+    ),
+    null
+  );
+});
+
 test("matches only GET and HEAD document requests", () => {
   assert.equal(
     isPublicProfileDocumentRequest(new Request(`${BASE_URL}/u/postmelee`)),
@@ -112,6 +139,24 @@ test("matches only GET and HEAD document requests", () => {
     ),
     false
   );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`)
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`, { method: "HEAD" })
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`, { method: "POST" })
+    ),
+    false
+  );
 });
 
 test("returns null for requests it does not own", async () => {
@@ -131,7 +176,9 @@ test("returns null for requests it does not own", async () => {
 
 test("serves the injected document for a public profile", async () => {
   const handler = createHandler();
-  const response = await handler(new Request(`${BASE_URL}/?profile=postmelee`));
+  const response = await handler(
+    new Request(`${BASE_URL}/api/share/postmelee`)
+  );
   const body = await response.text();
 
   assert.equal(response.status, 200);
@@ -145,7 +192,7 @@ test("serves the injected document for a public profile", async () => {
   );
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.ok(body.includes("property=\"og:title\""));
-  assert.ok(body.includes(`${BASE_URL}/?profile=postmelee`));
+  assert.ok(body.includes(`${BASE_URL}/api/share/postmelee`));
   assert.ok(body.includes(`${BASE_URL}/u/postmelee/social.png?v=`));
   assert.ok(body.includes("<div id=\"root\"></div>"));
 });
@@ -159,7 +206,7 @@ test("accepts the minimal store resolver summary", async () => {
     })
   });
   const body = await (
-    await handler(new Request(`${BASE_URL}/?profile=postmelee`))
+    await handler(new Request(`${BASE_URL}/api/share/postmelee`))
   ).text();
 
   assert.ok(body.includes("postmelee's Codex card"));
@@ -177,10 +224,10 @@ test("keeps documents distinct per handle", async () => {
   });
 
   const first = await (
-    await handler(new Request(`${BASE_URL}/?profile=alice`))
+    await handler(new Request(`${BASE_URL}/api/share/alice`))
   ).text();
   const second = await (
-    await handler(new Request(`${BASE_URL}/?profile=bob`))
+    await handler(new Request(`${BASE_URL}/api/share/bob`))
   ).text();
 
   assert.ok(first.includes("alice's Codex card"));
@@ -191,10 +238,10 @@ test("keeps documents distinct per handle", async () => {
 test("falls back to site tags for private and missing handles", async () => {
   const handler = createHandler();
   const missing = await (
-    await handler(new Request(`${BASE_URL}/?profile=ghost`))
+    await handler(new Request(`${BASE_URL}/api/share/ghost`))
   ).text();
   const privateProfile = await (
-    await handler(new Request(`${BASE_URL}/?profile=hidden`))
+    await handler(new Request(`${BASE_URL}/api/share/hidden`))
   ).text();
 
   assert.equal(missing, privateProfile);
@@ -250,7 +297,7 @@ test("ignores profiles without a usable image revision date", async () => {
 test("omits the body for HEAD requests", async () => {
   const handler = createHandler();
   const response = await handler(
-    new Request(`${BASE_URL}/?profile=postmelee`, { method: "HEAD" })
+    new Request(`${BASE_URL}/api/share/postmelee`, { method: "HEAD" })
   );
 
   assert.equal(response.status, 200);

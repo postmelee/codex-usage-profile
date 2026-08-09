@@ -10,10 +10,10 @@ Turn Codex account usage into a private-by-default profile and a stable GitHub R
 Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The public MVP is available at [codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site), and the CLI uses that origin by default.
 
 > [!IMPORTANT]
-> The current production service supports the private preview, publish flow, and stable README card. A metadata-enhanced `/?profile={handle}` share page and social preview are included in the next deployment candidate but are not yet live. The preview embed below will be replaced only after that deployment passes production smoke checks.
+> The current production service supports the private preview, publish flow, and stable README card. A metadata-enhanced `/api/share/{handle}` page and social preview are included in the next deployment candidate but are not yet live. The preview embed below will be replaced only after that deployment passes production smoke checks.
 
 <!-- PROFILE_CARD_EMBED_PLACEHOLDER
-Replace after the next production deployment and `/?profile={handle}` smoke:
+Replace after the next production deployment and `/api/share/{handle}` smoke:
 
 [![Codex usage profile](<PRODUCTION_CARD_URL>)](<PRODUCTION_PROFILE_URL>)
 -->
@@ -53,7 +53,7 @@ Future submits update the same image URL. Your README Markdown does not need to 
 | Surface | URL | Availability | Purpose |
 |---|---|---|---|
 | README card | `/u/{handle}/card.png` | Available now | Stable PNG for GitHub profile and project READMEs |
-| Public profile | `/?profile={handle}` | Next deployment | Human-readable share page with link-preview metadata |
+| Public profile | `/api/share/{handle}` | Next deployment | Human-readable share page with link-preview metadata |
 | Social preview | `/u/{handle}/social.png` | Next deployment | Link preview image for social platforms |
 
 Use the README card in Markdown after replacing `{handle}` with your published profile handle:

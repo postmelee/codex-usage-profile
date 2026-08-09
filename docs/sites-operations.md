@@ -7,9 +7,10 @@ fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을
 범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
 현재 saved version 7의 public HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. Task #74·#78 누적 배포
-후보의 canonical share/OG 문서도 Sites front door가 Worker에 전달하는
-`/?profile={handle}`을 사용하고 social preview는 `/u/{handle}/social.png`다.
+README card는 `/u/{handle}/card.png`를 사용한다. owner-only version 15에서 root
+query는 Worker 전에 정적 `index.html`로 처리됨을 확인했다. 다음 후보의 canonical
+share/OG 문서는 Worker 전달이 확인된 `/api/share/{handle}`을 사용하고 social
+preview는 `/u/{handle}/social.png`다.
 동적 metadata와 social image 후보는 owner-only와 public smoke가 완료되기
 전까지 production 기능으로 안내하지 않는다. extension 없는 `/u/{handle}`은
 public Gate에서도 `/`로 `307` 전환된 경로이므로 Sites share URL로 사용하지 않는다.
@@ -144,7 +145,7 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
    private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
    query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
-   User-Agent로 `/?profile={handle}` HTML의 canonical·`og:url`·`og:image`와
+   User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
    Twitter Card metadata를 확인하고, `/u/{handle}/social.png`의
    GET/HEAD/If-None-Match 304와 2400x1260 응답을 검증한다. private·missing
    handle은 동일한 기본 OG/unavailable HTML을 반환하고 README/social PNG는
@@ -236,7 +237,7 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
    query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
-   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/?profile={handle}` HTML의
+   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/api/share/{handle}` HTML의
    canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
    `GET|HEAD|304`·2400x1260을 확인한다. private 및 missing 상태에서 HTML이 같은
    기본 metadata/unavailable 화면으로 닫히고 social PNG가 같은 404인지 검증한
@@ -249,12 +250,12 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. 현재 saved version 7 baseline과 Task #74·#78 누적 후보의
-public HTML은 모두 `/?profile={handle}`을 사용한다. 후보는 이 경로의 initial
-HTML에 handle별 canonical/OG/Twitter metadata를 주입하고, 사람에게는 같은 SPA
-공개 화면을 제공한다. extension 없는 `/u/{handle}`은 local runtime 하위 호환으로만
-유지하며 실제 Sites front door 지원이 별도 실측되기 전에는 production link로
-안내하지 않는다.
+계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
+`/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
+HTML이 정적 asset으로 처리됨을 확인했다. 다음 후보는 `/api/share/{handle}`에서
+handle별 canonical/OG/Twitter metadata와 같은 SPA 공개 화면을 제공한다. root
+query와 extension 없는 `/u/{handle}`은 source 하위 호환으로만 유지하며
+production share link로 안내하지 않는다.
 
 ## 로그와 quota stop
 

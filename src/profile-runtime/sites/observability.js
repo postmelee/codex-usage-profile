@@ -117,6 +117,9 @@ export function classifyProfileSitesRoute(request) {
   if (pathname.startsWith("/api/account-usage/")) {
     return PROFILE_SITES_ROUTE_CLASSES.ACCOUNT_USAGE;
   }
+  if (/^\/api\/share\/[^/]+\/?$/.test(pathname)) {
+    return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_PROFILE;
+  }
   if (
     pathname.startsWith("/api/profiles/public/") ||
     pathname.startsWith("/api/snapshots/public/")

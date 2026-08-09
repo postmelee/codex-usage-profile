@@ -109,7 +109,7 @@ test("builds account login redirect URLs", () => {
   );
 });
 
-test("preserves the Sites profile query through GitHub login", () => {
+test("preserves the Sites API share path through GitHub login", () => {
   const client = {
     buildGitHubLoginUrl(options) {
       return `/login?redirect_to=${encodeURIComponent(options.redirectTo)}`;
@@ -118,10 +118,10 @@ test("preserves the Sites profile query through GitHub login", () => {
 
   assert.equal(
     buildAccountLoginHref(client, {
-      pathname: "/",
-      search: "?profile=meleeisdeveloping"
+      pathname: "/api/share/meleeisdeveloping",
+      search: ""
     }),
-    "/login?redirect_to=%2F%3Fprofile%3Dmeleeisdeveloping"
+    "/login?redirect_to=%2Fapi%2Fshare%2Fmeleeisdeveloping"
   );
 });
 

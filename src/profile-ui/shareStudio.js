@@ -78,11 +78,10 @@ export function buildPublicProfileShareUrl(origin, handle) {
   const url = normalizeHttpUrl(origin);
   if (!url) return null;
 
-  // ChatGPT Sites forwards the root query route to the Worker while its front
-  // door redirects extensionless nested paths before dynamic metadata runs.
-  url.pathname = "/";
+  // ChatGPT Sites dispatches the API prefix to the Worker, while the root
+  // query is served as a static asset before dynamic metadata can run.
+  url.pathname = `/api/share/${encodeURIComponent(normalizedHandle)}`;
   url.search = "";
-  url.searchParams.set("profile", normalizedHandle);
   url.hash = "";
   return url.toString();
 }

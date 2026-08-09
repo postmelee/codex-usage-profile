@@ -411,19 +411,94 @@ protected health `200`, operator route `404`다. 새 token/session/usage/media m
 Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정
 ```
 
+## Stage 3.8 — Worker 전달 공유 문서 경로 보정
+
+### Stage 3.7 owner-only production 반증
+
+Stage 3.7 exact source commit의 owner-only saved version 15 배포와 provenance 확인은
+성공했다. custom owner-only, 허용 사용자 1명, group/external visitor 0명,
+service `normal`, maintenance disabled/secret-absent baseline도 유지됐다.
+
+그러나 protected `/?profile={handle}` GET/HEAD `200`은 동적 metadata 없이 정적
+`index.html`을 반환했고 해당 root query는 Worker request event에 나타나지 않았다.
+같은 version에서 `/u/{handle}`은 Worker event와 동적 fallback canonical/OG/Twitter를
+반환했으며 `/api/profiles/public/{handle}`도 Worker에서 `404`를 반환했다. 따라서
+root query가 Worker로 전달된다는 Stage 3.7 가정은 production에서 반증됐다.
+release blocker 확인 직후 readiness bridge와 Gate B는 시작하지 않았고 원격은
+owner-only safe baseline을 유지한다.
+
+### 승인된 보정 설계
+
+1. canonical HTML share URL은 Sites production에서 Worker 전달이 확인된 exact
+   `/api/share/{handle}` GET/HEAD를 사용한다.
+2. public profile document handler는 API share path를 기존 `/u/{handle}`과 root
+   query보다 우선하지 않고 병렬 하위 호환 route로 인식한다. POST, 추가 path,
+   invalid handle과 media URL은 계속 거부한다.
+3. Share Studio, frontend public profile route, OAuth current-location redirect와
+   Open Graph canonical/`og:url`은 API share path를 사용한다.
+4. README card와 social image는 각각 `/u/{handle}/card.png`,
+   `/u/{handle}/social.png?v={revision}`을 유지한다. API JSON route, R2 key,
+   ETag와 publish/unpublish 계약은 변경하지 않는다.
+5. observability는 `/api/share/{handle}`을 identity-less `public_profile` class로
+   축약하고 raw handle을 application event에 기록하지 않는다.
+6. 공식 문서는 Stage 3.7 production 반증과 API share canonical을 반영하되,
+   owner-only 재배포와 별도 Gate B 전 production CTA는 활성화하지 않는다.
+
+### 예상 변경 파일
+
+- `src/profile-runtime/public-profile-document.js`
+- `src/profile-runtime/open-graph.js`
+- `src/profile-runtime/sites/observability.js`
+- `src/profile-runtime/__tests__/public-profile-document.test.js`
+- `src/profile-runtime/__tests__/open-graph.test.js`
+- `src/profile-runtime/sites/__tests__/backend.test.js`
+- `src/profile-runtime/sites/__tests__/observability.test.js`
+- `src/profile-runtime/sites/__tests__/full-stack.test.js`
+- `src/profile-ui/shareStudio.js`
+- `src/profile-ui/publicProfileRoutes.js`
+- `src/profile-ui/__tests__/shareStudio.test.js`
+- `src/profile-ui/__tests__/publicProfileRoutes.test.js`
+- `src/profile-ui/__tests__/accountUi.test.js`
+- `scripts/smoke-sites-fullstack-local.mjs`
+- `tests/profile-ui.spec.js`
+- `README.md`
+- `docs/sites-operations.md`
+- `docs/production-hosting.md`
+- `docs/readme-card.md`
+- `mydocs/working/task_m100_83_stage3_8.md`
+
+### 검증
+
+- API share/path/query GET·HEAD 판별, POST/media/invalid path 폴스루
+- public API share document canonical·`og:url`·Twitter metadata와
+  `/u/{handle}/social.png?v=` 분리
+- private/missing API share HTML의 byte-identical fallback
+- Share Studio target과 frontend route가 encoded `/api/share/{handle}` 사용
+- current-location OAuth redirect가 API share path를 보존
+- observability가 raw handle 없이 `public_profile`로 축약
+- real Worker·D1·R2·ASSETS full-stack smoke에서 API share GET/HEAD와 handle별 metadata
+- focused Node tests, 전체 test/E2E/build/full-stack/production artifact 검증
+- source commit 뒤 새 owner-only saved version에서 protected API share initial HTML exact-match
+
+### 커밋
+
+```text
+Task #83 [Stage 3.8]: Worker 전달 공유 문서 경로 보정
+```
+
 ## Stage 4 — Gate B public cache 실측과 baseline 원복
 
 ### Gate B 승인 입력
 
 public access를 열기 전에 다음을 제시한다.
 
-- Stage 3.7 saved version/deployment/source와 protected readiness exact-match 증적
+- Stage 3.8 saved version/deployment/source와 protected readiness exact-match 증적
 - Gate B 1차 `/u/{handle} → /` `307` 실패, 즉시 owner-only 복원과
-  `/?profile={handle}` 보정의 protected `200` 증적
+  Stage 3.7 root query 정적 우회와 `/api/share/{handle}` 보정의 protected exact metadata 증적
 - current owner-only access policy와 public으로 바꿀 exact access, 즉시 복원할 owner-only 값
 - maintenance disabled, operator secret absent, operator route `404`, health `200`
 - disposable test profile/private state, 일회용 token/session과 종료 cleanup scope
-- 측정할 exact `/?profile={handle}`·README/social URL과 redacted 관찰 항목
+- 측정할 exact `/api/share/{handle}`·README/social URL과 redacted 관찰 항목
 - 반복 GET/HEAD 및 submit 전·직후·경과 후 측정 순서
 - success/failure 모두 public에서 즉시 owner-only로 복원하는 절차
 - current plan/quota와 추가 결제·자동 초과 과금 표시
@@ -453,7 +528,7 @@ Gate B 승인 전에는 access를 public으로 변경하지 않는다.
 2. public access로 전환한다.
 3. anonymous landing, private API `401/403`, private/missing profile/card/social `404`와 동일 HTML fallback을 확인한다.
 4. OAuth/CLI submit과 publish를 수행하고 README PNG 4변형, social PNG, canonical HTML/metadata 공개 계약을 확인한다.
-5. 같은 `/?profile={handle}`에 GET/HEAD를 반복하며 timestamp와 bounded `CF-Cache-Status`, `Age`, `x-request-id`, `Cache-Control`, `og:image?v=`만 기록한다.
+5. 같은 `/api/share/{handle}`에 GET/HEAD를 반복하며 timestamp와 bounded `CF-Cache-Status`, `Age`, `x-request-id`, `Cache-Control`, `og:image?v=`만 기록한다.
 6. 다음 usage submit 전, 직후, 짧은 경과 후 HTML `og:image?v=`와 social PNG ETag/304를 대조한다.
 7. cache header가 없거나 always dynamic이어도 application revision이 즉시 갱신되고 privacy/publish 계약이 맞으면 비차단으로 분류한다.
 8. stale HTML이 private 전환 뒤 공개되거나 다른 handle 응답이 섞이거나 revision이 계약 시간 안에 갱신되지 않으면 release blocker로 분류하고 후속 공개를 중단한다.
@@ -506,6 +581,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   - `Task #83 Stage 2: exact Sites candidate와 archive preflight`
   - `Task #83 Stage 3: owner-only Sites candidate와 전체 smoke`
   - `Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정`
+  - `Task #83 [Stage 3.8]: Worker 전달 공유 문서 경로 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
 
 ## 단계 의존성
@@ -515,8 +591,10 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - Stage 3은 Stage 2 완료보고서 승인과 별도 Gate A 승인 후 진행한다.
 - Stage 3.7은 Stage 4 Gate B 1차 blocker와 owner-only 복원 뒤 작업지시자의
   계획 보정·source 수정 승인으로 진행한다.
-- Stage 4 재시도는 Stage 3.7 완료보고서 승인, 새 owner-only saved version의
-  protected query HTML 검증과 별도 Gate B 재승인 후 진행한다.
+- Stage 3.8은 Stage 3.7 owner-only version 15의 root query 정적 우회 반증 뒤
+  작업지시자의 계획 보정·source 수정 승인으로 진행한다.
+- Stage 4 재시도는 Stage 3.8 완료보고서 승인, 새 owner-only saved version의
+  protected API share HTML 검증과 별도 Gate B 재승인 후 진행한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응

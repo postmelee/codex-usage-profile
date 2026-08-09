@@ -72,13 +72,18 @@ test("Sites observability reduces dynamic paths and unusual methods to safe clas
     "https://profile.example/api/custom/private-value",
     { method: "CUSTOM" }
   );
+  const publicShare = new Request(
+    "https://profile.example/api/share/private-owner-handle"
+  );
 
   assert.equal(classifyProfileSitesRoute(publicCard), "public_card");
+  assert.equal(classifyProfileSitesRoute(publicShare), "public_profile");
   assert.equal(classifyProfileSitesRoute(unknownApi), "api");
   assert.doesNotMatch(
     JSON.stringify({
       first: classifyProfileSitesRoute(publicCard),
-      second: classifyProfileSitesRoute(unknownApi)
+      second: classifyProfileSitesRoute(unknownApi),
+      third: classifyProfileSitesRoute(publicShare)
     }),
     /private-owner-handle|private-value/
   );

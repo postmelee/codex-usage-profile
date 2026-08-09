@@ -125,6 +125,12 @@ test("Sites backend fixes maintenance, owner-only, and quota stop semantics", as
   );
   assert.equal(queryDocument.status, 404);
   assert.equal((await queryDocument.json()).error.code, "not_found");
+  const apiShareDocument = createProfileSitesOperationalStopResponse(
+    new Request("https://profile.test/api/share/private-owner"),
+    { serviceMode: "owner-only" }
+  );
+  assert.equal(apiShareDocument.status, 404);
+  assert.equal((await apiShareDocument.json()).error.code, "not_found");
   assert.equal(
     createProfileSitesOperationalStopResponse(
       new Request("https://profile.test/u/private-owner"),

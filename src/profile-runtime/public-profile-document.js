@@ -17,12 +17,21 @@ const PUBLIC_PROFILE_DOCUMENT_HEADERS = Object.freeze({
 
 const PUBLIC_PROFILE_DOCUMENT_METHODS = Object.freeze(["GET", "HEAD"]);
 const PUBLIC_PROFILE_DOCUMENT_PATH_RE = /^\/u\/([^/]+)$/;
+const PUBLIC_PROFILE_SHARE_PATH_RE = /^\/api\/share\/([^/]+)$/;
 const UNSUPPORTED_HANDLE_RE = new RegExp("[\\u0000-\\u001f\\u007f/?#]");
 
 export function readPublicProfileDocumentHandle(pathname) {
+  return readEncodedPathHandle(pathname, PUBLIC_PROFILE_DOCUMENT_PATH_RE);
+}
+
+function readPublicProfileShareHandle(pathname) {
+  return readEncodedPathHandle(pathname, PUBLIC_PROFILE_SHARE_PATH_RE);
+}
+
+function readEncodedPathHandle(pathname, pattern) {
   if (typeof pathname !== "string" || pathname === "") return null;
 
-  const match = PUBLIC_PROFILE_DOCUMENT_PATH_RE.exec(
+  const match = pattern.exec(
     pathname.endsWith("/") && pathname !== "/"
       ? pathname.slice(0, -1)
       : pathname
@@ -43,6 +52,8 @@ export function readPublicProfileDocumentRequestHandle(request) {
   if (!request || typeof request.url !== "string") return null;
 
   const url = new URL(request.url);
+  const shareHandle = readPublicProfileShareHandle(url.pathname);
+  if (shareHandle !== null) return shareHandle;
   const pathHandle = readPublicProfileDocumentHandle(url.pathname);
   if (pathHandle !== null) return pathHandle;
   if (url.pathname !== "/") return null;

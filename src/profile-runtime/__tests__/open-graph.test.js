@@ -50,10 +50,10 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   });
 
   assert.equal(document.title, "postmelee's Codex card · Codex Usage Profile");
-  assert.equal(document.canonicalUrl, `${ORIGIN}/?profile=postmelee`);
+  assert.equal(document.canonicalUrl, `${ORIGIN}/api/share/postmelee`);
   assert.equal(readTag(document, "og:type"), "website");
   assert.equal(readTag(document, "og:title"), "postmelee's Codex card");
-  assert.equal(readTag(document, "og:url"), `${ORIGIN}/?profile=postmelee`);
+  assert.equal(readTag(document, "og:url"), `${ORIGIN}/api/share/postmelee`);
   assert.equal(readTag(document, "og:site_name"), PROFILE_OPEN_GRAPH_SITE_NAME);
   assert.equal(
     readTag(document, "og:image"),
@@ -256,11 +256,11 @@ test("rejects html without a closing head tag", () => {
 test("builds urls for handles that need encoding", () => {
   assert.equal(
     buildPublicProfileUrl(ORIGIN, "foo-bar"),
-    `${ORIGIN}/?profile=foo-bar`
+    `${ORIGIN}/api/share/foo-bar`
   );
   assert.equal(
     buildPublicProfileUrl(ORIGIN, "foo bar"),
-    `${ORIGIN}/?profile=foo+bar`
+    `${ORIGIN}/api/share/foo%20bar`
   );
   assert.equal(
     buildSocialImageUrl(ORIGIN, "foo bar", UPLOADED_AT),

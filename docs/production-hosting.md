@@ -37,7 +37,7 @@ version 7을 유지했다.
 
 현재 `devel`의 누적 deploy candidate는 Task #74의 owner
 `card_style`·`card_locale` additive migration과 media contract v4 위에 Task #78의
-`/?profile={handle}` Open Graph document, 2400x1260 `social.png`, Share Studio와 structured
+`/api/share/{handle}` Open Graph document, 2400x1260 `social.png`, Share Studio와 structured
 store contract v3 public summary projection을 포함한다. 이 누적 candidate는
 local·PR 검증까지만 완료했으며 실제 Sites owner-only/public smoke는 아직 수행하지
 않았다. 별도 Gate에서 같은 commit을 owner-only saved version으로 배포해 검증하기
@@ -90,10 +90,12 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 [`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
-이 contract v3 projection과 `/?profile={handle}` document read path는 Task #78 누적 후보의
-local·PR 검증 상태다. current production version 7의 공개 HTML은
-`/?profile={handle}` compatibility route를 사용하며, 후보의 production D1 query와
-cache 동작은 owner-only/public smoke 전에는 hosted 검증 완료로 간주하지 않는다.
+이 contract v3 projection과 `/api/share/{handle}` document read path는 Task #78 누적
+후보의 후속 보정 상태다. current production version 7의 공개 화면은
+`/?profile={handle}` compatibility route를 사용하지만 owner-only version 15에서
+root query initial HTML은 Worker 전에 정적 asset으로 처리됐다. 다음 후보의
+production D1 query와 cache 동작은 API share owner-only/public smoke 전에는 hosted
+검증 완료로 간주하지 않는다.
 
 canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1/)의 D1 구현이다. schema와 ordered migration은 [`db/migrations/`](../db/migrations/)에 있고 Sites artifact의 `.openai/drizzle/`에 package된다. D1 adapter는 prepared statement, conditional update와 batch를 사용하며 process memory lock으로 원자성을 보완하지 않는다.
 
@@ -110,7 +112,7 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
-`/?profile={handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. `og:image?v=`는 두 시각 중 최신 값을 밀리초 정밀도로 사용하므로 사용량 갱신과 카드 theme·locale 저장이 모두 캐시 키를 바꾼다. HTML share URL과 별개로 social image는 `/u/{handle}/social.png`를 유지한다.
+`/api/share/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. `og:image?v=`는 두 시각 중 최신 값을 밀리초 정밀도로 사용하므로 사용량 갱신과 카드 theme·locale 저장이 모두 캐시 키를 바꾼다. HTML share URL과 별개로 social image는 `/u/{handle}/social.png`를 유지한다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 

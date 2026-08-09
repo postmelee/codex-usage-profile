@@ -194,9 +194,10 @@ function buildLocaleTags(locale) {
 
 export function buildPublicProfileUrl(origin, handle) {
   const normalizedHandle = normalizeHandle(handle);
-  const url = new URL("/", normalizeOrigin(origin));
-  url.searchParams.set("profile", normalizedHandle);
-  return url.toString();
+  return new URL(
+    `/api/share/${encodeURIComponent(normalizedHandle)}`,
+    normalizeOrigin(origin)
+  ).toString();
 }
 
 export function buildSocialImageUrl(origin, handle, revisionAt) {

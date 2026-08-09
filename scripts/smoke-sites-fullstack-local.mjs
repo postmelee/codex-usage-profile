@@ -362,18 +362,18 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(publicProfile.body.data.owner.handle, "local-owner");
 
     const publicDocument = await fetch(new URL(
-      "/?profile=local-owner",
+      "/api/share/local-owner",
       origin
     ));
     const publicDocumentHtml = await publicDocument.text();
     assert.equal(publicDocument.status, 200);
     assert.match(
       publicDocumentHtml,
-      /<link rel="canonical" href="[^"]+\?profile=local-owner" \/>/
+      /<link rel="canonical" href="[^"]+\/api\/share\/local-owner" \/>/
     );
     assert.match(
       publicDocumentHtml,
-      /<meta property="og:url" content="[^"]+\?profile=local-owner" \/>/
+      /<meta property="og:url" content="[^"]+\/api\/share\/local-owner" \/>/
     );
     assert.match(
       publicDocumentHtml,
@@ -381,7 +381,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     );
 
     const publicDocumentHead = await fetch(new URL(
-      "/?profile=local-owner",
+      "/api/share/local-owner",
       origin
     ), { method: "HEAD" });
     assert.equal(publicDocumentHead.status, 200);
