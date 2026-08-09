@@ -245,6 +245,23 @@ test("operator CLI migrate rejects extra options and unsafe output", async () =>
     }),
     (error) => error.code === "invalid_response"
   );
+
+  await assert.rejects(
+    runSitesProfileMaintenanceCli(["migrate", "--origin", ORIGIN], {
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async () => jsonResponse({
+        ok: false,
+        error: {
+          code: "migration_apply_unavailable",
+          message: "provider SQL failed for a private owner"
+        }
+      }, 503),
+      stdout: () => {}
+    }),
+    (error) =>
+      error.code === "migration_apply_unavailable" &&
+      !error.message.includes("provider")
+  );
 });
 
 test("operator CLI bounds an unresponsive request without leaking context", async () => {

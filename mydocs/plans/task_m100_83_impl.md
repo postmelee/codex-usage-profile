@@ -210,6 +210,12 @@ deploy했다. local missing-schema 경로는 통과했으므로 Sites package mi
   unavailable로 중단된 뒤에도 owner-only/revision 65 safe baseline을 복원했다.
   readiness와 같은 `sqlite_master` read 경계에서 normalized exact column DDL
   fragment를 판정하도록 inspection을 축소한다.
+- version 11도 같은 generic unavailable로 중단됐고 owner-only access revision
+  35, environment revision 67의 disabled/secret-absent/service `normal`과 같은
+  version private deployment를 복원했다. 더 이상 schema 형태를 추측하지 않고
+  inspection, reconciliation, apply, verification 네 경계를 고정된 503 코드로만
+  식별한다. provider 오류·SQL·schema·identity 원문은 반환하지 않으며,
+  `maintenance_conflict`와 `migration_not_ready` 응답 계약은 유지한다.
 
 ### Gate A 승인 입력
 

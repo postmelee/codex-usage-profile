@@ -312,6 +312,95 @@ test("maintenance migration rejects unexpected versions before mutation", async 
   assert.equal(applyCalls, 0);
 });
 
+test("maintenance migration reports only bounded stage failures", async () => {
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  const providerDetail =
+    "SQL failed for private-owner with usage, token, and schema bytes";
+  const cases = [
+    {
+      code: "migration_inspection_unavailable",
+      message: "Maintenance migration inspection failed",
+      options: {
+        inspectD1MigrationReadiness: async () => {
+          throw new Error(providerDetail);
+        }
+      }
+    },
+    {
+      code: "migration_reconciliation_unavailable",
+      message: "Maintenance migration reconciliation failed",
+      options: {
+        inspectD1MigrationReadiness: async () => migrationState(
+          [1, 2],
+          expectedVersions
+        ),
+        reconcileHostedD1Migrations: async () => {
+          throw new Error(providerDetail);
+        }
+      }
+    },
+    {
+      code: "migration_apply_unavailable",
+      message: "Maintenance migration apply failed",
+      options: {
+        inspectD1MigrationReadiness: async () => migrationState(
+          [1, 2],
+          expectedVersions
+        ),
+        reconcileHostedD1Migrations: async (_database, migrations) =>
+          migrations,
+        migrateD1Database: async () => {
+          throw new Error(providerDetail);
+        }
+      }
+    },
+    {
+      code: "migration_verification_unavailable",
+      message: "Maintenance migration verification failed",
+      options: {
+        inspectD1MigrationReadiness: (() => {
+          let calls = 0;
+          return async () => {
+            calls += 1;
+            if (calls === 1) {
+              return migrationState([1, 2], expectedVersions);
+            }
+            throw new Error(providerDetail);
+          };
+        })(),
+        reconcileHostedD1Migrations: async (_database, migrations) =>
+          migrations,
+        migrateD1Database: async () => ({
+          newlyApplied: [3, 4, 5]
+        })
+      }
+    }
+  ];
+
+  for (const item of cases) {
+    const fixture = await createServiceFixture({
+      database: { batch() {}, prepare() {} },
+      migrations: candidateMigrations(),
+      ...item.options
+    });
+    const response = await createProfileSitesMaintenanceHandler({
+      config: enabledConfig(),
+      service: fixture.service
+    })(maintenanceRequest({ operation: "migrate" }));
+    const body = await response.text();
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(JSON.parse(body), {
+      ok: false,
+      error: { code: item.code, message: item.message }
+    });
+    assert.doesNotMatch(
+      body,
+      /SQL|private-owner|usage|token|schema bytes/i
+    );
+  }
+});
+
 test("maintenance migration rejects hosted schema drift before mutation", async () => {
   let applyCalls = 0;
   const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);

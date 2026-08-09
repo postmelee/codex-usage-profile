@@ -45,6 +45,13 @@ export const DEFAULT_PROFILE_SITES_MAINTENANCE_BODY_MAX_BYTES =
 export const PROFILE_SITES_MIGRATION_NOT_READY_CODE =
   "migration_not_ready";
 
+const PROFILE_SITES_MIGRATION_STAGE_CODES = Object.freeze([
+  "migration_inspection_unavailable",
+  "migration_reconciliation_unavailable",
+  "migration_apply_unavailable",
+  "migration_verification_unavailable"
+]);
+
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8"
@@ -120,6 +127,9 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
           503,
           PROFILE_SITES_MIGRATION_NOT_READY_CODE
         );
+      }
+      if (PROFILE_SITES_MIGRATION_STAGE_CODES.includes(error?.code)) {
+        return maintenanceResponse(503, error.code);
       }
       if (error instanceof TypeError || error?.code === "invalid") {
         return maintenanceResponse(400, "invalid_request");
@@ -207,7 +217,16 @@ export function createProfileSitesMaintenanceService(options = {}) {
   }
 
   async function migrate() {
-    const before = await inspectReadiness(dependencies.database);
+    let before;
+    try {
+      before = await inspectReadiness(dependencies.database);
+    } catch (cause) {
+      throw maintenanceError(
+        "migration_inspection_unavailable",
+        "D1 migration inspection is unavailable",
+        cause
+      );
+    }
     if (before.unexpectedVersions.length > 0) {
       throw maintenanceError(
         "conflict",
@@ -215,26 +234,55 @@ export function createProfileSitesMaintenanceService(options = {}) {
       );
     }
     const migrations = requireExactD1Migrations(options.migrations);
-    const runnableMigrations = await reconcileMigrations(
-      dependencies.database,
-      migrations,
-      before.appliedVersions
-    );
-    const applied = await applyMigrations(dependencies.database, {
-      migrations: runnableMigrations,
-      now
-    });
-    const after = await inspectReadiness(dependencies.database);
+    let runnableMigrations;
+    try {
+      runnableMigrations = await reconcileMigrations(
+        dependencies.database,
+        migrations,
+        before.appliedVersions
+      );
+    } catch (error) {
+      if (error?.code === "conflict") throw error;
+      throw maintenanceError(
+        "migration_reconciliation_unavailable",
+        "D1 migration reconciliation is unavailable",
+        error
+      );
+    }
+    let applied;
+    try {
+      applied = await applyMigrations(dependencies.database, {
+        migrations: runnableMigrations,
+        now
+      });
+    } catch (cause) {
+      throw maintenanceError(
+        "migration_apply_unavailable",
+        "D1 migration apply is unavailable",
+        cause
+      );
+    }
+    let after;
+    let newlyAppliedVersions;
+    try {
+      after = await inspectReadiness(dependencies.database);
+      newlyAppliedVersions = normalizeAppliedMigrationVersions(
+        applied?.newlyApplied,
+        after.appliedVersions
+      );
+    } catch (cause) {
+      throw maintenanceError(
+        "migration_verification_unavailable",
+        "D1 migration verification is unavailable",
+        cause
+      );
+    }
     if (after.readyExact !== true) {
       throw maintenanceError(
         PROFILE_SITES_MIGRATION_NOT_READY_CODE,
         "D1 migration readiness did not match after apply"
       );
     }
-    const newlyAppliedVersions = normalizeAppliedMigrationVersions(
-      applied?.newlyApplied,
-      after.appliedVersions
-    );
     return Object.freeze({
       summary: Object.freeze({
         appliedVersions: after.appliedVersions,
@@ -934,7 +982,14 @@ function maintenanceMessage(code) {
     invalid_request: "Maintenance request is invalid",
     maintenance_conflict: "Maintenance plan is stale or conflicts",
     maintenance_unavailable: "Maintenance operation is unavailable",
+    migration_apply_unavailable: "Maintenance migration apply failed",
+    migration_inspection_unavailable:
+      "Maintenance migration inspection failed",
     migration_not_ready: "Maintenance readiness check failed",
+    migration_reconciliation_unavailable:
+      "Maintenance migration reconciliation failed",
+    migration_verification_unavailable:
+      "Maintenance migration verification failed",
     method_not_allowed: "Maintenance method is not allowed",
     not_found: "Not found",
     unsupported_media_type: "Maintenance request must use JSON"
