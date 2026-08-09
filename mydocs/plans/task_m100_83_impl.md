@@ -288,8 +288,8 @@ Gate A 승인 전에는 access, environment, D1/R2, source repository, version/d
 9. 기존 production 소유자 데이터는 읽기 외에 사용하지 않는다. 별도 disposable GitHub 계정의 로그인 준비를 확인하고 service `owner-only`를 private deploy해 모든 public profile/card/social route가 동일 `404`인지 먼저 확인한다.
 10. access를 짧게 public으로 전환해 packed CLI login/approve/exchange/submit/status/revoke와 OAuth/session/logout을 disposable 계정으로 검증한다. 이 bridge에서는 runtime `owner-only`가 기존·QA public profile/media를 계속 `404`로 닫아야 한다.
 11. CLI bridge 직후 먼저 access를 owner-only로 복원하고 service `normal`을 private deploy한다. owner-authenticated browser 안에서 disposable 계정의 private preview와 card settings를 검증한다.
-12. disposable profile publish 뒤 dark/light × en/ko README PNG와 social PNG의 GET/HEAD/If-None-Match 304, canonical/OG/Twitter metadata를 owner-authenticated 요청으로 확인한다.
-13. private·missing handle이 같은 HTML fallback과 PNG `404`인지 대조하고 unpublish 뒤 모든 stable media가 404인지 확인한다.
+12. disposable profile publish 뒤 dark/light × en/ko README PNG와 social PNG의 GET/HEAD/If-None-Match 304를 protected 요청으로 확인한다. owner-authenticated Chrome·in-app browser와 protected request에서 owner-only Sites gate가 `/u/{handle}` HTML을 애플리케이션에 전달하지 않고 `/`로 `307` 전환하는 경계를 확인한다. 작업지시자가 승인한 계획 보정에 따라 canonical/OG/Twitter HTML 실측은 Stage 4 Gate B 필수 항목으로 이동한다.
+13. private·missing PNG가 같은 `404`인지 대조하고 unpublish 뒤 모든 stable media가 404인지 확인한다. private·missing HTML fallback 동일성은 Stage 4 public access에서 확인한다.
 14. recent error event에 query/credential/identity/usage bytes가 없음을 확인한다.
 15. disposable profile을 private으로 두고 token/session을 revoke하며 Gate B에 필요한 최소 QA state만 승인된 범위로 남긴다.
 
@@ -314,13 +314,13 @@ remote contract:
 - OAuth/session/logout와 packed CLI submit/revoke 성공
 - private preview `200`/no-store, private/missing public API·PNG `404`
 - README PNG 4변형과 social PNG GET/HEAD/304, publish/unpublish ETag 계약
-- canonical/`og:url`/`og:image`/Twitter metadata exact origin
+- owner-only Sites gate의 profile HTML `307 /` 경계와 Stage 4 canonical/OG/Twitter 실측 handoff
 - artifact/response/header/recent error event의 secret·private data 비노출
 - 추가 결제·plan upgrade·자동 초과 과금 요구 없음
 
 ### 중단·원복 조건
 
-- deployment, migration/readiness, maintenance 비활성화, OAuth/CLI/media/OG smoke 중 하나라도 실패한다.
+- deployment, migration/readiness, maintenance 비활성화, OAuth/CLI/media smoke 중 하나라도 실패한다.
 - missing 또는 unexpected migration version이 있다.
 - source SHA, archive와 saved version이 일치하지 않는다.
 - private/missing handle 구분, credential/private usage 또는 provider 원문이 노출된다.
@@ -341,6 +341,8 @@ Task #83 Stage 3: owner-only Sites candidate와 전체 smoke
 public access를 열기 전에 다음을 제시한다.
 
 - Stage 3 saved version/deployment/source와 protected readiness exact-match 증적
+- owner-only Sites gate에서 `/u/{handle}`가 `/`로 `307` 전환되어 Stage 4 public access에서
+  canonical/OG/Twitter·private/missing HTML 폴백을 실측해야 한다는 승인된 handoff
 - current owner-only access policy와 public으로 바꿀 exact access, 즉시 복원할 owner-only 값
 - maintenance disabled, operator secret absent, operator route `404`, health `200`
 - disposable test profile/private state, 일회용 token/session과 종료 cleanup scope
