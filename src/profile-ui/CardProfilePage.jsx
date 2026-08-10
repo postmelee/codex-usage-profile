@@ -13,6 +13,7 @@ import {
   getAccountLogin
 } from "./accountUi.js";
 import { buildProfileLoginHref } from "./cardShare.js";
+import { useCardImageReadiness } from "./cardImageReadiness.js";
 import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
@@ -69,7 +70,6 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const profile = profileState.profile;
   const hasUsage = Boolean(profile?.usage);
   const isPublic = profile?.visibility === "public";
-  const canShare = profileState.status === "ready" && hasUsage && isPublic;
   const draftStyle = cardSettingsState.draftStyle ?? profile?.cardStyle;
   const draftLocale = cardSettingsState.draftLocale ?? profile?.cardLocale ?? "en";
   const cardSettingsDirty = Boolean(profile && draftStyle) && (
@@ -83,6 +83,17 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       theme: draftStyle?.theme ?? "dark"
     })
     : null;
+  const cardImage = useCardImageReadiness({
+    scopeKey: profile?.owner?.id ?? "owner-profile",
+    sourceKind: "owner",
+    src: previewUrl
+  });
+  const canShare = (
+    profileState.status === "ready" &&
+    hasUsage &&
+    isPublic &&
+    cardImage.ready
+  );
 
   const closeShare = useCallback(() => {
     setShareOpen(false);
@@ -183,6 +194,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       <section className="card-profile-view" aria-labelledby="card-profile-title">
         <CardProfileContent
           authStatus={authStatus}
+          cardImage={cardImage}
           cardSettingsDirty={cardSettingsDirty}
           cardSettingsState={cardSettingsState}
           client={client}
@@ -269,12 +281,17 @@ function CardProfileContent(props) {
         <div className="profile-card-preview-stage">
           <MarketingCardPreview
             alt={t("profile.card.alt.owner")}
+            busy={props.cardImage.busy}
             cardRef={props.sourceCardRef}
+            errorLabel={t("home.cardUnavailable")}
             sourceKind="owner"
-            src={props.previewUrl}
+            sourceUrl={props.cardImage.visibleSrc}
+            src={props.cardImage.displaySrc}
+            status={props.cardImage.status}
             transitionSuspended={props.shareOpen}
           />
           <ProfileCardAction
+            cardReady={props.cardImage.ready}
             cardSettingsDirty={props.cardSettingsDirty}
             cardSettingsSaving={props.cardSettingsState.status === "saving"}
             isPublic={props.isPublic}
@@ -381,6 +398,7 @@ function getEmptyProfileCopyStatus(status, t) {
 }
 
 function ProfileCardAction({
+  cardReady,
   cardSettingsDirty,
   cardSettingsSaving,
   isPublic,
@@ -410,22 +428,26 @@ function ProfileCardAction({
       </div>
       <div className="home-account-actions">
         <button
-          aria-busy={isPublic && cardSettingsSaving ? true : undefined}
+          aria-busy={cardSettingsSaving || !cardReady ? true : undefined}
           aria-label={isPublic
             ? cardSettingsSaving
               ? t("profile.card.settings.savingBeforeShare")
+              : !cardReady
+                ? t("home.loadingCard")
               : cardSettingsDirty
                 ? t("profile.card.settings.saveAndShare")
                 : t("common.shareProfile")
             : undefined}
           className="primary-command"
-          disabled={isSubmitting || cardSettingsSaving}
+          disabled={isSubmitting || cardSettingsSaving || !cardReady}
           onClick={isPublic ? onShare : onPublish}
           type="button"
         >
           {isPublic
             ? cardSettingsSaving
               ? t("profile.card.settings.savingBeforeShare")
+              : !cardReady
+                ? t("home.loadingCard")
               : cardSettingsDirty
                 ? t("profile.card.settings.saveAndShare")
                 : t("common.share")

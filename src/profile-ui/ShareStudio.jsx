@@ -1,6 +1,7 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { CardImageFrame } from "../profile-marketing/MarketingLanding.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
 import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
@@ -13,6 +14,7 @@ import {
   formatShareStudioPlatformMessage,
   getShareStudioCopy
 } from "./shareStudio.js";
+import { useCardImageReadiness } from "./cardImageReadiness.js";
 import { useCardHandoffMotion } from "./useCardHandoffMotion.js";
 
 export function ShareStudio({
@@ -32,7 +34,6 @@ export function ShareStudio({
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousFocusRef = useRef(null);
-  const previewImageRef = useRef(null);
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -60,6 +61,11 @@ export function ShareStudio({
     && markdown
     && typeof document !== "undefined"
   );
+  const cardImage = useCardImageReadiness({
+    scopeKey: publicOwnerHandle ?? "share-studio",
+    sourceKind: "public",
+    src: canRender ? imageUrl : null
+  });
 
   const {
     cardRef: motionCardRef,
@@ -70,10 +76,18 @@ export function ShareStudio({
   } = useCardHandoffMotion({
     active: canRender,
     onClose,
-    restartKey: imageUrl,
+    ready: cardImage.ready && !previewFailed,
+    restartKey: cardImage.desiredSrc,
     sourceCardRef,
     sourceRect
   });
+
+  useEffect(() => {
+    if (!canRender || !cardImage.failed) return;
+
+    setPreviewFailed(true);
+    settleAtTarget("preview-error");
+  }, [canRender, cardImage.desiredSrc, cardImage.failed]);
 
   useLayoutEffect(() => {
     if (!canRender) return undefined;
@@ -224,25 +238,18 @@ export function ShareStudio({
           data-testid="share-studio-card-motion"
           ref={motionCardRef}
         >
-          {previewFailed ? (
-            <div
-              aria-label={copy.previewAlt}
-              className="share-studio-preview-fallback"
-              role="img"
-            >
-              <span>{copy.previewUnavailable}</span>
-            </div>
-          ) : (
-            <img
-              alt={copy.previewAlt}
-              className="share-card-preview share-studio-card"
-              height="612"
-              onError={handlePreviewError}
-              ref={previewImageRef}
-              src={imageUrl}
-              width="998"
-            />
-          )}
+          <CardImageFrame
+            alt={copy.previewAlt}
+            busy={cardImage.busy}
+            errorLabel={copy.previewUnavailable}
+            imageClassName="share-card-preview share-studio-card"
+            loadingLabel={copy.previewAlt}
+            onError={handlePreviewError}
+            sourceKind="public"
+            sourceUrl={cardImage.visibleSrc}
+            src={previewFailed ? null : cardImage.displaySrc}
+            status={previewFailed ? "error" : cardImage.status}
+          />
         </div>
 
         <div aria-label={copy.destinations} className="share-studio-primary-actions">

@@ -8,6 +8,7 @@ import { ProfileShell } from "./ProfileShell.jsx";
 import { getAccountOwner } from "./accountUi.js";
 import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 import { buildLocalizedCardUrl, buildProfileLoginHref } from "./cardShare.js";
+import { useCardImageReadiness } from "./cardImageReadiness.js";
 
 export function PublicProfilePage({
   authState,
@@ -76,6 +77,11 @@ function PublicProfileStage({
       profile.cardStyle?.theme
     )
   );
+  const cardImage = useCardImageReadiness({
+    scopeKey: owner.id ?? owner.handle,
+    sourceKind: "public",
+    src: resolvedCardUrl
+  });
 
   return (
     <div className="public-profile-stage">
@@ -98,9 +104,13 @@ function PublicProfileStage({
         <div className="profile-card-preview-stage">
           <MarketingCardPreview
             alt={t("profile.card.alt.public", { name: displayName })}
+            busy={cardImage.busy}
             cardRef={cardRef}
-            sourceKind="owner"
-            src={resolvedCardUrl}
+            errorLabel={t("home.cardUnavailable")}
+            sourceKind="public"
+            sourceUrl={cardImage.visibleSrc}
+            src={cardImage.displaySrc}
+            status={cardImage.status}
             transitionSuspended={introOpen}
           />
         </div>
@@ -109,6 +119,7 @@ function PublicProfileStage({
       {intro ? (
         <PublicCardIntro
           cardAlt={t("profile.card.alt.public", { name: displayName })}
+          cardImage={cardImage}
           cardUrl={resolvedCardUrl}
           createCardHref={authState?.status === "authenticated"
             ? OWNER_PROFILE_HREF
@@ -143,13 +154,7 @@ function PublicProfileState({
   }
 
   if (status === "loading") {
-    return (
-      <div className="public-profile-state is-loading">
-        <div className="profile-state-indicator" aria-hidden="true" />
-        <h1>{t("profile.public.loading")}</h1>
-        <p>{t("profile.public.fetching")}</p>
-      </div>
-    );
+    return <PublicProfileLoadingSkeleton />;
   }
 
   return (
@@ -227,13 +232,7 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
   const profile = profileState.profile;
 
   if (profileState.status === "loading") {
-    return (
-      <div className="public-profile-state is-loading">
-        <div className="profile-state-indicator" aria-hidden="true" />
-        <h1>{t("profile.public.loading")}</h1>
-        <p>{t("profile.public.fetching")}</p>
-      </div>
-    );
+    return <PublicProfileLoadingSkeleton />;
   }
 
   if (!profile?.usage) {
@@ -255,6 +254,44 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
       preview
       profile={profile}
     />
+  );
+}
+
+function PublicProfileLoadingSkeleton() {
+  const { t } = useLocale();
+
+  return (
+    <div
+      aria-busy="true"
+      className="public-profile-loading-skeleton"
+      data-testid="public-profile-loading-skeleton"
+    >
+      <div aria-hidden="true" className="public-profile-loading-identity">
+        <span className="public-profile-loading-avatar" />
+        <span className="public-profile-loading-name" />
+        <span className="public-profile-loading-handle" />
+      </div>
+      <div aria-hidden="true" className="public-profile-loading-stats">
+        {Array.from({ length: 5 }, (_, index) => (
+          <span key={index} />
+        ))}
+      </div>
+      <div aria-hidden="true" className="public-profile-loading-activity">
+        <span />
+      </div>
+      <div className="public-profile-loading-card">
+        <MarketingCardPreview
+          alt=""
+          busy
+          loadingLabel={t("profile.public.fetching")}
+          sourceKind="public"
+          src={null}
+          status="loading"
+        />
+      </div>
+      <h1 className="sr-only">{t("profile.public.loading")}</h1>
+      <p className="sr-only">{t("profile.public.fetching")}</p>
+    </div>
   );
 }
 

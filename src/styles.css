@@ -693,6 +693,28 @@ button {
   transition-duration: 0ms;
 }
 
+.card-preview-fallback {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, var(--share-preview-accent), transparent 52%),
+    var(--surface-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: inherit;
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 14px;
+  height: 100%;
+  justify-items: center;
+  line-height: 20px;
+  padding: 28px;
+  text-align: center;
+  width: 100%;
+}
+
+.card-preview-fallback span {
+  max-width: 320px;
+}
+
 .home-card-skeleton::after {
   animation: home-card-skeleton-progress 1.6s linear infinite;
   background: linear-gradient(
@@ -1466,6 +1488,102 @@ button {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.public-profile-loading-skeleton {
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  width: min(100%, 920px);
+}
+
+.public-profile-loading-skeleton::after {
+  animation: home-card-skeleton-progress 1.6s linear infinite;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--skeleton-sheen-edge) 38%,
+    var(--skeleton-sheen-center) 50%,
+    var(--skeleton-sheen-edge) 62%,
+    transparent 100%
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-100%);
+  z-index: 5;
+}
+
+.public-profile-loading-identity {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.public-profile-loading-avatar,
+.public-profile-loading-name,
+.public-profile-loading-handle,
+.public-profile-loading-stats span,
+.public-profile-loading-activity {
+  background: var(--card-preview-placeholder-subtle);
+}
+
+.public-profile-loading-avatar {
+  border-radius: 50%;
+  height: 72px;
+  width: 72px;
+}
+
+.public-profile-loading-name,
+.public-profile-loading-handle {
+  border-radius: 999px;
+}
+
+.public-profile-loading-name {
+  height: 24px;
+  margin-top: 20px;
+  width: min(42%, 260px);
+}
+
+.public-profile-loading-handle {
+  height: 14px;
+  margin-top: 9px;
+  width: min(24%, 150px);
+}
+
+.public-profile-loading-stats {
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 52px;
+  min-height: 74px;
+  padding: 24px;
+}
+
+.public-profile-loading-stats span {
+  border-radius: 999px;
+  height: 20px;
+}
+
+.public-profile-loading-activity {
+  border-radius: 14px;
+  height: 180px;
+  margin-top: 50px;
+  opacity: 0.72;
+}
+
+.public-profile-loading-card {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 56px;
+  padding-top: 32px;
+}
+
+.public-profile-loading-card .home-card-tilt {
+  margin-inline: auto;
+  margin-top: 0;
+}
+
 .public-profile-state.is-unavailable {
   display: grid;
   gap: 12px;
@@ -1536,6 +1654,12 @@ button {
   .public-profile-owner-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .public-profile-loading-stats {
+    gap: 12px;
+    grid-template-columns: 1fr;
+    padding: 20px;
   }
 }
 
@@ -1714,32 +1838,15 @@ button {
   width: min(600px, calc(100vw - 48px));
 }
 
+.share-studio-card-motion .home-card-media {
+  border-radius: inherit;
+  height: 100%;
+}
+
 .share-studio-card {
   animation: share-studio-card-crossfade 120ms cubic-bezier(0.2, 0, 0, 1) both;
   border-radius: inherit;
   width: 100%;
-}
-
-.share-studio-preview-fallback {
-  align-items: center;
-  background:
-    radial-gradient(circle at 50% 20%, var(--share-preview-accent), transparent 52%),
-    var(--surface-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: inherit;
-  color: var(--text-secondary);
-  display: grid;
-  font-size: 14px;
-  height: 100%;
-  justify-items: center;
-  line-height: 20px;
-  padding: 28px;
-  text-align: center;
-  width: 100%;
-}
-
-.share-studio-preview-fallback span {
-  max-width: 320px;
 }
 
 .share-studio-primary-actions {
@@ -3466,6 +3573,12 @@ button {
     transform: none;
   }
 
+  .public-profile-loading-skeleton::after {
+    animation: none;
+    opacity: 0;
+    transform: none;
+  }
+
   .device-success {
     animation: none;
     transform: none;
@@ -4005,6 +4118,11 @@ button {
   margin: 0;
   max-width: 100%;
   width: 100%;
+}
+
+.public-card-intro-card .home-card-skeleton,
+.share-studio-card-motion .home-card-skeleton {
+  transition-duration: 0ms;
 }
 
 .public-card-intro-actions {

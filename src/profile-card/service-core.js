@@ -55,6 +55,7 @@ export function createProfileCardServiceCore(options = {}) {
     throw new TypeError("store is required");
   }
   const pngCache = createLruCache(cacheEntries);
+  const pngInflight = new Map();
   const avatarCache = createLruCache(cacheEntries);
 
   return {
@@ -210,18 +211,24 @@ export function createProfileCardServiceCore(options = {}) {
 
     let body = pngCache.get(sourceDigest);
     if (!body) {
-      if (typeof renderPng !== "function") {
-        throw new TypeError("renderPng must be a function");
+      let pending = pngInflight.get(sourceDigest);
+      if (!pending) {
+        pending = renderCardBody({
+          locale,
+          owner: renderOptions.owner,
+          theme,
+          usage
+        });
+        pngInflight.set(sourceDigest, pending);
       }
-      const avatarSource = await loadOwnerAvatar(renderOptions.owner);
-      const viewModel = buildCardViewModel({
-        locale,
-        owner: renderOptions.owner,
-        theme,
-        usage
-      });
-      body = Buffer.from(await renderPng(viewModel, { avatarSource, theme }));
-      pngCache.set(sourceDigest, body);
+      try {
+        body = await pending;
+        pngCache.set(sourceDigest, body);
+      } finally {
+        if (pngInflight.get(sourceDigest) === pending) {
+          pngInflight.delete(sourceDigest);
+        }
+      }
     }
 
     const revision = createProfileCardRevision(body);
@@ -238,6 +245,15 @@ export function createProfileCardServiceCore(options = {}) {
       sourceDigest,
       theme
     };
+  }
+
+  async function renderCardBody({ locale, owner, theme, usage }) {
+    if (typeof renderPng !== "function") {
+      throw new TypeError("renderPng must be a function");
+    }
+    const avatarSource = await loadOwnerAvatar(owner);
+    const viewModel = buildCardViewModel({ locale, owner, theme, usage });
+    return Buffer.from(await renderPng(viewModel, { avatarSource, theme }));
   }
 
   async function loadOwnerAvatar(owner) {

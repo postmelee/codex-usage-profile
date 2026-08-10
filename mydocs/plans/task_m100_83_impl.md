@@ -19,6 +19,13 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 - Stage 4 Gate B 종료 시 영구 public 상태를 유지하지 않는다. owner-only access, private profile, revoked token/session, disposable D1/R2 정리와 maintenance disabled/secret-absent baseline을 복원한 뒤 후속 #84로 넘긴다.
 - Sites에서 소유자 프로필의 canonical application route는 `/?view=profile`로 둔다. UI, OAuth 복귀와 CLI profile metadata가 이 경로를 생성하며 `/profile`은 Node/dev 하위 호환 route로만 유지한다.
 - Stage 3.10은 owner profile UI route와 metadata만 보정한다. Stage 3.9 exact source에서 완료한 Gate B cache·OG·social 측정의 backend/public 계약은 다시 실행하지 않고, 새 exact source의 owner-only saved version과 query route 집중 smoke로 후보를 재고정한다.
+- Stage 4 뒤 발견한 동적 카드 loading·motion 회귀는 Stage 4.1에서 보정한다. 홈의
+  기존 Skeleton을 공통 카드 readiness 표현으로 승격하되 avatar/logo에는 적용하지
+  않고, `load`와 가능한 `decode()`가 끝난 generation만 visible source와 motion을
+  활성화한다.
+- Stage 4.1은 private preview `private, no-store`, public media ETag/cache header,
+  D1/R2 publication atomicity를 유지한다. Skeleton과 별개로 unique render/in-flight
+  중복·avatar invalidation을 측정해 증명된 최소 성능 보정만 포함한다.
 
 ## 단계 개요
 
@@ -28,6 +35,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 2 | exact local candidate와 archive preflight | 전체 local 검증, Sites package archive, candidate 증적 | test/E2E/build/verifier, archive 파일·금지 문자열 검사 |
 | 3 | Gate A owner-only 배포와 전체 기능 smoke | saved version, migration `1..5`, owner-only smoke | exact source, readiness, maintenance safe state, OAuth/CLI/card/OG |
 | 4 | Gate B public cache 실측과 baseline 원복 | cache/revision 관찰, owner-only·disposable cleanup, 공식 상태 문서 | anonymous 경계, cache header, revision 신선도, 원복·비노출 |
+| 4.1 | 카드 readiness·Skeleton·motion 회귀 보정 | 공통 card loading contract, intro/handoff gate, profile draft 안정화 | delayed/error/reduced-motion E2E, cache 계약, owner-only smoke |
 
 ## 문서 위치 확인
 
@@ -39,6 +47,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 소유자 profile·CLI route | `docs/` | `docs/readme-card.md`, `docs/cli-submit.md` (Stage 3.10) | OK | Sites canonical root-query 경로를 사용자·CLI 문서에 반영하고 `/profile`은 local compatibility 설명에서만 유지 |
 | 단계 검증 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage{N}.md` | OK | SHA, count/size와 redacted remote 결과를 task 범위에 보관 |
 | 최종 handoff | `mydocs/report/` | `mydocs/report/task_m100_83_report.md` | OK | #84 선행조건과 exact application source를 최종 정리 |
+| Stage 4.1 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_1.md` | OK | 사용자 식별자나 raw timing log 없이 상태 전환·검증 결과와 exact source만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -754,14 +763,164 @@ Gate B 승인 전에는 access를 public으로 변경하지 않는다.
 Task #83 Stage 4: public cache 실측과 owner-only 원복
 ```
 
+## Stage 4.1 — 카드 readiness·Skeleton·motion 회귀 보정
+
+### 발견 근거와 범위
+
+version 18 owner-only 후보의 실제 브라우저 검증에서 다음 순서를 재현했다.
+
+1. 공개 profile JSON을 기다리는 동안 카드 구조와 무관한 72px 원형 indicator가 보인다.
+2. JSON과 card URL이 준비되면 `PublicCardIntro`가 즉시 mount되고 900ms Y축 회전을
+   시작한다.
+3. card PNG가 아직 `load`·`decode`되지 않아 alt text, 빈 어두운 면 또는 부분
+   렌더링된 card가 회전한다.
+4. 소유자 profile의 theme/locale draft와 Share Studio도 같은 card readiness를
+   소비하지 않아 지연 중 상태와 motion 시작 시점이 일관되지 않는다.
+
+홈은 이미 pending image preload, last-ready source와 exact card Skeleton을 가지지만
+다른 surface는 `MarketingCardPreview`의 기본 `ready` 상태 또는 raw `<img>`를 사용한다.
+Stage 4.1은 이를 공통 계약으로 통합하고 #84 영구 공개 전에 release blocker를 닫는다.
+
+### 산출물
+
+신규(공통 상태를 기존 module에 안전하게 수용할 수 없을 때만):
+
+- `src/profile-ui/cardImageReadiness.js`
+- `src/profile-ui/__tests__/cardImageReadiness.test.js`
+
+수정:
+
+- `src/profile-marketing/MarketingLanding.jsx`
+- `src/profile-ui/homeCardTransition.js`
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/profile-ui/PublicCardIntro.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/useCardHandoffMotion.js` — readiness input이 공통 hook 경계에
+  필요한 경우에만
+- `src/profile-card/service-core.js` — focused 측정으로 unique render/in-flight 또는
+  avatar cache key 문제가 확인된 경우에만
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- 관련 focused Node test
+- `mydocs/working/task_m100_83_stage4_1.md`
+- `mydocs/orders/20260811.md`
+
+보호 대상:
+
+- private preview `Cache-Control: private, no-store`
+- public card/social ETag와 `no-cache, must-revalidate`
+- `/api/share/{handle}` canonical/OG/Twitter와 cache header
+- D1/R2 publication ordering, visibility와 atomicity
+- card PNG bytes, theme/locale URL contract와 `499 / 306` 비율
+
+### 변경 내용
+
+1. 동적 card source마다 monotonically increasing generation을 만든다. 최초 source는
+   `visible=null`, `status=loading`이며 exact card 비율 Skeleton으로 공간을 예약한다.
+2. 새 source는 pending image로 preload한다. `load` 뒤 `decode()`가 지원되면 decode까지
+   기다리고, 현재 generation과 일치할 때만 `visibleSrc`로 commit한다. 이전 generation의
+   늦은 완료·실패는 무시한다.
+3. source 교체 중 last-ready image가 있으면 DOM에서 보존하고 Skeleton/neutral busy
+   layer로 pending 상태를 알린다. 준비 전 새 bitmap이나 alt text는 노출하지 않는다.
+4. 공통 preview는 `loading`, `ready`, `error`를 `aria-busy`, polite status와
+   `data-card-status`로 제공한다. error 시 last-ready가 있으면 유지하고, 최초 load
+   error면 고정 fallback을 표시해 무한 shimmer를 막는다.
+5. 공개 profile JSON loading은 handle·identity를 노출하지 않는 profile/card 구조형
+   Skeleton으로 교체한다. unavailable/private-owner 결과 상태는 기존 copy와 action을
+   유지한다.
+6. `PublicCardIntro` dialog와 Skeleton은 즉시 렌더할 수 있지만 flip의 active 조건은
+   해당 generation의 card `ready`다. ready 전 spatial animation·tilt·beam을 실행하지
+   않고, ready 뒤 opening은 한 번만 실행한다.
+7. Share Studio도 공통 card frame 또는 동일 readiness hook을 사용한다. source handoff는
+   image ready 뒤 시작하고 error에서는 stable fallback으로 settle한다.
+8. 소유자 profile theme/locale 변경은 last-ready card를 유지한 채 새 variant를 준비한다.
+   save/share action은 최신 draft generation과 저장 상태를 사용하며 이전 image 완료가
+   최신 선택을 되돌리지 못한다.
+9. reduced-motion에서는 flip/handoff를 생략하고 decoded image를 즉시 교체하거나
+   140ms 이하의 opacity transition만 허용한다. Skeleton shimmer도 기존처럼 중단한다.
+10. private preview 요청을 실제 후보와 local instrumentation으로 측정한다. 동일
+    owner/usage/theme/locale의 중복 renderer 실행과 concurrent miss가 증명되면 bounded
+    in-flight dedupe/LRU key를 최소 보정한다. avatar cache는 avatar 자체 식별자·URL과
+    필요한 owner identity만 사용해 card setting 변경으로 불필요하게 무효화되지 않게
+    하되, stale avatar를 허용하지 않는다.
+11. card settings 저장은 D1/R2 일관성 완료 뒤에만 성공을 반환하는 기존 계약을
+    유지한다. UI는 saving 상태를 명확히 표시하고 server work를 비동기로 가장해
+    성공을 조기 반환하지 않는다.
+
+### 검증
+
+focused state/unit:
+
+- initial source `loading → ready`, source change의 last-ready 보존
+- 빠른 dark/light/locale 연속 변경에서 최신 generation만 commit
+- `load` 뒤 decode 대기와 decode rejection/error fallback
+- source 제거/unmount 뒤 pending completion 무시
+- private/public source validation과 기존 home transition 회귀 부재
+
+Playwright E2E:
+
+- public profile JSON이 delayed인 동안 identity-free 구조형 Skeleton과 card 비율 유지
+- card PNG가 delayed인 동안 intro phase가 preparing이고 flip animation 0개
+- response release와 `naturalWidth > 0`/decode 뒤 opening 1회, Skeleton fade-out
+- failed card에서 alt text flip·무한 Skeleton 없이 fallback과 정상 close action
+- owner profile 최초 load 및 theme/locale source 변경에서 last-ready image 보존,
+  latest source만 표시
+- Share Studio delayed/error image의 handoff gate와 fallback settle
+- `prefers-reduced-motion: reduce`에서 spatial flip/handoff 미실행
+- desktop/mobile aspect-ratio, layout shift와 horizontal overflow 부재
+
+성능·계약:
+
+- cold/warm dark/light owner preview ready timing을 동일 조건으로 전후 비교
+- 동일 pending source의 renderer 중복 수와 avatar cache hit/miss focused assertion
+- private preview `private, no-store`, public card/social ETag/cache header exact 불변
+- D1/R2 publication, visibility와 README/social 4 variant focused 회귀
+
+전체:
+
+```bash
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+owner-only remote 집중 smoke는 새 exact source saved version을 별도 승인 후 배포해
+protected `/api/share/{handle}` 첫 진입, profile theme/locale draft, intro/Share Studio
+loading·motion과 final safe baseline만 확인한다. permanent public Gate C와 disposable
+profile publication은 #84에 유지하며, public cache·OG·SNS Gate B 전체 mutation은
+public backend/media 계약이 불변이면 반복하지 않는다.
+
+### 중단·원복 조건
+
+- card bytes/URL, private/public cache header, D1/R2 publication 계약이 변경된다.
+- last-ready card가 다른 owner/source와 혼합되거나 private card가 public surface에
+  재사용된다.
+- error에서 무한 loading이 남거나 ready 전 motion을 시작한다.
+- source race가 최신 theme/locale 선택을 덮는다.
+- 성능 보정이 stale private data 또는 settings success 조기 반환을 요구한다.
+
+중단 시 UI 공통 readiness 범위로 되돌려 계획을 다시 승인받는다. owner-only 배포가
+실패하면 access를 public으로 바꾸지 않고 saved version 18, access revision 56,
+environment revision 85의 safe baseline을 유지한다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
 - 실패한 검증은 단계 완료로 처리하지 않는다.
 - 계획 변경이나 예상 파일 밖 source 변경이 필요하면 구현계획서를 먼저 갱신하고 승인을 받는다.
-- Stage 3·3.10·4 원격 결과에는 secret/plain identity/raw usage/backup path를 기록하지 않는다.
+- Stage 3·3.10·4·4.1 원격 결과에는 secret/plain identity/raw usage/backup path를 기록하지 않는다.
 - 공식 문서 위치가 수행계획서 판단과 달라지면 수정 전에 계획 변경 승인을 받는다.
-- Stage 4 완료 뒤 전체 수용 기준과 #84 선행조건을 최종 보고서에서 재확인한다.
+- Stage 4.1 완료 뒤 전체 수용 기준과 #84 선행조건을 최종 보고서에서 재확인한다.
 
 ## 커밋
 
@@ -775,6 +934,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   - `Task #83 [Stage 3.9]: social preview 자산 가용성 보정`
   - `Task #83 [Stage 3.10]: Sites 소유자 프로필 경로 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
+  - `Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정`
 
 ## 단계 의존성
 
@@ -797,6 +957,13 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   version과 query route 집중 smoke, safe baseline 재확인 뒤 작성한다. Stage 3.10이
   public profile/cache/OG/media source를 변경하지 않으므로 Gate B 전체 public
   mutation은 반복하지 않는다.
+- Stage 4.1은 Stage 4 완료 뒤 실제 후보 브라우저에서 확인한 card loading·motion
+  blocker와 작업지시자의 계획 보정 승인으로 진행한다. source 구현 전 이 보정
+  구현계획을 승인받는다.
+- Stage 4.1 source·focused/전체 검증 승인 뒤에만 새 exact source owner-only saved
+  version 배포 승인을 요청한다. public backend/media 계약이 불변이면 Gate B 전체
+  mutation은 반복하지 않고 protected 사용자 흐름만 집중 확인한다.
+- task-final-report는 Stage 4.1 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
@@ -823,13 +990,22 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   R2 authority/social metadata 정합성을 확인한다. 부재·mismatch·provider failure는
   실제 사용자를 변경하지 않고 packaged static image로 fail closed한다.
 - **quota/과금 변화**: 각 Gate 직전 plan 표시를 확인하고 추가 결제·자동 초과 과금 요구 시 mutation을 중단한다.
+- **loading UI와 실제 성능 혼동**: Skeleton 표시 성공과 renderer latency 개선을 별도
+  assertion으로 검증하며, 서버 보정은 measured duplicate/invalidation에 한정한다.
+- **decode race**: abort할 수 없는 browser image decode가 source 변경 뒤 완료될 수
+  있다. generation exact-match 전에는 visible state를 commit하지 않는다.
+- **motion readiness 순환 의존**: motion wrapper 크기 측정과 image ready가 서로를
+  기다리지 않도록 Skeleton이 최종 aspect-ratio rect를 먼저 제공하고, ready는 bitmap
+  decode만 의존한다.
+- **공통화 회귀**: 홈의 source allowlist, owner logout stale-card 차단과 share handoff를
+  공통 hook으로 약화하지 않고 기존 focused transition test를 함께 유지한다.
 
 ## 승인 요청 사항
 
 - Cloudflare Vite build가 manifest를 소비한 뒤 실행되는 별도 post-build finalizer 방식
 - finalizer가 exact manifest만 제거하고 다른 runtime/build entry는 보존하는 fail-closed 범위
 - production verifier와 Worker·renderer·D1/R2 제품 source를 Stage 1 보호 대상으로 두는 결정
-- 4개 Stage와 Stage 3.7·3.8·3.9·3.10 보정의 산출물, 검증 명령과 exact 커밋 메시지
+- 4개 Stage와 Stage 3.7·3.8·3.9·3.10·4.1 보정의 산출물, 검증 명령과 exact 커밋 메시지
 - Stage 3.10의 `/?view=profile` canonical route, `/profile` Node/dev compatibility,
   영향 파일과 owner-only 집중 smoke 범위
 - Stage 3.10이 public cache·OG·media 계약을 변경하지 않으므로 Gate B 전체 public
@@ -838,3 +1014,9 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - saved version source는 Stage 2 application candidate, 이후 보고서 commit은 document-only HEAD로 구분하는 provenance 정책
 - Gate B 결과를 release blocker와 비차단 cache 최적화로 나누는 판단 기준
 - Stage 4 뒤 owner-only baseline으로 복원하고 #84가 Gate C와 main 릴리스를 담당하는 의존성
+- Stage 4.1의 동적 card surface 한정 Skeleton, generation/load/decode readiness,
+  intro/Share Studio motion gate와 reduced-motion/error 계약
+- measured private render 중복·avatar invalidation만 최소 보정하고 cache header와
+  publication atomicity를 유지하는 성능 경계
+- Stage 4.1 source 검증 뒤 owner-only saved version 배포와 protected 집중 smoke를
+  별도 승인으로 분리하는 절차

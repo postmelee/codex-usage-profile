@@ -128,6 +128,32 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
   assert.equal(renderCount, 1);
 });
 
+test("deduplicates concurrent renders for the same card source digest", async () => {
+  let releaseRender;
+  let renderCount = 0;
+  const renderGate = new Promise((resolve) => {
+    releaseRender = resolve;
+  });
+  const fixture = createFixture({
+    renderPng: async () => {
+      renderCount += 1;
+      await renderGate;
+      return Buffer.from("png");
+    }
+  });
+
+  const first = fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  const second = fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(renderCount, 1);
+  releaseRender();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.sourceDigest, secondResult.sourceDigest);
+  assert.deepEqual(firstResult.body, secondResult.body);
+  assert.equal(renderCount, 1);
+});
+
 test("separates private light previews while keeping public cards dark", async () => {
   const renderedThemes = [];
   const fixture = createFixture({
