@@ -7,33 +7,35 @@ fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을
 범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
 검증된 public baseline saved version 7의 HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. 현재는 Gate B blocker 복원 뒤
-saved version 16의 custom owner-only 상태다. owner-only version 15에서 root query는
-Worker 전에 정적 `index.html`로 처리됨을 확인했다. 다음 후보의 canonical
-share/OG 문서는 Worker 전달이 확인된 `/api/share/{handle}`을 사용하고 social
-preview는 정합한 `/u/{handle}/social.png` 또는 packaged
-`/assets/codex-social-sample.png`다.
-동적 metadata와 social image 후보는 owner-only와 public smoke가 완료되기
-전까지 production 기능으로 안내하지 않는다. extension 없는 `/u/{handle}`은
-public Gate에서도 `/`로 `307` 전환된 경로이므로 Sites share URL로 사용하지 않는다.
+README card는 `/u/{handle}/card.png`를 사용한다. Task #83의 최종 Gate B에서는
+saved version 17의 canonical `/api/share/{handle}`, 정합한
+`/u/{handle}/social.png` 또는 packaged `/assets/codex-social-sample.png`, README
+card 변형과 공개·비공개 경계를 검증한 뒤 custom owner-only로 복원했다. 현재는
+owner profile 경로를 보정한 exact source의 saved version 18, custom owner-only
+상태다. 영구 public 전환과 CTA 활성화는 #84 Gate C에서 수행한다.
+
+owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
+extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
+두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
+smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
 ## 현재 production baseline
 
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 16 / `bbc0e0e6686a0b0b5c5ddc6dfb3c91ec5eaa5377` |
-| access | custom owner-only revision 49, owner 1명, 추가 user/group 0명 |
-| environment | revision 77 |
+| saved version/source | 18 / `e431cc88ba73b02341a170fe5c38117d4552e42a` |
+| access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
+| environment | revision 85 |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
 | disposable QA state | owner/session/token/D1/R2/local credential 없음 |
 
 원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
-user, workspace group과 tenant group은 0개로 둔다. application rollback은
-version 7 이전의 saved version을 명시적으로 선택하되, data/schema rollback은
-별도 digest/count 승인 없이 수행하지 않는다.
+user, workspace group과 tenant group은 0개로 둔다. 현재 application의 직전
+rollback target은 Gate B를 통과한 version 17이며, legacy public 동작 비교 기준은
+version 7이다. data/schema rollback은 별도 digest/count 승인 없이 수행하지 않는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
@@ -260,10 +262,10 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
 계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
 `/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
-HTML이 정적 asset으로 처리됨을 확인했다. 다음 후보는 `/api/share/{handle}`에서
-handle별 canonical/OG/Twitter metadata와 같은 SPA 공개 화면을 제공한다. root
-query와 extension 없는 `/u/{handle}`은 source 하위 호환으로만 유지하며
-production share link로 안내하지 않는다.
+HTML이 정적 asset으로 처리됨을 확인했다. 검증된 릴리스 후보는
+`/api/share/{handle}`에서 handle별 canonical/OG/Twitter metadata와 같은 SPA 공개
+화면을 제공한다. root query와 extension 없는 `/u/{handle}`은 source 하위
+호환으로만 유지하며 production share link로 안내하지 않는다.
 
 ## 로그와 quota stop
 

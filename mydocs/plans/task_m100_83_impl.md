@@ -723,6 +723,31 @@ Gate B 승인 전에는 access를 public으로 변경하지 않는다.
 - **비차단 후속 후보**: application은 정확하지만 shared cache가 비활성이라 D1 비용 최적화 여지가 있거나, 외부 platform cache의 갱신 지연만 관찰됨.
 - 후속 최적화가 필요하면 측정된 header/요청 수와 안전 경계를 사용해 별도 Issue 후보를 작성하되, 이 Stage에서 cache source를 수정하지 않는다.
 
+### Stage 4 완료 결과
+
+- Stage 3.9 exact source `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의
+  saved version 17에서 최종 Gate B를 실행했다. anonymous/private/missing 경계,
+  README dark/light × en/ko, canonical OG/Twitter, personalized/fallback social
+  GET/HEAD/304와 publish/unpublish 계약이 통과했다.
+- 반복 요청과 submit 전후 측정에서는 shared-cache HIT나 stale `Age` 증거가 없었다.
+  application revision과 media ETag는 즉시 갱신됐으므로 cache source 변경과 별도
+  최적화 이슈를 release blocker로 분류하지 않는다.
+- X 링크 카드의 실제 표시는 작업지시자가 정상으로 확인했다. 플랫폼의 장기 scraper
+  cache와 투명 여백 합성 색은 provider 동작이므로 이 Stage에서 media source를
+  보정하지 않는다.
+- 측정 종료 뒤 public publication, 일회용 token/session, disposable D1/R2와 local
+  credential을 정리하고 custom owner-only policy로 복원했다.
+- Stage 3.10 exact source `e431cc88ba73b02341a170fe5c38117d4552e42a`는 saved
+  version 18로 owner-only 배포했다. protected `/?view=profile`, 계정 메뉴, public
+  CTA와 실제 OAuth 복귀를 확인했고 readiness는 `[1,2,3,4,5]` exact-match다.
+- 최종 safe baseline은 access revision 56, owner 1명·추가 user/group 0명,
+  environment revision 85, maintenance disabled/operator secret absent/service normal,
+  health `200`, operator route `404`다. anonymous root와 owner query는 Sites access
+  gate에서 `401`이다.
+- Stage 3.10은 public profile/cache/OG/media source를 변경하지 않았으므로 public
+  Gate B를 반복하지 않았다. permanent public Gate C와 `main` 릴리스는 #84에서
+  수행한다.
+
 ### 커밋
 
 ```text

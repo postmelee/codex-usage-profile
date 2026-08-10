@@ -25,20 +25,20 @@ Sites project에서 사용한다. `stage5`가 포함된 기존 slug는 project�
 |---|---|
 | canonical origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 16 |
-| deployed source | `bbc0e0e6686a0b0b5c5ddc6dfb3c91ec5eaa5377` |
-| access | custom owner-only, revision 49; owner 1명, 추가 user/group 0명 |
-| environment | revision 77, maintenance disabled, service normal, operator secret absent |
+| saved version | 18 |
+| deployed source | `e431cc88ba73b02341a170fe5c38117d4552e42a` |
+| access | custom owner-only, revision 56; owner 1명, 추가 user/group 0명 |
+| environment | revision 85, maintenance disabled, service normal, operator secret absent |
 | public rollback baseline | saved version 7 / source `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
 
-현재 owner-only version 16은 Task #74의 owner
-`card_style`·`card_locale` additive migration과 media contract v4 위에 Task #78의
-`/api/share/{handle}` Open Graph document, 2400x1260 `social.png`, Share Studio와 structured
-store contract v3 public summary projection을 포함한다. protected API share와 migration
-readiness는 통과했지만 Gate B에서 기존 version 7 publication의 README PNG `200`과
-social PNG `404` 불일치가 확인돼 즉시 owner-only로 복원했다. Stage 3.9 source는 R2
-authority/social 정합성이 없으면 packaged sample을 선언하도록 보정하며, 새 owner-only
-saved version 검증과 별도 Gate B 전에는 public CTA로 승격하지 않는다.
+Task #83 version 17은 Task #74의 owner `card_style`·`card_locale` additive
+migration과 media contract v4, Task #78의 `/api/share/{handle}` Open Graph document,
+2400x1260 `social.png`, Share Studio와 structured store contract v3 public summary
+projection을 포함한다. R2 authority/social 정합성이 없으면 packaged sample을
+선언하는 보정 뒤 owner-only와 제한된 public Gate B를 통과했고, 측정 직후 다시
+owner-only로 복원했다. 현재 version 18은 이 공개 계약을 유지하면서 Sites 소유자
+프로필 경로를 `/?view=profile`로 보정한 exact source다. owner-only 집중 smoke까지
+통과했으며 영구 public 전환과 CTA 활성화는 #84 Gate C에 남아 있다.
 
 ## 요청과 신뢰 경계
 
@@ -87,12 +87,14 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 [`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
-이 contract v3 projection과 `/api/share/{handle}` document read path는 Task #78 누적
-후보의 후속 보정 상태다. current production version 7의 공개 화면은
-`/?profile={handle}` compatibility route를 사용하지만 owner-only version 15에서
-root query initial HTML은 Worker 전에 정적 asset으로 처리됐다. 다음 후보의
-production D1 query와 cache 동작은 API share owner-only/public smoke 전에는 hosted
-검증 완료로 간주하지 않는다.
+이 contract v3 projection과 `/api/share/{handle}` document read path는 Task #83
+version 17의 owner-only·public smoke에서 hosted 검증됐다. 반복 요청과 submit
+전후 측정에서는 shared-cache HIT나 stale `Age` 증거를 확인하지 못했지만
+application revision과 media ETag는 즉시 갱신됐고 privacy·publish 계약도
+유지됐다. 따라서 cache source 변경은 release blocker가 아니며, 영구 public
+전환 전 별도 추측성 최적화를 추가하지 않는다. version 7의
+`/?profile={handle}` compatibility 화면과 version 15의 정적 root-query 반증은
+legacy 비교 근거로만 유지한다.
 
 canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1/)의 D1 구현이다. schema와 ordered migration은 [`db/migrations/`](../db/migrations/)에 있고 Sites artifact의 `.openai/drizzle/`에 package된다. D1 adapter는 prepared statement, conditional update와 batch를 사용하며 process memory lock으로 원자성을 보완하지 않는다.
 
@@ -118,8 +120,10 @@ fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/pos
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
 아래 media contract v4 theme·social 항목은 Task #74·#78 누적 후보 기준이다.
-current production version 7은 기존 stable README card 계약을 유지하며 후보 배포
-전에는 `social.png`나 light theme가 production에 존재한다고 가정하지 않는다.
+legacy public baseline version 7은 기존 stable README card 계약만 제공했다.
+version 17 Gate B에서는 아래 `social.png`와 light theme 계약까지 검증했지만,
+현재 access는 owner-only이므로 #84 Gate C 전에는 일반 사용자에게 활성화됐다고
+안내하지 않는다.
 
 - contract version: `4` (`3`은 query 없는 dark legacy reader만 지원)
 - dark immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
@@ -339,6 +343,17 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
+- Task #83 saved version 17, source
+  `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의 owner-only·제한 public Gate B:
+  migration readiness `[1,2,3,4,5]`, canonical API share, packaged social fallback,
+  README dark/light × en/ko, publish/unpublish, private/missing 비노출과 revision/ETag
+  신선도
+- 같은 Gate B의 반복 요청에서는 shared-cache HIT·stale `Age` 증거가 없었고,
+  application revision/ETag가 즉시 갱신돼 cache 변경을 release blocker로 분류하지
+  않음; 측정 뒤 disposable state를 정리하고 custom owner-only로 원복
+- Task #83 saved version 18, source
+  `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
+  공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
 - saved version 7, source
   `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0`와 production deployment
   `succeeded`
