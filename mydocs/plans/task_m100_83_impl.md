@@ -17,6 +17,8 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 - Stage 3 배포 source는 Stage 2 완료 commit이다. Stage 3·4 보고서와 공식 문서 commit은 배포 뒤 추가되는 문서-only HEAD로 구분하고, saved version의 exact application source SHA를 별도로 기록한다.
 - migration `3..5` 적용은 mutation이고 readiness는 read-only다. exact `[1,2,3,4,5]`가 아니면 기능 smoke와 public Gate를 진행하지 않는다.
 - Stage 4 Gate B 종료 시 영구 public 상태를 유지하지 않는다. owner-only access, private profile, revoked token/session, disposable D1/R2 정리와 maintenance disabled/secret-absent baseline을 복원한 뒤 후속 #84로 넘긴다.
+- Sites에서 소유자 프로필의 canonical application route는 `/?view=profile`로 둔다. UI, OAuth 복귀와 CLI profile metadata가 이 경로를 생성하며 `/profile`은 Node/dev 하위 호환 route로만 유지한다.
+- Stage 3.10은 owner profile UI route와 metadata만 보정한다. Stage 3.9 exact source에서 완료한 Gate B cache·OG·social 측정의 backend/public 계약은 다시 실행하지 않고, 새 exact source의 owner-only saved version과 query route 집중 smoke로 후보를 재고정한다.
 
 ## 단계 개요
 
@@ -34,6 +36,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Sites current baseline·runbook | `docs/` | `docs/sites-operations.md` (Stage 4, 필요한 경우) | OK | saved version/access/environment 또는 장기 운영 절차가 실제로 바뀔 때만 최소 수정 |
 | production 검증 상태 | `docs/` | `docs/production-hosting.md` (Stage 4, 필요한 경우) | OK | migration/artifact/cache 중 장기 유지할 검증 사실만 반영 |
 | 공개 카드 후보 상태 | `docs/` | `docs/readme-card.md` (Stage 4, 필요한 경우) | OK | Gate C 전이므로 CTA는 활성화하지 않고 후보 상태 문구만 사실에 맞게 조정 |
+| 소유자 profile·CLI route | `docs/` | `docs/readme-card.md`, `docs/cli-submit.md` (Stage 3.10) | OK | Sites canonical root-query 경로를 사용자·CLI 문서에 반영하고 `/profile`은 local compatibility 설명에서만 유지 |
 | 단계 검증 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage{N}.md` | OK | SHA, count/size와 redacted remote 결과를 task 범위에 보관 |
 | 최종 handoff | `mydocs/report/` | `mydocs/report/task_m100_83_report.md` | OK | #84 선행조건과 exact application source를 최종 정리 |
 
@@ -563,6 +566,90 @@ visitor 0명, anonymous `401`, protected health `200`, operator route `404`, ser
 Task #83 [Stage 3.9]: social preview 자산 가용성 보정
 ```
 
+## Stage 3.10 — Sites 소유자 프로필 경로 보정
+
+### Stage 4 종료 전 production 결함
+
+Stage 3.9 exact source의 Gate B cache·OG·social 측정과 disposable cleanup 뒤 access는
+custom owner-only로 복원됐다. 복원 상태에서 인증된 계정 메뉴의 **프로필** 링크가
+`/profile`을 전체 navigation으로 요청하고, Sites front door가 extension 없는 이
+경로를 application `index.html`로 전달하지 않아 `/` 홈으로 돌아가는 결함을
+확인했다.
+
+설정 메뉴의 `/?view=settings`와 device approval의 `/?view=device`는 같은 Sites
+제약을 root-query route로 회피하지만 owner profile만 legacy path를 생성한다.
+`/api/share/{handle}`이나 Gate B cache 결과가 원인은 아니며, Stage 3.7·3.8에서
+확정한 Sites application route 제약이 소유자 화면 진입점에도 적용된 누락이다.
+기본 계정 메뉴, 로그인 복귀와 기기 승인 후 profile 진입이 홈으로 이탈하므로
+#84 release candidate 승격 전에 #83의 owner-only 기능 smoke 결함으로 보정한다.
+
+### 승인 요청 보정 설계
+
+1. Sites canonical owner profile href를 `/?view=profile`로 고정하고 UI에서 재사용할
+   route 상수를 둔다. broad client-router 도입이나 history state 전환은 수행하지
+   않는다.
+2. root pathname에서 `view=profile`을 `OWNER_PROFILE`로 해석한다. 기존
+   `?profile={handle}` public compatibility query보다 먼저 explicit `view`를
+   판정해 두 query 계약이 충돌하지 않게 한다.
+3. account menu, owner profile 로그인 CTA, public 화면의 create/my-profile CTA와
+   device approval 완료 link가 canonical owner route만 생성하도록 변경한다.
+4. OAuth `redirect_to`와 CLI status의 `profileUrl`도 query와 fragment를 보존하는
+   `/?view=profile`로 변경한다. local redirect 검증의 same-origin 보호 규칙은
+   완화하지 않는다.
+5. `/profile` route 해석과 Node/dev direct navigation test는 하위 호환으로
+   유지한다. 기존 `/profile` 문자열을 일괄 치환하지 않고 사용자에게 전달되는
+   href·redirect·metadata만 변경한다.
+6. public profile document, `/api/share/{handle}`, README/social PNG, cache/ETag,
+   D1/R2 schema와 visibility 계약은 변경하지 않는다. 따라서 Gate B public
+   cache·SNS 전체 smoke는 재실행하지 않는다.
+7. source 검증 뒤 별도 승인으로 exact source owner-only saved version을 배포하고
+   protected `/?view=profile` rendering, 계정 메뉴 href, 로그인 URL의
+   `redirect_to`, device/public CTA와 safe environment baseline만 집중 확인한다.
+
+### 예상 변경 파일
+
+- `src/profile-ui/appRoutes.js`
+- `src/profile-ui/AccountMenu.jsx`
+- `src/profile-ui/cardShare.js`
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/profile-ui/DeviceApprovalPage.jsx`
+- `src/profile-backend/http.js`
+- `src/profile-ui/__tests__/appRoutes.test.js`
+- `src/profile-ui/__tests__/cardShare.test.js`
+- `src/profile-backend/__tests__/http.test.js`
+- `tests/profile-ui.spec.js`
+- `docs/readme-card.md`
+- `docs/cli-submit.md`
+- `mydocs/working/task_m100_83_stage3_10.md`
+
+### 검증
+
+- `/?view=profile`은 owner profile, `/?view=settings`는 settings,
+  `?profile={handle}`은 public profile로 서로 다르게 resolve
+- account menu, authenticated/anonymous public CTA와 device success link의
+  canonical owner href
+- owner profile GitHub login URL과 OAuth callback의 `redirect_to` query roundtrip
+- CLI submit/status metadata의 absolute owner `profileUrl`
+- `/profile` Node/dev legacy route와 direct E2E 호환 유지
+- focused Node/UI E2E 뒤 전체 test/E2E/build/full-stack/production verifier
+- exact source owner-only deployment에서 protected query route와 anonymous Sites
+  gate, readiness `[1,2,3,4,5]`, maintenance disabled/secret-absent, operator `404`
+- `git diff --check`
+
+### 중단·원복 조건
+
+`view=profile`이 public profile query와 충돌하거나 OAuth redirect가 root 이외로
+이탈하고, owner profile 외 public/backend 계약 diff가 생기면 구현을 중단하고
+계획 범위를 다시 승인받는다. owner-only 배포가 실패하면 public으로 전환하지
+않고 기존 Stage 3.9 saved version과 exact owner-only access/environment baseline을
+유지한다.
+
+### 커밋
+
+```text
+Task #83 [Stage 3.10]: Sites 소유자 프로필 경로 보정
+```
+
 ## Stage 4 — Gate B public cache 실측과 baseline 원복
 
 ### Gate B 승인 입력
@@ -647,7 +734,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
 - 실패한 검증은 단계 완료로 처리하지 않는다.
 - 계획 변경이나 예상 파일 밖 source 변경이 필요하면 구현계획서를 먼저 갱신하고 승인을 받는다.
-- Stage 3·4 원격 결과에는 secret/plain identity/raw usage/backup path를 기록하지 않는다.
+- Stage 3·3.10·4 원격 결과에는 secret/plain identity/raw usage/backup path를 기록하지 않는다.
 - 공식 문서 위치가 수행계획서 판단과 달라지면 수정 전에 계획 변경 승인을 받는다.
 - Stage 4 완료 뒤 전체 수용 기준과 #84 선행조건을 최종 보고서에서 재확인한다.
 
@@ -661,6 +748,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   - `Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정`
   - `Task #83 [Stage 3.8]: Worker 전달 공유 문서 경로 보정`
   - `Task #83 [Stage 3.9]: social preview 자산 가용성 보정`
+  - `Task #83 [Stage 3.10]: Sites 소유자 프로필 경로 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
 
 ## 단계 의존성
@@ -677,6 +765,13 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   source 수정 승인으로 진행한다.
 - Stage 4 재시도는 Stage 3.9 완료보고서 승인, 새 owner-only saved version의
   protected API share HTML·fallback asset 검증과 별도 Gate B 재승인 후 진행한다.
+- Stage 3.10은 Stage 4 Gate B cache·SNS 측정과 owner-only 복원 뒤 발견한
+  `/profile` front-door 이탈을 근거로, 본 구현계획 보정과 source 수정 승인을 받은
+  뒤 진행한다.
+- Stage 4 완료보고서는 Stage 3.10 exact source의 전체 local 검증, owner-only saved
+  version과 query route 집중 smoke, safe baseline 재확인 뒤 작성한다. Stage 3.10이
+  public profile/cache/OG/media source를 변경하지 않으므로 Gate B 전체 public
+  mutation은 반복하지 않는다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
@@ -692,6 +787,12 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - **Sites front-door 경로 불일치**: local Worker `/u/{handle}` 성공은 production
   share 계약으로 인정하지 않는다. query route의 protected/public initial HTML을
   별도로 검증하고 media URL과 HTML URL builder를 분리한다.
+- **owner/public query 충돌**: explicit `view=profile`을 `profile={handle}`보다 먼저
+  판정하고 focused route test로 owner/public profile을 분리한다.
+- **legacy route drift**: 제품이 생성하는 owner link만 canonical query로 바꾸고
+  `/profile` Node/dev route와 direct navigation test는 제거하지 않는다.
+- **OAuth·CLI deep-link drift**: UI href뿐 아니라 `redirect_to`와 API metadata의
+  absolute profile URL을 함께 검증한다.
 - **cache 오판**: timestamp, HTML revision, social ETag와 cache header를 함께 기록하고 application correctness와 최적화를 분리한다.
 - **legacy social object 부재**: D1 public만으로 personalized image를 추정하지 않고
   R2 authority/social metadata 정합성을 확인한다. 부재·mismatch·provider failure는
@@ -703,7 +804,11 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - Cloudflare Vite build가 manifest를 소비한 뒤 실행되는 별도 post-build finalizer 방식
 - finalizer가 exact manifest만 제거하고 다른 runtime/build entry는 보존하는 fail-closed 범위
 - production verifier와 Worker·renderer·D1/R2 제품 source를 Stage 1 보호 대상으로 두는 결정
-- 4개 Stage와 Stage 3.7·3.8·3.9 보정의 산출물, 검증 명령과 exact 커밋 메시지
+- 4개 Stage와 Stage 3.7·3.8·3.9·3.10 보정의 산출물, 검증 명령과 exact 커밋 메시지
+- Stage 3.10의 `/?view=profile` canonical route, `/profile` Node/dev compatibility,
+  영향 파일과 owner-only 집중 smoke 범위
+- Stage 3.10이 public cache·OG·media 계약을 변경하지 않으므로 Gate B 전체 public
+  smoke를 반복하지 않는 결정
 - Stage 3 Gate A와 Stage 4 Gate B의 승인 입력·중단·원복 절차
 - saved version source는 Stage 2 application candidate, 이후 보고서 commit은 document-only HEAD로 구분하는 provenance 정책
 - Gate B 결과를 release blocker와 비차단 cache 최적화로 나누는 판단 기준

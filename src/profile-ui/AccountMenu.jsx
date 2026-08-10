@@ -9,6 +9,7 @@ import {
   buildAccountLoginHref,
   getAccountMenuSummary
 } from "./accountUi.js";
+import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 import { useLocale } from "./LocaleProvider.jsx";
 
 export function AccountMenu({
@@ -16,7 +17,7 @@ export function AccountMenu({
   client,
   location = globalThis.window?.location,
   onAuthStateChange,
-  profileHref = "/profile",
+  profileHref = OWNER_PROFILE_HREF,
   settingsHref = "/?view=settings"
 }) {
   const { locale, t } = useLocale();

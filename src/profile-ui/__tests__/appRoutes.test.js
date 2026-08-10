@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   APP_ROUTE_TYPES,
+  OWNER_PROFILE_HREF,
   isDeviceApprovalRoute,
   isSettingsRoute,
   resolveAppRoute
@@ -27,6 +28,10 @@ test("resolves reserved app routes before profile routes", () => {
   assert.deepEqual(resolveAppRoute(new URL("http://localhost/?view=settings")), {
     pathname: "/",
     type: APP_ROUTE_TYPES.SETTINGS
+  });
+  assert.deepEqual(resolveAppRoute(new URL(`http://localhost${OWNER_PROFILE_HREF}`)), {
+    pathname: "/",
+    type: APP_ROUTE_TYPES.OWNER_PROFILE
   });
   assert.deepEqual(resolveAppRoute(new URL("http://localhost/?profile=postmelee")), {
     pathname: "/",
@@ -64,5 +69,6 @@ test("checks route predicates", () => {
   assert.equal(isDeviceApprovalRoute(new URL("http://localhost/settings")), false);
   assert.equal(isSettingsRoute(new URL("http://localhost/settings")), true);
   assert.equal(isSettingsRoute(new URL("http://localhost/?view=settings")), true);
+  assert.equal(isSettingsRoute(new URL(`http://localhost${OWNER_PROFILE_HREF}`)), false);
   assert.equal(isSettingsRoute(new URL("http://localhost/u/postmelee")), false);
 });

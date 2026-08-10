@@ -8,7 +8,7 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 ## 현재 production 사용자 흐름
 
 1. 웹사이트에서 **Sign in with GitHub**을 선택한다.
-2. 로그인 후 `/profile`에서 GitHub 이름, 사용자명, 아바타가 반영된 private preview를 확인한다.
+2. 로그인 후 `/?view=profile`에서 GitHub 이름, 사용자명, 아바타가 반영된 private preview를 확인한다.
 3. CLI `submit`으로 Codex 사용량을 전송한다. credential이 없으면 browser 승인을 먼저 진행하고 같은 명령에서 제출을 계속한다. 사용량이 아직 없으면 카드 게시가 활성화되지 않는다.
 4. **Publish card**를 선택해 프로필을 public으로 전환한다.
 5. **Share**에서 stable image URL 또는 README Markdown을 복사해 GitHub profile이나 repository README에 삽입한다.
@@ -23,7 +23,7 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 
 아래 흐름은 Task #74·#78 누적 후보가 owner-only 및 public smoke를 통과한 뒤 활성화한다.
 
-1. `/profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
+1. `/?view=profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
 2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공하며 **저장**으로 PNG를 내려받을 수 있다.
 3. SNS에는 `https://{origin}/api/share/{handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
 4. X, LinkedIn 또는 Reddit 버튼은 해당 서비스의 작성 창을 공유 링크와 함께 연다. provider API나 OAuth로 자동 게시하지 않는다.

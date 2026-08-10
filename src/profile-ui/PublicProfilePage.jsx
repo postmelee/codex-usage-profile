@@ -5,8 +5,9 @@ import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { PublicCardIntro } from "./PublicCardIntro.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
-import { buildAccountLoginHref, getAccountOwner } from "./accountUi.js";
-import { buildLocalizedCardUrl } from "./cardShare.js";
+import { getAccountOwner } from "./accountUi.js";
+import { OWNER_PROFILE_HREF } from "./appRoutes.js";
+import { buildLocalizedCardUrl, buildProfileLoginHref } from "./cardShare.js";
 
 export function PublicProfilePage({
   authState,
@@ -110,8 +111,8 @@ function PublicProfileStage({
           cardAlt={t("profile.card.alt.public", { name: displayName })}
           cardUrl={resolvedCardUrl}
           createCardHref={authState?.status === "authenticated"
-            ? "/profile"
-            : buildAccountLoginHref(client)}
+            ? OWNER_PROFILE_HREF
+            : buildProfileLoginHref(client)}
           onClose={() => setIntroOpen(false)}
           open={introOpen}
           ownerName={displayName}
@@ -159,8 +160,8 @@ function PublicProfileState({
         <a
           className="primary-command"
           href={authState?.status === "authenticated"
-            ? "/profile"
-            : buildAccountLoginHref(client)}
+            ? OWNER_PROFILE_HREF
+            : buildProfileLoginHref(client)}
         >
           {t("profile.public.createYourCard")}
         </a>

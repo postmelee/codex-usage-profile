@@ -6,6 +6,8 @@ export const APP_ROUTE_TYPES = Object.freeze({
   SETTINGS: "settings"
 });
 
+export const OWNER_PROFILE_HREF = "/?view=profile";
+
 export function resolveAppRoute(location) {
   const pathname = normalizeAppPathname(location?.pathname);
   const rootSearchParams = pathname === "/"
@@ -24,6 +26,13 @@ export function resolveAppRoute(location) {
     return {
       pathname,
       type: APP_ROUTE_TYPES.SETTINGS
+    };
+  }
+
+  if (rootView === "profile") {
+    return {
+      pathname,
+      type: APP_ROUTE_TYPES.OWNER_PROFILE
     };
   }
 

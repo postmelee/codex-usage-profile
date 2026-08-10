@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
+const OWNER_PROFILE_ROUTE = "/?view=profile";
 const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
   import.meta.url
@@ -1223,7 +1224,7 @@ test.describe("Home and share card flow", () => {
     await accountButton.click();
     await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveAttribute(
       "href",
-      "/profile"
+      OWNER_PROFILE_ROUTE
     );
     await expect(page.getByRole("menuitem", { name: "Settings" })).toHaveAttribute(
       "href",
@@ -1250,7 +1251,7 @@ test.describe("Home and share card flow", () => {
     await expect(menuItems.nth(0)).toHaveText("Profile");
     await expect(menuItems.nth(1)).toHaveText("Settings");
     await expect(menuItems.nth(2)).toHaveText("Log out");
-    await expect(profileItem).toHaveAttribute("href", "/profile");
+    await expect(profileItem).toHaveAttribute("href", OWNER_PROFILE_ROUTE);
     await expect(settingsItem).toHaveAttribute("href", "/?view=settings");
     await expect(profileItem.locator('[data-account-icon="profile"]'))
       .toHaveClass(/lucide-user-round/);
@@ -1333,7 +1334,7 @@ test.describe("Home and share card flow", () => {
     expect(shortQuickstartBox.y).toBeLessThan(620);
     await page.screenshot({ path: testInfo.outputPath("home-short-viewport.png") });
 
-    for (const path of ["/profile", "/settings", PROFILE_ROUTE]) {
+    for (const path of [OWNER_PROFILE_ROUTE, "/profile", "/settings", PROFILE_ROUTE]) {
       await page.goto(path);
       await dismissCardIntro(page);
       await expect(page.locator(".app-frame")).toHaveClass(/app-frame--fullscreen/);
@@ -1363,7 +1364,7 @@ test.describe("Home and share card flow", () => {
       .toHaveAttribute("href", "/");
     await page.getByRole("button", { name: "Account menu for postmelee" }).click();
     await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
-      .toHaveAttribute("href", "/profile");
+      .toHaveAttribute("href", OWNER_PROFILE_ROUTE);
 
     const scrollMetrics = await page.locator(".profile-shell").evaluate((shell) => {
       shell.scrollTop = 120;
@@ -1453,7 +1454,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Copy command" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
     await expect(page.getByRole("link", { name: "Profile", exact: true }))
-      .toHaveAttribute("href", "/profile");
+      .toHaveAttribute("href", OWNER_PROFILE_ROUTE);
     await expect(page.locator(".device-success")).toHaveCSS(
       "animation-name",
       "device-success-enter"
@@ -1547,7 +1548,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/?view=device&user_code=ABCD-1234");
     await page.getByRole("button", { name: "Account menu for postmelee" }).click();
     await expect(page.getByRole("menuitem", { name: "Profile", exact: true }))
-      .toHaveAttribute("href", "/profile");
+      .toHaveAttribute("href", OWNER_PROFILE_ROUTE);
     await expect(page.getByRole("menuitem", { name: "Settings", exact: true }))
       .toHaveAttribute("href", "/?view=settings");
     await page.getByRole("menuitem", { name: "Log out" }).click();
@@ -2345,12 +2346,15 @@ test.describe("Profile and Settings canvases", () => {
 
   test("anonymous owner Profile aligns sign-in state with profile content start", async ({ page }) => {
     await mockAnonymousAccount(page);
-    await page.goto("/profile");
+    await page.goto(OWNER_PROFILE_ROUTE);
 
     await expect(page.getByRole("heading", { level: 1, name: "Sign in required" }))
       .toBeVisible();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" }))
-      .toBeVisible();
+      .toHaveAttribute(
+        "href",
+        "/api/auth/github/login?redirect_to=%2F%3Fview%3Dprofile"
+      );
 
     const desktopTopOffset = await page.evaluate(() => {
       const message = document.querySelector(".card-profile-message").getBoundingClientRect();
@@ -2836,6 +2840,29 @@ test.describe("Settings appearance control", () => {
 });
 
 test.describe("Public profile", () => {
+  test("public profile intro uses the Sites owner profile route", async ({ page }) => {
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator(".public-card-intro-actions .primary-command"))
+      .toHaveAttribute(
+        "href",
+        "/api/auth/github/login?redirect_to=%2F%3Fview%3Dprofile"
+      );
+  });
+
+  test("public profile intro links authenticated users to their owner profile", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator(".public-card-intro-actions .primary-command"))
+      .toHaveAttribute("href", OWNER_PROFILE_ROUTE);
+  });
+
   test("public profile renders the API-backed GitHub identity and selected public card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
     await mockPublicProfile(page);
@@ -2986,7 +3013,10 @@ test.describe("Public profile", () => {
     ))
       .toBeVisible();
     await expect(page.getByRole("link", { name: "Create your Codex card" }))
-      .toBeVisible();
+      .toHaveAttribute(
+        "href",
+        "/api/auth/github/login?redirect_to=%2F%3Fview%3Dprofile"
+      );
     await expect(page.getByText("private-or-missing", { exact: false })).toHaveCount(0);
     await expect(page.locator(".home-card-preview")).toHaveCount(0);
   });

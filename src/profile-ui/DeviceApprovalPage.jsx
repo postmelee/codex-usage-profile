@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CodexCheckCircleIcon } from "./Icons.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 import {
   DEVICE_APPROVAL_ERROR_KIND,
   DEVICE_APPROVAL_UI_STATUS,
@@ -262,7 +263,7 @@ export function DeviceApprovalPage({
                       className="device-success-links"
                     >
                       <a href="/">{t("common.nav.home")}</a>
-                      <a href="/profile">{t("common.nav.profile")}</a>
+                      <a href={OWNER_PROFILE_HREF}>{t("common.nav.profile")}</a>
                     </nav>
                   </section>
                 ) : null}

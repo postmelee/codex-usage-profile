@@ -1,4 +1,5 @@
 import { resolveLocale } from "./i18n.js";
+import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 
 export function resolveShareLocale(value) {
   return resolveLocale(value);
@@ -43,8 +44,9 @@ export function buildReadmeCardSnippet(cardUrl) {
 
 export function buildProfileLoginHref(client) {
   if (client && typeof client.buildGitHubLoginUrl === "function") {
-    return client.buildGitHubLoginUrl({ redirectTo: "/profile" });
+    return client.buildGitHubLoginUrl({ redirectTo: OWNER_PROFILE_HREF });
   }
 
-  return "/api/auth/github/login?redirect_to=%2Fprofile";
+  const params = new URLSearchParams({ redirect_to: OWNER_PROFILE_HREF });
+  return `/api/auth/github/login?${params.toString()}`;
 }

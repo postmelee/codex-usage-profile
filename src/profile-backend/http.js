@@ -41,6 +41,7 @@ const JSON_HEADERS = Object.freeze({
 });
 const DEFAULT_SETTINGS_TOKEN_LABEL = "CLI token";
 const MAX_SETTINGS_TOKEN_LABEL_LENGTH = 100;
+const OWNER_PROFILE_PATH = "/?view=profile";
 const PRIVATE_CARD_CACHE_CONTROL = "private, no-store";
 
 export const ACCOUNT_USAGE_DEVICE_ID_HEADER = "x-codex-usage-profile-device-id";
@@ -1172,7 +1173,7 @@ function buildAccountUsageProfileMetadata(owner, request, publicBaseUrl) {
   return {
     handle: owner.handle,
     visibility: owner.visibility,
-    profileUrl: new URL("/profile", baseUrl).toString(),
+    profileUrl: new URL(OWNER_PROFILE_PATH, baseUrl).toString(),
     imageUrl,
     readmeMarkdown: `![Codex usage profile](${imageUrl})`
   };
