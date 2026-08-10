@@ -486,13 +486,91 @@ owner-only safe baseline을 유지한다.
 Task #83 [Stage 3.8]: Worker 전달 공유 문서 경로 보정
 ```
 
+## Stage 3.9 — social preview 자산 가용성 보정
+
+### Gate B 2차 production 반증
+
+Stage 3.8 exact source의 owner-only saved version 16 배포와 provenance, protected
+`/api/share/{handle}` GET/HEAD metadata 및 migration readiness `[1,2,3,4,5]`는
+통과했다. Gate B 재승인 뒤 public access revision 48에서 anonymous landing
+`200`, private API `401`, missing API/media `404`, public API share GET/HEAD `200`과
+canonical/OG/Twitter metadata가 통과했다.
+
+그러나 기존 version 7 publication의 README stable card는 `200`이지만 metadata가
+선언한 stable/versioned social PNG는 모두 `404`였다. missing API share fallback도
+`MARKETING_OPERATOR_CARD_HANDLE`의 같은 social object를 선언해 깨진 preview를
+반환했다. application event는 해당 social route를 `asset`으로 분류했다. X·Threads·
+카카오톡 요청과 disposable mutation은 시작하지 않고 public access를 revision 49의
+custom owner-only로 즉시 복원했다. 최종 기준선은 허용 사용자 1명, group/external
+visitor 0명, anonymous `401`, protected health `200`, operator route `404`, service
+`normal`, maintenance disabled/secret-absent다.
+
+### 승인된 보정 설계
+
+1. store public profile projection 뒤 media store의 dark stable authority와 social
+   object metadata를 body 없이 읽는다. owner id와 publication id가 일치할 때만
+   personalized `/u/{handle}/social.png?v={revision}`을 metadata에 선언한다.
+2. legacy publication, social renderer 미지원 결과, missing/private profile 또는
+   media read 실패는 실제 계정 mutation과 on-demand R2 write 없이 packaged
+   `/assets/codex-social-sample.png`으로 fail closed한다.
+3. static fallback은 기존 sample view model과 renderer로 결정적으로 생성한
+   2400x1260 PNG이며 OG/Twitter width·height·type 선언과 byte identity를 검증한다.
+4. README card/public API/visibility/R2 publication·ETag 계약은 변경하지 않는다.
+   personalized social route 자체가 missing이면 계속 동일 `404`다.
+5. `social.png` GET/HEAD의 application observability는 raw handle 없이
+   `public_card`로 축약한다.
+6. 실제 production 소유자의 settings, usage, visibility를 backfill 목적으로
+   변경하지 않는다. 새 owner-only 배포와 protected asset 검증 뒤 Gate B를 다시
+   승인받는다.
+
+### 예상 변경 파일
+
+- `public/assets/codex-social-sample.png`
+- `scripts/generate-social-sample.mjs`
+- `src/profile-card/__tests__/social-sample-asset.test.js`
+- `src/profile-runtime/public-profile-resolver.js`
+- `src/profile-runtime/open-graph.js`
+- `src/profile-runtime/public-profile-document.js`
+- `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/dev-server.js`
+- `src/profile-runtime/production-server.js`
+- `src/profile-runtime/sites/observability.js`
+- `src/profile-runtime/__tests__/public-profile-resolver.test.js`
+- `src/profile-runtime/__tests__/open-graph.test.js`
+- `src/profile-runtime/__tests__/public-profile-document.test.js`
+- `src/profile-runtime/sites/__tests__/observability.test.js`
+- `scripts/smoke-sites-fullstack-local.mjs`
+- `docs/sites-operations.md`
+- `docs/production-hosting.md`
+- `docs/readme-card.md`
+- `mydocs/working/task_m100_83_stage3_9.md`
+
+### 검증
+
+- generated sample asset과 source renderer 결과의 byte equality, PNG 2400x1260
+- coherent authority/social publication은 personalized versioned image URL
+- legacy/missing/mismatched/error social state는 packaged static fallback URL
+- missing/private HTML byte-identical fallback과 static asset `200 image/png`
+- personalized social route missing `404`를 HTML의 static fallback `200`과 분리
+- social GET/HEAD observability의 identity-less `public_card` 분류
+- real Worker·D1·R2·ASSETS full-stack smoke와 전체 Node/E2E/build/verifier
+- source commit 뒤 owner-only saved version에서 legacy API share initial HTML이
+  존재하는 fallback asset만 선언하는지 protected exact-match
+
+### 커밋
+
+```text
+Task #83 [Stage 3.9]: social preview 자산 가용성 보정
+```
+
 ## Stage 4 — Gate B public cache 실측과 baseline 원복
 
 ### Gate B 승인 입력
 
 public access를 열기 전에 다음을 제시한다.
 
-- Stage 3.8 saved version/deployment/source와 protected readiness exact-match 증적
+- Stage 3.9 saved version/deployment/source, protected fallback asset과 readiness
+  exact-match 증적
 - Gate B 1차 `/u/{handle} → /` `307` 실패, 즉시 owner-only 복원과
   Stage 3.7 root query 정적 우회와 `/api/share/{handle}` 보정의 protected exact metadata 증적
 - current owner-only access policy와 public으로 바꿀 exact access, 즉시 복원할 owner-only 값
@@ -582,6 +660,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   - `Task #83 Stage 3: owner-only Sites candidate와 전체 smoke`
   - `Task #83 [Stage 3.7]: Sites 호환 공유 문서 경로 보정`
   - `Task #83 [Stage 3.8]: Worker 전달 공유 문서 경로 보정`
+  - `Task #83 [Stage 3.9]: social preview 자산 가용성 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
 
 ## 단계 의존성
@@ -593,8 +672,11 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   계획 보정·source 수정 승인으로 진행한다.
 - Stage 3.8은 Stage 3.7 owner-only version 15의 root query 정적 우회 반증 뒤
   작업지시자의 계획 보정·source 수정 승인으로 진행한다.
-- Stage 4 재시도는 Stage 3.8 완료보고서 승인, 새 owner-only saved version의
-  protected API share HTML 검증과 별도 Gate B 재승인 후 진행한다.
+- Stage 3.9는 Stage 3.8 owner-only version 16의 protected metadata 성공 뒤 Gate B
+  2차 public social PNG `404` 반증과 owner-only 복원, 작업지시자의 계획 보정·
+  source 수정 승인으로 진행한다.
+- Stage 4 재시도는 Stage 3.9 완료보고서 승인, 새 owner-only saved version의
+  protected API share HTML·fallback asset 검증과 별도 Gate B 재승인 후 진행한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
@@ -611,6 +693,9 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
   share 계약으로 인정하지 않는다. query route의 protected/public initial HTML을
   별도로 검증하고 media URL과 HTML URL builder를 분리한다.
 - **cache 오판**: timestamp, HTML revision, social ETag와 cache header를 함께 기록하고 application correctness와 최적화를 분리한다.
+- **legacy social object 부재**: D1 public만으로 personalized image를 추정하지 않고
+  R2 authority/social metadata 정합성을 확인한다. 부재·mismatch·provider failure는
+  실제 사용자를 변경하지 않고 packaged static image로 fail closed한다.
 - **quota/과금 변화**: 각 Gate 직전 plan 표시를 확인하고 추가 결제·자동 초과 과금 요구 시 mutation을 중단한다.
 
 ## 승인 요청 사항
@@ -618,7 +703,7 @@ Task #83 Stage 4: public cache 실측과 owner-only 원복
 - Cloudflare Vite build가 manifest를 소비한 뒤 실행되는 별도 post-build finalizer 방식
 - finalizer가 exact manifest만 제거하고 다른 runtime/build entry는 보존하는 fail-closed 범위
 - production verifier와 Worker·renderer·D1/R2 제품 source를 Stage 1 보호 대상으로 두는 결정
-- 4개 Stage와 Stage 3.7 보정의 산출물, 검증 명령과 exact 커밋 메시지
+- 4개 Stage와 Stage 3.7·3.8·3.9 보정의 산출물, 검증 명령과 exact 커밋 메시지
 - Stage 3 Gate A와 Stage 4 Gate B의 승인 입력·중단·원복 절차
 - saved version source는 Stage 2 application candidate, 이후 보고서 commit은 document-only HEAD로 구분하는 provenance 정책
 - Gate B 결과를 release blocker와 비차단 cache 최적화로 나누는 판단 기준

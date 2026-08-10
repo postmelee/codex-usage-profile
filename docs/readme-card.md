@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 한 번 복사한 공개 이미지 URL을 GitHub README에 유지할 수 있고, 이후 사용량 제출이 성공하면 같은 URL이 최신 카드로 다시 렌더링된다.
 
 > [!IMPORTANT]
-> 현재 production은 saved version 7 기준으로 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면을 제공한다. root query는 owner-only version 15에서 정적 `index.html`로 처리되어 동적 metadata 공유 URL로 사용할 수 없었다. 다음 후보의 canonical `/api/share/{handle}`, `/u/{handle}/social.png`, 카드 theme 선택과 Share Studio는 아직 production smoke를 통과하지 않았다. extension 없는 `/u/{handle}`도 실제 Sites public Gate에서 `/`로 전환되어 공유 링크로 사용하지 않는다. 이 절의 다음 배포 기능은 후보가 실제 배포될 때까지 production CTA로 사용하지 않는다.
+> 검증된 public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. 현재 Site는 Gate B blocker 복원 뒤 saved version 16, custom owner-only 상태다. 다음 후보의 canonical `/api/share/{handle}`, social preview, 카드 theme 선택과 Share Studio는 아직 production smoke를 통과하지 않았다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 이 절의 다음 배포 기능은 후보가 owner-only 재검증과 별도 public Gate를 통과할 때까지 production CTA로 사용하지 않는다.
 
 ## 현재 production 사용자 흐름
 
@@ -39,15 +39,15 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 |---|---|
 | `og:title` | `{handle}'s Codex card` |
 | `og:description` | 서비스 안내 문구 (`?locale`에 따라 한국어/영어) |
-| `og:image` | `https://{origin}/u/{handle}/social.png?v={revision}` |
+| `og:image` | 정합한 social object: `https://{origin}/u/{handle}/social.png?v={revision}`; legacy/missing: `https://{origin}/assets/codex-social-sample.png` |
 | 이미지 크기 | 2400x1260 (1.91:1 미리보기 규격의 2배 해상도) |
 | `twitter:card` | `summary_large_image` |
 
-소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 같은 URL의 이미지가 갱신된다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
+소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. D1 공개 projection 뒤 README authority와 social object의 owner/publication id가 일치할 때만 개인화 URL을 선언한다. 기존 publication에 social object가 없거나 metadata가 불일치하거나 media read가 실패하면 실제 계정을 변경하거나 R2에 즉석 쓰기하지 않고 저장소에 포함된 2400x1260 sample을 선언한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 같은 개인화 URL의 이미지가 갱신된다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
 
 README용 `/u/{handle}/card.png`는 현재 production에서도 사용하는 1497x918 원본이며 후보 배포로 URL이나 응답이 달라지지 않는다.
 
-비공개 handle과 존재하지 않는 handle은 구분 없이 사이트 기본 메타데이터로 폴백한다. 응답으로 handle 존재 여부를 알 수 없다.
+비공개 handle과 존재하지 않는 handle은 구분 없이 사이트 기본 메타데이터와 packaged sample로 폴백한다. legacy public profile은 handle별 title/canonical을 유지하되 sample image를 사용한다. fallback은 실제 사용자 handle의 media object에 의존하지 않으므로 응답으로 private/missing handle 존재 여부를 알 수 없다.
 
 플랫폼은 미리보기를 자체 서버에 캐시하므로 카드를 갱신해도 기존 미리보기가 한동안 남을 수 있다. 카카오는 [OG 캐시 관리 도구](https://developers.kakao.com/tool)로 초기화할 수 있다.
 
@@ -109,7 +109,7 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 | canonical 공유 | `/api/share/{handle}` | 다음 배포 | Worker가 initial HTML에 handle별 OG/Twitter metadata를 주입하고 owner-only·public smoke 뒤 공유 링크로 승격한다. |
 | 공개 JSON | `/api/profiles/public/{handle}` | 현재 production | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
 | README PNG | `/u/{handle}/card.png` | 현재 production | README에 삽입하는 1497x918 stable image endpoint다. |
-| social PNG | `/u/{handle}/social.png` | 다음 배포 | API share canonical 문서의 2400x1260 링크 미리보기 이미지다. |
+| social PNG | `/u/{handle}/social.png` | 다음 배포 | 정합한 publication의 2400x1260 링크 미리보기 이미지다. object가 없는 legacy publication 자체는 계속 404이고 HTML metadata만 packaged sample로 닫힌다. |
 
 profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON은 `404`를 반환한다. Publish가 완료되지 않았거나 private 전환으로 stable object가 제거됐거나 locale metadata/revision이 불완전하면 공개 PNG도 owner 존재 여부를 노출하지 않는 동일한 `404`를 반환한다. R2 provider·timeout·bucket 장애는 내부 storage 정보를 포함하지 않는 `503 media_unavailable`과 `Retry-After: 5`를 반환하므로 일시 장애를 미published 결과로 캐시하지 않는다. 공개 HTML은 로그인 여부를 노출하지 않는 unavailable 상태를 표시한다.
 

@@ -6,11 +6,13 @@
 fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
 범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
-현재 saved version 7의 public HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. owner-only version 15에서 root
-query는 Worker 전에 정적 `index.html`로 처리됨을 확인했다. 다음 후보의 canonical
+검증된 public baseline saved version 7의 HTML profile은 `/?profile={handle}`, stable
+README card는 `/u/{handle}/card.png`를 사용한다. 현재는 Gate B blocker 복원 뒤
+saved version 16의 custom owner-only 상태다. owner-only version 15에서 root query는
+Worker 전에 정적 `index.html`로 처리됨을 확인했다. 다음 후보의 canonical
 share/OG 문서는 Worker 전달이 확인된 `/api/share/{handle}`을 사용하고 social
-preview는 `/u/{handle}/social.png`다.
+preview는 정합한 `/u/{handle}/social.png` 또는 packaged
+`/assets/codex-social-sample.png`다.
 동적 metadata와 social image 후보는 owner-only와 public smoke가 완료되기
 전까지 production 기능으로 안내하지 않는다. extension 없는 `/u/{handle}`은
 public Gate에서도 `/`로 `307` 전환된 경로이므로 Sites share URL로 사용하지 않는다.
@@ -20,9 +22,9 @@ public Gate에서도 `/`로 `307` 전환된 경로이므로 Sites share URL로 �
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 7 / `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
-| access | public revision 26 |
-| environment | revision 57 |
+| saved version/source | 16 / `bbc0e0e6686a0b0b5c5ddc6dfb3c91ec5eaa5377` |
+| access | custom owner-only revision 49, owner 1명, 추가 user/group 0명 |
+| environment | revision 77 |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
@@ -95,6 +97,8 @@ Worker request event는 `requestId`, `routeClass`, `method`, `status`,
 cookie, Authorization, OAuth code/state, session/token/device code, owner,
 usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-request-id`로
 사용자 오류와 같은 event를 연결한다.
+`card.png`와 `social.png`는 모두 raw handle을 남기지 않는 `public_card`로
+축약한다.
 
 ## Owner-only candidate 배포
 
@@ -146,10 +150,12 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
    query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
    User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
-   Twitter Card metadata를 확인하고, `/u/{handle}/social.png`의
-   GET/HEAD/If-None-Match 304와 2400x1260 응답을 검증한다. private·missing
-   handle은 동일한 기본 OG/unavailable HTML을 반환하고 README/social PNG는
-   같은 404로 닫혀 존재 여부를 드러내지 않아야 한다.
+   Twitter Card metadata를 확인하고, 정합 publication의
+   `/u/{handle}/social.png` GET/HEAD/If-None-Match 304와 2400x1260 응답을
+   검증한다. 이어서 legacy social-missing fixture에서 personalized route 404와
+   HTML의 `/assets/codex-social-sample.png` 선언, fallback asset GET/HEAD 200을
+   함께 확인한다. private·missing handle은 동일한 기본 OG/unavailable HTML과
+   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -239,9 +245,11 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
    뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/api/share/{handle}` HTML의
    canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
-   `GET|HEAD|304`·2400x1260을 확인한다. private 및 missing 상태에서 HTML이 같은
-   기본 metadata/unavailable 화면으로 닫히고 social PNG가 같은 404인지 검증한
-   뒤 unpublish 후 모든 README/social PNG 조합 404를 확인한다.
+   `GET|HEAD|304`·2400x1260을 확인한다. 기존 public publication처럼 social object가
+   없으면 personalized route 404와 HTML의 packaged sample URL·asset 200을 함께
+   확인한다. private 및 missing 상태에서 HTML이 같은 기본 metadata/unavailable
+   화면과 packaged sample로 닫히고 social PNG가 같은 404인지 검증한 뒤 unpublish
+   후 모든 README/social PNG 조합 404를 확인한다.
 4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
    owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
    Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가

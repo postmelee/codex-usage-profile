@@ -4,6 +4,8 @@ export const DEFAULT_PROFILE_OPEN_GRAPH_LOCALE = "en";
 export const PROFILE_SOCIAL_IMAGE_WIDTH = 2400;
 export const PROFILE_SOCIAL_IMAGE_HEIGHT = 1260;
 export const PROFILE_SOCIAL_IMAGE_TYPE = "image/png";
+export const PROFILE_FALLBACK_SOCIAL_IMAGE_PATH =
+  "/assets/codex-social-sample.png";
 
 const OPEN_GRAPH_LOCALE_TAGS = Object.freeze({
   en: "en_US",
@@ -39,7 +41,7 @@ export function buildProfileOpenGraphDocument(options = {}) {
 
   if (!profile) {
     const fallbackUrl = new URL("/", origin).toString();
-    const fallbackHandle = normalizeOptionalHandle(options.fallbackImageHandle);
+    const imageUrl = buildFallbackSocialImageUrl(origin);
     return freezeDocument({
       canonicalUrl: fallbackUrl,
       description,
@@ -50,9 +52,7 @@ export function buildProfileOpenGraphDocument(options = {}) {
         imageAlt: locale === "ko"
           ? "Codex 사용량 카드 예시"
           : "Sample Codex usage card",
-        imageUrl: fallbackHandle
-          ? buildSocialImageUrl(origin, fallbackHandle)
-          : null,
+        imageUrl,
         locale
       }),
       title: PROFILE_OPEN_GRAPH_SITE_NAME
@@ -60,15 +60,17 @@ export function buildProfileOpenGraphDocument(options = {}) {
   }
 
   const canonicalUrl = buildPublicProfileUrl(origin, profile.handle);
-  const imageUrl = buildSocialImageUrl(
-    origin,
-    profile.handle,
-    profile.imageRevisionAt
-  );
+  const imageUrl = profile.socialImageAvailable
+    ? buildSocialImageUrl(origin, profile.handle, profile.imageRevisionAt)
+    : buildFallbackSocialImageUrl(origin);
   const socialTitle = `${profile.handle}'s Codex card`;
-  const imageAlt = locale === "ko"
-    ? `${profile.handle}의 Codex 사용량 카드`
-    : `${profile.handle}'s Codex usage card`;
+  const imageAlt = profile.socialImageAvailable
+    ? locale === "ko"
+      ? `${profile.handle}의 Codex 사용량 카드`
+      : `${profile.handle}'s Codex usage card`
+    : locale === "ko"
+      ? "Codex 사용량 카드 예시"
+      : "Sample Codex usage card";
 
   return freezeDocument({
     canonicalUrl,
@@ -212,6 +214,13 @@ export function buildSocialImageUrl(origin, handle, revisionAt) {
   return url.toString();
 }
 
+export function buildFallbackSocialImageUrl(origin) {
+  return new URL(
+    PROFILE_FALLBACK_SOCIAL_IMAGE_PATH,
+    normalizeOrigin(origin)
+  ).toString();
+}
+
 export function toRevisionToken(revisionAt) {
   const time = new Date(revisionAt).getTime();
   if (!Number.isFinite(time)) {
@@ -259,17 +268,9 @@ function normalizeProfileSummary(value) {
       ? value.cardLocale
       : DEFAULT_PROFILE_OPEN_GRAPH_LOCALE,
     handle: normalizeHandle(value.handle),
-    imageRevisionAt: value.imageRevisionAt ?? value.uploadedAt
+    imageRevisionAt: value.imageRevisionAt ?? value.uploadedAt,
+    socialImageAvailable: value.socialImageAvailable !== false
   });
-}
-
-function normalizeOptionalHandle(value) {
-  if (value === undefined || value === null || value === "") return null;
-  try {
-    return normalizeHandle(value);
-  } catch {
-    return null;
-  }
 }
 
 function normalizeHandle(value) {

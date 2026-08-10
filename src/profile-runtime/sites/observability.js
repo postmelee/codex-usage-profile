@@ -126,7 +126,7 @@ export function classifyProfileSitesRoute(request) {
   ) {
     return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_PROFILE;
   }
-  if (/^\/u\/[^/]+\/card\.png$/.test(pathname)) {
+  if (/^\/u\/[^/]+\/(?:card|social)\.png$/.test(pathname)) {
     return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_CARD;
   }
   if (pathname === "/api/profile" || pathname.startsWith("/api/profile/")) {

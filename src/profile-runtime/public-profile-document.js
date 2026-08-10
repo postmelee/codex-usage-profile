@@ -1,7 +1,4 @@
 import {
-  MARKETING_OPERATOR_CARD_HANDLE
-} from "../profile-marketing/marketing-config.js";
-import {
   buildProfileOpenGraphDocument,
   injectProfileOpenGraphHead
 } from "./open-graph.js";
@@ -80,9 +77,6 @@ export function createPublicProfileDocumentHandler(options = {}) {
   const cacheControl = options.cacheControl ??
     PUBLIC_PROFILE_DOCUMENT_CACHE_CONTROL;
   const publicBaseUrl = options.publicBaseUrl ?? null;
-  const fallbackImageHandle = Object.hasOwn(options, "fallbackImageHandle")
-    ? options.fallbackImageHandle
-    : MARKETING_OPERATOR_CARD_HANDLE;
 
   return async function handlePublicProfileDocument(request) {
     if (!isPublicProfileDocumentRequest(request)) return null;
@@ -95,7 +89,6 @@ export function createPublicProfileDocumentHandler(options = {}) {
     let openGraphDocument;
     try {
       openGraphDocument = buildProfileOpenGraphDocument({
-        fallbackImageHandle,
         handle,
         origin,
         profile,

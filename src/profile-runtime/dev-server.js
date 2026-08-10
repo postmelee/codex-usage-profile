@@ -33,6 +33,7 @@ import {
 import {
   createFileProfileBackendStore
 } from "../profile-backend/index.js";
+import { createMemoryProfileMediaStore } from "../profile-media/index.js";
 
 export {
   createNodeRequestUrl,
@@ -122,14 +123,16 @@ export async function startProfileRuntimeDevServer(options = {}) {
     createIfMissing: true,
     filePath: config.profileStoreFile
   });
+  const mediaStore = options.mediaStore ?? createMemoryProfileMediaStore();
   const apiHandler = options.apiHandler ?? createProfileRuntimeBackendHandler({
     ...options,
     config,
     env,
+    mediaStore,
     store
   });
   const documentHandler = options.documentHandler ??
-    createDevPublicProfileDocumentHandler({ config, store, vite });
+    createDevPublicProfileDocumentHandler({ config, mediaStore, store, vite });
   const server = options.server ?? createHttpServer(
     createProfileRuntimeNodeHandler({
       apiHandler,
@@ -162,7 +165,7 @@ export async function startProfileRuntimeDevServer(options = {}) {
 }
 
 export function createDevPublicProfileDocumentHandler(options = {}) {
-  const { config, store, vite } = options;
+  const { config, mediaStore, store, vite } = options;
   if (!config || !store || typeof vite?.transformIndexHtml !== "function") {
     return null;
   }
@@ -181,7 +184,7 @@ export function createDevPublicProfileDocumentHandler(options = {}) {
       }
     },
     publicBaseUrl: config.publicBaseUrl,
-    resolveProfile: createStorePublicProfileResolver(store)
+    resolveProfile: createStorePublicProfileResolver(store, { mediaStore })
   });
 }
 

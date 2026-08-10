@@ -129,12 +129,12 @@ async function handleSitesPublicProfileDocument(request, context) {
   if (!isPublicProfileDocumentRequest(request)) return null;
   if (typeof context.environment.ASSETS?.fetch !== "function") return null;
 
-  let store;
+  let dependencies;
   try {
-    store = createProfileSitesBackendDependencies({
+    dependencies = createProfileSitesBackendDependencies({
       database: context.config.database,
       media: context.config.media
-    }).store;
+    });
   } catch {
     return null;
   }
@@ -151,7 +151,9 @@ async function handleSitesPublicProfileDocument(request, context) {
       return response.ok ? response.text() : null;
     },
     publicBaseUrl: context.config.publicBaseUrl,
-    resolveProfile: createStorePublicProfileResolver(store)
+    resolveProfile: createStorePublicProfileResolver(dependencies.store, {
+      mediaStore: dependencies.mediaStore
+    })
   });
 
   return handler(request);

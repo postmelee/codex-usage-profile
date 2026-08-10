@@ -246,25 +246,30 @@ test("falls back to site tags for private and missing handles", async () => {
 
   assert.equal(missing, privateProfile);
   assert.ok(missing.includes("<title>Codex Usage Profile</title>"));
-  assert.ok(missing.includes("/u/postmelee/social.png"));
+  assert.ok(missing.includes("/assets/codex-social-sample.png"));
+  assert.ok(!missing.includes("/u/postmelee/social.png"));
   assert.ok(!missing.includes("/u/ghost/social.png"));
   assert.ok(!missing.includes("/u/hidden/social.png"));
   assert.ok(missing.includes("content=\"summary_large_image\""));
 });
 
-test("uses a configured fallback image handle", async () => {
-  const handler = createHandler({ fallbackImageHandle: "operator" });
-  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
+test("keeps profile metadata but falls back when personalized social media is unavailable", async () => {
+  const handler = createHandler({
+    resolveProfile: async () => ({
+      cardLocale: "ko",
+      handle: "postmelee",
+      imageRevisionAt: UPLOADED_AT,
+      socialImageAvailable: false
+    })
+  });
+  const body = await (
+    await handler(new Request(`${BASE_URL}/api/share/postmelee`))
+  ).text();
 
-  assert.ok(body.includes("/u/operator/social.png"));
-});
-
-test("omits the fallback image when no handle is configured", async () => {
-  const handler = createHandler({ fallbackImageHandle: null });
-  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
-
-  assert.ok(!body.includes("og:image"));
-  assert.ok(body.includes("content=\"summary\""));
+  assert.ok(body.includes("postmelee's Codex card"));
+  assert.ok(body.includes(`${BASE_URL}/api/share/postmelee`));
+  assert.ok(body.includes(`${BASE_URL}/assets/codex-social-sample.png`));
+  assert.ok(!body.includes("/u/postmelee/social.png"));
 });
 
 test("falls back to site tags when the profile lookup fails", async () => {

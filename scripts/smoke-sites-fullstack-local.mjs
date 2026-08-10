@@ -17,6 +17,9 @@ import {
   migrateD1Database
 } from "../src/profile-backend/d1/migration-runner.js";
 import {
+  createProfileMediaSocialKey
+} from "../src/profile-media/media-store-contract.js";
+import {
   loginWithDeviceCode
 } from "../packages/codex-usage-profile-cli/src/device-login.js";
 import {
@@ -214,6 +217,27 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(landing.status, 200);
     assert.match(await landing.text(), /<div id="root"><\/div>/);
 
+    const fallbackSocial = await fetch(new URL(
+      "/assets/codex-social-sample.png",
+      origin
+    ));
+    const fallbackSocialPng = new Uint8Array(
+      await fallbackSocial.arrayBuffer()
+    );
+    assert.equal(fallbackSocial.status, 200);
+    assert.equal(fallbackSocial.headers.get("content-type"), "image/png");
+    assert.deepEqual(readPngDimensions(fallbackSocialPng), {
+      height: 1260,
+      width: 2400
+    });
+    const fallbackSocialHead = await fetch(new URL(
+      "/assets/codex-social-sample.png",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(fallbackSocialHead.status, 200);
+    assert.equal((await fallbackSocialHead.arrayBuffer()).byteLength, 0);
+    assert.equal(fallbackSocialHead.headers.get("content-type"), "image/png");
+
     const spa = await fetch(new URL("/settings", origin));
     assert.equal(spa.status, 200);
     assert.match(await spa.text(), /<div id="root"><\/div>/);
@@ -379,6 +403,45 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       publicDocumentHtml,
       /<meta property="og:image" content="[^"]+\/u\/local-owner\/social\.png\?v=\d+" \/>/
     );
+
+    const publicSocial = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ));
+    const publicSocialPng = new Uint8Array(await publicSocial.arrayBuffer());
+    assert.equal(publicSocial.status, 200);
+    assert.equal(publicSocial.headers.get("content-type"), "image/png");
+    assert.deepEqual(readPngDimensions(publicSocialPng), {
+      height: 1260,
+      width: 2400
+    });
+    const publicSocialHead = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(publicSocialHead.status, 200);
+    assert.equal((await publicSocialHead.arrayBuffer()).byteLength, 0);
+
+    const mediaBucket = await miniflare.getR2Bucket("PROFILE_MEDIA");
+    await mediaBucket.delete(createProfileMediaSocialKey({
+      handle: "local-owner"
+    }));
+    const legacySocial = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ));
+    assert.equal(legacySocial.status, 404);
+    const legacyDocument = await fetch(new URL(
+      "/api/share/local-owner",
+      origin
+    ));
+    const legacyDocumentHtml = await legacyDocument.text();
+    assert.equal(legacyDocument.status, 200);
+    assert.match(
+      legacyDocumentHtml,
+      /<meta property="og:image" content="[^"]+\/assets\/codex-social-sample\.png" \/>/
+    );
+    assert.doesNotMatch(legacyDocumentHtml, /\/u\/local-owner\/social\.png/);
 
     const publicDocumentHead = await fetch(new URL(
       "/api/share/local-owner",
@@ -612,7 +675,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 44,
+      routesVerified: 50,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {

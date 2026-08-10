@@ -25,23 +25,20 @@ Sites project에서 사용한다. `stage5`가 포함된 기존 slug는 project�
 |---|---|
 | canonical origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 7 |
-| deployed source | `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
-| access | public, revision 14 |
-| environment | revision 9, maintenance disabled, service normal |
-| owner-only rollback | owner 1명, 추가 user/group 0개의 직전 custom policy |
+| saved version | 16 |
+| deployed source | `bbc0e0e6686a0b0b5c5ddc6dfb3c91ec5eaa5377` |
+| access | custom owner-only, revision 49; owner 1명, 추가 user/group 0명 |
+| environment | revision 77, maintenance disabled, service normal, operator secret absent |
+| public rollback baseline | saved version 7 / source `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
 
-Task #51 Stage 6의 repository HEAD 차이는 README와 운영 문서·보고서뿐이다.
-deployable source가 바뀌지 않았으므로 새 saved version을 만들지 않고 검증된
-version 7을 유지했다.
-
-현재 `devel`의 누적 deploy candidate는 Task #74의 owner
+현재 owner-only version 16은 Task #74의 owner
 `card_style`·`card_locale` additive migration과 media contract v4 위에 Task #78의
 `/api/share/{handle}` Open Graph document, 2400x1260 `social.png`, Share Studio와 structured
-store contract v3 public summary projection을 포함한다. 이 누적 candidate는
-local·PR 검증까지만 완료했으며 실제 Sites owner-only/public smoke는 아직 수행하지
-않았다. 별도 Gate에서 같은 commit을 owner-only saved version으로 배포해 검증하기
-전까지 이 문서의 current production 값은 version 7 baseline을 계속 뜻한다.
+store contract v3 public summary projection을 포함한다. protected API share와 migration
+readiness는 통과했지만 Gate B에서 기존 version 7 publication의 README PNG `200`과
+social PNG `404` 불일치가 확인돼 즉시 owner-only로 복원했다. Stage 3.9 source는 R2
+authority/social 정합성이 없으면 packaged sample을 선언하도록 보정하며, 새 owner-only
+saved version 검증과 별도 Gate B 전에는 public CTA로 승격하지 않는다.
 
 ## 요청과 신뢰 경계
 
@@ -112,7 +109,7 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
-`/api/share/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. `og:image?v=`는 두 시각 중 최신 값을 밀리초 정밀도로 사용하므로 사용량 갱신과 카드 theme·locale 저장이 모두 캐시 키를 바꾼다. HTML share URL과 별개로 social image는 `/u/{handle}/social.png`를 유지한다.
+`/api/share/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. 이어서 R2 dark authority와 social metadata를 body 없이 읽어 owner/publication id와 ETag가 정합할 때만 `/u/{handle}/social.png?v=`를 선언한다. revision query는 owner·usage 두 시각 중 최신 값을 밀리초 정밀도로 사용한다. legacy/missing/mismatch/provider failure는 사용자 mutation이나 on-demand R2 write 없이 `/assets/codex-social-sample.png`로 fail closed한다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
@@ -148,8 +145,11 @@ canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-b
 object를 제공한다. `If-None-Match`가 application ETag와 일치하면 object body를
 읽지 않고 `304`를 반환한다. dark authority와 social publication이 일치하지
 않거나 private/unpublished/missing이면 존재 여부를 숨기는 `404`, provider
-장애이면 generic `503 media_unavailable`을 반환한다. 이 route의 local·PR contract
-검증은 완료됐지만 production R2/HTTP smoke는 아직 수행하지 않았다.
+장애이면 generic `503 media_unavailable`을 반환한다. API share metadata는 이 route가
+실제로 제공 가능한 경우만 개인화 URL을 사용한다. 그렇지 않으면 packaged sample을
+사용하되 social route 자체의 404/503 계약은 바꾸지 않는다. 정합 publication과 legacy
+missing social의 local real-Worker 회귀 검증은 완료됐지만 보정 source의 production
+R2/HTTP smoke는 아직 수행하지 않았다.
 
 stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
