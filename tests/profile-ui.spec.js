@@ -32,6 +32,44 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
 });
 
+test("card readiness releases reacquired same-source leases", async ({ page }) => {
+  await page.route("**/__card-readiness/card.png", (route) => route.fulfill({
+    body: CARD_PNG,
+    contentType: "image/png",
+    status: 200
+  }));
+  await page.goto(
+    "/src/profile-ui/__tests__/fixtures/card-image-readiness.html"
+  );
+  const state = page.locator("#readiness-state");
+
+  await expect(state).toHaveAttribute("data-status", "ready");
+  const firstDisplaySrc = await state.getAttribute("data-display-src");
+  expect(firstDisplaySrc).toMatch(/^blob:/);
+
+  await page.evaluate(() => {
+    globalThis.__cardImageReadinessHarness.setSource(null);
+  });
+  await expect(state).toHaveAttribute("data-status", "idle");
+  await expect(state).toHaveAttribute("data-display-src", firstDisplaySrc);
+
+  await page.evaluate(() => {
+    const harness = globalThis.__cardImageReadinessHarness;
+    harness.setSource(harness.cardSource);
+  });
+  await expect(state).toHaveAttribute("data-status", "ready");
+  await expect(state).toHaveAttribute("data-display-src", firstDisplaySrc);
+
+  const result = await page.evaluate(async () => {
+    const harness = globalThis.__cardImageReadinessHarness;
+    const cleared = harness.clear();
+    harness.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return { cleared, revoked: [...harness.revokedObjectUrls] };
+  });
+  expect(result).toEqual({ cleared: 1, revoked: [firstDisplaySrc] });
+});
+
 test.describe("theme surfaces", () => {
   test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
     const approvedArtworkSelectors = [

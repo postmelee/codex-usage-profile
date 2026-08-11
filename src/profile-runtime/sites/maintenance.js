@@ -54,6 +54,12 @@ const PROFILE_SITES_MIGRATION_STAGE_CODES = Object.freeze([
   "migration_apply_read_unavailable",
   "migration_verification_unavailable"
 ]);
+const PROFILE_SITES_MIGRATION_APPLY_STAGE_CODES = Object.freeze(
+  D1_MIGRATION_MANIFEST.flatMap(({ version }) => [
+    `migration_apply_metadata_v${version}_unavailable`,
+    `migration_apply_sql_v${version}_unavailable`
+  ])
+);
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -818,9 +824,7 @@ function normalizeAppliedMigrationVersions(value, appliedVersions) {
 
 function isMigrationStageCode(value) {
   return PROFILE_SITES_MIGRATION_STAGE_CODES.includes(value) ||
-    /^migration_apply_(?:metadata|sql)_v[1-5]_unavailable$/u.test(
-      value ?? ""
-    );
+    PROFILE_SITES_MIGRATION_APPLY_STAGE_CODES.includes(value);
 }
 
 function migrationApplyFailureCode(progress, migrations) {

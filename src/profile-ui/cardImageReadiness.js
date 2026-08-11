@@ -89,7 +89,7 @@ export function useCardImageReadiness({
   useEffect(() => {
     const resource = state.visible;
     return () => resource?.release?.();
-  }, [state.visible?.displaySrc]);
+  }, [state.visible]);
 
   const stateMatchesRequest = (
     state.scopeKey === scopeKey &&

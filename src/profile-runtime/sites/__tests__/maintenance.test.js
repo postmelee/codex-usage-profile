@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -406,15 +407,17 @@ test("maintenance migration bounds the exact failed apply kind and version", asy
   for (const item of [
     {
       code: "migration_apply_sql_v3_unavailable",
-      reconcile: async (_database, migrations) => migrations
+      reconcile: async (_database, migrations) => migrations,
+      version: 3
     },
     {
-      code: "migration_apply_metadata_v3_unavailable",
+      code: "migration_apply_metadata_v5_unavailable",
       reconcile: async (_database, migrations) => migrations.map(
-        (migration) => migration.version === 3
+        (migration) => migration.version === 5
           ? { ...migration, sql: "" }
           : migration
-      )
+      ),
+      version: 5
     }
   ]) {
     const fixture = await createServiceFixture({
@@ -426,7 +429,7 @@ test("maintenance migration bounds the exact failed apply kind and version", asy
       ),
       reconcileHostedD1Migrations: item.reconcile,
       migrateD1Database: async (_database, options) => {
-        options.onProgress({ phase: "batch", version: 3 });
+        options.onProgress({ phase: "batch", version: item.version });
         throw new Error("provider SQL includes private-owner token bytes");
       }
     });
@@ -446,6 +449,62 @@ test("maintenance migration bounds the exact failed apply kind and version", asy
     });
     assert.doesNotMatch(body, /provider|private-owner|token|includes|bytes/i);
   }
+});
+
+test("hosted migration specifications match the candidate SQL fragments", async () => {
+  const migrations = candidateMigrationsFromSqlFiles();
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  const hostedTables = hostedTableSqlFromMigrations(migrations.slice(2));
+  let readinessCalls = 0;
+  const database = {
+    batch() {},
+    prepare(sql) {
+      assert.match(sql, /^SELECT sql FROM sqlite_master/u);
+      return {
+        bind(table) {
+          return {
+            async all() {
+              return { results: [{ sql: hostedTables.get(table) }] };
+            }
+          };
+        }
+      };
+    }
+  };
+  const fixture = await createServiceFixture({
+    database,
+    migrations,
+    inspectD1MigrationReadiness: async () => {
+      readinessCalls += 1;
+      return migrationState(
+        readinessCalls === 1 ? [1, 2] : expectedVersions,
+        expectedVersions
+      );
+    },
+    migrateD1Database: async (_database, options) => {
+      assert.deepEqual(
+        options.migrations.map(({ version, sql }) => ({ version, sql })),
+        [
+          { version: 3, sql: "" },
+          { version: 4, sql: "" },
+          { version: 5, sql: "" }
+        ]
+      );
+      return { newlyApplied: [3, 4, 5] };
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  const responseBody = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(responseBody));
+  assert.deepEqual(responseBody.summary, {
+    appliedVersions: expectedVersions,
+    newlyAppliedVersions: [3, 4, 5],
+    operation: "migrate"
+  });
 });
 
 test("maintenance migration rejects a partially hosted base schema", async () => {
@@ -853,6 +912,31 @@ function candidateMigrations() {
     name,
     sql: `SELECT ${version}`
   }));
+}
+
+function candidateMigrationsFromSqlFiles() {
+  return D1_MIGRATION_MANIFEST.map(({ version, name, file }) => ({
+    version,
+    name,
+    sql: readFileSync(new URL(`../../../../${file}`, import.meta.url), "utf8")
+  }));
+}
+
+function hostedTableSqlFromMigrations(migrations) {
+  const columns = new Map();
+  for (const migration of migrations) {
+    const withoutComments = migration.sql.replace(/^--.*$/gmu, "");
+    const match = /ALTER\s+TABLE\s+([a-z][a-z0-9_]*)\s+ADD\s+COLUMN\s+([\s\S]*?);/iu
+      .exec(withoutComments);
+    assert.ok(match, `migration ${migration.version} must add one column`);
+    const tableColumns = columns.get(match[1]) ?? [];
+    tableColumns.push(match[2].trim());
+    columns.set(match[1], tableColumns);
+  }
+  return new Map([...columns].map(([table, tableColumns]) => [
+    table,
+    `CREATE TABLE ${table} (id TEXT, ${tableColumns.join(", ")})`
+  ]));
 }
 
 function migrationState(appliedVersions, expectedVersions) {

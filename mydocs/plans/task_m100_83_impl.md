@@ -38,6 +38,9 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 - Stage 4.4는 saved version 20 hosted smoke에서 확인한 warm target 중복 fade와 profile
   loading 표현 불일치만 보정한다. source 없는 cold readiness fade와 route별 fetch,
   public media/cache·publication·access 계약은 변경하지 않는다.
+- Stage 4.7은 PR #85 리뷰에서 확인한 동일 display source lease 재획득 누수와 hosted
+  migration SQL/spec drift 보호선만 보정한다. avatar backoff, cache TTL, decode timeout,
+  social fallback 정책과 원격 배포는 후속 범위로 유지한다.
 
 ## 단계 개요
 
@@ -53,6 +56,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 4.4 | 공유 전환·프로필 Skeleton 연속성 보정 | warm target motion continuity, 공통 profile Skeleton | opacity 연속성, 요소별 shimmer, identity 비노출, reduced-motion |
 | 4.5 | Skeleton/ready 위치·reveal 정합화 | ready-equivalent placeholder geometry, content micro cascade | bounding box, final opacity/transform, replay 부재, reduced-motion |
 | 4.6 | profile reveal 공간 이동·stagger 제거 | transform-free synchronized opacity reveal | delay 0s, active/final transform none, geometry, reduced-motion, local preview |
+| 4.7 | PR 리뷰 차단 항목 보정 | visible lease lifecycle, migration SQL/spec drift guard | A→null→A lease 회수, actual SQL reconciliation, manifest 기반 stage code, 전체 회귀 |
 
 ## 문서 위치 확인
 
@@ -70,6 +74,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Stage 4.4 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_4.md` | OK | 사용자 identity·hosted URL 원문 없이 target opacity와 Skeleton 상태·검증 결과만 기록 |
 | Stage 4.5 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_5.md` | OK | 사용자 identity·usage 없이 layout delta와 animation 계약만 기록 |
 | Stage 4.6 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_6.md` | OK | transform·stagger 제거, local preview 승인과 exact source owner-only hosted smoke만 기록 |
+| Stage 4.7 리뷰 보정 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_7.md` | OK | lease count나 SQL 원문 대신 lifecycle·drift 검증 결과와 exact source만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1354,6 +1359,62 @@ owner-only Site를 재배포하지 않는다.
 Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
 ```
 
+## Stage 4.7 — PR 리뷰 차단 항목 보정
+
+### 발견 근거와 범위
+
+- PR #85 리뷰에서 `useCardImageReadiness`의 cleanup dependency가
+  `visible.displaySrc`만 추적해 A→null→A 재획득 시 동일 display source의 새 lease를
+  회수하지 못하는 경로를 확인했다.
+- cleanup dependency를 lease identity로 고정하고, 실제 React hook을 브라우저에서
+  A→null→A로 구동한 뒤 cache clear와 unmount 시 object URL이 정확히 한 번 해제되는
+  회귀 테스트를 추가한다.
+- hosted D1 migration 3~5의 column specification이 migration SQL과 수동 중복되므로,
+  실제 SQL의 `ADD COLUMN` fragment로 hosted schema fixture를 구성해 reconciliation이
+  metadata-only로 성공하는 contract test를 추가한다.
+- bounded migration apply stage code는 고정 `v1-5` 정규식 대신
+  `D1_MIGRATION_MANIFEST`에서 파생해 다음 migration 추가 시 진단 코드가 generic fallback으로
+  퇴행하지 않게 한다.
+- avatar failure backoff/retry 의미, cache sliding TTL, state updater purity, decode timeout,
+  R2/social provider degradation 정책과 PR 분할은 포함하지 않는다.
+- source와 local 검증만 수행한다. owner-only saved version 생성, production access 변경과
+  Gate B/C 재실측은 수행하지 않는다.
+
+### 예상 변경 파일
+
+- `src/profile-ui/cardImageReadiness.js`
+- `src/profile-ui/__tests__/fixtures/card-image-readiness.html`
+- `src/profile-ui/__tests__/fixtures/card-image-readiness-harness.jsx`
+- `tests/profile-ui.spec.js`
+- `src/profile-runtime/sites/maintenance.js`
+- `src/profile-runtime/sites/__tests__/maintenance.test.js`
+- `mydocs/plans/task_m100_83_impl.md`
+- `mydocs/orders/20260812.md`
+- `mydocs/working/task_m100_83_stage4_7.md`
+- `mydocs/report/task_m100_83_report.md`
+
+새 공식 제품 문서는 만들거나 수정하지 않는다. 후속 릴리즈 이슈 #84의 route·Gate C
+수용 기준 보정은 PR #85 병합·cleanup 뒤 별도 승인된 task에서 수행한다.
+
+### 검증
+
+```bash
+node --test src/profile-runtime/sites/__tests__/maintenance.test.js src/profile-ui/__tests__/cardImageReadiness.test.js
+npx playwright test --grep "card readiness releases reacquired same-source leases"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+### 커밋
+
+```text
+Task #83 [Stage 4.7]: PR 리뷰 차단 항목 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -1381,6 +1442,7 @@ Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
   - `Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정`
   - `Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화`
   - `Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거`
+  - `Task #83 [Stage 4.7]: PR 리뷰 차단 항목 보정`
 
 ## 단계 의존성
 
@@ -1443,7 +1505,11 @@ Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
   직접 확인 승인 전에는 remote saved version을 생성하지 않는다. 직접 확인 승인 뒤 exact
   source `c030339d848f961c54358d9d3523b340bed09670`을 saved version 23으로 owner-only
   배포했고 동시 reveal·공유 card hosted smoke를 통과했다.
-- task-final-report는 Stage 4.6 local 확인과 owner-only version 23 smoke 통과 뒤 재개한다.
+- Stage 4.7은 PR #85 리뷰 검토와 작업지시자의 병합 전 차단 항목 보정 승인으로 진행한다.
+  lease lifecycle과 migration drift guard만 source에 반영하고 전체 local 검증·CI를 통과한
+  뒤 작업지시자 직접 merge 경계에서 중단한다. 원격 Sites 배포는 반복하지 않는다.
+- task-final-report는 Stage 4.7 완료 결과로 기존 최종 보고서를 정정하고 PR #85 head를
+  갱신하는 범위에서 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
@@ -1484,6 +1550,11 @@ Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
   response header 완화 없이 page reload 간 즉시 재사용을 약속하지 않는다.
 - **avatar retry 증폭**: invalid content까지 반복하면 외부 provider 부하와 응답 지연이
   커진다. transient status/network만 1회 재시도하고 timeout·byte limit을 유지한다.
+- **동일 display source lease 재획득**: object URL 문자열이 같아도 lease identity는 다를 수
+  있으므로 effect cleanup은 visible lease 객체를 추적하고 A→null→A browser regression으로
+  최종 disposal을 고정한다.
+- **hosted migration spec drift**: 수동 column specification과 실제 migration SQL을 함께
+  소비하는 contract test를 두고, apply stage code 허용 범위는 manifest에서 파생한다.
 
 ## 승인 요청 사항
 
@@ -1505,3 +1576,5 @@ Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
   publication atomicity를 유지하는 성능 경계
 - Stage 4.1 source 검증 뒤 owner-only saved version 배포와 protected 집중 smoke를
   별도 승인으로 분리하는 절차
+- Stage 4.7의 lease lifecycle·migration drift guard 한정 범위와 전체 local 검증 뒤
+  CI 통과 상태에서 작업지시자 직접 merge로 넘기는 절차
