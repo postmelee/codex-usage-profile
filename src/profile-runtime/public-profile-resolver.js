@@ -1,11 +1,23 @@
 import { normalizeCardLocale } from "../profile-card/presentation.js";
 
-export function createStorePublicProfileResolver(store) {
+export function createStorePublicProfileResolver(store, options = {}) {
   if (
     !store ||
     typeof store.getPublicProfileSummaryByHandle !== "function"
   ) {
     throw new TypeError("store must expose a public profile summary lookup");
+  }
+  const mediaStore = options.mediaStore ?? null;
+  if (
+    mediaStore &&
+    (
+      typeof mediaStore.getPublishedCard !== "function" ||
+      typeof mediaStore.getSocialCard !== "function"
+    )
+  ) {
+    throw new TypeError(
+      "mediaStore must expose published and social card lookups"
+    );
   }
 
   return async function resolvePublicProfileSummary(handle) {
@@ -18,9 +30,35 @@ export function createStorePublicProfileResolver(store) {
       imageRevisionAt: latestRevisionAt(
         summary.ownerUpdatedAt,
         summary.uploadedAt
-      )
+      ),
+      socialImageAvailable: mediaStore
+        ? await hasCoherentSocialImage(mediaStore, summary.handle)
+        : true
     };
   };
+}
+
+async function hasCoherentSocialImage(mediaStore, handle) {
+  try {
+    const authority = await mediaStore.getPublishedCard({
+      handle,
+      includeBody: false
+    });
+    if (!authority) return false;
+
+    const social = await mediaStore.getSocialCard({
+      handle,
+      includeBody: false
+    });
+    return Boolean(
+      social &&
+      typeof social.etag === "string" &&
+      social.ownerId === authority.ownerId &&
+      social.publicationId === authority.publicationId
+    );
+  } catch {
+    return false;
+  }
 }
 
 function latestRevisionAt(...values) {

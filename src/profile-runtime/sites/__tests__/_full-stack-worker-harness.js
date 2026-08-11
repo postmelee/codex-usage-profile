@@ -1,7 +1,4 @@
 import {
-  migrateD1Database
-} from "../../../profile-backend/d1/migration-runner.js";
-import {
   D1_MIGRATION_MANIFEST
 } from "../../../profile-backend/d1/migration-manifest.js";
 import {
@@ -53,6 +50,7 @@ const worker = createProfileSitesWorker({
       };
     }
   },
+  migrations,
   profileCardRenderPng: createWorkerProfileCardRenderer(
     PROFILE_CARD_WORKER_RENDERER_ASSETS
   ),
@@ -63,21 +61,6 @@ const worker = createProfileSitesWorker({
 export default {
   async fetch(request, environment, executionContext) {
     const url = new URL(request.url);
-    if (url.pathname === "/__local/migrate") {
-      if (
-        environment.LOCAL_FULL_STACK_TEST !== "1" ||
-        request.method !== "POST"
-      ) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      const result = await migrateD1Database(environment.DB, {
-        migrations,
-        now: () => new Date("2026-07-24T00:00:00.000Z")
-      });
-      return Response.json({ ok: true, result });
-    }
-
     if (url.pathname === "/__local/maintenance-mode") {
       if (
         environment.LOCAL_FULL_STACK_TEST !== "1" ||

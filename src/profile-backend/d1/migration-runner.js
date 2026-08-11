@@ -1,5 +1,7 @@
 export async function migrateD1Database(database, options = {}) {
   assertD1Database(database);
+  const reportProgress = requireProgressReporter(options.onProgress);
+  reportProgress(Object.freeze({ phase: "initialize" }));
   await database.prepare(
     "CREATE TABLE IF NOT EXISTS schema_migrations (" +
       "version INTEGER PRIMARY KEY NOT NULL, " +
@@ -10,6 +12,7 @@ export async function migrateD1Database(database, options = {}) {
   if (!Array.isArray(migrations)) {
     throw new TypeError("D1 migrations must be an array");
   }
+  reportProgress(Object.freeze({ phase: "read" }));
   const applied = await database.prepare(
     "SELECT version FROM schema_migrations ORDER BY version"
   ).all();
@@ -21,6 +24,10 @@ export async function migrateD1Database(database, options = {}) {
   for (const migration of migrations) {
     if (appliedVersions.has(migration.version)) continue;
 
+    reportProgress(Object.freeze({
+      phase: "prepare",
+      version: migration.version
+    }));
     const statements = splitSqlStatements(migration.sql).map((sql) =>
       database.prepare(sql)
     );
@@ -33,6 +40,10 @@ export async function migrateD1Database(database, options = {}) {
         (options.now ?? (() => new Date()))().toISOString()
       )
     );
+    reportProgress(Object.freeze({
+      phase: "batch",
+      version: migration.version
+    }));
     await database.batch(statements);
     newlyApplied.push(migration.version);
   }
@@ -41,6 +52,14 @@ export async function migrateD1Database(database, options = {}) {
     appliedVersions: [...appliedVersions, ...newlyApplied].sort((a, b) => a - b),
     newlyApplied
   };
+}
+
+function requireProgressReporter(value) {
+  if (value === undefined) return () => {};
+  if (typeof value !== "function") {
+    throw new TypeError("D1 migration progress reporter must be a function");
+  }
+  return value;
 }
 
 export function splitSqlStatements(sql) {

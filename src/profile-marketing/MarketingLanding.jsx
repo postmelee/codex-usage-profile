@@ -24,6 +24,7 @@ export function MarketingLanding({
   cardPreviewUrl,
   cardRef,
   cardSourceKind,
+  cardSourceUrl,
   cardStatus,
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
@@ -62,6 +63,7 @@ export function MarketingLanding({
             sourceKind={cardSourceKind ?? (
               resolvedCardUrl ? "sample" : null
             )}
+            sourceUrl={cardSourceUrl}
             src={resolvedCardUrl}
             status={cardStatus ?? (cardBusy ? "loading" : "ready")}
             transitionSuspended={cardTransitionSuspended}
@@ -82,10 +84,12 @@ export function MarketingCardPreview({
   alt,
   busy = false,
   cardRef,
+  errorLabel,
   loadingLabel,
   onError,
   overlay,
   sourceKind = null,
+  sourceUrl,
   src,
   status = "ready",
   transitionSuspended = false
@@ -112,40 +116,79 @@ export function MarketingCardPreview({
         size="md"
         strength={0.82}
       >
-        <div
-          aria-busy={busy}
-          className="home-card-media"
-          data-card-source-kind={sourceKind ?? undefined}
-          data-card-status={status}
-        >
-          {src ? (
-            <img
-              alt={alt}
-              className="home-card-preview"
-              height="918"
-              onError={onError}
-              src={src}
-              width="1497"
-            />
-          ) : null}
-          {overlay}
-          <HomeCardSkeleton active={busy} />
-          <span className="home-card-glare" aria-hidden="true" />
-          <p
-            aria-live="polite"
-            className="sr-only"
-            data-testid="home-card-loading-status"
-            role="status"
-          >
-            {busy ? (loadingLabel ?? t("home.loadingCardPreview")) : ""}
-          </p>
-        </div>
+        <CardImageFrame
+          alt={alt}
+          busy={busy}
+          errorLabel={errorLabel}
+          loadingLabel={loadingLabel ?? t("home.loadingCardPreview")}
+          onError={onError}
+          overlay={overlay}
+          sourceKind={sourceKind}
+          sourceUrl={sourceUrl}
+          src={src}
+          status={status}
+        />
       </BorderBeam>
     </MarketingCardTilt>
   );
 }
 
-function HomeCardSkeleton({ active }) {
+export function CardImageFrame({
+  alt,
+  busy = false,
+  errorLabel,
+  imageClassName = "home-card-preview",
+  loadingLabel,
+  onError,
+  overlay,
+  sourceKind = null,
+  sourceUrl,
+  src,
+  status = "ready"
+}) {
+  return (
+    <div
+      aria-busy={busy}
+      className="home-card-media"
+      data-card-source-kind={sourceKind ?? undefined}
+      data-card-source-url={sourceUrl ?? undefined}
+      data-card-status={status}
+    >
+      {src ? (
+        <img
+          alt={alt}
+          className={imageClassName}
+          height="918"
+          onError={onError}
+          src={src}
+          width="1497"
+        />
+      ) : null}
+      {!src && status === "error" ? (
+        <div
+          aria-label={alt}
+          className="card-preview-fallback"
+          role="img"
+        >
+          <span>{errorLabel}</span>
+        </div>
+      ) : null}
+      {overlay}
+      <CardImageSkeleton active={busy} />
+      <span className="home-card-glare" aria-hidden="true" />
+      <p
+        aria-live="polite"
+        className="sr-only"
+        data-testid="home-card-loading-status"
+        role="status"
+      >
+        {busy ? loadingLabel : ""}
+      </p>
+    </div>
+  );
+}
+
+export function CardImageSkeleton({ active }) {
   return (
     <div
       aria-hidden="true"

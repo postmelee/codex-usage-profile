@@ -14,7 +14,7 @@
     "build:cloud-run": "vite build --configLoader runner",
     "build:marketing": "npm run build:sites",
     "build:sites": "vite build --config vite.sites.config.js --configLoader runner",
-    "build:sites-fullstack": "vite build --config vite.sites-fullstack.config.js",
+    "build:sites-fullstack": "vite build --config vite.sites-fullstack.config.js && node scripts/finalize-sites-fullstack-artifact.mjs",
     "build:production": "npm run build:sites-fullstack",
     "cleanup:card-media": "node scripts/cleanup-orphan-card-media.mjs",
     "migrate:postgres": "node src/profile-backend/postgres/migrate.js",

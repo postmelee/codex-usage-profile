@@ -18,6 +18,7 @@ export function useCardHandoffMotion(options = {}) {
     introDuration = 280,
     introFrames = null,
     onClose,
+    ready = true,
     restartKey,
     sourceCardRef,
     sourceRect
@@ -38,7 +39,18 @@ export function useCardHandoffMotion(options = {}) {
   onCloseRef.current = onClose;
 
   useLayoutEffect(() => {
-    if (!active) return undefined;
+    if (!active || ready) return;
+
+    closingRef.current = false;
+    globalThis.clearTimeout(handoffTimerRef.current);
+    globalThis.clearTimeout(motionTimerRef.current);
+    animationRef.current?.cancel();
+    animationRef.current = null;
+    setPhase(CARD_HANDOFF_PHASES.PREPARING);
+  }, [active, ready]);
+
+  useLayoutEffect(() => {
+    if (!active || !ready) return undefined;
 
     closingRef.current = false;
 
@@ -59,10 +71,10 @@ export function useCardHandoffMotion(options = {}) {
       revealedSourceRef.current = null;
       revealedSourceStyleRef.current = null;
     };
-  }, [active]);
+  }, [active, ready]);
 
   useLayoutEffect(() => {
-    if (!active) return undefined;
+    if (!active || !ready) return undefined;
 
     const card = cardRef.current;
     if (!card) return undefined;
@@ -130,7 +142,7 @@ export function useCardHandoffMotion(options = {}) {
         animationRef.current = null;
       }
     };
-  }, [active, restartKey, sourceCardRef, sourceRect]);
+  }, [active, ready, restartKey, sourceCardRef, sourceRect]);
 
   useLayoutEffect(() => {
     if (!active) return undefined;
@@ -167,6 +179,10 @@ export function useCardHandoffMotion(options = {}) {
   }, [active, phase]);
 
   function requestClose() {
+    if (!ready) {
+      onCloseRef.current?.();
+      return;
+    }
     if (closingRef.current) return;
     closingRef.current = true;
     setPhase(CARD_HANDOFF_PHASES.CLOSING);

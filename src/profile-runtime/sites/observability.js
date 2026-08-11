@@ -1,4 +1,5 @@
 export const PROFILE_SITES_REQUEST_ID_HEADER = "x-request-id";
+export const PROFILE_SITES_AVATAR_EVENT_TYPE = "profile_card_avatar";
 
 export const PROFILE_SITES_ROUTE_CLASSES = Object.freeze({
   ACCOUNT_USAGE: "account_usage",
@@ -98,6 +99,34 @@ export function createProfileSitesRequestEvent(value = {}) {
   return Object.freeze(event);
 }
 
+export function observeProfileCardAvatarLoadFailure(value, options = {}) {
+  const event = createProfileCardAvatarLoadEvent(value);
+  writeEventSafely(options.writeEvent, event);
+  return event;
+}
+
+export function createProfileCardAvatarLoadEvent(value = {}) {
+  if (
+    typeof value.errorCode !== "string" ||
+    !/^avatar_[a-z0-9_]{1,55}$/.test(value.errorCode)
+  ) {
+    throw new TypeError("Profile card avatar error code is invalid");
+  }
+  if (
+    !Number.isSafeInteger(value.attempt) ||
+    value.attempt < 1 || value.attempt > 2
+  ) {
+    throw new TypeError("Profile card avatar attempt is invalid");
+  }
+
+  return Object.freeze({
+    eventType: PROFILE_SITES_AVATAR_EVENT_TYPE,
+    errorCode: value.errorCode,
+    attempt: value.attempt,
+    retrying: value.retrying === true
+  });
+}
+
 export function classifyProfileSitesRoute(request) {
   const pathname = new URL(request.url).pathname;
 
@@ -117,13 +146,16 @@ export function classifyProfileSitesRoute(request) {
   if (pathname.startsWith("/api/account-usage/")) {
     return PROFILE_SITES_ROUTE_CLASSES.ACCOUNT_USAGE;
   }
+  if (/^\/api\/share\/[^/]+\/?$/.test(pathname)) {
+    return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_PROFILE;
+  }
   if (
     pathname.startsWith("/api/profiles/public/") ||
     pathname.startsWith("/api/snapshots/public/")
   ) {
     return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_PROFILE;
   }
-  if (/^\/u\/[^/]+\/card\.png$/.test(pathname)) {
+  if (/^\/u\/[^/]+\/(?:card|social)\.png$/.test(pathname)) {
     return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_CARD;
   }
   if (pathname === "/api/profile" || pathname.startsWith("/api/profile/")) {

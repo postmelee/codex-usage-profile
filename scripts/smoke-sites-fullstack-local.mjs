@@ -11,6 +11,15 @@ import { promisify } from "node:util";
 import { Miniflare } from "miniflare";
 
 import {
+  D1_MIGRATION_MANIFEST
+} from "../src/profile-backend/d1/migration-manifest.js";
+import {
+  migrateD1Database
+} from "../src/profile-backend/d1/migration-runner.js";
+import {
+  createProfileMediaSocialKey
+} from "../src/profile-media/media-store-contract.js";
+import {
   loginWithDeviceCode
 } from "../packages/codex-usage-profile-cli/src/device-login.js";
 import {
@@ -93,12 +102,23 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   try {
     const ready = await miniflare.ready;
     const origin = ready.origin;
+    const migrationDatabase = await miniflare.getD1Database("DB");
+    await migrateD1Database(migrationDatabase, {
+      migrations: await loadLocalMigrations(D1_MIGRATION_MANIFEST),
+      now: () => new Date("2026-07-24T00:00:00.000Z")
+    });
+    await migrationDatabase.prepare("DELETE FROM schema_migrations").run();
+    const hostedSchemaBefore = await readHostedSchema(migrationDatabase);
     const maintenanceDisabled = await requestMaintenance(origin, {
       operation: "retention",
       retentionDays: 90,
       recentRevisions: 5
     });
     assert.equal(maintenanceDisabled.response.status, 404);
+    const migrationDisabled = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(migrationDisabled.response.status, 404);
     const maintenanceEnabled = await requestJson(
       origin,
       "POST",
@@ -120,9 +140,43 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       }
     });
 
-    const migrated = await requestJson(origin, "POST", "/__local/migrate");
+    await migrationDatabase.prepare(
+      "INSERT INTO schema_migrations (version, name, applied_at) " +
+        "VALUES (99, 'unexpected_test', '2026-07-24T00:00:00.000Z')"
+    ).run();
+    const unexpectedMigration = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(unexpectedMigration.response.status, 409);
+    assert.deepEqual(
+      await readMigrationVersions(migrationDatabase),
+      [99]
+    );
+    await migrationDatabase.prepare(
+      "DELETE FROM schema_migrations WHERE version = 99"
+    ).run();
+
+    const migrated = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
     assert.equal(migrated.response.status, 200);
-    assert.deepEqual(migrated.body.result.appliedVersions, [1, 2, 3, 4, 5]);
+    assert.deepEqual(migrated.body, {
+      ok: true,
+      summary: {
+        appliedVersions: [1, 2, 3, 4, 5],
+        newlyAppliedVersions: [1, 2, 3, 4, 5],
+        operation: "migrate"
+      }
+    });
+    assert.deepEqual(
+      await readHostedSchema(migrationDatabase),
+      hostedSchemaBefore
+    );
+    const repeatedMigration = await requestMaintenance(origin, {
+      operation: "migrate"
+    });
+    assert.equal(repeatedMigration.response.status, 200);
+    assert.deepEqual(repeatedMigration.body.summary.newlyAppliedVersions, []);
 
     const readiness = await requestMaintenance(origin, {
       operation: "readiness"
@@ -162,6 +216,27 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     const landing = await fetch(new URL("/", origin));
     assert.equal(landing.status, 200);
     assert.match(await landing.text(), /<div id="root"><\/div>/);
+
+    const fallbackSocial = await fetch(new URL(
+      "/assets/codex-social-sample.png",
+      origin
+    ));
+    const fallbackSocialPng = new Uint8Array(
+      await fallbackSocial.arrayBuffer()
+    );
+    assert.equal(fallbackSocial.status, 200);
+    assert.equal(fallbackSocial.headers.get("content-type"), "image/png");
+    assert.deepEqual(readPngDimensions(fallbackSocialPng), {
+      height: 1260,
+      width: 2400
+    });
+    const fallbackSocialHead = await fetch(new URL(
+      "/assets/codex-social-sample.png",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(fallbackSocialHead.status, 200);
+    assert.equal((await fallbackSocialHead.arrayBuffer()).byteLength, 0);
+    assert.equal(fallbackSocialHead.headers.get("content-type"), "image/png");
 
     const spa = await fetch(new URL("/settings", origin));
     assert.equal(spa.status, 200);
@@ -309,6 +384,75 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     );
     assert.equal(publicProfile.response.status, 200);
     assert.equal(publicProfile.body.data.owner.handle, "local-owner");
+
+    const publicDocument = await fetch(new URL(
+      "/api/share/local-owner",
+      origin
+    ));
+    const publicDocumentHtml = await publicDocument.text();
+    assert.equal(publicDocument.status, 200);
+    assert.match(
+      publicDocumentHtml,
+      /<link rel="canonical" href="[^"]+\/api\/share\/local-owner" \/>/
+    );
+    assert.match(
+      publicDocumentHtml,
+      /<meta property="og:url" content="[^"]+\/api\/share\/local-owner" \/>/
+    );
+    assert.match(
+      publicDocumentHtml,
+      /<meta property="og:image" content="[^"]+\/u\/local-owner\/social\.png\?v=\d+" \/>/
+    );
+
+    const publicSocial = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ));
+    const publicSocialPng = new Uint8Array(await publicSocial.arrayBuffer());
+    assert.equal(publicSocial.status, 200);
+    assert.equal(publicSocial.headers.get("content-type"), "image/png");
+    assert.deepEqual(readPngDimensions(publicSocialPng), {
+      height: 1260,
+      width: 2400
+    });
+    const publicSocialHead = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(publicSocialHead.status, 200);
+    assert.equal((await publicSocialHead.arrayBuffer()).byteLength, 0);
+
+    const mediaBucket = await miniflare.getR2Bucket("PROFILE_MEDIA");
+    await mediaBucket.delete(createProfileMediaSocialKey({
+      handle: "local-owner"
+    }));
+    const legacySocial = await fetch(new URL(
+      "/u/local-owner/social.png",
+      origin
+    ));
+    assert.equal(legacySocial.status, 404);
+    const legacyDocument = await fetch(new URL(
+      "/api/share/local-owner",
+      origin
+    ));
+    const legacyDocumentHtml = await legacyDocument.text();
+    assert.equal(legacyDocument.status, 200);
+    assert.match(
+      legacyDocumentHtml,
+      /<meta property="og:image" content="[^"]+\/assets\/codex-social-sample\.png" \/>/
+    );
+    assert.doesNotMatch(legacyDocumentHtml, /\/u\/local-owner\/social\.png/);
+
+    const publicDocumentHead = await fetch(new URL(
+      "/api/share/local-owner",
+      origin
+    ), { method: "HEAD" });
+    assert.equal(publicDocumentHead.status, 200);
+    assert.equal((await publicDocumentHead.arrayBuffer()).byteLength, 0);
+    assert.equal(
+      publicDocumentHead.headers.get("content-type"),
+      "text/html; charset=utf-8"
+    );
 
     const publicCard = await fetch(new URL(
       "/u/local-owner/card.png?locale=ko",
@@ -531,7 +675,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 42,
+      routesVerified: 50,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {
@@ -539,9 +683,38 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
   }
 }
 
+async function loadLocalMigrations(manifest) {
+  return Promise.all(manifest.map(async ({ file, name, version }) => ({
+    version,
+    name,
+    sql: await readFile(resolve(REPOSITORY_ROOT, file), "utf8")
+  })));
+}
+
+async function readMigrationVersions(database) {
+  const result = await database.prepare(
+    "SELECT version FROM schema_migrations ORDER BY version"
+  ).all();
+  return result.results.map(({ version }) => Number(version));
+}
+
+async function readHostedSchema(database) {
+  const result = await database.prepare(
+    "SELECT name, sql FROM sqlite_master " +
+      "WHERE type = 'table' AND name IN ('cli_login_challenges', 'owners') " +
+      "ORDER BY name"
+  ).all();
+  return result.results.map(({ name, sql }) => ({ name, sql }));
+}
+
 async function buildLocalSmokeArtifact() {
   const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-  await execFileAsync(executable, ["run", "build:sites-fullstack"], {
+  await execFileAsync(executable, [
+    "run",
+    "build:sites-fullstack",
+    "--",
+    OUTPUT_ROOT
+  ], {
     cwd: REPOSITORY_ROOT,
     env: {
       ...process.env,

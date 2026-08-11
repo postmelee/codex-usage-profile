@@ -215,7 +215,7 @@ token 또는 machine을 더 이상 신뢰하지 않으면 웹 Settings의 API To
 ```text
 Usage submitted successfully.
 Captured: 2026-07-11T00:00:00.000Z
-Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/profile
+Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
 Card: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
 README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```

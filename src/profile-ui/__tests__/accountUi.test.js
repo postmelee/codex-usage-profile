@@ -109,6 +109,22 @@ test("builds account login redirect URLs", () => {
   );
 });
 
+test("preserves the Sites API share path through GitHub login", () => {
+  const client = {
+    buildGitHubLoginUrl(options) {
+      return `/login?redirect_to=${encodeURIComponent(options.redirectTo)}`;
+    }
+  };
+
+  assert.equal(
+    buildAccountLoginHref(client, {
+      pathname: "/api/share/meleeisdeveloping",
+      search: ""
+    }),
+    "/login?redirect_to=%2Fapi%2Fshare%2Fmeleeisdeveloping"
+  );
+});
+
 test("maps account auth error query parameters to user-facing copy", () => {
   assert.deepEqual(
     getAccountAuthError({

@@ -1648,6 +1648,10 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
   assert.match(submitted.body.data.submission.revision, /^usage_/);
   assert.equal(submitted.body.data.profile.handle, "postmelee");
   assert.equal(
+    submitted.body.data.profile.profileUrl,
+    `${BASE_URL}/?view=profile`
+  );
+  assert.equal(
     submitted.body.data.profile.imageUrl,
     `${BASE_URL}/u/postmelee/card.png`
   );
@@ -1663,6 +1667,7 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
 
   assert.equal(status.status, 200);
   assert.equal(status.body.data.account.handle, "postmelee");
+  assert.equal(status.body.data.profile.profileUrl, `${BASE_URL}/?view=profile`);
   assert.equal(status.body.data.latestUsage.capturedAt, document.capturedAt);
   assert.equal(status.body.data.latestUsage.revision, submitted.body.data.submission.revision);
   assert.equal(stored.contractVersion, ACCOUNT_USAGE_CONTRACT_VERSION);

@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   DEFAULT_PROFILE_OPEN_GRAPH_LOCALE,
+  PROFILE_FALLBACK_SOCIAL_IMAGE_PATH,
   PROFILE_OPEN_GRAPH_SITE_NAME,
   PROFILE_SOCIAL_IMAGE_HEIGHT,
   PROFILE_SOCIAL_IMAGE_WIDTH,
+  buildFallbackSocialImageUrl,
   buildProfileOpenGraphDocument,
   buildPublicProfileUrl,
   buildSocialImageUrl,
@@ -50,10 +52,10 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   });
 
   assert.equal(document.title, "postmelee's Codex card · Codex Usage Profile");
-  assert.equal(document.canonicalUrl, `${ORIGIN}/u/postmelee`);
+  assert.equal(document.canonicalUrl, `${ORIGIN}/api/share/postmelee`);
   assert.equal(readTag(document, "og:type"), "website");
   assert.equal(readTag(document, "og:title"), "postmelee's Codex card");
-  assert.equal(readTag(document, "og:url"), `${ORIGIN}/u/postmelee`);
+  assert.equal(readTag(document, "og:url"), `${ORIGIN}/api/share/postmelee`);
   assert.equal(readTag(document, "og:site_name"), PROFILE_OPEN_GRAPH_SITE_NAME);
   assert.equal(
     readTag(document, "og:image"),
@@ -74,9 +76,8 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   );
 });
 
-test("uses the operator social image on fallback when a handle is configured", () => {
+test("uses the packaged social image for missing and private profiles", () => {
   const document = buildProfileOpenGraphDocument({
-    fallbackImageHandle: "postmelee",
     handle: "ghost",
     origin: ORIGIN,
     profile: null
@@ -85,7 +86,7 @@ test("uses the operator social image on fallback when a handle is configured", (
   assert.equal(document.title, PROFILE_OPEN_GRAPH_SITE_NAME);
   assert.equal(
     readTag(document, "og:image"),
-    `${ORIGIN}/u/postmelee/social.png`
+    `${ORIGIN}${PROFILE_FALLBACK_SOCIAL_IMAGE_PATH}`
   );
   assert.equal(
     readTag(document, "og:image:width"),
@@ -98,19 +99,22 @@ test("uses the operator social image on fallback when a handle is configured", (
   );
 });
 
-test("omits the image and downgrades the twitter card without a fallback handle", () => {
+test("uses the packaged social image when personalized media is unavailable", () => {
   const document = buildProfileOpenGraphDocument({
-    handle: "ghost",
+    handle: "postmelee",
     origin: ORIGIN,
-    profile: null
+    profile: createProfile({ socialImageAvailable: false })
   });
 
-  assert.equal(document.title, PROFILE_OPEN_GRAPH_SITE_NAME);
-  assert.equal(document.canonicalUrl, `${ORIGIN}/`);
-  assert.equal(readTag(document, "og:title"), PROFILE_OPEN_GRAPH_SITE_NAME);
-  assert.equal(readTag(document, "og:image"), null);
-  assert.equal(readTag(document, "twitter:image"), null);
-  assert.equal(readTag(document, "twitter:card"), "summary");
+  assert.equal(document.title, "postmelee's Codex card · Codex Usage Profile");
+  assert.equal(document.canonicalUrl, `${ORIGIN}/api/share/postmelee`);
+  assert.equal(readTag(document, "og:title"), "postmelee's Codex card");
+  assert.equal(
+    readTag(document, "og:image"),
+    `${ORIGIN}${PROFILE_FALLBACK_SOCIAL_IMAGE_PATH}`
+  );
+  assert.equal(readTag(document, "og:image:alt"), "Codex 사용량 카드 예시");
+  assert.equal(readTag(document, "twitter:card"), "summary_large_image");
 });
 
 test("private and missing handles produce identical fallback tags", () => {
@@ -255,8 +259,16 @@ test("rejects html without a closing head tag", () => {
 
 test("builds urls for handles that need encoding", () => {
   assert.equal(
+    buildFallbackSocialImageUrl(ORIGIN),
+    `${ORIGIN}${PROFILE_FALLBACK_SOCIAL_IMAGE_PATH}`
+  );
+  assert.equal(
     buildPublicProfileUrl(ORIGIN, "foo-bar"),
-    `${ORIGIN}/u/foo-bar`
+    `${ORIGIN}/api/share/foo-bar`
+  );
+  assert.equal(
+    buildPublicProfileUrl(ORIGIN, "foo bar"),
+    `${ORIGIN}/api/share/foo%20bar`
   );
   assert.equal(
     buildSocialImageUrl(ORIGIN, "foo bar", UPLOADED_AT),

@@ -1,6 +1,7 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { CardImageFrame } from "../profile-marketing/MarketingLanding.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
 import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
@@ -13,7 +14,11 @@ import {
   formatShareStudioPlatformMessage,
   getShareStudioCopy
 } from "./shareStudio.js";
-import { useCardHandoffMotion } from "./useCardHandoffMotion.js";
+import { useCardImageReadiness } from "./cardImageReadiness.js";
+import {
+  CARD_HANDOFF_PHASES,
+  useCardHandoffMotion
+} from "./useCardHandoffMotion.js";
 
 export function ShareStudio({
   cardLocale,
@@ -26,13 +31,13 @@ export function ShareStudio({
   open,
   publicCardUrl,
   publicOwnerHandle,
+  sourceCardImage,
   sourceCardRef,
   sourceRect
 }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousFocusRef = useRef(null);
-  const previewImageRef = useRef(null);
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [toast, setToast] = useState(null);
@@ -60,6 +65,27 @@ export function ShareStudio({
     && markdown
     && typeof document !== "undefined"
   );
+  const cardImage = useCardImageReadiness({
+    scopeKey: publicOwnerHandle ?? "share-studio",
+    sourceKind: "public",
+    src: canRender ? imageUrl : null
+  });
+  const hasSourceRequest = Boolean(
+    canRender &&
+    sourceCardImage?.displaySrc &&
+    sourceCardImage?.scopeKey &&
+    sourceCardImage?.sourceKind &&
+    sourceCardImage?.sourceUrl
+  );
+  const sourceImage = useCardImageReadiness({
+    scopeKey: sourceCardImage?.scopeKey ?? "share-source",
+    sourceKind: sourceCardImage?.sourceKind ?? "owner",
+    src: hasSourceRequest ? sourceCardImage.sourceUrl : null
+  });
+  const sourceDisplaySrc = sourceImage.displaySrc ?? (
+    hasSourceRequest ? sourceCardImage.displaySrc : null
+  );
+  const hasWarmSource = Boolean(sourceDisplaySrc);
 
   const {
     cardRef: motionCardRef,
@@ -70,10 +96,18 @@ export function ShareStudio({
   } = useCardHandoffMotion({
     active: canRender,
     onClose,
-    restartKey: imageUrl,
+    ready: hasWarmSource || (cardImage.ready && !previewFailed),
+    restartKey: cardImage.desiredSrc,
     sourceCardRef,
     sourceRect
   });
+
+  useEffect(() => {
+    if (!canRender || !cardImage.failed) return;
+
+    setPreviewFailed(true);
+    if (!hasWarmSource) settleAtTarget("preview-error");
+  }, [canRender, cardImage.desiredSrc, cardImage.failed, hasWarmSource]);
 
   useLayoutEffect(() => {
     if (!canRender) return undefined;
@@ -141,6 +175,28 @@ export function ShareStudio({
   }, [canRender]);
 
   if (!canRender) return null;
+
+  const showPublicTarget = Boolean(
+    cardImage.ready &&
+    !previewFailed &&
+    (!hasWarmSource || transitionPhase === CARD_HANDOFF_PHASES.OPEN)
+  );
+  const previewSrc = showPublicTarget
+    ? cardImage.displaySrc
+    : sourceDisplaySrc ?? cardImage.displaySrc;
+  const previewFailedWithoutSource = previewFailed && !hasWarmSource;
+  const previewBusy = !previewSrc && cardImage.busy;
+  const previewStatus = previewFailedWithoutSource
+    ? "error"
+    : previewSrc
+      ? "ready"
+      : cardImage.status;
+  const previewSourceKind = showPublicTarget
+    ? "public"
+    : sourceCardImage?.sourceKind ?? "public";
+  const previewSourceUrl = showPublicTarget
+    ? cardImage.visibleSrc
+    : sourceImage.visibleSrc ?? sourceCardImage?.sourceUrl ?? cardImage.visibleSrc;
 
   async function copyValue(value, status) {
     try {
@@ -221,29 +277,30 @@ export function ShareStudio({
 
         <div
           className="share-studio-card-motion"
+          data-share-preview-source={showPublicTarget ? "public" : hasWarmSource ? "source" : "cold"}
+          data-share-target-status={previewFailed ? "error" : cardImage.status}
           data-testid="share-studio-card-motion"
           ref={motionCardRef}
         >
-          {previewFailed ? (
-            <div
-              aria-label={copy.previewAlt}
-              className="share-studio-preview-fallback"
-              role="img"
-            >
-              <span>{copy.previewUnavailable}</span>
-            </div>
-          ) : (
-            <img
-              alt={copy.previewAlt}
-              className="share-card-preview share-studio-card"
-              height="612"
-              onError={handlePreviewError}
-              ref={previewImageRef}
-              src={imageUrl}
-              width="998"
-            />
-          )}
+          <CardImageFrame
+            alt={copy.previewAlt}
+            busy={previewBusy}
+            errorLabel={copy.previewUnavailable}
+            imageClassName={`share-card-preview share-studio-card${showPublicTarget ? ` is-public-target${hasWarmSource ? " is-warm-handoff-target" : ""}` : hasWarmSource ? " is-handoff-source" : ""}`}
+            loadingLabel={copy.previewAlt}
+            onError={showPublicTarget ? handlePreviewError : undefined}
+            sourceKind={previewSourceKind}
+            sourceUrl={previewSourceUrl}
+            src={previewFailedWithoutSource ? null : previewSrc}
+            status={previewStatus}
+          />
         </div>
+
+        {previewFailed && hasWarmSource ? (
+          <p className="share-studio-preview-status is-error" role="status">
+            {copy.previewUnavailable}
+          </p>
+        ) : null}
 
         <div aria-label={copy.destinations} className="share-studio-primary-actions">
           {shareTargets.map((target, index) => (

@@ -1,0 +1,89 @@
+# Task #83 Stage 3.10 완료 보고서
+
+GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
+구현계획서: [`task_m100_83_impl.md`](../plans/task_m100_83_impl.md)
+Stage: 3.10
+
+## 단계 목적
+
+Stage 3.9 exact source의 Gate B 실측과 owner-only 원복 뒤, 인증된 계정 메뉴의
+프로필 링크가 legacy `/profile`을 전체 navigation으로 요청하고 Sites front door에서
+홈으로 전환되는 결함을 확인했다. 이 단계는 Sites 소유자 프로필 canonical 경로를
+`/?view=profile`로 고정하고 메뉴, OAuth 복귀, device/public CTA와 CLI metadata가
+같은 경로를 생성하도록 보정하는 것이 목적이다.
+
+공개 프로필 문서, `/api/share/{handle}`, social/README PNG, cache/ETag, D1/R2
+schema와 visibility 계약은 변경하지 않는다. `/profile`은 Node/dev direct navigation
+하위 호환 경로로 유지한다.
+
+## 산출물
+
+| 파일 | 변경 요약 |
+|---|---|
+| `src/profile-ui/appRoutes.js`, `src/profile-ui/AccountMenu.jsx` | `OWNER_PROFILE_HREF`를 `/?view=profile`로 고정하고 root query를 owner profile로 해석하며 계정 메뉴 기본 링크에 재사용 |
+| `src/profile-ui/cardShare.js`, `src/profile-ui/PublicProfilePage.jsx`, `src/profile-ui/DeviceApprovalPage.jsx` | OAuth `redirect_to`, anonymous/authenticated public CTA와 device 완료 링크를 Sites canonical owner route로 통일 |
+| `src/profile-backend/http.js` | CLI submit/status의 absolute `profileUrl`이 canonical query route를 사용하도록 보정 |
+| `src/profile-ui/__tests__/appRoutes.test.js`, `src/profile-ui/__tests__/cardShare.test.js`, `src/profile-backend/__tests__/http.test.js` | owner/settings/public query 분리, OAuth encoding과 CLI metadata 회귀 검증 추가 |
+| `tests/profile-ui.spec.js` | 메뉴, OAuth 복귀, device/public CTA, canonical·legacy owner profile의 브라우저 회귀 검증 추가 |
+| `docs/readme-card.md`, `docs/cli-submit.md` | 사용자와 CLI 문서의 소유자 프로필 URL을 Sites canonical query route로 정합화 |
+| `mydocs/plans/task_m100_83_impl.md` | production 반증, Stage 3.10 승인 범위·검증·원복 조건과 #84 의존성 기록 |
+
+## 본문 변경 정도 / 본문 무손실 여부
+
+기존 owner profile 화면, 공개 profile/API/media 계약과 OAuth same-origin redirect 검증은
+유지했다. 사용자에게 전달되는 owner profile href·redirect·metadata만 query route로
+변경했으며, legacy `/profile` route resolver와 Node/dev direct navigation test는 그대로
+보존했다. 공식 문서는 기존 구조 안의 예시 URL만 필요한 범위에서 수정했다.
+
+## 검증 결과
+
+실행 명령:
+
+```bash
+node --test src/profile-ui/__tests__/appRoutes.test.js src/profile-ui/__tests__/cardShare.test.js src/profile-backend/__tests__/http.test.js
+npm run test:e2e -- --grep "account menu exposes Profile|device approval treats exchanged|device approval common header|anonymous owner Profile|public profile uses one identity-free|owner Profile and Settings stay readable|public profile intro"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+결과:
+
+- 집중 Node 검증: 51/51 통과
+- owner route 집중 Playwright 검증: 8/8 통과
+- 전체 Node 검증: 712개 중 706개 통과, 6개 환경 조건 skip, 실패 0
+- 전체 Playwright E2E: 66/66 통과
+- production build: production manifest 제거 확인, 보존 대상 0
+- full-stack verifier: client 8, worker 2, migration 5, raw 3,993,020 bytes,
+  gzip 2,164,490 bytes 확인
+- production verifier: artifact 5,095,565 bytes, bindings 3, migration 5 및
+  동일 Worker 크기 확인
+- `git diff --check`: 이상 없음
+
+## 잔여 위험
+
+- Stage 3.10 source는 아직 Sites에 배포하지 않았다. 현재 원격은 Stage 3.9 saved
+  version과 custom owner-only safe baseline을 유지한다.
+- 새 owner-only saved version에서 protected `/?view=profile` rendering, 계정 메뉴
+  href, OAuth `redirect_to`, device/public CTA와 readiness·safe environment baseline을
+  exact-match로 확인해야 한다.
+- Stage 3.10은 public cache·OG·media source를 변경하지 않았으므로 Gate B 전체
+  public cache·SNS smoke는 재실행하지 않는다.
+
+## 다음 단계 영향
+
+- 이 보고서와 source를 한 커밋으로 고정한 뒤 exact commit을 기존 Site의 owner-only
+  saved version으로 배포한다.
+- protected owner profile과 생성 링크, readiness `[1,2,3,4,5]`, maintenance
+  disabled/secret-absent, service normal, operator `404`, health `200`과 owner-only
+  allowlist를 집중 확인한다.
+- 원격 집중 smoke가 통과하면 Stage 4 최종 보고에 Stage 3.10 증적을 추가하고 #84
+  release candidate 승격 입력으로 넘긴다. public access는 변경하지 않는다.
+
+## 승인 요청
+
+- Stage 3.10 산출물과 검증 결과를 승인하면 exact commit의 owner-only 재배포와
+  query route 집중 smoke로 진행한다. public 전환은 이번 승인 범위에 포함하지 않는다.

@@ -54,6 +54,17 @@ test("starts every public profile handle in an API-backed loading state", () => 
     }
   );
   assert.deepEqual(
+    resolvePublicProfileRoute(
+      new URL("http://localhost/api/share/meleeisdeveloping")
+    ),
+    {
+      handle: "meleeisdeveloping",
+      profile: null,
+      source: "api",
+      status: "loading"
+    }
+  );
+  assert.deepEqual(
     resolvePublicProfileRoute(new URL("http://localhost/u/someone/")),
     {
       handle: "someone",
@@ -69,7 +80,9 @@ test("rejects unsupported and malformed public profile paths", () => {
     "http://localhost/unknown",
     "http://localhost/?profile=",
     "http://localhost/u/one/more",
-    "http://localhost/u/%ZZ"
+    "http://localhost/u/%ZZ",
+    "http://localhost/api/share/one/more",
+    "http://localhost/api/share/%ZZ"
   ]) {
     assert.deepEqual(resolvePublicProfileRoute(new URL(url)), {
       handle: null,

@@ -78,9 +78,9 @@ export function buildPublicProfileShareUrl(origin, handle) {
   const url = normalizeHttpUrl(origin);
   if (!url) return null;
 
-  // The canonical share target is the Open Graph route, so link previews on X,
-  // Threads and KakaoTalk resolve the card image and description.
-  url.pathname = `/u/${encodeURIComponent(normalizedHandle)}`;
+  // ChatGPT Sites dispatches the API prefix to the Worker, while the root
+  // query is served as a static asset before dynamic metadata can run.
+  url.pathname = `/api/share/${encodeURIComponent(normalizedHandle)}`;
   url.search = "";
   url.hash = "";
   return url.toString();

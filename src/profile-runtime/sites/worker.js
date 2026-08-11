@@ -20,7 +20,10 @@ import {
   PROFILE_SITES_MAINTENANCE_PATH,
   createProfileSitesMaintenanceHandler
 } from "./maintenance.js";
-import { observeProfileSitesRequest } from "./observability.js";
+import {
+  observeProfileCardAvatarLoadFailure,
+  observeProfileSitesRequest
+} from "./observability.js";
 
 const INDEX_PATH = "/index.html";
 
@@ -52,6 +55,11 @@ async function handleProfileSitesRequest(
   options
 ) {
   const pathname = new URL(request.url).pathname;
+  const profileCardAvatarFailureObserver = (event) => (
+    observeProfileCardAvatarLoadFailure(event, {
+      writeEvent: options.writeEvent
+    })
+  );
   let config;
   try {
     config = loadProfileSitesConfig({
@@ -81,6 +89,8 @@ async function handleProfileSitesRequest(
       database: config.database,
       fetchImpl: options.fetchImpl ?? globalThis.fetch,
       media: config.media,
+      migrations: options.migrations,
+      profileCardAvatarFailureObserver,
       profileCardRenderPng: options.profileCardRenderPng,
       profileCardRendererVersion: options.profileCardRendererVersion
     })(request);
@@ -104,6 +114,7 @@ async function handleProfileSitesRequest(
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
     githubClient: options.githubClient,
     media: config.media,
+    profileCardAvatarFailureObserver,
     profileCardRenderPng: options.profileCardRenderPng,
     profileCardRendererVersion: options.profileCardRendererVersion,
     rateLimiterOptions: options.rateLimiterOptions ??
@@ -128,12 +139,12 @@ async function handleSitesPublicProfileDocument(request, context) {
   if (!isPublicProfileDocumentRequest(request)) return null;
   if (typeof context.environment.ASSETS?.fetch !== "function") return null;
 
-  let store;
+  let dependencies;
   try {
-    store = createProfileSitesBackendDependencies({
+    dependencies = createProfileSitesBackendDependencies({
       database: context.config.database,
       media: context.config.media
-    }).store;
+    });
   } catch {
     return null;
   }
@@ -142,12 +153,17 @@ async function handleSitesPublicProfileDocument(request, context) {
     loadIndexHtml: async (documentRequest) => {
       const response = await context.environment.ASSETS.fetch(new Request(
         new URL(INDEX_PATH, documentRequest.url),
-        documentRequest
+        {
+          headers: documentRequest.headers,
+          method: "GET"
+        }
       ));
       return response.ok ? response.text() : null;
     },
     publicBaseUrl: context.config.publicBaseUrl,
-    resolveProfile: createStorePublicProfileResolver(store)
+    resolveProfile: createStorePublicProfileResolver(dependencies.store, {
+      mediaStore: dependencies.mediaStore
+    })
   });
 
   return handler(request);

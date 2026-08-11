@@ -238,7 +238,7 @@ export async function startProfileProductionServer(options = {}) {
           "utf8"
         ).catch(() => null),
         publicBaseUrl: deploymentConfig.canonicalAppOrigin,
-        resolveProfile: createStorePublicProfileResolver(store)
+        resolveProfile: createStorePublicProfileResolver(store, { mediaStore })
       });
     server = options.server ?? createHttpServer(
       createProductionNodeHandler({

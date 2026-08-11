@@ -5,7 +5,7 @@ export function resolvePublicProfileRoute(location) {
   const rootHandle = pathname === "/"
     ? new URLSearchParams(location?.search ?? "").get("profile")
     : null;
-  const match = pathname.match(/^\/u\/([^/]+)$/);
+  const match = pathname.match(/^\/(?:u|api\/share)\/([^/]+)$/);
 
   if (rootHandle === null && !match) {
     return createState("unavailable", null, null);

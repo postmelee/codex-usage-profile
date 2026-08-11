@@ -6,28 +6,37 @@
 fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
 범위에서만 수행한다. production origin은
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
-현재 saved version 7의 public HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. Task #74·#78 누적 배포
-후보의 canonical share/OG 문서는 `/u/{handle}`, social preview는
-`/u/{handle}/social.png`다. 이 두 후보 surface는 owner-only와 public smoke가
-완료되기 전까지 production link로 안내하지 않는다.
+검증된 public baseline saved version 7의 HTML profile은 `/?profile={handle}`, stable
+README card는 `/u/{handle}/card.png`를 사용한다. Task #83의 최종 Gate B에서는
+saved version 17의 canonical `/api/share/{handle}`, 정합한
+`/u/{handle}/social.png` 또는 packaged `/assets/codex-social-sample.png`, README
+card 변형과 공개·비공개 경계를 검증한 뒤 custom owner-only로 복원했다. 현재는
+owner profile 경로와 card readiness·resource reuse·공유 handoff·profile Skeleton을
+보정한 exact source의 saved version 23, custom owner-only 상태다. 영구 public 전환과
+CTA 활성화는 #84 Gate C에서 수행한다.
+
+owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
+extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
+두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
+smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
 ## 현재 production baseline
 
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 7 / `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
-| access | public revision 26 |
-| environment | revision 57 |
+| saved version/source | 23 / `c030339d848f961c54358d9d3523b340bed09670` |
+| access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
+| environment | revision 85 |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
 | disposable QA state | owner/session/token/D1/R2/local credential 없음 |
 
 원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
-user, workspace group과 tenant group은 0개로 둔다. application rollback은
-version 7 이전의 saved version을 명시적으로 선택하되, data/schema rollback은
+user, workspace group과 tenant group은 0개로 둔다. 현재 application의 직전
+rollback target은 Gate B를 통과한 version 17이며, legacy public 동작 비교 기준은
+version 7이다. 현재 UX 후보의 직전 비교 대상은 version 22다. data/schema rollback은
 별도 digest/count 승인 없이 수행하지 않는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
@@ -92,6 +101,8 @@ Worker request event는 `requestId`, `routeClass`, `method`, `status`,
 cookie, Authorization, OAuth code/state, session/token/device code, owner,
 usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-request-id`로
 사용자 오류와 같은 event를 연결한다.
+`card.png`와 `social.png`는 모두 raw handle을 남기지 않는 `public_card`로
+축약한다.
 
 ## Owner-only candidate 배포
 
@@ -109,20 +120,31 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
    끝까지 조회한다.
-5. owner-only access가 유지된 상태에서 protected read-only readiness를 먼저
-   실행한다.
+5. owner-only access가 유지된 상태에서 protected migration을 실행한 뒤
+   read-only readiness로 exact 결과를 확인한다. `migrate`는 manifest에 포함된
+   pending migration만 적용하며 owner selector나 SQL을 입력으로 받지 않는다.
 
    ```bash
+   npm run sites:profile-maintenance -- migrate \
+     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
    npm run sites:profile-maintenance -- readiness \
      --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
    ```
 
-   응답은 `operation=readiness`, `ready=true`이고 `expectedVersions`와
+   migrate 응답은 `appliedVersions`, `newlyAppliedVersions`, `operation=migrate`
+   외 필드를 포함하지 않아야 한다. readiness 응답은 `operation=readiness`,
+   `ready=true`이고 `expectedVersions`와
    `appliedVersions`가 순서까지 정확히 같아야 한다. owner/usage/token/session,
    SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
+   Sites가 package migration의 physical schema를 먼저 적용하고 application
+   `schema_migrations` metadata를 남기지 않은 경우, migration 1·2의 모든
+   explicit table/index DDL과 migration 3~5의 additive column contract가
+   candidate와 exact-match할 때만 metadata-only로 reconcile한다. 일부 object만
+   있거나 drift가 있으면 mutation 전 `maintenance_conflict`로 중단한다.
    `schema_migrations` table이 아직 없거나 expected version이 누락된 상태는
-   `migration_not_ready`로 중단한다. 실제 D1/provider 조회 장애는 세부 원문을
-   노출하지 않는 `maintenance_unavailable`로 중단한다.
+   `migration_not_ready`로 중단한다. 실제 D1/provider 장애는 inspection,
+   reconciliation, apply, verification 또는 exact manifest version의 bounded
+   code만 반환하고 SQL/provider 원문을 노출하지 않는다.
 6. readiness 성공 직후 `PROFILE_MAINTENANCE_MODE=disabled`로 바꾸고 operator
    secret을 제거한 environment를 같은 source saved version에 적용한다.
    owner-only access를 유지하면서 operator route가 generic `404`, `/healthz`가
@@ -131,11 +153,13 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
    private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
    query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
-   User-Agent로 `/u/{handle}` HTML의 canonical·`og:url`·`og:image`와
-   Twitter Card metadata를 확인하고, `/u/{handle}/social.png`의
-   GET/HEAD/If-None-Match 304와 2400x1260 응답을 검증한다. private·missing
-   handle은 동일한 기본 OG/unavailable HTML을 반환하고 README/social PNG는
-   같은 404로 닫혀 존재 여부를 드러내지 않아야 한다.
+   User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
+   Twitter Card metadata를 확인하고, 정합 publication의
+   `/u/{handle}/social.png` GET/HEAD/If-None-Match 304와 2400x1260 응답을
+   검증한다. 이어서 legacy social-missing fixture에서 personalized route 404와
+   HTML의 `/assets/codex-social-sample.png` 선언, fallback asset GET/HEAD 200을
+   함께 확인한다. private·missing handle은 동일한 기본 OG/unavailable HTML과
+   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -223,11 +247,13 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
 3. public access로 전환하고 anonymous landing, private API 401/403, private
    profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
    query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
-   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/u/{handle}` HTML의
+   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/api/share/{handle}` HTML의
    canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
-   `GET|HEAD|304`·2400x1260을 확인한다. private 및 missing 상태에서 HTML이 같은
-   기본 metadata/unavailable 화면으로 닫히고 social PNG가 같은 404인지 검증한
-   뒤 unpublish 후 모든 README/social PNG 조합 404를 확인한다.
+   `GET|HEAD|304`·2400x1260을 확인한다. 기존 public publication처럼 social object가
+   없으면 personalized route 404와 HTML의 packaged sample URL·asset 200을 함께
+   확인한다. private 및 missing 상태에서 HTML이 같은 기본 metadata/unavailable
+   화면과 packaged sample로 닫히고 social PNG가 같은 404인지 검증한 뒤 unpublish
+   후 모든 README/social PNG 조합 404를 확인한다.
 4. Gate B는 즉시 custom owner-only로 원복하고 anonymous platform auth gate,
    owner-only allowlist, token/session revoke와 public card 404를 재확인한다.
    Gate C는 정상 결과일 때 public access를 유지하고, 실패나 stop trigger가
@@ -236,12 +262,12 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. 현재 saved version 7 baseline의 public HTML 확인은
-`/?profile={handle}`을 사용한다. Task #74·#78 누적 후보가 위 owner-only와 public
-smoke를 모두 통과한 뒤에는 extension 없는 `/u/{handle}`을 canonical production
-share link로 승격하고, `/?profile={handle}`은 SPA compatibility 진입점으로만
-유지한다. 해당 saved version 배포와 smoke 전에는 `/u/{handle}`을 production
-link로 안내하지 않는다.
+계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
+`/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
+HTML이 정적 asset으로 처리됨을 확인했다. 검증된 릴리스 후보는
+`/api/share/{handle}`에서 handle별 canonical/OG/Twitter metadata와 같은 SPA 공개
+화면을 제공한다. root query와 extension 없는 `/u/{handle}`은 source 하위
+호환으로만 유지하며 production share link로 안내하지 않는다.
 
 ## 로그와 quota stop
 

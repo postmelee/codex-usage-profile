@@ -5,7 +5,8 @@ import {
   PUBLIC_PROFILE_DOCUMENT_CACHE_CONTROL,
   createPublicProfileDocumentHandler,
   isPublicProfileDocumentRequest,
-  readPublicProfileDocumentHandle
+  readPublicProfileDocumentHandle,
+  readPublicProfileDocumentRequestHandle
 } from "../public-profile-document.js";
 
 const BASE_URL = "https://profiles.example.test";
@@ -43,6 +44,66 @@ test("reads the handle from public profile document paths", () => {
   assert.equal(readPublicProfileDocumentHandle("/u/%zz"), null);
 });
 
+test("reads the handle from the Sites-compatible profile query", () => {
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/?profile=postmelee`)
+    ),
+    "postmelee"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/?locale=ko&profile=foo%20bar`)
+    ),
+    "foo bar"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/?profile=one&profile=two`)
+    ),
+    null
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/settings?profile=postmelee`)
+    ),
+    null
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/?profile=foo%2Fbar`)
+    ),
+    null
+  );
+});
+
+test("reads the handle from the Worker-routed API share path", () => {
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/postmelee`)
+    ),
+    "postmelee"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/foo%20bar/`)
+    ),
+    "foo bar"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/one/more`)
+    ),
+    null
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/foo%2Fbar`)
+    ),
+    null
+  );
+});
+
 test("matches only GET and HEAD document requests", () => {
   assert.equal(
     isPublicProfileDocumentRequest(new Request(`${BASE_URL}/u/postmelee`)),
@@ -66,6 +127,36 @@ test("matches only GET and HEAD document requests", () => {
     ),
     false
   );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/?profile=postmelee`)
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/?profile=postmelee`, { method: "POST" })
+    ),
+    false
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`)
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`, { method: "HEAD" })
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee`, { method: "POST" })
+    ),
+    false
+  );
 });
 
 test("returns null for requests it does not own", async () => {
@@ -85,7 +176,9 @@ test("returns null for requests it does not own", async () => {
 
 test("serves the injected document for a public profile", async () => {
   const handler = createHandler();
-  const response = await handler(new Request(`${BASE_URL}/u/postmelee`));
+  const response = await handler(
+    new Request(`${BASE_URL}/api/share/postmelee`)
+  );
   const body = await response.text();
 
   assert.equal(response.status, 200);
@@ -99,8 +192,25 @@ test("serves the injected document for a public profile", async () => {
   );
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.ok(body.includes("property=\"og:title\""));
+  assert.ok(body.includes(`${BASE_URL}/api/share/postmelee`));
   assert.ok(body.includes(`${BASE_URL}/u/postmelee/social.png?v=`));
   assert.ok(body.includes("<div id=\"root\"></div>"));
+});
+
+test("accepts the minimal store resolver summary", async () => {
+  const handler = createHandler({
+    resolveProfile: async () => ({
+      cardLocale: "ko",
+      handle: "postmelee",
+      imageRevisionAt: UPLOADED_AT
+    })
+  });
+  const body = await (
+    await handler(new Request(`${BASE_URL}/api/share/postmelee`))
+  ).text();
+
+  assert.ok(body.includes("postmelee's Codex card"));
+  assert.ok(body.includes(`/u/postmelee/social.png?v=${Date.parse(UPLOADED_AT)}`));
 });
 
 test("keeps documents distinct per handle", async () => {
@@ -113,8 +223,12 @@ test("keeps documents distinct per handle", async () => {
     })
   });
 
-  const first = await (await handler(new Request(`${BASE_URL}/u/alice`))).text();
-  const second = await (await handler(new Request(`${BASE_URL}/u/bob`))).text();
+  const first = await (
+    await handler(new Request(`${BASE_URL}/api/share/alice`))
+  ).text();
+  const second = await (
+    await handler(new Request(`${BASE_URL}/api/share/bob`))
+  ).text();
 
   assert.ok(first.includes("alice's Codex card"));
   assert.ok(second.includes("bob's Codex card"));
@@ -124,33 +238,38 @@ test("keeps documents distinct per handle", async () => {
 test("falls back to site tags for private and missing handles", async () => {
   const handler = createHandler();
   const missing = await (
-    await handler(new Request(`${BASE_URL}/u/ghost`))
+    await handler(new Request(`${BASE_URL}/api/share/ghost`))
   ).text();
   const privateProfile = await (
-    await handler(new Request(`${BASE_URL}/u/hidden`))
+    await handler(new Request(`${BASE_URL}/api/share/hidden`))
   ).text();
 
   assert.equal(missing, privateProfile);
   assert.ok(missing.includes("<title>Codex Usage Profile</title>"));
-  assert.ok(missing.includes("/u/postmelee/social.png"));
+  assert.ok(missing.includes("/assets/codex-social-sample.png"));
+  assert.ok(!missing.includes("/u/postmelee/social.png"));
   assert.ok(!missing.includes("/u/ghost/social.png"));
   assert.ok(!missing.includes("/u/hidden/social.png"));
   assert.ok(missing.includes("content=\"summary_large_image\""));
 });
 
-test("uses a configured fallback image handle", async () => {
-  const handler = createHandler({ fallbackImageHandle: "operator" });
-  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
+test("keeps profile metadata but falls back when personalized social media is unavailable", async () => {
+  const handler = createHandler({
+    resolveProfile: async () => ({
+      cardLocale: "ko",
+      handle: "postmelee",
+      imageRevisionAt: UPLOADED_AT,
+      socialImageAvailable: false
+    })
+  });
+  const body = await (
+    await handler(new Request(`${BASE_URL}/api/share/postmelee`))
+  ).text();
 
-  assert.ok(body.includes("/u/operator/social.png"));
-});
-
-test("omits the fallback image when no handle is configured", async () => {
-  const handler = createHandler({ fallbackImageHandle: null });
-  const body = await (await handler(new Request(`${BASE_URL}/u/ghost`))).text();
-
-  assert.ok(!body.includes("og:image"));
-  assert.ok(body.includes("content=\"summary\""));
+  assert.ok(body.includes("postmelee's Codex card"));
+  assert.ok(body.includes(`${BASE_URL}/api/share/postmelee`));
+  assert.ok(body.includes(`${BASE_URL}/assets/codex-social-sample.png`));
+  assert.ok(!body.includes("/u/postmelee/social.png"));
 });
 
 test("falls back to site tags when the profile lookup fails", async () => {
@@ -165,12 +284,12 @@ test("falls back to site tags when the profile lookup fails", async () => {
   assert.ok((await response.text()).includes("<title>Codex Usage Profile</title>"));
 });
 
-test("ignores profiles without a usable uploadedAt", async () => {
+test("ignores profiles without a usable image revision date", async () => {
   const handler = createHandler({
     resolveProfile: async () => ({
       cardLocale: "en",
       handle: "postmelee",
-      uploadedAt: "not-a-date"
+      imageRevisionAt: "not-a-date"
     })
   });
   const body = await (
@@ -183,7 +302,7 @@ test("ignores profiles without a usable uploadedAt", async () => {
 test("omits the body for HEAD requests", async () => {
   const handler = createHandler();
   const response = await handler(
-    new Request(`${BASE_URL}/u/postmelee`, { method: "HEAD" })
+    new Request(`${BASE_URL}/api/share/postmelee`, { method: "HEAD" })
   );
 
   assert.equal(response.status, 200);

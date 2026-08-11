@@ -11,6 +11,7 @@ import {
   createR2BindingProfileMediaStore
 } from "../../profile-media/r2-binding/store.js";
 import { createGitHubOAuthClient } from "../github-oauth-client.js";
+import { isPublicProfileDocumentRequest } from "../public-profile-document.js";
 import { PROFILE_SITES_SERVICE_MODES } from "./config.js";
 
 export const PROFILE_SITES_BACKEND_UNAVAILABLE_CODE =
@@ -52,6 +53,7 @@ export function createProfileSitesBackendHandler(options = {}) {
       githubClientId: options.config.githubClientId,
       mediaStore: dependencies.mediaStore,
       profileCardFetchImpl: options.fetchImpl,
+      profileCardAvatarFailureObserver: options.profileCardAvatarFailureObserver,
       profileCardRenderPng: options.profileCardRenderPng,
       profileCardRendererVersion: options.profileCardRendererVersion,
       publicBaseUrl: options.config.publicBaseUrl,
@@ -78,7 +80,7 @@ export function createProfileSitesOperationalStopResponse(request, config = {}) 
 
   if (
     config.serviceMode === PROFILE_SITES_SERVICE_MODES.OWNER_ONLY &&
-    isPublicProfileRoute(url.pathname, method)
+    isPublicProfileRoute(request, url.pathname, method)
   ) {
     return operationalJsonResponse({
       code: "not_found",
@@ -190,11 +192,11 @@ function operationalJsonResponse(options) {
   });
 }
 
-function isPublicProfileRoute(pathname, method) {
+function isPublicProfileRoute(request, pathname, method) {
   if (!["GET", "HEAD"].includes(method)) return false;
-  return pathname.startsWith("/api/profiles/public/") ||
+  return isPublicProfileDocumentRequest(request) ||
+    pathname.startsWith("/api/profiles/public/") ||
     pathname.startsWith("/api/snapshots/public/") ||
     /^\/u\/[^/]+\/card\.png$/.test(pathname) ||
-    /^\/u\/[^/]+\/social\.png$/.test(pathname) ||
-    /^\/u\/[^/]+$/.test(pathname);
+    /^\/u\/[^/]+\/social\.png$/.test(pathname);
 }

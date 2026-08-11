@@ -9,6 +9,13 @@ import {
   createD1ProfileMaintenance
 } from "../../profile-backend/d1/maintenance.js";
 import {
+  D1_MIGRATION_MANIFEST
+} from "../../profile-backend/d1/migration-manifest.js";
+import {
+  migrateD1Database,
+  splitSqlStatements
+} from "../../profile-backend/d1/migration-runner.js";
+import {
   inspectD1MigrationReadiness
 } from "../../profile-backend/d1/store.js";
 import { createProfileCardServiceCore } from "../../profile-card/service-core.js";
@@ -39,9 +46,48 @@ export const DEFAULT_PROFILE_SITES_MAINTENANCE_BODY_MAX_BYTES =
 export const PROFILE_SITES_MIGRATION_NOT_READY_CODE =
   "migration_not_ready";
 
+const PROFILE_SITES_MIGRATION_STAGE_CODES = Object.freeze([
+  "migration_inspection_unavailable",
+  "migration_reconciliation_unavailable",
+  "migration_apply_unavailable",
+  "migration_apply_initialize_unavailable",
+  "migration_apply_read_unavailable",
+  "migration_verification_unavailable"
+]);
+const PROFILE_SITES_MIGRATION_APPLY_STAGE_CODES = Object.freeze(
+  D1_MIGRATION_MANIFEST.flatMap(({ version }) => [
+    `migration_apply_metadata_v${version}_unavailable`,
+    `migration_apply_sql_v${version}_unavailable`
+  ])
+);
+
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8"
+});
+const HOSTED_D1_MIGRATION_COLUMNS = Object.freeze({
+  3: Object.freeze({
+    column: "intent",
+    table: "cli_login_challenges",
+    tableSqlFragment:
+      "intent TEXT CHECK (intent IS NULL OR intent IN ('login', 'submit'))"
+  }),
+  4: Object.freeze({
+    column: "card_style",
+    table: "owners",
+    tableSqlFragment:
+      "card_style TEXT NOT NULL " +
+      "DEFAULT '{\"effect\":{\"preset\":\"none\",\"version\":1}," +
+      "\"schemaVersion\":1,\"theme\":\"dark\"}' " +
+      "CHECK (json_valid(card_style))"
+  }),
+  5: Object.freeze({
+    column: "card_locale",
+    table: "owners",
+    tableSqlFragment:
+      "card_locale TEXT NOT NULL DEFAULT 'en' " +
+      "CHECK (card_locale IN ('en', 'ko'))"
+  })
 });
 
 export function createProfileSitesMaintenanceHandler(options = {}) {
@@ -91,6 +137,9 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
           PROFILE_SITES_MIGRATION_NOT_READY_CODE
         );
       }
+      if (isMigrationStageCode(error?.code)) {
+        return maintenanceResponse(503, error.code);
+      }
       if (error instanceof TypeError || error?.code === "invalid") {
         return maintenanceResponse(400, "invalid_request");
       }
@@ -115,6 +164,9 @@ export function createProfileSitesMaintenanceService(options = {}) {
   const now = options.now ?? (() => new Date());
   const inspectReadiness = options.inspectD1MigrationReadiness ??
     inspectD1MigrationReadiness;
+  const applyMigrations = options.migrateD1Database ?? migrateD1Database;
+  const reconcileMigrations = options.reconcileHostedD1Migrations ??
+    reconcileHostedD1Migrations;
   const createId = options.createId ??
     ((prefix) => `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`);
   const d1 = options.d1Maintenance ?? createD1ProfileMaintenance({
@@ -132,6 +184,7 @@ export function createProfileSitesMaintenanceService(options = {}) {
     store,
     now,
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
+    observeAvatarLoadFailure: options.profileCardAvatarFailureObserver,
     renderPng: options.profileCardRenderPng,
     rendererVersion: options.profileCardRendererVersion
   });
@@ -147,6 +200,7 @@ export function createProfileSitesMaintenanceService(options = {}) {
   return Object.freeze({
     deleteAccount,
     exportOwner,
+    migrate,
     planOwner,
     readiness,
     repairPublication,
@@ -168,6 +222,86 @@ export function createProfileSitesMaintenanceService(options = {}) {
         expectedVersions: result.expectedVersions,
         operation: "readiness",
         ready: true
+      })
+    });
+  }
+
+  async function migrate() {
+    let before;
+    try {
+      before = await inspectReadiness(dependencies.database);
+    } catch (cause) {
+      throw maintenanceError(
+        "migration_inspection_unavailable",
+        "D1 migration inspection is unavailable",
+        cause
+      );
+    }
+    if (before.unexpectedVersions.length > 0) {
+      throw maintenanceError(
+        "conflict",
+        "D1 contains a migration version outside the candidate manifest"
+      );
+    }
+    const migrations = requireExactD1Migrations(options.migrations);
+    let runnableMigrations;
+    try {
+      runnableMigrations = await reconcileMigrations(
+        dependencies.database,
+        migrations,
+        before.appliedVersions
+      );
+    } catch (error) {
+      if (error?.code === "conflict") throw error;
+      throw maintenanceError(
+        "migration_reconciliation_unavailable",
+        "D1 migration reconciliation is unavailable",
+        error
+      );
+    }
+    let applied;
+    let applyProgress = Object.freeze({ phase: "unknown" });
+    try {
+      applied = await applyMigrations(dependencies.database, {
+        migrations: runnableMigrations,
+        now,
+        onProgress(progress) {
+          applyProgress = progress;
+        }
+      });
+    } catch (cause) {
+      throw maintenanceError(
+        migrationApplyFailureCode(applyProgress, runnableMigrations),
+        "D1 migration apply is unavailable",
+        cause
+      );
+    }
+    let after;
+    let newlyAppliedVersions;
+    try {
+      after = await inspectReadiness(dependencies.database);
+      newlyAppliedVersions = normalizeAppliedMigrationVersions(
+        applied?.newlyApplied,
+        after.appliedVersions
+      );
+    } catch (cause) {
+      throw maintenanceError(
+        "migration_verification_unavailable",
+        "D1 migration verification is unavailable",
+        cause
+      );
+    }
+    if (after.readyExact !== true) {
+      throw maintenanceError(
+        PROFILE_SITES_MIGRATION_NOT_READY_CODE,
+        "D1 migration readiness did not match after apply"
+      );
+    }
+    return Object.freeze({
+      summary: Object.freeze({
+        appliedVersions: after.appliedVersions,
+        newlyAppliedVersions,
+        operation: "migrate"
       })
     });
   }
@@ -468,8 +602,11 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
     throw new TypeError("maintenance payload must be an object");
   }
   switch (payload.operation) {
+    case "migrate":
+      assertIdentitylessPayload(payload, "migrate");
+      return service.migrate();
     case "readiness":
-      assertReadinessPayload(payload);
+      assertIdentitylessPayload(payload, "readiness");
       return service.readiness();
     case "plan":
       return service.planOwner(payload);
@@ -488,13 +625,228 @@ export async function dispatchMaintenanceOperation(service, payload = {}) {
   }
 }
 
-function assertReadinessPayload(payload) {
+function assertIdentitylessPayload(payload, operation) {
   if (
     Object.keys(payload).length !== 1 ||
-    payload.operation !== "readiness"
+    payload.operation !== operation
   ) {
-    throw new TypeError("readiness accepts only the operation field");
+    throw new TypeError(`${operation} accepts only the operation field`);
   }
+}
+
+function requireExactD1Migrations(value) {
+  if (!Array.isArray(value) || value.length !== D1_MIGRATION_MANIFEST.length) {
+    throw new TypeError("exact D1 migrations are required");
+  }
+  return Object.freeze(value.map((migration, index) => {
+    const expected = D1_MIGRATION_MANIFEST[index];
+    if (
+      !migration ||
+      typeof migration !== "object" ||
+      Array.isArray(migration) ||
+      Object.keys(migration).sort().join(",") !== "name,sql,version" ||
+      migration.version !== expected.version ||
+      migration.name !== expected.name ||
+      typeof migration.sql !== "string" ||
+      migration.sql.trim() === ""
+    ) {
+      throw new TypeError("D1 migrations do not match the candidate manifest");
+    }
+    return migration;
+  }));
+}
+
+async function reconcileHostedD1Migrations(
+  database,
+  migrations,
+  appliedVersions
+) {
+  const applied = new Set(appliedVersions);
+  const runnable = [];
+  for (const migration of migrations) {
+    if (applied.has(migration.version)) continue;
+    if (migration.version <= 2) {
+      runnable.push(await reconcileHostedD1BaseMigration(
+        database,
+        migration
+      ));
+      continue;
+    }
+    const specification = HOSTED_D1_MIGRATION_COLUMNS[migration.version];
+    if (!specification) {
+      runnable.push(migration);
+      continue;
+    }
+
+    const tableResult = await database.prepare(
+      "SELECT sql FROM sqlite_master " +
+        "WHERE type = 'table' AND name = ? LIMIT 1"
+    ).bind(specification.table).all();
+    const tableSql = tableResult.results?.[0]?.sql;
+    if (typeof tableSql !== "string") {
+      if (!applied.has(1)) {
+        runnable.push(migration);
+        continue;
+      }
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 table is missing for the candidate migration"
+      );
+    }
+    const normalizedTableSql = normalizeSql(tableSql);
+    const columnPattern = new RegExp(
+      `\\b${specification.column.toLowerCase()}\\b`,
+      "u"
+    );
+    if (!columnPattern.test(normalizedTableSql)) {
+      runnable.push(migration);
+      continue;
+    }
+    if (
+      !normalizedTableSql.includes(
+        normalizeSql(specification.tableSqlFragment)
+      )
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 schema does not match the candidate migration"
+      );
+    }
+    runnable.push(Object.freeze({
+      name: migration.name,
+      sql: "",
+      version: migration.version
+    }));
+  }
+  return Object.freeze(runnable);
+}
+
+async function reconcileHostedD1BaseMigration(database, migration) {
+  const objects = splitSqlStatements(migration.sql).map((sql) => {
+    const match = /^CREATE (TABLE|INDEX) ([a-z][a-z0-9_]*)\b/iu.exec(sql);
+    if (!match) {
+      throw new TypeError("Hosted D1 base migration must contain only schema objects");
+    }
+    return Object.freeze({
+      name: match[2],
+      sql,
+      type: match[1].toLowerCase()
+    });
+  });
+  const stored = [];
+  for (const object of objects) {
+    const result = await database.prepare(
+      "SELECT type, name, sql FROM sqlite_master " +
+        "WHERE type = ? AND name = ? LIMIT 1"
+    ).bind(object.type, object.name).all();
+    stored.push(result.results?.[0] ?? null);
+  }
+  const presentCount = stored.filter(Boolean).length;
+  if (presentCount === 0) return migration;
+  if (presentCount !== objects.length) {
+    throw maintenanceError(
+      "conflict",
+      "Hosted D1 base schema is only partially applied"
+    );
+  }
+  for (let index = 0; index < objects.length; index += 1) {
+    const object = objects[index];
+    const actual = stored[index];
+    if (
+      actual.type !== object.type ||
+      actual.name !== object.name ||
+      typeof actual.sql !== "string"
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 base schema does not match the candidate migration"
+      );
+    }
+    const actualSql = object.type === "table"
+      ? stripHostedD1ColumnFragments(object.name, actual.sql)
+      : normalizeSql(actual.sql);
+    if (
+      actualSql !== normalizeSql(object.sql)
+    ) {
+      throw maintenanceError(
+        "conflict",
+        "Hosted D1 base schema does not match the candidate migration"
+      );
+    }
+  }
+  return Object.freeze({
+    name: migration.name,
+    sql: "",
+    version: migration.version
+  });
+}
+
+function stripHostedD1ColumnFragments(table, value) {
+  let normalized = normalizeSql(value);
+  for (const specification of Object.values(HOSTED_D1_MIGRATION_COLUMNS)) {
+    if (specification.table !== table) continue;
+    normalized = normalized.replace(
+      normalizeSql(specification.tableSqlFragment),
+      ""
+    );
+  }
+  let collapsed = normalized;
+  do {
+    normalized = collapsed;
+    collapsed = normalized.replace(/,\s*,/gu, ",");
+  } while (collapsed !== normalized);
+  return normalizeSql(
+    collapsed.replace(/\(\s*,/gu, "(").replace(/,\s*\)/gu, ")")
+  );
+}
+
+function normalizeSql(value) {
+  return value.replace(/\s+/gu, " ").trim().toLowerCase();
+}
+
+function normalizeAppliedMigrationVersions(value, appliedVersions) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("D1 migration result is invalid");
+  }
+  const allowed = new Set(appliedVersions);
+  const normalized = [...value];
+  if (
+    normalized.some((version, index) =>
+      !Number.isSafeInteger(version) ||
+      !allowed.has(version) ||
+      (index > 0 && version <= normalized[index - 1])
+    )
+  ) {
+    throw new TypeError("D1 migration result is invalid");
+  }
+  return Object.freeze(normalized);
+}
+
+function isMigrationStageCode(value) {
+  return PROFILE_SITES_MIGRATION_STAGE_CODES.includes(value) ||
+    PROFILE_SITES_MIGRATION_APPLY_STAGE_CODES.includes(value);
+}
+
+function migrationApplyFailureCode(progress, migrations) {
+  if (progress?.phase === "initialize") {
+    return "migration_apply_initialize_unavailable";
+  }
+  if (progress?.phase === "read") {
+    return "migration_apply_read_unavailable";
+  }
+  if (
+    ["prepare", "batch"].includes(progress?.phase) &&
+    Number.isSafeInteger(progress?.version)
+  ) {
+    const migration = migrations.find(
+      (candidate) => candidate.version === progress.version
+    );
+    if (migration) {
+      const kind = migration.sql.trim() === "" ? "metadata" : "sql";
+      return `migration_apply_${kind}_v${migration.version}_unavailable`;
+    }
+  }
+  return "migration_apply_unavailable";
 }
 
 function isAuthorizedMaintenanceRequest(request, config) {
@@ -754,11 +1106,21 @@ function maintenanceResponse(status, code) {
 }
 
 function maintenanceMessage(code) {
+  if (code.startsWith("migration_apply_")) {
+    return "Maintenance migration apply failed";
+  }
   return {
     invalid_request: "Maintenance request is invalid",
     maintenance_conflict: "Maintenance plan is stale or conflicts",
     maintenance_unavailable: "Maintenance operation is unavailable",
+    migration_apply_unavailable: "Maintenance migration apply failed",
+    migration_inspection_unavailable:
+      "Maintenance migration inspection failed",
     migration_not_ready: "Maintenance readiness check failed",
+    migration_reconciliation_unavailable:
+      "Maintenance migration reconciliation failed",
+    migration_verification_unavailable:
+      "Maintenance migration verification failed",
     method_not_allowed: "Maintenance method is not allowed",
     not_found: "Not found",
     unsupported_media_type: "Maintenance request must use JSON"

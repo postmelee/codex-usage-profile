@@ -4,6 +4,7 @@ import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx"
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { CardStyleSettings } from "./CardStyleSettings.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { ProfileLoadingSkeleton } from "./ProfileLoadingSkeleton.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { Icon } from "./Icons.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
@@ -13,6 +14,7 @@ import {
   getAccountLogin
 } from "./accountUi.js";
 import { buildProfileLoginHref } from "./cardShare.js";
+import { useCardImageReadiness } from "./cardImageReadiness.js";
 import { HOME_SUBMIT_COMMAND } from "./homeOnboarding.js";
 
 export function CardProfilePage({ authState, client, onAuthStateChange }) {
@@ -32,6 +34,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareSourceImage, setShareSourceImage] = useState(null);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
   useEffect(() => {
@@ -69,7 +72,6 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   const profile = profileState.profile;
   const hasUsage = Boolean(profile?.usage);
   const isPublic = profile?.visibility === "public";
-  const canShare = profileState.status === "ready" && hasUsage && isPublic;
   const draftStyle = cardSettingsState.draftStyle ?? profile?.cardStyle;
   const draftLocale = cardSettingsState.draftLocale ?? profile?.cardLocale ?? "en";
   const cardSettingsDirty = Boolean(profile && draftStyle) && (
@@ -83,21 +85,43 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       theme: draftStyle?.theme ?? "dark"
     })
     : null;
+  const cardImage = useCardImageReadiness({
+    scopeKey: profile?.owner?.id ?? "owner-profile",
+    sourceKind: "owner",
+    src: previewUrl
+  });
+  const canShare = (
+    profileState.status === "ready" &&
+    hasUsage &&
+    isPublic &&
+    cardImage.ready
+  );
 
   const closeShare = useCallback(() => {
     setShareOpen(false);
+    setShareSourceImage(null);
     shareSourceRectRef.current = null;
   }, []);
 
   async function openShare() {
+    const sourceImage = snapshotShareSourceImage({
+      displaySrc: cardImage.displaySrc,
+      scopeKey: profile?.owner?.id,
+      sourceKind: cardImage.sourceKind,
+      sourceUrl: cardImage.visibleSrc
+    });
+    const sourceRect = snapshotRect(
+      shareSourceCardRef.current?.getBoundingClientRect()
+    );
+    if (!sourceImage) return;
+
     if (cardSettingsDirty) {
       const nextProfile = await saveCardSettings();
       if (!nextProfile) return;
     }
 
-    shareSourceRectRef.current = snapshotRect(
-      shareSourceCardRef.current?.getBoundingClientRect()
-    );
+    shareSourceRectRef.current = sourceRect;
+    setShareSourceImage(sourceImage);
     setShareOpen(true);
   }
 
@@ -110,6 +134,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       setProfileState({ error: null, profile: nextProfile, status: "ready" });
       setPreviewRevision((value) => value + 1);
       setShareOpen(false);
+      setShareSourceImage(null);
       shareSourceRectRef.current = null;
       setMutationState({ error: null, status: "idle" });
       if (authState?.account?.owner && nextProfile.owner) {
@@ -183,6 +208,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       <section className="card-profile-view" aria-labelledby="card-profile-title">
         <CardProfileContent
           authStatus={authStatus}
+          cardImage={cardImage}
           cardSettingsDirty={cardSettingsDirty}
           cardSettingsState={cardSettingsState}
           client={client}
@@ -210,9 +236,10 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
-        open={shareOpen && canShare}
+        open={shareOpen && (canShare || Boolean(shareSourceImage))}
         publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
+        sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
       />
@@ -234,7 +261,13 @@ function CardProfileContent(props) {
     );
   }
   if (authStatus === "loading" || profileState.status === "loading") {
-    return <ProfileMessage title={t("profile.loading.title")} />;
+    return (
+      <ProfileLoadingSkeleton
+        loadingLabel={t("profile.loading.title")}
+        surface="owner"
+        title={t("profile.loading.title")}
+      />
+    );
   }
   if (authStatus === "unavailable" || profileState.status === "error") {
     return (
@@ -249,7 +282,7 @@ function CardProfileContent(props) {
   }
 
   return (
-    <div className="card-profile-stage">
+    <div className="card-profile-stage profile-content-reveal">
       <AccountUsageProfile
         headingId="card-profile-title"
         owner={props.profile.owner}
@@ -269,12 +302,17 @@ function CardProfileContent(props) {
         <div className="profile-card-preview-stage">
           <MarketingCardPreview
             alt={t("profile.card.alt.owner")}
+            busy={props.cardImage.busy}
             cardRef={props.sourceCardRef}
+            errorLabel={t("home.cardUnavailable")}
             sourceKind="owner"
-            src={props.previewUrl}
+            sourceUrl={props.cardImage.visibleSrc}
+            src={props.cardImage.displaySrc}
+            status={props.cardImage.status}
             transitionSuspended={props.shareOpen}
           />
           <ProfileCardAction
+            cardReady={props.cardImage.ready}
             cardSettingsDirty={props.cardSettingsDirty}
             cardSettingsSaving={props.cardSettingsState.status === "saving"}
             isPublic={props.isPublic}
@@ -381,6 +419,7 @@ function getEmptyProfileCopyStatus(status, t) {
 }
 
 function ProfileCardAction({
+  cardReady,
   cardSettingsDirty,
   cardSettingsSaving,
   isPublic,
@@ -410,22 +449,26 @@ function ProfileCardAction({
       </div>
       <div className="home-account-actions">
         <button
-          aria-busy={isPublic && cardSettingsSaving ? true : undefined}
+          aria-busy={cardSettingsSaving || !cardReady ? true : undefined}
           aria-label={isPublic
             ? cardSettingsSaving
               ? t("profile.card.settings.savingBeforeShare")
+              : !cardReady
+                ? t("home.loadingCard")
               : cardSettingsDirty
                 ? t("profile.card.settings.saveAndShare")
                 : t("common.shareProfile")
             : undefined}
           className="primary-command"
-          disabled={isSubmitting || cardSettingsSaving}
+          disabled={isSubmitting || cardSettingsSaving || !cardReady}
           onClick={isPublic ? onShare : onPublish}
           type="button"
         >
           {isPublic
             ? cardSettingsSaving
               ? t("profile.card.settings.savingBeforeShare")
+              : !cardReady
+                ? t("home.loadingCard")
               : cardSettingsDirty
                 ? t("profile.card.settings.saveAndShare")
                 : t("common.share")
@@ -452,4 +495,17 @@ function snapshotRect(rect) {
     top: rect.top,
     width: rect.width
   };
+}
+
+function snapshotShareSourceImage({ displaySrc, scopeKey, sourceKind, sourceUrl }) {
+  if (
+    typeof displaySrc !== "string" || displaySrc === "" ||
+    typeof scopeKey !== "string" || scopeKey === "" ||
+    typeof sourceKind !== "string" || sourceKind === "" ||
+    typeof sourceUrl !== "string" || sourceUrl === ""
+  ) {
+    return null;
+  }
+
+  return Object.freeze({ displaySrc, scopeKey, sourceKind, sourceUrl });
 }

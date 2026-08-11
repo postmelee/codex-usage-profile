@@ -27,14 +27,18 @@ test("profile preview and save use draft card settings without site theme coupli
   assert.doesNotMatch(source, /useTheme/u);
 });
 
-test("profile share saves dirty card settings before opening Share Studio", async () => {
+test("profile share waits for readiness and saves dirty settings before opening Share Studio", async () => {
   const source = await readFile(join(SOURCE_ROOT, "CardProfilePage.jsx"), "utf8");
 
   assert.match(source, /async function openShare\(\)/u);
   assert.match(source, /const nextProfile = await saveCardSettings\(\)/u);
   assert.match(source, /if \(!nextProfile\) return/u);
   assert.match(source, /profile\.card\.settings\.saveAndShare/u);
-  assert.match(source, /disabled=\{isSubmitting \|\| cardSettingsSaving\}/u);
+  assert.match(source, /cardImage\.ready/u);
+  assert.match(
+    source,
+    /disabled=\{isSubmitting \|\| cardSettingsSaving \|\| !cardReady\}/u
+  );
 });
 
 test("home owner card and share studio use the saved card selection", async () => {

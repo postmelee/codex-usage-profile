@@ -128,9 +128,38 @@ test("memoizes avatar and PNG by strong ETag and supports conditional reads", as
   assert.equal(renderCount, 1);
 });
 
+test("deduplicates concurrent renders for the same card source digest", async () => {
+  let releaseRender;
+  let renderCount = 0;
+  const renderGate = new Promise((resolve) => {
+    releaseRender = resolve;
+  });
+  const fixture = createFixture({
+    renderPng: async () => {
+      renderCount += 1;
+      await renderGate;
+      return Buffer.from("png");
+    }
+  });
+
+  const first = fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  const second = fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(renderCount, 1);
+  releaseRender();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.sourceDigest, secondResult.sourceDigest);
+  assert.deepEqual(firstResult.body, secondResult.body);
+  assert.equal(renderCount, 1);
+});
+
 test("separates private light previews while keeping public cards dark", async () => {
   const renderedThemes = [];
   const fixture = createFixture({
+    fetchImpl: async () => new Response(Buffer.from("avatar"), {
+      headers: { "content-type": "image/png" }
+    }),
     renderPng: async (viewModel, options) => {
       renderedThemes.push([viewModel.theme, options.theme]);
       return Buffer.from(`png-${options.theme}`);
@@ -261,6 +290,165 @@ test("renders a valid PNG when avatar loading fails", async () => {
   assert.equal(image.height, CARD_OUTPUT_HEIGHT);
 });
 
+test("retries one transient avatar failure and renders the recovered bytes", async () => {
+  const events = [];
+  let fetchCount = 0;
+  let renderedAvatar = null;
+  const fixture = createFixture({
+    fetchImpl: async () => {
+      fetchCount += 1;
+      if (fetchCount === 1) throw new Error("temporary provider failure");
+      return new Response(Buffer.from("recovered-avatar"), {
+        headers: { "content-type": "image/png" }
+      });
+    },
+    observeAvatarLoadFailure(event) {
+      events.push(event);
+    },
+    renderPng: async (_viewModel, options) => {
+      renderedAvatar = Buffer.from(options.avatarSource).toString();
+      return Buffer.from("png");
+    }
+  });
+
+  await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(fetchCount, 2);
+  assert.equal(renderedAvatar, "recovered-avatar");
+  assert.deepEqual(events, [{
+    errorCode: "avatar_fetch_unavailable",
+    attempt: 1,
+    retrying: true
+  }]);
+  assert.deepEqual(Object.keys(events[0]), ["errorCode", "attempt", "retrying"]);
+});
+
+test("uses manual redirects and rejects redirect responses without following them", async () => {
+  const fetchCalls = [];
+  const events = [];
+  let renderedAvatar = "not-called";
+  const fixture = createFixture({
+    fetchImpl: async (url, options) => {
+      fetchCalls.push({ options, url });
+      return new Response(null, {
+        headers: { location: "https://example.com/private-avatar.png" },
+        status: 302
+      });
+    },
+    observeAvatarLoadFailure(event) {
+      events.push(event);
+    },
+    renderPng: async (_viewModel, options) => {
+      renderedAvatar = options.avatarSource;
+      return Buffer.from("fallback-png");
+    }
+  });
+
+  const result = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(result.body.toString(), "fallback-png");
+  assert.equal(renderedAvatar, null);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, OWNER.avatarUrl);
+  assert.equal(fetchCalls[0].options.redirect, "manual");
+  assert.ok(fetchCalls[0].options.signal instanceof AbortSignal);
+  assert.deepEqual(events, [{
+    errorCode: "avatar_http_rejected",
+    attempt: 1,
+    retrying: false
+  }]);
+});
+
+test("does not cache failed avatar fallbacks or derived PNGs", async () => {
+  let fetchCount = 0;
+  const renderedAvatars = [];
+  const fixture = createFixture({
+    fetchImpl: async () => {
+      fetchCount += 1;
+      if (fetchCount <= 2) throw new Error("temporary provider failure");
+      return new Response(Buffer.from("avatar-after-failure"), {
+        headers: { "content-type": "image/png" }
+      });
+    },
+    renderPng: async (_viewModel, options) => {
+      renderedAvatars.push(options.avatarSource && Buffer.from(
+        options.avatarSource
+      ).toString());
+      return Buffer.from(`png-${renderedAvatars.length}`);
+    }
+  });
+
+  const fallback = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  const recovered = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(fetchCount, 3);
+  assert.deepEqual(renderedAvatars, [null, "avatar-after-failure"]);
+  assert.notDeepEqual(fallback.body, recovered.body);
+});
+
+test("keeps successful avatar bytes across settings revisions until bounded TTL", async () => {
+  let currentTime = new Date("2026-06-11T00:02:00.000Z");
+  let fetchCount = 0;
+  const fixture = createFixture({
+    avatarCacheTtlMs: 1_000,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return new Response(Buffer.from(`avatar-${fetchCount}`), {
+        headers: { "content-type": "image/png" }
+      });
+    },
+    now: () => currentTime,
+    renderPng: async (_viewModel, options) => Buffer.from(options.avatarSource)
+  });
+
+  const first = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+  fixture.store.saveOwner({
+    ...fixture.store.getOwnerById(OWNER.id),
+    updatedAt: "2026-06-11T00:02:30.000Z"
+  });
+  const settingsChanged = await fixture.service.renderOwnerCard({
+    ownerId: OWNER.id
+  });
+  currentTime = new Date("2026-06-11T00:02:02.000Z");
+  fixture.store.saveOwner({
+    ...fixture.store.getOwnerById(OWNER.id),
+    updatedAt: "2026-06-11T00:02:31.000Z"
+  });
+  const expired = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.body.toString(), "avatar-1");
+  assert.equal(settingsChanged.body.toString(), "avatar-1");
+  assert.equal(expired.body.toString(), "avatar-2");
+});
+
+test("keeps avatar failure observation bounded and non-blocking", async () => {
+  const observed = [];
+  const fixture = createFixture({
+    fetchImpl: async () => new Response("unavailable", { status: 503 }),
+    observeAvatarLoadFailure(event) {
+      observed.push(event);
+      throw new Error("logging failed with private identity and provider response");
+    },
+    renderPng: async (_viewModel, options) => {
+      assert.equal(options.avatarSource, null);
+      return Buffer.from("fallback-png");
+    }
+  });
+
+  const result = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(result.body.toString(), "fallback-png");
+  assert.deepEqual(observed, [
+    { errorCode: "avatar_http_unavailable", attempt: 1, retrying: true },
+    { errorCode: "avatar_http_unavailable", attempt: 2, retrying: false }
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(observed),
+    /postmelee|avatars\.githubusercontent|private identity|provider response/
+  );
+});
+
 test("rejects unsupported and oversized avatar responses before rendering", async () => {
   const responses = [
     new Response(Buffer.from("not-an-image"), {
@@ -325,11 +513,13 @@ function createFixture(options = {}) {
     store,
     service: createProfileCardService({
       store,
-      now: () => new Date("2026-06-11T00:02:00.000Z"),
+      now: options.now ?? (() => new Date("2026-06-11T00:02:00.000Z")),
       fetchImpl: options.fetchImpl ?? (async () => {
         throw new Error("network disabled in test");
       }),
-      renderPng: options.renderPng
+      renderPng: options.renderPng,
+      avatarCacheTtlMs: options.avatarCacheTtlMs,
+      observeAvatarLoadFailure: options.observeAvatarLoadFailure
     })
   };
 }

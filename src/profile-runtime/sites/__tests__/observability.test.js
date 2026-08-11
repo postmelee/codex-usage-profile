@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   PROFILE_SITES_REQUEST_ID_HEADER,
   bucketDuration,
+  createProfileCardAvatarLoadEvent,
   classifyProfileSitesRoute,
+  observeProfileCardAvatarLoadFailure,
   observeProfileSitesRequest
 } from "../observability.js";
 
@@ -72,13 +74,23 @@ test("Sites observability reduces dynamic paths and unusual methods to safe clas
     "https://profile.example/api/custom/private-value",
     { method: "CUSTOM" }
   );
+  const publicShare = new Request(
+    "https://profile.example/api/share/private-owner-handle"
+  );
+  const publicSocial = new Request(
+    "https://profile.example/u/private-owner-handle/social.png"
+  );
 
   assert.equal(classifyProfileSitesRoute(publicCard), "public_card");
+  assert.equal(classifyProfileSitesRoute(publicSocial), "public_card");
+  assert.equal(classifyProfileSitesRoute(publicShare), "public_profile");
   assert.equal(classifyProfileSitesRoute(unknownApi), "api");
   assert.doesNotMatch(
     JSON.stringify({
       first: classifyProfileSitesRoute(publicCard),
-      second: classifyProfileSitesRoute(unknownApi)
+      second: classifyProfileSitesRoute(unknownApi),
+      third: classifyProfileSitesRoute(publicShare),
+      fourth: classifyProfileSitesRoute(publicSocial)
     }),
     /private-owner-handle|private-value/
   );
@@ -104,4 +116,41 @@ test("Sites observability never lets a logging failure alter the response", asyn
 
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "landing");
+});
+
+test("avatar observability emits only bounded retry fields and ignores writer failure", () => {
+  const events = [];
+  const event = observeProfileCardAvatarLoadFailure({
+    attempt: 1,
+    errorCode: "avatar_fetch_unavailable",
+    retrying: true
+  }, {
+    writeEvent(value) {
+      events.push(value);
+      throw new Error("logging failed with owner and avatar URL");
+    }
+  });
+
+  assert.deepEqual(event, {
+    eventType: "profile_card_avatar",
+    errorCode: "avatar_fetch_unavailable",
+    attempt: 1,
+    retrying: true
+  });
+  assert.deepEqual(events, [event]);
+  assert.deepEqual(Object.keys(event), [
+    "eventType",
+    "errorCode",
+    "attempt",
+    "retrying"
+  ]);
+  assert.doesNotMatch(JSON.stringify(event), /owner|github|avatar URL/);
+  assert.throws(
+    () => createProfileCardAvatarLoadEvent({
+      attempt: 3,
+      errorCode: "provider body leaked",
+      retrying: false
+    }),
+    /invalid/
+  );
 });

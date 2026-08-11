@@ -33,6 +33,7 @@ const INTRO_FRAMES = Object.freeze([
 
 export function PublicCardIntro({
   cardAlt,
+  cardImage,
   cardUrl,
   createCardHref,
   onClose,
@@ -59,6 +60,8 @@ export function PublicCardIntro({
       : PUBLIC_CARD_INTRO_ROTATION_DURATION,
     introFrames: INTRO_FRAMES,
     onClose,
+    ready: cardImage.ready,
+    restartKey: cardImage.desiredSrc,
     sourceCardRef: targetCardRef,
     sourceRect: null
   });
@@ -160,7 +163,16 @@ export function PublicCardIntro({
           data-testid="public-card-intro-card"
           ref={motionCardRef}
         >
-          <MarketingCardPreview alt={cardAlt} sourceKind="owner" src={cardUrl} />
+          <MarketingCardPreview
+            alt={cardAlt}
+            busy={cardImage.busy}
+            errorLabel={t("home.cardUnavailable")}
+            loadingLabel={t("home.loadingCardPreview")}
+            sourceKind="public"
+            sourceUrl={cardImage.visibleSrc}
+            src={cardImage.displaySrc}
+            status={cardImage.status}
+          />
         </div>
 
         <div className="public-card-intro-actions">

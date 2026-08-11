@@ -66,13 +66,16 @@ test("preserves legacy queryless dark URLs and rejects unsafe schemes", () => {
 test("builds GitHub login links that always return to the owner profile", () => {
   const client = {
     buildGitHubLoginUrl(options) {
-      assert.deepEqual(options, { redirectTo: "/profile" });
-      return "/login?redirect_to=%2Fprofile";
+      assert.deepEqual(options, { redirectTo: "/?view=profile" });
+      return "/login?redirect_to=%2F%3Fview%3Dprofile";
     }
   };
-  assert.equal(buildProfileLoginHref(client), "/login?redirect_to=%2Fprofile");
+  assert.equal(
+    buildProfileLoginHref(client),
+    "/login?redirect_to=%2F%3Fview%3Dprofile"
+  );
   assert.equal(
     buildProfileLoginHref(null),
-    "/api/auth/github/login?redirect_to=%2Fprofile"
+    "/api/auth/github/login?redirect_to=%2F%3Fview%3Dprofile"
   );
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createProfileApiClient } from "./profile-api/client.js";
 import { DeviceApprovalPage } from "./profile-ui/DeviceApprovalPage.jsx";
@@ -14,6 +14,7 @@ import {
   loadPublicProfileRoute,
   resolvePublicProfileRoute
 } from "./profile-ui/publicProfileRoutes.js";
+import { clearCardImageResourceCache } from "./profile-ui/cardImageReadiness.js";
 
 export function App() {
   const profileApiClient = useMemo(() => createProfileApiClient(), []);
@@ -25,6 +26,7 @@ export function App() {
   const [publicRoute, setPublicRoute] = useState(() => (
     resolvePublicProfileRoute(window.location)
   ));
+  const previousOwnerScopeRef = useRef(null);
   const handleAuthStateChange = useCallback((nextAuthState) => {
     setAuthState(nextAuthState);
   }, []);
@@ -54,6 +56,20 @@ export function App() {
       isCurrent = false;
     };
   }, [profileApiClient]);
+
+  const ownerScope = authState.status === "authenticated"
+    ? authState.account?.owner?.id ?? authState.account?.owner?.handle ?? null
+    : null;
+  useEffect(() => {
+    const previousScope = previousOwnerScopeRef.current;
+    if (previousScope && previousScope !== ownerScope) {
+      clearCardImageResourceCache({
+        scopeKey: previousScope,
+        sourceKind: "owner"
+      });
+    }
+    previousOwnerScopeRef.current = ownerScope;
+  }, [ownerScope]);
 
   useEffect(() => {
     let isCurrent = true;

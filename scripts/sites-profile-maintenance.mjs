@@ -40,6 +40,7 @@ const OWNER_COMMANDS = new Set([
   "repair-publication"
 ]);
 const COMMANDS = new Set([
+  "migrate",
   "readiness",
   "plan",
   "export",
@@ -121,7 +122,9 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   }
   const summary = parsed.command === "readiness"
     ? normalizeReadinessSummary(result.summary)
-    : result.summary;
+    : parsed.command === "migrate"
+      ? normalizeMigrationSummary(result.summary)
+      : result.summary;
   stdout(JSON.stringify(summary));
   return { summary };
 }
@@ -177,6 +180,7 @@ export function sitesProfileMaintenanceHelpText() {
     "Usage: npm run sites:profile-maintenance -- <command> --origin <https-origin> [options]",
     "",
     "Commands:",
+    "  migrate             Apply exact pending D1 migrations (idempotent)",
     "  readiness           Verify the exact D1 migration set (read-only)",
     "  plan                Create an owner deletion plan",
     "  export              Export one durable owner backup",
@@ -231,9 +235,9 @@ export async function readBackupFile(path) {
 async function createOperationPayload(parsed, options) {
   if (parsed.help) return { operation: parsed.command };
   if (!parsed.origin) throw new TypeError("--origin is required");
-  if (parsed.command === "readiness") {
-    assertReadinessOptions(parsed);
-    return { operation: "readiness" };
+  if (["migrate", "readiness"].includes(parsed.command)) {
+    assertIdentitylessOptions(parsed);
+    return { operation: parsed.command };
   }
   if (OWNER_COMMANDS.has(parsed.command)) {
     requireKeySegment(parsed.ownerId, "ownerId");
@@ -320,16 +324,42 @@ async function createOperationPayload(parsed, options) {
   return payload;
 }
 
-function assertReadinessOptions(parsed) {
+function assertIdentitylessOptions(parsed) {
   if (parsed.apply === true) {
-    throw new TypeError("readiness does not accept --apply");
+    throw new TypeError(`${parsed.command} does not accept --apply`);
   }
   const allowed = new Set(["apply", "command", "help", "origin"]);
   const unexpected = Object.keys(parsed)
     .filter((key) => !allowed.has(key) && parsed[key] !== undefined);
   if (unexpected.length > 0) {
-    throw new TypeError("readiness accepts only --origin");
+    throw new TypeError(`${parsed.command} accepts only --origin`);
   }
+}
+
+function normalizeMigrationSummary(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw cliError("invalid_response");
+  }
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== 3 ||
+    keys[0] !== "appliedVersions" ||
+    keys[1] !== "newlyAppliedVersions" ||
+    keys[2] !== "operation" ||
+    value.operation !== "migrate"
+  ) {
+    throw cliError("invalid_response");
+  }
+  const appliedVersions = normalizeMigrationVersions(value.appliedVersions);
+  const newlyAppliedVersions = normalizeNewMigrationVersions(
+    value.newlyAppliedVersions,
+    appliedVersions
+  );
+  return Object.freeze({
+    appliedVersions,
+    newlyAppliedVersions,
+    operation: "migrate"
+  });
 }
 
 function normalizeReadinessSummary(value) {
@@ -376,6 +406,22 @@ function normalizeMigrationVersions(value) {
     throw cliError("invalid_response");
   }
   return Object.freeze([...value]);
+}
+
+function normalizeNewMigrationVersions(value, appliedVersions) {
+  if (!Array.isArray(value)) throw cliError("invalid_response");
+  const allowed = new Set(appliedVersions);
+  const normalized = [...value];
+  if (
+    normalized.some((version, index) =>
+      !Number.isSafeInteger(version) ||
+      !allowed.has(version) ||
+      (index > 0 && version <= normalized[index - 1])
+    )
+  ) {
+    throw cliError("invalid_response");
+  }
+  return Object.freeze(normalized);
 }
 
 async function readSafeResponse(response) {

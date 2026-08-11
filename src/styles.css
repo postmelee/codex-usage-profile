@@ -693,6 +693,28 @@ button {
   transition-duration: 0ms;
 }
 
+.card-preview-fallback {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, var(--share-preview-accent), transparent 52%),
+    var(--surface-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: inherit;
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 14px;
+  height: 100%;
+  justify-items: center;
+  line-height: 20px;
+  padding: 28px;
+  text-align: center;
+  width: 100%;
+}
+
+.card-preview-fallback span {
+  max-width: 320px;
+}
+
 .home-card-skeleton::after {
   animation: home-card-skeleton-progress 1.6s linear infinite;
   background: linear-gradient(
@@ -1466,6 +1488,255 @@ button {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.profile-loading-skeleton {
+  min-width: 0;
+  position: relative;
+  width: min(100%, 920px);
+}
+
+.profile-loading-shimmer {
+  background: var(--card-preview-placeholder-subtle);
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+.profile-loading-shimmer::after {
+  animation: home-card-skeleton-progress 1.6s linear infinite;
+  animation-delay: var(--profile-skeleton-delay, 0ms);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--skeleton-sheen-edge) 38%,
+    var(--skeleton-sheen-center) 50%,
+    var(--skeleton-sheen-edge) 62%,
+    transparent 100%
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-100%);
+  z-index: 1;
+}
+
+.profile-loading-identity {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-loading-avatar {
+  border-radius: 50%;
+  height: 72px;
+  width: 72px;
+}
+
+.profile-loading-name,
+.profile-loading-handle {
+  border-radius: 999px;
+}
+
+.profile-loading-name {
+  height: 32px;
+  margin-top: 20px;
+  width: min(42%, 260px);
+}
+
+.profile-loading-handle {
+  height: 22px;
+  margin-top: 8px;
+  width: min(24%, 150px);
+}
+
+.profile-loading-stats {
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 52px;
+  min-height: 74px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.profile-loading-stat {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 10px 12px;
+  position: relative;
+}
+
+.profile-loading-stat + .profile-loading-stat::before {
+  background: var(--border-subtle);
+  content: "";
+  height: 44px;
+  left: 0;
+  position: absolute;
+  top: 15px;
+  width: 1px;
+}
+
+.profile-loading-stat-value,
+.profile-loading-stat-label {
+  border-radius: 999px;
+  height: 20px;
+}
+
+.profile-loading-stat-value {
+  width: min(72%, 104px);
+}
+
+.profile-loading-stat-label {
+  margin-top: 2px;
+  width: min(82%, 118px);
+}
+
+.profile-loading-activity {
+  margin-top: 50px;
+  min-width: 0;
+  width: 100%;
+}
+
+.profile-loading-activity-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.profile-loading-activity-title {
+  border-radius: 999px;
+  height: 20px;
+  width: 90px;
+}
+
+.profile-loading-activity-tabs {
+  display: flex;
+  gap: 18px;
+}
+
+.profile-loading-activity-tabs > span {
+  border-radius: 999px;
+  height: 20px;
+  width: 52px;
+}
+
+.profile-loading-activity-grid-wrap {
+  --profile-loading-cell-size: clamp(
+    13px,
+    calc((100cqw - 153px) / 52),
+    16px
+  );
+  container-type: inline-size;
+  display: block;
+  overflow: hidden;
+  padding-bottom: 8px;
+  width: 100%;
+}
+
+.profile-loading-activity-grid {
+  display: grid;
+  gap: 3px;
+  overflow: hidden;
+  width: min(100%, 985px);
+}
+
+.profile-loading-activity-row {
+  -webkit-mask-image: repeating-linear-gradient(
+    90deg,
+    black 0 var(--profile-loading-cell-size),
+    transparent var(--profile-loading-cell-size)
+      calc(var(--profile-loading-cell-size) + 3px)
+  );
+  height: var(--profile-loading-cell-size);
+  mask-image: repeating-linear-gradient(
+    90deg,
+    black 0 var(--profile-loading-cell-size),
+    transparent var(--profile-loading-cell-size)
+      calc(var(--profile-loading-cell-size) + 3px)
+  );
+  width: min(100cqw, 985px);
+}
+
+.profile-loading-activity-months {
+  align-items: center;
+  display: flex;
+  height: 18px;
+  justify-content: space-between;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.profile-loading-activity-months > span {
+  border-radius: 999px;
+  height: 12px;
+  width: 28px;
+}
+
+.profile-loading-activity-option {
+  border-radius: 999px;
+  height: 18px;
+  margin-left: auto;
+  margin-top: 2px;
+  width: 132px;
+}
+
+.profile-loading-card {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 56px;
+  padding-top: 32px;
+}
+
+.profile-loading-card-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 30px;
+  width: 100%;
+}
+
+.profile-loading-card-title,
+.profile-loading-card-status {
+  border-radius: 999px;
+}
+
+.profile-loading-card-title {
+  height: 30px;
+  width: min(32%, 220px);
+}
+
+.profile-loading-card-status {
+  height: 18px;
+  width: 52px;
+}
+
+.profile-loading-card .home-card-tilt {
+  margin-inline: auto;
+}
+
+.profile-content-reveal .profile-header,
+.profile-content-reveal .profile-stats,
+.profile-content-reveal .token-activity,
+.profile-content-reveal .profile-card-section,
+.profile-content-reveal > .public-profile-owner-banner {
+  animation: profile-content-enter 360ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+}
+
+@keyframes profile-content-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 .public-profile-state.is-unavailable {
   display: grid;
   gap: 12px;
@@ -1536,6 +1807,25 @@ button {
   .public-profile-owner-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .profile-loading-stats {
+    grid-template-columns: 1fr;
+    margin-top: 36px;
+  }
+
+  .profile-loading-stat + .profile-loading-stat::before {
+    height: 1px;
+    left: 18px;
+    right: 18px;
+    top: 0;
+    width: auto;
+  }
+
+  .profile-loading-activity-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 }
 
@@ -1714,32 +2004,32 @@ button {
   width: min(600px, calc(100vw - 48px));
 }
 
+.share-studio-card-motion .home-card-media {
+  border-radius: inherit;
+  height: 100%;
+}
+
 .share-studio-card {
   animation: share-studio-card-crossfade 120ms cubic-bezier(0.2, 0, 0, 1) both;
   border-radius: inherit;
   width: 100%;
 }
 
-.share-studio-preview-fallback {
-  align-items: center;
-  background:
-    radial-gradient(circle at 50% 20%, var(--share-preview-accent), transparent 52%),
-    var(--surface-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: inherit;
-  color: var(--text-secondary);
-  display: grid;
-  font-size: 14px;
-  height: 100%;
-  justify-items: center;
-  line-height: 20px;
-  padding: 28px;
-  text-align: center;
-  width: 100%;
+.share-studio-card.is-handoff-source,
+.share-studio-card.is-warm-handoff-target {
+  animation: none;
 }
 
-.share-studio-preview-fallback span {
-  max-width: 320px;
+.share-studio-preview-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 10px 0 -10px;
+  text-align: center;
+}
+
+.share-studio-preview-status.is-error {
+  color: var(--share-toast-danger-text);
 }
 
 .share-studio-primary-actions {
@@ -3466,6 +3756,22 @@ button {
     transform: none;
   }
 
+  .profile-loading-shimmer::after {
+    animation: none;
+    opacity: 0;
+    transform: none;
+  }
+
+  .profile-content-reveal .profile-header,
+  .profile-content-reveal .profile-stats,
+  .profile-content-reveal .token-activity,
+  .profile-content-reveal .profile-card-section,
+  .profile-content-reveal > .public-profile-owner-banner {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
   .device-success {
     animation: none;
     transform: none;
@@ -4005,6 +4311,11 @@ button {
   margin: 0;
   max-width: 100%;
   width: 100%;
+}
+
+.public-card-intro-card .home-card-skeleton,
+.share-studio-card-motion .home-card-skeleton {
+  transition-duration: 0ms;
 }
 
 .public-card-intro-actions {
