@@ -2661,7 +2661,7 @@ test.describe("Profile and Settings canvases", () => {
     expect(unavailableTopOffset).toBe(48);
   });
 
-  test("owner Profile loading geometry matches ready content and reveals in place", async ({ page }) => {
+  test("owner Profile loading geometry matches ready content and reveals together in place", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     let releaseProfile;
     const profileGate = new Promise((resolve) => {
@@ -2693,15 +2693,18 @@ test.describe("Profile and Settings canvases", () => {
       return {
         animationDelay: style.animationDelay,
         animationDuration: style.animationDuration,
-        animationName: style.animationName
+        animationName: style.animationName,
+        transform: style.transform
       };
     }));
     expect(revealMotion.map((motion) => motion.animationName))
       .toEqual(Array(4).fill("profile-content-enter"));
     expect(revealMotion.map((motion) => motion.animationDelay))
-      .toEqual(["0s", "0.04s", "0.08s", "0.12s"]);
+      .toEqual(Array(4).fill("0s"));
     expect(new Set(revealMotion.map((motion) => motion.animationDuration)))
       .toEqual(new Set(["0.36s"]));
+    expect(revealMotion.map((motion) => motion.transform))
+      .toEqual(Array(4).fill("none"));
 
     await page.waitForTimeout(520);
     const readyGeometry = await readProfileGeometry(page, "ready");
@@ -2714,17 +2717,14 @@ test.describe("Profile and Settings canvases", () => {
       ".profile-card-section"
     ].map((selector) => {
       const style = getComputedStyle(document.querySelector(selector));
-      const matrix = new DOMMatrixReadOnly(style.transform);
       return {
         opacity: style.opacity,
-        translateX: matrix.m41,
-        translateY: matrix.m42
+        transform: style.transform
       };
     }));
     expect(settledMotion).toEqual(Array(4).fill({
       opacity: "1",
-      translateX: 0,
-      translateY: 0
+      transform: "none"
     }));
   });
 

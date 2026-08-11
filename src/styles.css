@@ -1727,27 +1727,13 @@ button {
   animation: profile-content-enter 360ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
 }
 
-.profile-content-reveal .profile-stats {
-  animation-delay: 40ms;
-}
-
-.profile-content-reveal .token-activity {
-  animation-delay: 80ms;
-}
-
-.profile-content-reveal .profile-card-section {
-  animation-delay: 120ms;
-}
-
 @keyframes profile-content-enter {
   from {
     opacity: 0;
-    transform: translate3d(0, 6px, 0);
   }
 
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
   }
 }
 

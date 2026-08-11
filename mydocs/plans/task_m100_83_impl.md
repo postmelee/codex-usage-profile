@@ -52,6 +52,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 4.3 | hosted avatar 호환과 공유 handoff 연속성 보정 | manual redirect fail-closed, source bitmap handoff | 3xx 거부, delayed target/failure/close/reduced-motion, hosted smoke |
 | 4.4 | 공유 전환·프로필 Skeleton 연속성 보정 | warm target motion continuity, 공통 profile Skeleton | opacity 연속성, 요소별 shimmer, identity 비노출, reduced-motion |
 | 4.5 | Skeleton/ready 위치·reveal 정합화 | ready-equivalent placeholder geometry, content micro cascade | bounding box, final opacity/transform, replay 부재, reduced-motion |
+| 4.6 | profile reveal 공간 이동·stagger 제거 | transform-free synchronized opacity reveal | delay 0s, active/final transform none, geometry, reduced-motion, local preview |
 
 ## 문서 위치 확인
 
@@ -68,6 +69,8 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Stage 4.3 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_3.md` | OK | hosted URL·identity 원문 없이 redirect/handoff 상태와 검증 결과만 기록 |
 | Stage 4.4 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_4.md` | OK | 사용자 identity·hosted URL 원문 없이 target opacity와 Skeleton 상태·검증 결과만 기록 |
 | Stage 4.5 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_5.md` | 예정 | 사용자 identity·usage 없이 layout delta와 animation 계약만 기록 |
+
+| Stage 4.6 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_6.md` | 예정 | transform·stagger 제거와 local preview 검증만 기록하고 사용자 승인 전 remote 결과는 기록하지 않음 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1310,6 +1313,48 @@ protected direct share HTML의 version 22 asset 응답을 확인했다.
 Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화
 ```
 
+## Stage 4.6 — profile reveal 공간 이동·stagger 제거
+
+### 발견 근거와 범위
+
+- saved version 22 직접 확인에서 ready content가 6px 아래 좌표에서 위로 이동해 Skeleton과
+  다른 위치에서 시작하는 것처럼 보이는 잔여 회귀를 확인했다.
+- loading/ready box geometry와 reduced-motion 계약은 유지하고 `profile-content-enter`의
+  transform 성분 및 0/40/80/120ms stagger를 제거해 전 영역을 동시에 opacity reveal한다.
+- profile API, card resource/cache/readiness, 공유 motion, Sites access와 remote deployment는
+  변경하지 않는다. 사용자 직접 확인 전에는 로컬 preview까지만 수행한다.
+
+### 예상 변경 파일
+
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_83.md`
+- `mydocs/plans/task_m100_83_impl.md`
+- `mydocs/orders/20260811.md`
+- `mydocs/working/task_m100_83_stage4_6.md` (로컬 검증 승인 뒤 단계 종료 시)
+
+### 검증
+
+```bash
+npx playwright test --grep "loading geometry matches ready content"
+npm test -- --test-concurrency=1
+npx playwright test
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+로컬 preview에서 ready reveal의 active/final transform `none`, 전 영역 delay `0s`와
+Skeleton/ready geometry를 확인한다. 작업지시자 승인 전에는 saved version을 만들거나
+owner-only Site를 재배포하지 않는다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -1336,6 +1381,7 @@ Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화
   - `Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정`
   - `Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정`
   - `Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화`
+  - `Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거`
 
 ## 단계 의존성
 
@@ -1393,7 +1439,10 @@ Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화
   뒤 exact source를 saved version 22로 owner-only 재배포했고 protected hosted smoke를
   통과했다. 사용자 직접 확인 승인 전에는 public mutation과 task-final-report를 시작하지
   않는다.
-- task-final-report는 Stage 4.5 완료보고서와 owner-only smoke 승인 뒤 재개한다.
+- Stage 4.6은 saved version 22 직접 확인에서 발견한 upward entrance와 순차 reveal 잔여
+  불일치에 대해 작업지시자의 source 수정·local preview 지시로 진행한다. local 검증과
+  직접 확인 승인 전에는 remote saved version을 생성하지 않는다.
+- task-final-report는 Stage 4.6 local 확인과 필요한 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응
