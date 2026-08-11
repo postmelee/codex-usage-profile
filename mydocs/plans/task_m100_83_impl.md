@@ -1322,6 +1322,10 @@ Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정
   profile loading 불일치를 근거로 작업지시자의 계획·source 수정 승인 후 진행한다.
 - Stage 4.4 source·focused/전체 검증과 완료보고서 승인 뒤에만 exact source owner-only
   saved version 재배포 승인을 다시 요청한다.
+- Stage 4.4 exact source는 saved version 21로 owner-only 재배포됐고 protected health·
+  profile/share HTML과 hosted warm target·공통 Skeleton smoke를 통과했다. access revision
+  56의 custom owner-only 경계는 유지하며 사용자 직접 확인 승인 전에는 public mutation과
+  task-final-report를 시작하지 않는다.
 - task-final-report는 Stage 4.4 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 

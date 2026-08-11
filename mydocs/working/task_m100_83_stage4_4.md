@@ -24,7 +24,7 @@ fade를 제거하고, 두 profile route를 identity-free 공통 구조형 Skelet
 | `src/styles.css` | page-wide sheen 제거, identity·stats·activity·card별 loading 표현, 7행 activity mask와 reduced-motion 중지, warm target animation 제거 |
 | `tests/profile-ui.spec.js` | warm target opacity/animation 연속성, 공개·소유자 Skeleton 구조와 요소별 shimmer, reduced-motion 회귀 검증 추가 |
 | `mydocs/plans/task_m100_83.md`, `mydocs/plans/task_m100_83_impl.md` | Stage 4.4 발견 근거, 승인 범위, 문서 위치, 구현·검증·중단 조건 기록 |
-| `mydocs/orders/20260811.md` | Stage 4.4 local 완료와 owner-only 재배포 승인 대기 상태 반영 |
+| `mydocs/orders/20260811.md` | Stage 4.4 owner-only 재배포·원격 smoke 완료와 사용자 직접 확인 대기 상태 반영 |
 
 ## 본문 변경 정도 / 본문 무손실 여부
 
@@ -70,6 +70,21 @@ git diff --check
   크기, `ok: true`
 - `git diff --check`: 이상 없음
 
+원격 owner-only 검증:
+
+- exact source `ca25800bb11619367f347a1090348427fe99adaa`를 saved version 21로 저장·배포
+- access는 `custom`, owner allowlist 1명, group 0개, external visitor 0명,
+  access revision 56으로 배포 전 경계 유지
+- protected `/healthz`, owner profile과 공개 share HTML 경로: 모두 `200`
+- hosted owner profile 첫 loading: 공통 profile Skeleton 1개, 독립 shimmer 요소 20개,
+  최상위 wrapper animation `none`; 준비 뒤 Skeleton 제거와 공유 command 노출 확인
+- hosted 공개 share 첫 loading: 공통 public profile Skeleton과 독립 shimmer 요소 20개,
+  최상위 wrapper animation `none`; 준비 뒤 modal과 decoded card 노출 확인
+- hosted Share Studio: source handoff 뒤 public target이 `is-warm-handoff-target`,
+  animation-name `none`, opacity `1`, decoded image width 양수로 전환됨을 확인
+- 화면의 기존 text loading UI는 제거됐고 `프로필 불러오는 중`은 1×1 clipped
+  `sr-only` 접근성 문구로만 유지됨을 확인
+
 전체 Node 검증의 Miniflare D1 fixture는 localhost listen이 허용된 검증 환경에서 실행했다.
 Playwright 패키지 browser cache가 현재 revision과 맞지 않아 설치된 Chrome channel을 사용했고,
 same-origin을 유지하도록 5187 transport에 맞춘 임시 테스트 사본만 사용했다. 제품 코드와
@@ -77,8 +92,8 @@ assertion은 바꾸지 않았고 임시 테스트 파일은 검증 직후 삭제
 
 ## 잔여 위험
 
-- Stage 4.4 source는 아직 Sites에 재배포하지 않았다. 실제 hosted browser에서 warm target
-  교체의 무깜빡임과 공개·소유자 profile Skeleton을 owner-only saved version으로 확인해야 한다.
+- hosted 자동 smoke는 DOM·computed style·decoded image 상태로 깜빡임 제거를 확인했다.
+  사용자가 실제 화면에서 같은 전환의 지각 품질을 최종 확인해야 한다.
 - card preview 내부는 Home에서 검증된 card-accurate Skeleton과 단일 card-local sheen을
   재사용한다. 이번 보정은 profile 전체를 횡단하던 page-wide sheen만 제거했다.
 - public access 전환과 X·Threads·카카오톡 실측은 Task #84 Gate C 범위이며 이번 단계에
@@ -86,14 +101,14 @@ assertion은 바꾸지 않았고 임시 테스트 파일은 검증 직후 삭제
 
 ## 다음 단계 영향
 
-- 이 보고서와 source를 하나의 Stage 4.4 commit으로 고정한 뒤, 별도 승인으로 같은 exact
-  source를 기존 Site의 owner-only saved version으로 재배포한다.
-- owner-only smoke는 Home/Profile 첫 공유의 source→public 교체, 공개 share direct entry와
-  `/?view=profile` 첫 loading, light/dark와 reduced motion을 집중 확인한다.
-- 사용자 직접 확인은 owner-only smoke가 통과한 saved version을 같은 Stage 5 URL에서
-  제공한 뒤 진행한다.
+- Stage 4.4 exact source는 saved version 21로 owner-only 배포됐고 protected 경로와 hosted
+  공유·profile loading 집중 smoke를 통과했다.
+- 사용자가 같은 Stage 5 URL에서 owner profile 첫 loading, 공유 command의 중앙 이동 뒤
+  무깜빡임, 공개 share direct entry의 요소별 Skeleton을 직접 확인한다.
+- 사용자 확인 승인 뒤 `task-final-report`를 재개하며, public access 전환과 SNS 실측은
+  Task #84 Gate C 전까지 수행하지 않는다.
 
 ## 승인 요청
 
-- Stage 4.4 산출물과 검증 결과를 승인하면 exact source owner-only saved version 재배포와
-  protected 공유·profile loading 집중 smoke로 진행한다.
+- saved version 21의 owner profile·공유 modal·공개 share direct entry 직접 확인 결과를
+  승인하면 Task #83 최종 보고 절차로 진행한다.
