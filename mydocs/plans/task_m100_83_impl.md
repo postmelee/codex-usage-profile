@@ -1298,7 +1298,11 @@ npm run verify:sites-production
 git diff --check
 ```
 
-원격 owner-only 배포는 Stage 4.5 exact source와 전체 검증·완료보고서 승인 뒤에만 수행한다.
+원격 owner-only 배포는 Stage 4.5 exact source와 전체 검증·완료보고서 승인 뒤 수행한다.
+승인된 source `0cea83436e5347eb73fcb1ccc221fdbd169ab9ed`를 saved version 22로
+배포했고, custom owner-only access revision 56·environment revision 85를 유지했다.
+hosted smoke는 owner profile Skeleton→reveal, card bitmap ready, Share Studio frame 안정성과
+protected direct share HTML의 version 22 asset 응답을 확인했다.
 
 ### 커밋
 
@@ -1386,7 +1390,9 @@ Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화
   task-final-report를 시작하지 않는다.
 - Stage 4.5는 작업지시자의 saved version 21 직접 확인과 source 수정 지시에 따라
   Skeleton/ready geometry와 content reveal만 보정한다. local 전체 검증·완료보고서 승인
-  뒤에만 exact source owner-only saved version 재배포를 요청한다.
+  뒤 exact source를 saved version 22로 owner-only 재배포했고 protected hosted smoke를
+  통과했다. 사용자 직접 확인 승인 전에는 public mutation과 task-final-report를 시작하지
+  않는다.
 - task-final-report는 Stage 4.5 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 

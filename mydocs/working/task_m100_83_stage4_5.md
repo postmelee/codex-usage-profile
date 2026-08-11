@@ -22,7 +22,7 @@ stats, heatmap, card section 구조와 정렬하고, 데이터 준비 뒤 정보
 | `src/styles.css` | 실제 line box·divider·52×7 heatmap sizing·month/option·card heading 간격 정렬과 0/40/80/120ms reveal, reduced-motion 즉시 상태 추가 |
 | `tests/profile-ui.spec.js` | loading/ready 주요 bounding box 2px 허용 오차, reveal timing·최종 상태와 reduced-motion 회귀 검증 추가 |
 | `mydocs/plans/task_m100_83.md`, `mydocs/plans/task_m100_83_impl.md` | Stage 4.5 발견 근거, 범위, 문서 위치, 구현·검증·중단 경계 기록 |
-| `mydocs/orders/20260811.md` | Stage 4.5 local 완료와 owner-only 재배포 승인 대기 상태 반영 |
+| `mydocs/orders/20260811.md` | Stage 4.5 version 22 owner-only 배포·hosted smoke와 사용자 직접 확인 대기 상태 반영 |
 
 ## 본문 변경 정도 / 본문 무손실 여부
 
@@ -64,6 +64,21 @@ git diff --check
   크기, `ok: true`
 - `git diff --check`: 이상 없음
 
+원격 owner-only 재배포 및 hosted smoke:
+
+- exact source: `0cea83436e5347eb73fcb1ccc221fdbd169ab9ed`
+- Sites saved version: 22, archive 6,256,640 bytes / 29 files
+- 접근 경계: custom owner 1명, workspace/tenant group 0개, external visitor 0명,
+  access revision 56, environment revision 85
+- hosted asset: `app-Dz_i5LBA.js`, `index-SEqwN1Iq.css`
+- owner profile 진입 직후 공통 Skeleton 1개, ready 뒤 reveal stage 1개 확인
+- ready stage: identity, stats, activity, card가 `profile-content-enter` 360ms와
+  `0/40/80/120ms` delay를 유지하고 최종 opacity `1`, translation `0`으로 정착
+- owner card bitmap 2개가 complete 상태와 유효 natural size를 유지
+- Share Studio 재진입 45 frame 동안 image 누락·미완료·숨김 0건, source 변경 0건
+- protected `/api/share/postmelee`: `200`, canonical OG/social metadata와 version 22 JS/CSS
+  asset 응답 확인
+
 전체 Node 검증의 real-workerd D1 fixture는 localhost listen이 허용된 검증 환경에서
 실행했다. Playwright package browser revision 대신 설치된 Chrome channel을 사용했고,
 same-origin fixture를 유지하도록 5187 transport의 임시 테스트 사본만 사용했다. 제품
@@ -71,8 +86,8 @@ same-origin fixture를 유지하도록 5187 transport의 임시 테스트 사본
 
 ## 잔여 위험
 
-- Stage 4.5 source는 아직 Sites에 재배포하지 않았다. 실제 hosted owner profile과 공개
-  share direct entry에서 Skeleton/ready 위치와 reveal의 지각 품질을 확인해야 한다.
+- version 22 owner-only 재배포와 자동 hosted smoke는 완료했다. 실제 화면에서의 Skeleton
+  위치와 reveal 지각 품질은 작업지시자 직접 확인 승인이 남아 있다.
 - content reveal은 initial ready stage mount에서만 실행한다. 후속 카드 설정·visibility
   저장은 같은 stage DOM을 유지하므로 animation을 다시 시작하지 않는다.
 - public access 전환과 X·Threads·카카오톡 실측은 Task #84 Gate C 범위이며 이번 단계에
@@ -80,13 +95,12 @@ same-origin fixture를 유지하도록 5187 transport의 임시 테스트 사본
 
 ## 다음 단계 영향
 
-- 이 보고서와 source를 하나의 Stage 4.5 commit으로 고정한 뒤 별도 승인으로 같은 exact
-  source를 기존 Site의 owner-only saved version으로 재배포한다.
-- owner-only smoke는 `/?view=profile`과 `/api/share/{handle}` cold entry의 위치 정합,
-  ready micro cascade, reduced-motion 즉시 상태와 Stage 4.4 공유 무깜빡임을 집중 확인한다.
-- 사용자 직접 확인 승인 뒤에만 `task-final-report`를 재개한다.
+- source commit과 saved version 22의 exact SHA 일치를 유지하고 배포 결과는 document-only
+  후속 commit으로 기록한다.
+- 작업지시자가 version 22의 Skeleton 위치·micro cascade와 공유 무깜빡임을 직접 확인해
+  승인한 뒤에만 `task-final-report`를 재개한다.
 
 ## 승인 요청
 
-- Stage 4.5 산출물과 검증 결과를 승인하면 exact source owner-only saved version
-  재배포와 protected profile transition 집중 smoke로 진행한다.
+- saved version 22에서 `/?view=profile`의 Skeleton 위치와 ready micro cascade, 공유 버튼
+  모달의 무깜빡임을 직접 확인하고 Stage 4.5 owner-only smoke 완료 여부를 승인한다.
