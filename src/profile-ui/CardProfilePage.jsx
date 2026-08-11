@@ -33,6 +33,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
   });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareSourceImage, setShareSourceImage] = useState(null);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
   useEffect(() => {
@@ -97,18 +98,29 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
 
   const closeShare = useCallback(() => {
     setShareOpen(false);
+    setShareSourceImage(null);
     shareSourceRectRef.current = null;
   }, []);
 
   async function openShare() {
+    const sourceImage = snapshotShareSourceImage({
+      displaySrc: cardImage.displaySrc,
+      scopeKey: profile?.owner?.id,
+      sourceKind: cardImage.sourceKind,
+      sourceUrl: cardImage.visibleSrc
+    });
+    const sourceRect = snapshotRect(
+      shareSourceCardRef.current?.getBoundingClientRect()
+    );
+    if (!sourceImage) return;
+
     if (cardSettingsDirty) {
       const nextProfile = await saveCardSettings();
       if (!nextProfile) return;
     }
 
-    shareSourceRectRef.current = snapshotRect(
-      shareSourceCardRef.current?.getBoundingClientRect()
-    );
+    shareSourceRectRef.current = sourceRect;
+    setShareSourceImage(sourceImage);
     setShareOpen(true);
   }
 
@@ -121,6 +133,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
       setProfileState({ error: null, profile: nextProfile, status: "ready" });
       setPreviewRevision((value) => value + 1);
       setShareOpen(false);
+      setShareSourceImage(null);
       shareSourceRectRef.current = null;
       setMutationState({ error: null, status: "idle" });
       if (authState?.account?.owner && nextProfile.owner) {
@@ -222,9 +235,10 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         makingPrivate={mutationState.status === "submitting"}
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
-        open={shareOpen && canShare}
+        open={shareOpen && (canShare || Boolean(shareSourceImage))}
         publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
+        sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
       />
@@ -474,4 +488,17 @@ function snapshotRect(rect) {
     top: rect.top,
     width: rect.width
   };
+}
+
+function snapshotShareSourceImage({ displaySrc, scopeKey, sourceKind, sourceUrl }) {
+  if (
+    typeof displaySrc !== "string" || displaySrc === "" ||
+    typeof scopeKey !== "string" || scopeKey === "" ||
+    typeof sourceKind !== "string" || sourceKind === "" ||
+    typeof sourceUrl !== "string" || sourceUrl === ""
+  ) {
+    return null;
+  }
+
+  return Object.freeze({ displaySrc, scopeKey, sourceKind, sourceUrl });
 }

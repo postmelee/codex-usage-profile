@@ -69,6 +69,7 @@ export function HomePage({
   });
   const [previewRevision, setPreviewRevision] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareSourceImage, setShareSourceImage] = useState(null);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
   const cardTransition = cardState.transition;
@@ -264,14 +265,23 @@ export function HomePage({
   }
 
   function openShare() {
+    const sourceImage = snapshotShareSourceImage({
+      displaySrc: visibleCardDisplaySrc,
+      scopeKey: ownerKey,
+      sourceKind: visibleCardSource?.kind,
+      sourceUrl: visibleCardSource?.src
+    });
+    if (!sourceImage) return;
     shareSourceRectRef.current = snapshotRect(
       shareSourceCardRef.current?.getBoundingClientRect()
     );
+    setShareSourceImage(sourceImage);
     setShareOpen(true);
   }
 
   function closeShare() {
     setShareOpen(false);
+    setShareSourceImage(null);
     shareSourceRectRef.current = null;
   }
 
@@ -284,6 +294,7 @@ export function HomePage({
       setProfileState({ error: null, profile: nextProfile, status: "ready" });
       setPreviewRevision((value) => value + 1);
       setShareOpen(false);
+      setShareSourceImage(null);
       shareSourceRectRef.current = null;
       setMutationState({ error: null, status: "idle" });
 
@@ -364,6 +375,7 @@ export function HomePage({
         open={shareOpen && canShare}
         publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
+        sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
       />
@@ -380,6 +392,19 @@ function snapshotRect(rect) {
     top: rect.top,
     width: rect.width
   };
+}
+
+function snapshotShareSourceImage({ displaySrc, scopeKey, sourceKind, sourceUrl }) {
+  if (
+    typeof displaySrc !== "string" || displaySrc === "" ||
+    typeof scopeKey !== "string" || scopeKey === "" ||
+    typeof sourceKind !== "string" || sourceKind === "" ||
+    typeof sourceUrl !== "string" || sourceUrl === ""
+  ) {
+    return null;
+  }
+
+  return Object.freeze({ displaySrc, scopeKey, sourceKind, sourceUrl });
 }
 
 function HomeSampleIdentity({ owner }) {

@@ -1870,6 +1870,123 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
   });
 
+  test("Share Studio hands off the decoded source while the public target loads", async ({ page }) => {
+    let publicPreviewFetches = 0;
+    let releasePublicCard;
+    const publicCardGate = new Promise((resolve) => {
+      releasePublicCard = resolve;
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/u/postmelee/card.png*", async (route) => {
+      if (!route.request().url().includes("theme=dark")) {
+        await route.fulfill({
+          body: CARD_PNG,
+          contentType: "image/png",
+          status: 200
+        });
+        return;
+      }
+      if (route.request().resourceType() === "fetch") publicPreviewFetches += 1;
+      await publicCardGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      }).catch(() => {});
+    });
+
+    await page.goto("/");
+    const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceImage = sourceCard.getByRole("img", { name: "Your Codex usage card" });
+    await expect(sourceImage).toHaveAttribute("src", /^blob:/);
+    const sourceBlobUrl = await sourceImage.getAttribute("src");
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const backdrop = page.getByTestId("share-studio-backdrop");
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    const motionImage = motionCard.getByRole("img", {
+      name: "Codex usage card preview"
+    });
+    const skeleton = motionCard.locator(".home-card-skeleton");
+
+    await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
+    await expect(motionCard).toHaveAttribute("data-share-target-status", "loading");
+    await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+    await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
+    await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
+    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
+    expect(publicPreviewFetches).toBe(1);
+
+    releasePublicCard();
+    await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
+    await expect(motionCard).toHaveAttribute("data-share-preview-source", "public");
+    await expect(motionImage).toHaveClass(/\bis-public-target\b/);
+    await expect(motionImage).toHaveAttribute("src", /^blob:/);
+    await expect.poll(() => motionImage.getAttribute("src")).not.toBe(sourceBlobUrl);
+    expect(publicPreviewFetches).toBe(1);
+  });
+
+  test("Share Studio restores the source when closed before the public target is ready", async ({ page }) => {
+    let releasePublicCard;
+    const publicCardGate = new Promise((resolve) => {
+      releasePublicCard = resolve;
+    });
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", (route) => route.fulfill({
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
+    }));
+    await page.route("**/u/postmelee/card.png*", async (route) => {
+      if (!route.request().url().includes("theme=dark")) {
+        await route.fulfill({
+          body: CARD_PNG,
+          contentType: "image/png",
+          status: 200
+        });
+        return;
+      }
+      await publicCardGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      }).catch(() => {});
+    });
+
+    await page.goto("/");
+    const sourceCard = page.locator('[data-card-source="true"]');
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
+    await expect(motionCard).toHaveAttribute("data-share-target-status", "loading");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceCard).toHaveCSS("opacity", "1");
+    await expect(shareButton).toBeFocused();
+
+    releasePublicCard();
+  });
+
   test("Share Studio keeps the reference composition at wide desktop", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
@@ -2167,8 +2284,12 @@ test.describe("Home and share card flow", () => {
       .getByRole("heading", { name: "Share activity" })
       .boundingBox();
     expect(fallbackTitleBox.top ?? fallbackTitleBox.y).toBeGreaterThanOrEqual(0);
-    await expect(page.getByTestId("share-studio-card-motion"))
-      .toHaveAttribute("data-motion-fallback", "preview-error");
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
+    await expect(motionCard).toHaveAttribute("data-share-target-status", "error");
+    await expect(motionCard).not.toHaveAttribute("data-motion-fallback", "preview-error");
+    await expect(motionCard.getByRole("img", { name: "Codex usage card preview" }))
+      .toHaveAttribute("src", /^blob:/);
     await expect(page.locator(".share-studio-primary-action")).toHaveCount(6);
 
     const composer = page.getByRole("link", { name: "Share on Reddit" });

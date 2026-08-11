@@ -1849,6 +1849,22 @@ button {
   width: 100%;
 }
 
+.share-studio-card.is-handoff-source {
+  animation: none;
+}
+
+.share-studio-preview-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 10px 0 -10px;
+  text-align: center;
+}
+
+.share-studio-preview-status.is-error {
+  color: var(--share-toast-danger-text);
+}
+
 .share-studio-primary-actions {
   display: grid;
   gap: 20px;

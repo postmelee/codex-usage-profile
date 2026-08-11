@@ -30,6 +30,11 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
   동일 decoded image 재요청을 보정한다. avatar 성공 bytes만 server LRU에 저장하고
   transient failure는 bounded 1회 재시도한다. client는 owner-scoped·TTL/LRU bounded
   tab-memory resource cache만 사용하며 HTTP cache header와 persistent storage는 바꾸지 않는다.
+- Stage 4.3은 saved version 19 hosted smoke에서 확인한 Workerd
+  `redirect: "error"` 비호환과 최초 Share Studio source→target 연속성만 보정한다.
+  avatar는 manual redirect + 3xx fail-closed를 사용하고, 공유 motion은 이미 decode된
+  source bitmap으로 시작해 public target 준비 뒤 교체한다. owner/public cache key,
+  route별 profile load, HTTP header와 persistent storage 경계는 바꾸지 않는다.
 
 ## 단계 개요
 
@@ -41,6 +46,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 4 | Gate B public cache 실측과 baseline 원복 | cache/revision 관찰, owner-only·disposable cleanup, 공식 상태 문서 | anonymous 경계, cache header, revision 신선도, 원복·비노출 |
 | 4.1 | 카드 readiness·Skeleton·motion 회귀 보정 | 공통 card loading contract, intro/handoff gate, profile draft 안정화 | delayed/error/reduced-motion E2E, cache 계약, owner-only smoke |
 | 4.2 | avatar 복구성과 card resource 재사용 보정 | fail-soft avatar loader, tab-memory decoded resource cache | retry/failure eviction, cross-surface dedupe, owner 격리, 전체 회귀 |
+| 4.3 | hosted avatar 호환과 공유 handoff 연속성 보정 | manual redirect fail-closed, source bitmap handoff | 3xx 거부, delayed target/failure/close/reduced-motion, hosted smoke |
 
 ## 문서 위치 확인
 
@@ -54,6 +60,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 최종 handoff | `mydocs/report/` | `mydocs/report/task_m100_83_report.md` | OK | #84 선행조건과 exact application source를 최종 정리 |
 | Stage 4.1 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_1.md` | OK | 사용자 식별자나 raw timing log 없이 상태 전환·검증 결과와 exact source만 기록 |
 | Stage 4.2 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_2.md` | OK | avatar URL·owner·provider error 원문 없이 retry/cache/resource 결과만 기록 |
+| Stage 4.3 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_3.md` | OK | hosted URL·identity 원문 없이 redirect/handoff 상태와 검증 결과만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1044,6 +1051,112 @@ git diff --check
 Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정
 ```
 
+## Stage 4.3 — hosted avatar 호환과 공유 handoff 연속성 보정
+
+### 발견 근거와 범위
+
+- saved version 19의 avatar 원본 URL은 hosted 환경에서 `200 image/jpeg`이지만 같은
+  Workerd fetch에 `redirect: "error"`를 지정하면 response 전에 `TypeError`가 발생한다.
+  `redirect: "manual"`은 정상 response를 반환하며, 기존 allowlisted HTTPS host와
+  `response.ok` 검사를 유지하면 3xx를 따라가지 않고 fail closed할 수 있다.
+- Home·owner profile은 owner preview를 이미 decoded Blob으로 표시하지만 Share Studio는
+  별도 public URL을 새 resource key로 acquire한다. `shareOpen`과 동시에 source를 숨겨
+  target 준비 동안 hero Skeleton이 노출되고, ready 뒤 실제 카드가 뒤늦게 공간 motion에
+  합류한다. 재진입 public resource cache는 이 최초 owner→public handoff를 해결하지 않는다.
+- Share button은 usage/profile JSON을 다시 읽지 않는다. 따라서 Home-only refresh로
+  제한하지 않고 route direct entry와 mutation invalidation은 유지하며, warm interaction의
+  display resource만 source→target handoff로 연결한다.
+
+### 산출물
+
+수정:
+
+- `src/profile-card/service-core.js`
+- `src/profile-card/__tests__/service.test.js`
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/HomePage.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- `src/profile-ui/useCardHandoffMotion.js` — source visibility timing 변경이 필요한 경우에만
+- `src/profile-marketing/MarketingLanding.jsx` — decoded source metadata 전달이 필요한 경우에만
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_83.md`, `mydocs/plans/task_m100_83_impl.md`
+- `mydocs/orders/20260811.md`
+
+신규:
+
+- `mydocs/working/task_m100_83_stage4_3.md` (Stage 완료 시 `task-stage-report`로 작성)
+
+### 서버 avatar 변경
+
+1. allowlisted GitHub avatar request의 fetch redirect mode를 `manual`로 바꾼다.
+2. 기존 `response.ok` 검사를 통과하지 않는 3xx는 Location을 따르거나 body를 render하지
+   않고 non-retryable `avatar_http_rejected`로 initials fallback한다.
+3. timeout, transient 1회 retry, content-type/size/body 검사, 성공 bytes TTL cache와 safe
+   observer payload는 Stage 4.2 계약을 그대로 유지한다.
+4. focused test는 exact fetch option과 redirect response 무추적·무재시도를 고정한다.
+
+### client share handoff 변경
+
+1. Home과 owner profile은 공유 click 시 source rect와 함께 현재 decoded display source,
+   canonical source kind/URL과 owner scope를 Share Studio에 전달한다.
+2. Share Studio는 source display가 있으면 그 bitmap을 handoff preview의 초기 visible image로
+   사용하고 source overlay 준비 전 원래 카드를 숨기지 않는다. source가 없을 때만 기존
+   public readiness Skeleton을 사용한다.
+3. spatial opening은 source bitmap 준비를 시작 조건으로 삼는다. public target resource는
+   기존 public URL/cache key로 background acquire하고, target settle 및 decode 완료 뒤
+   120ms 이하의 opacity 교체로 commit한다. motion 중 target 준비가 끝나도 source bitmap을
+   중간에 교체하지 않는다.
+4. public target failure는 source bitmap을 유지하되 preview unavailable 상태와 share action
+   실패 계약을 보존한다. ready 전 close는 resource lease·focus·source visibility를 즉시
+   복원하고 object URL을 누수하지 않는다.
+5. owner/public cache key를 합치지 않고, source DOM reparent와 persistent storage를 사용하지
+   않는다. Home·profile route의 profile fetch와 direct public entry Skeleton은 유지한다.
+
+### 검증
+
+focused Node:
+
+- avatar request `redirect: "manual"`, 200 bytes render와 3xx 무추적·무재시도 fallback
+- 기존 transient retry, content/size 거부, success TTL cache와 observer 회귀 부재
+
+Playwright:
+
+- delayed public target의 첫 공유에서 source bitmap이 즉시 handoff하고 hero Skeleton은
+  활성화되지 않으며 actual target ready 뒤에만 교체
+- Home과 owner profile, dirty Save & Share, public target failure, close-before-ready,
+  detached source와 reduced-motion 경로
+- 첫 public target fetch 1회, close/reopen 추가 fetch 0회와 canonical public action URL 유지
+- source가 없는 cold path는 기존 Skeleton/readiness와 error fallback 유지
+
+전체:
+
+```bash
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+원격 owner-only 배포는 Stage 4.3 exact source commit과 전체 검증 결과를 제시해 별도
+승인받은 뒤 수행한다. 이 Stage source 보정만으로 access, D1/R2, OAuth 또는 saved version을
+변경하지 않는다.
+
+### 중단·원복 조건
+
+- avatar redirect를 자동 추적하거나 allowlisted host·content/size 검사를 완화해야 한다.
+- private owner bitmap이 public cache entry로 저장되거나 public action URL에 사용된다.
+- target 준비 전 source를 숨기거나 Skeleton이 warm handoff hero로 다시 노출된다.
+- direct route loading을 Home 상태에 의존시키거나 persistent private cache가 필요해진다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -1067,6 +1180,7 @@ Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
   - `Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정`
   - `Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정`
+  - `Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정`
 
 ## 단계 의존성
 
@@ -1103,7 +1217,15 @@ Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정
   same-document resource cache를 구현했고 focused/전체 test, E2E, production build와 두
   artifact verifier를 통과했다. 완료보고서와 같은 commit으로 고정한 뒤 owner-only
   saved version 배포 승인 경계에서 중단한다.
-- task-final-report는 Stage 4.1 완료보고서와 owner-only smoke 승인 뒤 재개한다.
+- Stage 4.3은 saved version 19 owner-only smoke에서 확인한 Workerd redirect 비호환과
+  최초 공유 handoff Skeleton 결함에 대해 작업지시자의 계획·source 수정 승인으로 진행한다.
+- Stage 4.3 source·focused/전체 검증과 완료보고서 승인 뒤에만 exact source owner-only
+  saved version 배포 승인을 다시 요청한다.
+- Stage 4.3 local source는 avatar redirect 미추적 fail-closed와 warm source handoff를
+  구현했고 focused/전체 test, E2E, production build와 두 artifact verifier를 통과했다.
+  완료보고서와 같은 commit으로 고정한 뒤 owner-only saved version 재배포 승인 경계에서
+  중단한다.
+- task-final-report는 Stage 4.3 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응

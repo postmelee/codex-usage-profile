@@ -297,7 +297,7 @@ export function createProfileCardServiceCore(options = {}) {
     for (let attempt = 1; attempt <= attemptCount; attempt += 1) {
       try {
         const response = await fetchImpl(avatarUrl, {
-          redirect: "error",
+          redirect: "manual",
           signal: AbortSignal.timeout(attemptTimeoutMs)
         });
         const source = await readAvatarResponse(response, {

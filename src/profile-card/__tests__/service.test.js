@@ -323,6 +323,42 @@ test("retries one transient avatar failure and renders the recovered bytes", asy
   assert.deepEqual(Object.keys(events[0]), ["errorCode", "attempt", "retrying"]);
 });
 
+test("uses manual redirects and rejects redirect responses without following them", async () => {
+  const fetchCalls = [];
+  const events = [];
+  let renderedAvatar = "not-called";
+  const fixture = createFixture({
+    fetchImpl: async (url, options) => {
+      fetchCalls.push({ options, url });
+      return new Response(null, {
+        headers: { location: "https://example.com/private-avatar.png" },
+        status: 302
+      });
+    },
+    observeAvatarLoadFailure(event) {
+      events.push(event);
+    },
+    renderPng: async (_viewModel, options) => {
+      renderedAvatar = options.avatarSource;
+      return Buffer.from("fallback-png");
+    }
+  });
+
+  const result = await fixture.service.renderOwnerCard({ ownerId: OWNER.id });
+
+  assert.equal(result.body.toString(), "fallback-png");
+  assert.equal(renderedAvatar, null);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, OWNER.avatarUrl);
+  assert.equal(fetchCalls[0].options.redirect, "manual");
+  assert.ok(fetchCalls[0].options.signal instanceof AbortSignal);
+  assert.deepEqual(events, [{
+    errorCode: "avatar_http_rejected",
+    attempt: 1,
+    retrying: false
+  }]);
+});
+
 test("does not cache failed avatar fallbacks or derived PNGs", async () => {
   let fetchCount = 0;
   const renderedAvatars = [];
