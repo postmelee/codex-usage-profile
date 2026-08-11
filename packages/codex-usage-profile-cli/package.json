@@ -1,0 +1,49 @@
+{
+  "name": "codex-usage-profile",
+  "version": "0.1.1",
+  "description": "Connect local Codex usage to a Codex Usage Profile.",
+  "keywords": [
+    "codex",
+    "openai",
+    "usage",
+    "profile",
+    "github-readme"
+  ],
+  "homepage": "https://github.com/postmelee/codex-usage-profile#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postmelee/codex-usage-profile",
+    "directory": "packages/codex-usage-profile-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/postmelee/codex-usage-profile/issues"
+  },
+  "type": "module",
+  "bin": {
+    "codex-usage-profile": "./bin/codex-usage-profile.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "codex-usage-analyzer": "0.4.1"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "license": "MIT"
+}
