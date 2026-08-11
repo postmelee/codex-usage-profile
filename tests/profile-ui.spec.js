@@ -2661,6 +2661,73 @@ test.describe("Profile and Settings canvases", () => {
     expect(unavailableTopOffset).toBe(48);
   });
 
+  test("owner Profile loading geometry matches ready content and reveals in place", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    let releaseProfile;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/profile", { waitUntil: "domcontentloaded" });
+
+    const loadingGeometry = await readProfileGeometry(page, "loading");
+    releaseProfile();
+    await expect(page.locator(".card-profile-stage.profile-content-reveal"))
+      .toBeVisible();
+
+    const revealMotion = await page.evaluate(() => [
+      ".profile-header",
+      ".profile-stats",
+      ".token-activity",
+      ".profile-card-section"
+    ].map((selector) => {
+      const style = getComputedStyle(document.querySelector(selector));
+      return {
+        animationDelay: style.animationDelay,
+        animationDuration: style.animationDuration,
+        animationName: style.animationName
+      };
+    }));
+    expect(revealMotion.map((motion) => motion.animationName))
+      .toEqual(Array(4).fill("profile-content-enter"));
+    expect(revealMotion.map((motion) => motion.animationDelay))
+      .toEqual(["0s", "0.04s", "0.08s", "0.12s"]);
+    expect(new Set(revealMotion.map((motion) => motion.animationDuration)))
+      .toEqual(new Set(["0.36s"]));
+
+    await page.waitForTimeout(520);
+    const readyGeometry = await readProfileGeometry(page, "ready");
+    expectProfileGeometryToMatch(loadingGeometry, readyGeometry);
+
+    const settledMotion = await page.evaluate(() => [
+      ".profile-header",
+      ".profile-stats",
+      ".token-activity",
+      ".profile-card-section"
+    ].map((selector) => {
+      const style = getComputedStyle(document.querySelector(selector));
+      const matrix = new DOMMatrixReadOnly(style.transform);
+      return {
+        opacity: style.opacity,
+        translateX: matrix.m41,
+        translateY: matrix.m42
+      };
+    }));
+    expect(settledMotion).toEqual(Array(4).fill({
+      opacity: "1",
+      translateX: 0,
+      translateY: 0
+    }));
+  });
+
   test("Settings keeps semantic sections and representative mutations", async ({ page }) => {
     let createRequests = 0;
     let renameRequests = 0;
@@ -3302,7 +3369,9 @@ test.describe("Public profile", () => {
     await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
     await expect(loadingSkeleton)
       .toHaveAttribute("data-profile-loading-surface", "public");
-    await expect(loadingSkeleton.locator(".public-profile-loading-stats span"))
+    await expect(loadingSkeleton.locator(
+      ".public-profile-loading-stats > [data-skeleton-part=stat]"
+    ))
       .toHaveCount(5);
     await expect(loadingSkeleton.locator(".public-profile-loading-activity"))
       .toBeVisible();
@@ -3338,6 +3407,8 @@ test.describe("Public profile", () => {
       name: "Post Melee"
     }))
       .toBeVisible();
+    await expect(page.locator(".public-profile-stage.profile-content-reveal"))
+      .toBeVisible();
   });
 
   test("profile loading Skeleton stops decorative motion for reduced motion", async ({ page }) => {
@@ -3364,6 +3435,34 @@ test.describe("Public profile", () => {
     expect(reducedMotion.placeholderShimmers.every((style) => (
       style.animationName === "none" && style.opacity === "0"
     ))).toBe(true);
+  });
+
+  test("profile content reveal settles immediately for reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+    await dismissCardIntro(page);
+
+    const reducedReveal = await page.evaluate(() => [
+      ".profile-header",
+      ".profile-stats",
+      ".token-activity",
+      ".profile-card-section"
+    ].map((selector) => {
+      const style = getComputedStyle(document.querySelector(selector));
+      return {
+        animationName: style.animationName,
+        opacity: style.opacity,
+        transform: style.transform
+      };
+    }));
+    expect(reducedReveal).toEqual(Array(4).fill({
+      animationName: "none",
+      opacity: "1",
+      transform: "none"
+    }));
   });
 
   test("public profile uses one identity-free unavailable state", async ({ page }) => {
@@ -3808,6 +3907,55 @@ function ownerProfile(visibility) {
     },
     visibility
   };
+}
+
+async function readProfileGeometry(page, state) {
+  const selectors = state === "loading"
+    ? {
+        activity: ".profile-loading-activity",
+        avatar: ".profile-loading-avatar",
+        card: ".profile-loading-card",
+        cardHeading: ".profile-loading-card-header",
+        cardPreview: ".profile-loading-card .home-card-tilt",
+        grid: ".profile-loading-activity-grid",
+        handle: ".profile-loading-handle",
+        name: ".profile-loading-name",
+        option: ".profile-loading-activity-option",
+        stats: ".profile-loading-stats"
+      }
+    : {
+        activity: ".token-activity",
+        avatar: ".avatar-shell",
+        card: ".profile-card-section",
+        cardHeading: ".card-profile-heading",
+        cardPreview: ".profile-card-section .home-card-tilt",
+        grid: ".token-grid",
+        handle: ".profile-heading p",
+        name: ".profile-heading h1",
+        option: ".token-activity-options",
+        stats: ".profile-stats"
+      };
+
+  return page.evaluate((geometrySelectors) => Object.fromEntries(
+    Object.entries(geometrySelectors).map(([key, selector]) => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return [key, {
+        height: rect.height,
+        top: rect.top
+      }];
+    })
+  ), selectors);
+}
+
+function expectProfileGeometryToMatch(loading, ready) {
+  for (const key of Object.keys(loading)) {
+    expect(Math.abs(loading[key].top - ready[key].top), `${key} top`).toBeLessThanOrEqual(2);
+    if (key === "card") continue;
+    expect(
+      Math.abs(loading[key].height - ready[key].height),
+      `${key} height`
+    ).toBeLessThanOrEqual(2);
+  }
 }
 
 async function fulfillJson(route, body, status = 200) {

@@ -51,6 +51,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 4.2 | avatar 복구성과 card resource 재사용 보정 | fail-soft avatar loader, tab-memory decoded resource cache | retry/failure eviction, cross-surface dedupe, owner 격리, 전체 회귀 |
 | 4.3 | hosted avatar 호환과 공유 handoff 연속성 보정 | manual redirect fail-closed, source bitmap handoff | 3xx 거부, delayed target/failure/close/reduced-motion, hosted smoke |
 | 4.4 | 공유 전환·프로필 Skeleton 연속성 보정 | warm target motion continuity, 공통 profile Skeleton | opacity 연속성, 요소별 shimmer, identity 비노출, reduced-motion |
+| 4.5 | Skeleton/ready 위치·reveal 정합화 | ready-equivalent placeholder geometry, content micro cascade | bounding box, final opacity/transform, replay 부재, reduced-motion |
 
 ## 문서 위치 확인
 
@@ -66,6 +67,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Stage 4.2 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_2.md` | OK | avatar URL·owner·provider error 원문 없이 retry/cache/resource 결과만 기록 |
 | Stage 4.3 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_3.md` | OK | hosted URL·identity 원문 없이 redirect/handoff 상태와 검증 결과만 기록 |
 | Stage 4.4 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_4.md` | OK | 사용자 identity·hosted URL 원문 없이 target opacity와 Skeleton 상태·검증 결과만 기록 |
+| Stage 4.5 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_5.md` | 예정 | 사용자 identity·usage 없이 layout delta와 animation 계약만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1249,6 +1251,61 @@ git diff --check
 Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정
 ```
 
+## Stage 4.5 — Skeleton/ready 위치와 content reveal 정합화
+
+### 발견 근거와 범위
+
+- saved version 21 직접 확인에서 warm target 깜빡임 제거는 승인됐다.
+- 공통 Skeleton은 identity name/handle line box가 ready보다 짧고, stats를 단일 pill로
+  표현하며, activity month label·option spacing과 card section heading을 생략한다.
+  이 높이 차이가 아래 section으로 누적돼 loading과 ready 위치가 다르게 보인다.
+- ready content는 API state 전환과 동시에 최종 opacity로 mount돼 Skeleton 제거 뒤 정보가
+  갑자기 나타난다.
+- Stage 4.5는 공통 Skeleton markup/CSS와 ready stage entrance class만 수정한다. profile
+  fetch, card resource/cache/readiness, API·publication·access 계약은 변경하지 않는다.
+
+### 구현 계약
+
+1. identity avatar/name/handle, stats 5개 value/label와 divider, activity header/grid/month
+   label/option, card heading/preview를 ready component와 같은 box hierarchy·간격으로 맞춘다.
+2. loading DOM에는 실제 identity·usage를 넣지 않고 중립 placeholder만 렌더한다.
+3. ready stage는 identity, stats, activity, card section 순으로 0/40/80/120ms delay를 사용하고
+   각 entrance는 6px 이하 translation과 opacity를 360ms decelerating curve로 정착시킨다.
+4. 전체 cascade는 500ms 안에 끝나며 profile state의 후속 저장·공개 전환 rerender에서는
+   animation을 다시 시작하지 않는다.
+5. `prefers-reduced-motion`에서는 animation과 transform을 제거하고 최종 상태를 즉시 표시한다.
+
+### 예상 변경 파일
+
+- `src/profile-ui/ProfileLoadingSkeleton.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_83.md`
+- `mydocs/plans/task_m100_83_impl.md`
+- `mydocs/orders/20260811.md`
+- `mydocs/working/task_m100_83_stage4_5.md`
+
+### 검증
+
+```bash
+npm test -- --test-concurrency=1
+npx playwright test
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+원격 owner-only 배포는 Stage 4.5 exact source와 전체 검증·완료보고서 승인 뒤에만 수행한다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -1274,6 +1331,7 @@ Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정
   - `Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정`
   - `Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정`
   - `Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정`
+  - `Task #83 [Stage 4.5]: 프로필 loading/ready 전환 정합화`
 
 ## 단계 의존성
 
@@ -1326,7 +1384,10 @@ Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정
   profile/share HTML과 hosted warm target·공통 Skeleton smoke를 통과했다. access revision
   56의 custom owner-only 경계는 유지하며 사용자 직접 확인 승인 전에는 public mutation과
   task-final-report를 시작하지 않는다.
-- task-final-report는 Stage 4.4 완료보고서와 owner-only smoke 승인 뒤 재개한다.
+- Stage 4.5는 작업지시자의 saved version 21 직접 확인과 source 수정 지시에 따라
+  Skeleton/ready geometry와 content reveal만 보정한다. local 전체 검증·완료보고서 승인
+  뒤에만 exact source owner-only saved version 재배포를 요청한다.
+- task-final-report는 Stage 4.5 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응

@@ -282,7 +282,7 @@ function CardProfileContent(props) {
   }
 
   return (
-    <div className="card-profile-stage">
+    <div className="card-profile-stage profile-content-reveal">
       <AccountUsageProfile
         headingId="card-profile-title"
         owner={props.profile.owner}

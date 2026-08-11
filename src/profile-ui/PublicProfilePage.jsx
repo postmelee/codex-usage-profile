@@ -85,7 +85,7 @@ function PublicProfileStage({
   });
 
   return (
-    <div className="public-profile-stage">
+    <div className="public-profile-stage profile-content-reveal">
       {banner}
 
       <AccountUsageProfile

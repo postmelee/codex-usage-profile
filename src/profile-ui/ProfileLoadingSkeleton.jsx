@@ -2,6 +2,7 @@ import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx"
 
 const PROFILE_LOADING_STAT_COUNT = 5;
 const PROFILE_LOADING_ACTIVITY_ROW_COUNT = 7;
+const PROFILE_LOADING_MONTH_COUNT = 12;
 const PROFILE_LOADING_TAB_COUNT = 3;
 
 export function ProfileLoadingSkeleton({
@@ -45,11 +46,21 @@ export function ProfileLoadingSkeleton({
       >
         {Array.from({ length: PROFILE_LOADING_STAT_COUNT }, (_, index) => (
           <span
-            className="profile-loading-shimmer"
+            className="profile-loading-stat"
             data-skeleton-part="stat"
             key={index}
-            style={{ "--profile-skeleton-delay": `${-80 * index}ms` }}
-          />
+          >
+            <span
+              className="profile-loading-stat-value profile-loading-shimmer"
+              data-skeleton-part="stat-value"
+              style={{ "--profile-skeleton-delay": `${-80 * index}ms` }}
+            />
+            <span
+              className="profile-loading-stat-label profile-loading-shimmer"
+              data-skeleton-part="stat-label"
+              style={{ "--profile-skeleton-delay": `${-80 * index - 120}ms` }}
+            />
+          </span>
         ))}
       </div>
 
@@ -73,15 +84,27 @@ export function ProfileLoadingSkeleton({
             ))}
           </span>
         </div>
-        <span className="profile-loading-activity-grid">
-          {Array.from({ length: PROFILE_LOADING_ACTIVITY_ROW_COUNT }, (_, index) => (
-            <span
-              className="profile-loading-activity-row profile-loading-shimmer"
-              data-skeleton-part="activity-row"
-              key={index}
-              style={{ "--profile-skeleton-delay": `${-90 * index}ms` }}
-            />
-          ))}
+        <span className="profile-loading-activity-grid-wrap">
+          <span className="profile-loading-activity-grid">
+            {Array.from({ length: PROFILE_LOADING_ACTIVITY_ROW_COUNT }, (_, index) => (
+              <span
+                className="profile-loading-activity-row profile-loading-shimmer"
+                data-skeleton-part="activity-row"
+                key={index}
+                style={{ "--profile-skeleton-delay": `${-90 * index}ms` }}
+              />
+            ))}
+          </span>
+          <span className="profile-loading-activity-months">
+            {Array.from({ length: PROFILE_LOADING_MONTH_COUNT }, (_, index) => (
+              <span
+                className="profile-loading-shimmer"
+                data-skeleton-part="activity-month"
+                key={index}
+                style={{ "--profile-skeleton-delay": `${-70 * index}ms` }}
+              />
+            ))}
+          </span>
         </span>
         <span
           className="profile-loading-activity-option profile-loading-shimmer"
@@ -91,6 +114,18 @@ export function ProfileLoadingSkeleton({
       </div>
 
       <div className="profile-loading-card public-profile-loading-card">
+        <div aria-hidden="true" className="profile-loading-card-header">
+          <span
+            className="profile-loading-card-title profile-loading-shimmer"
+            data-skeleton-part="card-title"
+            style={{ "--profile-skeleton-delay": "-160ms" }}
+          />
+          <span
+            className="profile-loading-card-status profile-loading-shimmer"
+            data-skeleton-part="card-status"
+            style={{ "--profile-skeleton-delay": "-280ms" }}
+          />
+        </div>
         <MarketingCardPreview
           alt=""
           busy
