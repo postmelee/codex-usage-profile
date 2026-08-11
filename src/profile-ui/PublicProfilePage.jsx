@@ -5,6 +5,7 @@ import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { PublicCardIntro } from "./PublicCardIntro.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { ProfileLoadingSkeleton } from "./ProfileLoadingSkeleton.jsx";
 import { getAccountOwner } from "./accountUi.js";
 import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 import { buildLocalizedCardUrl, buildProfileLoginHref } from "./cardShare.js";
@@ -154,7 +155,14 @@ function PublicProfileState({
   }
 
   if (status === "loading") {
-    return <PublicProfileLoadingSkeleton />;
+    return (
+      <ProfileLoadingSkeleton
+        description={t("profile.public.fetching")}
+        loadingLabel={t("profile.public.fetching")}
+        surface="public"
+        title={t("profile.public.loading")}
+      />
+    );
   }
 
   return (
@@ -254,44 +262,6 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
       preview
       profile={profile}
     />
-  );
-}
-
-function PublicProfileLoadingSkeleton() {
-  const { t } = useLocale();
-
-  return (
-    <div
-      aria-busy="true"
-      className="public-profile-loading-skeleton"
-      data-testid="public-profile-loading-skeleton"
-    >
-      <div aria-hidden="true" className="public-profile-loading-identity">
-        <span className="public-profile-loading-avatar" />
-        <span className="public-profile-loading-name" />
-        <span className="public-profile-loading-handle" />
-      </div>
-      <div aria-hidden="true" className="public-profile-loading-stats">
-        {Array.from({ length: 5 }, (_, index) => (
-          <span key={index} />
-        ))}
-      </div>
-      <div aria-hidden="true" className="public-profile-loading-activity">
-        <span />
-      </div>
-      <div className="public-profile-loading-card">
-        <MarketingCardPreview
-          alt=""
-          busy
-          loadingLabel={t("profile.public.fetching")}
-          sourceKind="public"
-          src={null}
-          status="loading"
-        />
-      </div>
-      <h1 className="sr-only">{t("profile.public.loading")}</h1>
-      <p className="sr-only">{t("profile.public.fetching")}</p>
-    </div>
   );
 }
 

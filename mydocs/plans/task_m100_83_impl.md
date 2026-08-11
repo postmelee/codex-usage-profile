@@ -35,6 +35,9 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
   avatar는 manual redirect + 3xx fail-closed를 사용하고, 공유 motion은 이미 decode된
   source bitmap으로 시작해 public target 준비 뒤 교체한다. owner/public cache key,
   route별 profile load, HTTP header와 persistent storage 경계는 바꾸지 않는다.
+- Stage 4.4는 saved version 20 hosted smoke에서 확인한 warm target 중복 fade와 profile
+  loading 표현 불일치만 보정한다. source 없는 cold readiness fade와 route별 fetch,
+  public media/cache·publication·access 계약은 변경하지 않는다.
 
 ## 단계 개요
 
@@ -47,6 +50,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 4.1 | 카드 readiness·Skeleton·motion 회귀 보정 | 공통 card loading contract, intro/handoff gate, profile draft 안정화 | delayed/error/reduced-motion E2E, cache 계약, owner-only smoke |
 | 4.2 | avatar 복구성과 card resource 재사용 보정 | fail-soft avatar loader, tab-memory decoded resource cache | retry/failure eviction, cross-surface dedupe, owner 격리, 전체 회귀 |
 | 4.3 | hosted avatar 호환과 공유 handoff 연속성 보정 | manual redirect fail-closed, source bitmap handoff | 3xx 거부, delayed target/failure/close/reduced-motion, hosted smoke |
+| 4.4 | 공유 전환·프로필 Skeleton 연속성 보정 | warm target motion continuity, 공통 profile Skeleton | opacity 연속성, 요소별 shimmer, identity 비노출, reduced-motion |
 
 ## 문서 위치 확인
 
@@ -61,6 +65,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Stage 4.1 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_1.md` | OK | 사용자 식별자나 raw timing log 없이 상태 전환·검증 결과와 exact source만 기록 |
 | Stage 4.2 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_2.md` | OK | avatar URL·owner·provider error 원문 없이 retry/cache/resource 결과만 기록 |
 | Stage 4.3 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_3.md` | OK | hosted URL·identity 원문 없이 redirect/handoff 상태와 검증 결과만 기록 |
+| Stage 4.4 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_4.md` | OK | 사용자 identity·hosted URL 원문 없이 target opacity와 Skeleton 상태·검증 결과만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1157,6 +1162,93 @@ git diff --check
 Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정
 ```
 
+## Stage 4.4 — 공유 전환·프로필 Skeleton 연속성 보정
+
+### 발견 근거와 범위
+
+- saved version 20의 warm Share Studio handoff는 source bitmap으로 공간 이동을 정상 완료한
+  뒤 public target class로 바뀌는 순간 `.share-studio-card` 기본 crossfade가 다시 시작한다.
+  wrapper transform은 이미 identity인데 image opacity가 낮아졌다 복귀하므로 네트워크나
+  Skeleton과 무관한 중복 fade다.
+- public profile loading은 identity·stats·activity·card 구조를 갖추고도 최상위 wrapper의
+  `::after` 하나가 전체 높이를 횡단한다. owner profile은 동일한 ready layout 앞에서 text
+  message만 표시해 두 route의 loading hierarchy와 layout 안정성이 다르다.
+- Stage 4.4는 client motion class와 공통 loading component/CSS만 수정한다. fetch 빈도,
+  card resource key/lease, API response, public cache·ETag와 Sites access는 범위 밖이다.
+
+### 산출물
+
+수정:
+
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/PublicProfilePage.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- `src/styles.css`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_83.md`, `mydocs/plans/task_m100_83_impl.md`
+- `mydocs/orders/20260811.md`
+
+신규:
+
+- `src/profile-ui/ProfileLoadingSkeleton.jsx`
+- `mydocs/working/task_m100_83_stage4_4.md` (Stage 완료 시 `task-stage-report`로 작성)
+
+### client motion 변경
+
+1. Share Studio는 decoded source를 사용한 warm handoff에서 public target이 준비돼 교체돼도
+   image-level crossfade animation을 다시 시작하지 않는다.
+2. source가 없는 cold path는 기존 120ms readiness fade, error와 Skeleton 계약을 유지한다.
+3. target class와 warm/cold 상태를 DOM attribute/class로 구분해 E2E가 opacity·animation-name
+   연속성을 직접 고정한다.
+
+### 공통 profile Skeleton 변경
+
+1. 공개·소유자 profile loading은 identity를 포함하지 않는 공통 구조형 component를 사용한다.
+2. 최상위 page-wide shimmer를 제거하고 avatar, name, handle, 각 stat, activity header/tabs/grid,
+   card preview가 자신의 경계에서 loading 상태를 표현한다. 실제 usage·card data는 렌더하지 않는다.
+3. 공통 Skeleton은 ready layout의 920px width, profile header→stats→activity→card 순서와
+   단일 sr-only `h1`을 유지한다. owner/public 별 접근성 문구와 test id만 구분한다.
+4. `prefers-reduced-motion: reduce`에서는 공통 placeholder와 card Skeleton sheen을 정지한다.
+
+### 검증
+
+Playwright:
+
+- delayed public target warm handoff가 public class로 바뀐 뒤에도 image animation-name `none`,
+  opacity `1`을 유지하고 hero Skeleton이 비활성인 상태
+- source 없는 cold path의 readiness fade와 error/reduced-motion 회귀 부재
+- public profile loading의 page wrapper pseudo animation 부재와 identity·stats·activity 요소별
+  shimmer, owner profile의 같은 공통 구조·단일 sr-only heading
+- 두 loading route에서 실제 identity 비노출, ready 전환 뒤 정상 heading과 layout 회귀 부재
+
+전체:
+
+```bash
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+원격 owner-only 배포는 Stage 4.4 exact source commit과 전체 검증 결과를 제시해 별도
+승인받은 뒤 수행한다. 이 Stage source 보정만으로 access, D1/R2, OAuth 또는 saved version을
+변경하지 않는다.
+
+### 중단·원복 조건
+
+- warm target 보정을 위해 public target readiness를 기다리지 않거나 spatial handoff를 제거해야 한다.
+- 공통 Skeleton에 실제 identity/usage를 임시 값으로 노출하거나 page fetch를 공유해야 한다.
+- per-element shimmer가 과도한 DOM animation·layout shift를 만들거나 reduced-motion을 무시한다.
+- cold path의 readiness·error fallback 또는 public media/cache 계약이 달라진다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -1181,6 +1273,7 @@ Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정
   - `Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정`
   - `Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정`
   - `Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정`
+  - `Task #83 [Stage 4.4]: 공유 전환과 프로필 Skeleton 보정`
 
 ## 단계 의존성
 
@@ -1225,7 +1318,11 @@ Task #83 [Stage 4.3]: hosted avatar와 공유 handoff 보정
   구현했고 focused/전체 test, E2E, production build와 두 artifact verifier를 통과했다.
   완료보고서와 같은 commit으로 고정한 뒤 owner-only saved version 재배포 승인 경계에서
   중단한다.
-- task-final-report는 Stage 4.3 완료보고서와 owner-only smoke 승인 뒤 재개한다.
+- Stage 4.4는 saved version 20 owner-only smoke에서 확인한 warm target 중복 fade와
+  profile loading 불일치를 근거로 작업지시자의 계획·source 수정 승인 후 진행한다.
+- Stage 4.4 source·focused/전체 검증과 완료보고서 승인 뒤에만 exact source owner-only
+  saved version 재배포 승인을 다시 요청한다.
+- task-final-report는 Stage 4.4 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응

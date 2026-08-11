@@ -1932,6 +1932,9 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
     await expect(motionCard).toHaveAttribute("data-share-preview-source", "public");
     await expect(motionImage).toHaveClass(/\bis-public-target\b/);
+    await expect(motionImage).toHaveClass(/\bis-warm-handoff-target\b/);
+    await expect(motionImage).toHaveCSS("animation-name", "none");
+    await expect(motionImage).toHaveCSS("opacity", "1");
     await expect(motionImage).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => motionImage.getAttribute("src")).not.toBe(sourceBlobUrl);
     expect(publicPreviewFetches).toBe(1);
@@ -2571,8 +2574,19 @@ test.describe("Profile and Settings canvases", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Loading profile" }))
       .toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    const ownerLoadingSkeleton = page.getByTestId("owner-profile-loading-skeleton");
+    await expect(ownerLoadingSkeleton).toHaveAttribute("aria-busy", "true");
+    await expect(ownerLoadingSkeleton)
+      .toHaveAttribute("data-profile-loading-surface", "owner");
+    await expect(ownerLoadingSkeleton.locator("[data-skeleton-part=stat]"))
+      .toHaveCount(5);
+    await expect(ownerLoadingSkeleton.locator("[data-skeleton-part=activity-row]"))
+      .toHaveCount(7);
+    await expect(ownerLoadingSkeleton.locator(".home-card-skeleton"))
+      .toHaveAttribute("data-active", "true");
+    await expect(page.locator(".card-profile-message")).toHaveCount(0);
     const loadingTopOffset = await page.evaluate(() => {
-      const message = document.querySelector(".card-profile-message").getBoundingClientRect();
+      const message = document.querySelector(".profile-loading-skeleton").getBoundingClientRect();
       const topbar = document.querySelector(".profile-topbar").getBoundingClientRect();
       return Math.round(message.top - topbar.bottom);
     });
@@ -3286,15 +3300,30 @@ test.describe("Public profile", () => {
       .toBeVisible();
     const loadingSkeleton = page.getByTestId("public-profile-loading-skeleton");
     await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
+    await expect(loadingSkeleton)
+      .toHaveAttribute("data-profile-loading-surface", "public");
     await expect(loadingSkeleton.locator(".public-profile-loading-stats span"))
       .toHaveCount(5);
     await expect(loadingSkeleton.locator(".public-profile-loading-activity"))
       .toBeVisible();
+    await expect(loadingSkeleton.locator("[data-skeleton-part=activity-row]"))
+      .toHaveCount(7);
     await expect(loadingSkeleton.locator(".home-card-media"))
       .toHaveAttribute("data-card-status", "loading");
     await expect(loadingSkeleton.locator(".home-card-skeleton"))
       .toHaveAttribute("data-active", "true");
     await expect(page.locator(".profile-state-indicator")).toHaveCount(0);
+    const skeletonMotion = await loadingSkeleton.evaluate((element) => ({
+      pageAnimation: getComputedStyle(element, "::after").animationName,
+      shimmerAnimations: Array.from(
+        element.querySelectorAll(".profile-loading-shimmer")
+      ).map((placeholder) => getComputedStyle(placeholder, "::after").animationName)
+    }));
+    expect(skeletonMotion.pageAnimation).toBe("none");
+    expect(skeletonMotion.shimmerAnimations.length).toBeGreaterThan(10);
+    expect(new Set(skeletonMotion.shimmerAnimations)).toEqual(
+      new Set(["home-card-skeleton-progress"])
+    );
     // Scoped to the profile region: the footer carries a constant author
     // credit, which is identical on every page and reveals nothing about the
     // handle being loaded.
@@ -3309,6 +3338,32 @@ test.describe("Public profile", () => {
       name: "Post Melee"
     }))
       .toBeVisible();
+  });
+
+  test("profile loading Skeleton stops decorative motion for reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await mockAnonymousAccount(page);
+    await page.route("**/api/profiles/public/postmelee", () => new Promise(() => {}));
+    await page.goto(PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const loadingSkeleton = page.getByTestId("public-profile-loading-skeleton");
+    await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
+    const reducedMotion = await loadingSkeleton.evaluate((element) => ({
+      cardShimmer: getComputedStyle(
+        element.querySelector(".home-card-skeleton"),
+        "::after"
+      ).animationName,
+      placeholderShimmers: Array.from(
+        element.querySelectorAll(".profile-loading-shimmer")
+      ).map((placeholder) => ({
+        animationName: getComputedStyle(placeholder, "::after").animationName,
+        opacity: getComputedStyle(placeholder, "::after").opacity
+      }))
+    }));
+    expect(reducedMotion.cardShimmer).toBe("none");
+    expect(reducedMotion.placeholderShimmers.every((style) => (
+      style.animationName === "none" && style.opacity === "0"
+    ))).toBe(true);
   });
 
   test("public profile uses one identity-free unavailable state", async ({ page }) => {

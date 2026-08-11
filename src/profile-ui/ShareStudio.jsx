@@ -286,7 +286,7 @@ export function ShareStudio({
             alt={copy.previewAlt}
             busy={previewBusy}
             errorLabel={copy.previewUnavailable}
-            imageClassName={`share-card-preview share-studio-card${showPublicTarget ? " is-public-target" : hasWarmSource ? " is-handoff-source" : ""}`}
+            imageClassName={`share-card-preview share-studio-card${showPublicTarget ? ` is-public-target${hasWarmSource ? " is-warm-handoff-target" : ""}` : hasWarmSource ? " is-handoff-source" : ""}`}
             loadingLabel={copy.previewAlt}
             onError={showPublicTarget ? handlePreviewError : undefined}
             sourceKind={previewSourceKind}

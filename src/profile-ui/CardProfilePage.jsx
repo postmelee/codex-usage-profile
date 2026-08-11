@@ -4,6 +4,7 @@ import { MarketingCardPreview } from "../profile-marketing/MarketingLanding.jsx"
 import { AccountUsageProfile } from "./AccountUsageProfile.jsx";
 import { CardStyleSettings } from "./CardStyleSettings.jsx";
 import { ProfileShell } from "./ProfileShell.jsx";
+import { ProfileLoadingSkeleton } from "./ProfileLoadingSkeleton.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import { Icon } from "./Icons.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
@@ -260,7 +261,13 @@ function CardProfileContent(props) {
     );
   }
   if (authStatus === "loading" || profileState.status === "loading") {
-    return <ProfileMessage title={t("profile.loading.title")} />;
+    return (
+      <ProfileLoadingSkeleton
+        loadingLabel={t("profile.loading.title")}
+        surface="owner"
+        title={t("profile.loading.title")}
+      />
+    );
   }
   if (authStatus === "unavailable" || profileState.status === "error") {
     return (

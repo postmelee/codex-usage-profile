@@ -1488,15 +1488,22 @@ button {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-.public-profile-loading-skeleton {
+.profile-loading-skeleton {
   min-width: 0;
-  overflow: hidden;
   position: relative;
   width: min(100%, 920px);
 }
 
-.public-profile-loading-skeleton::after {
+.profile-loading-shimmer {
+  background: var(--card-preview-placeholder-subtle);
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+.profile-loading-shimmer::after {
   animation: home-card-skeleton-progress 1.6s linear infinite;
+  animation-delay: var(--profile-skeleton-delay, 0ms);
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -1510,47 +1517,39 @@ button {
   pointer-events: none;
   position: absolute;
   transform: translateX(-100%);
-  z-index: 5;
+  z-index: 1;
 }
 
-.public-profile-loading-identity {
+.profile-loading-identity {
   align-items: center;
   display: flex;
   flex-direction: column;
 }
 
-.public-profile-loading-avatar,
-.public-profile-loading-name,
-.public-profile-loading-handle,
-.public-profile-loading-stats span,
-.public-profile-loading-activity {
-  background: var(--card-preview-placeholder-subtle);
-}
-
-.public-profile-loading-avatar {
+.profile-loading-avatar {
   border-radius: 50%;
   height: 72px;
   width: 72px;
 }
 
-.public-profile-loading-name,
-.public-profile-loading-handle {
+.profile-loading-name,
+.profile-loading-handle {
   border-radius: 999px;
 }
 
-.public-profile-loading-name {
+.profile-loading-name {
   height: 24px;
   margin-top: 20px;
   width: min(42%, 260px);
 }
 
-.public-profile-loading-handle {
+.profile-loading-handle {
   height: 14px;
   margin-top: 9px;
   width: min(24%, 150px);
 }
 
-.public-profile-loading-stats {
+.profile-loading-stats {
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   display: grid;
@@ -1561,25 +1560,78 @@ button {
   padding: 24px;
 }
 
-.public-profile-loading-stats span {
+.profile-loading-stats > span {
   border-radius: 999px;
   height: 20px;
 }
 
-.public-profile-loading-activity {
-  border-radius: 14px;
-  height: 180px;
+.profile-loading-activity {
   margin-top: 50px;
-  opacity: 0.72;
+  min-width: 0;
+  width: 100%;
 }
 
-.public-profile-loading-card {
+.profile-loading-activity-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.profile-loading-activity-title {
+  border-radius: 999px;
+  height: 16px;
+  width: 90px;
+}
+
+.profile-loading-activity-tabs {
+  display: flex;
+  gap: 18px;
+}
+
+.profile-loading-activity-tabs > span {
+  border-radius: 999px;
+  height: 14px;
+  width: 52px;
+}
+
+.profile-loading-activity-grid {
+  display: grid;
+  gap: 3px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.profile-loading-activity-row {
+  -webkit-mask-image: repeating-linear-gradient(
+    90deg,
+    black 0 13px,
+    transparent 13px 16px
+  );
+  height: 13px;
+  mask-image: repeating-linear-gradient(
+    90deg,
+    black 0 13px,
+    transparent 13px 16px
+  );
+  width: 100%;
+}
+
+.profile-loading-activity-option {
+  border-radius: 999px;
+  height: 14px;
+  margin-left: auto;
+  margin-top: 10px;
+  width: 132px;
+}
+
+.profile-loading-card {
   border-top: 1px solid var(--border-subtle);
   margin-top: 56px;
   padding-top: 32px;
 }
 
-.public-profile-loading-card .home-card-tilt {
+.profile-loading-card .home-card-tilt {
   margin-inline: auto;
   margin-top: 0;
 }
@@ -1656,10 +1708,16 @@ button {
     flex-direction: column;
   }
 
-  .public-profile-loading-stats {
+  .profile-loading-stats {
     gap: 12px;
     grid-template-columns: 1fr;
     padding: 20px;
+  }
+
+  .profile-loading-activity-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 }
 
@@ -1849,7 +1907,8 @@ button {
   width: 100%;
 }
 
-.share-studio-card.is-handoff-source {
+.share-studio-card.is-handoff-source,
+.share-studio-card.is-warm-handoff-target {
   animation: none;
 }
 
@@ -3589,7 +3648,7 @@ button {
     transform: none;
   }
 
-  .public-profile-loading-skeleton::after {
+  .profile-loading-shimmer::after {
     animation: none;
     opacity: 0;
     transform: none;
