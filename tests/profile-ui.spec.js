@@ -670,8 +670,9 @@ test.describe("Home and share card flow", () => {
     await page.goto("/");
 
     const ownerPreview = page.getByRole("img", { name: "Your Codex usage card" });
-    await expect(ownerPreview).toHaveAttribute(
-      "src",
+    await expect(ownerPreview).toHaveAttribute("src", /^blob:/);
+    await expect(page.locator(".home-card-media")).toHaveAttribute(
+      "data-card-source-url",
       "/api/profile/card.png?locale=en&theme=dark"
     );
     await expect.poll(() => ownerPreview.evaluate((image) => image.naturalWidth)).toBe(1497);
@@ -766,8 +767,9 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-status", "ready");
     await expect(media).toHaveAttribute("data-card-source-kind", "operator");
     await expect(media).toHaveAttribute("aria-busy", "false");
-    await expect(operatorCard).toHaveAttribute(
-      "src",
+    await expect(operatorCard).toHaveAttribute("src", /^blob:/);
+    await expect(media).toHaveAttribute(
+      "data-card-source-url",
       "/u/postmelee/card.png?locale=en"
     );
     await expect.poll(() => operatorCard.evaluate((image) => image.naturalWidth))
@@ -793,8 +795,9 @@ test.describe("Home and share card flow", () => {
       await expect(media).toHaveAttribute("data-card-status", "fallback");
       await expect(media).toHaveAttribute("data-card-source-kind", "sample");
       await expect(media).toHaveAttribute("aria-busy", "false");
-      await expect(sampleCard).toHaveAttribute(
-        "src",
+      await expect(sampleCard).toHaveAttribute("src", /^blob:/);
+      await expect(media).toHaveAttribute(
+        "data-card-source-url",
         "/assets/codex-card-sample.png"
       );
       await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
@@ -884,7 +887,8 @@ test.describe("Home and share card flow", () => {
         const nextSource = mediaElement?.querySelector("img")?.getAttribute("src") ?? null;
         if (
           nextSource !== previousSource &&
-          nextSource?.includes("/api/profile/card.png")
+          nextSource?.startsWith("blob:") &&
+          mediaElement?.dataset.cardSourceKind === "owner"
         ) {
           globalThis.__ownerCardDomCommits += 1;
         }
@@ -901,8 +905,9 @@ test.describe("Home and share card flow", () => {
     const ownerCard = page.getByRole("img", {
       name: "Your Codex usage card"
     });
-    await expect(ownerCard).toHaveAttribute(
-      "src",
+    await expect(ownerCard).toHaveAttribute("src", /^blob:/);
+    await expect(media).toHaveAttribute(
+      "data-card-source-url",
       "/api/profile/card.png?locale=en&theme=dark"
     );
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
@@ -1106,7 +1111,11 @@ test.describe("Home and share card flow", () => {
       await expect(media).toHaveAttribute("data-card-source-kind", "sample");
       await expect(page.getByRole("img", {
         name: "Sample Codex usage card"
-      })).toHaveAttribute("src", "/assets/codex-card-sample.png");
+      })).toHaveAttribute("src", /^blob:/);
+      await expect(media).toHaveAttribute(
+        "data-card-source-url",
+        "/assets/codex-card-sample.png"
+      );
       await expect(page.locator(".home-card-sample-identity")).toBeVisible();
       await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
       await expect(page.locator('img[src*="/api/profile/card.png"]')).toHaveCount(0);
@@ -1115,9 +1124,32 @@ test.describe("Home and share card flow", () => {
 
   test("Home card transition fails closed when owner image decode rejects", async ({ page }) => {
     await page.addInitScript(() => {
+      const blobSources = new WeakMap();
+      const objectUrlSources = new Map();
+      const originalFetch = globalThis.fetch.bind(globalThis);
+      globalThis.fetch = async function fetch(input, init) {
+        const response = await originalFetch(input, init);
+        const source = typeof input === "string" ? input : input.url;
+        const originalBlob = response.blob.bind(response);
+        Object.defineProperty(response, "blob", {
+          configurable: true,
+          value: async () => {
+            const blob = await originalBlob();
+            blobSources.set(blob, source);
+            return blob;
+          }
+        });
+        return response;
+      };
+      const originalCreateObjectUrl = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = function createObjectURL(blob) {
+        const value = originalCreateObjectUrl(blob);
+        objectUrlSources.set(value, blobSources.get(blob));
+        return value;
+      };
       const originalDecode = HTMLImageElement.prototype.decode;
       HTMLImageElement.prototype.decode = function decode() {
-        if (this.src.includes("/api/profile/card.png")) {
+        if (objectUrlSources.get(this.src)?.includes("/api/profile/card.png")) {
           return Promise.reject(new Error("synthetic decode failure"));
         }
         return originalDecode
@@ -1669,6 +1701,7 @@ test.describe("Home and share card flow", () => {
   test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     let visibility = "private";
+    let publicPreviewFetches = 0;
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", async (route) => {
       if (route.request().method() === "PATCH") {
@@ -1679,7 +1712,16 @@ test.describe("Home and share card flow", () => {
         ok: true
       });
     });
-    await mockCardImages(page);
+    await mockCardImages(page, {
+      onPublicCardRequest(request) {
+        if (
+          request.resourceType() === "fetch" &&
+          request.url().includes("theme=dark")
+        ) {
+          publicPreviewFetches += 1;
+        }
+      }
+    });
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
@@ -1704,6 +1746,7 @@ test.describe("Home and share card flow", () => {
         .getByRole("img", { name: "Codex usage card preview" })
         .evaluate((image) => image.naturalWidth)
     ).toBe(1497);
+    expect(publicPreviewFetches).toBe(1);
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     await expect(sourceCard).toHaveCSS("opacity", "0");
     const sourceBoxWhileOpen = await sourceCard.boundingBox();
@@ -1815,6 +1858,9 @@ test.describe("Home and share card flow", () => {
 
     await shareButton.click();
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
+      .toHaveAttribute("src", /^blob:/);
+    expect(publicPreviewFetches).toBe(1);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
 
@@ -2741,8 +2787,9 @@ test.describe("Settings appearance control", () => {
     await mockCardImages(page);
 
     await page.goto("/");
-    await expect(page.locator(".home-card-preview")).toHaveAttribute(
-      "src",
+    await expect(page.locator(".home-card-preview")).toHaveAttribute("src", /^blob:/);
+    await expect(page.locator(".home-card-media")).toHaveAttribute(
+      "data-card-source-url",
       /\/api\/profile\/card\.png\?locale=en&theme=dark/
     );
 
@@ -3489,14 +3536,17 @@ async function getMarketingMetrics(page) {
   });
 }
 
-async function mockCardImages(page) {
+async function mockCardImages(page, options = {}) {
   const fulfillPng = (route) => route.fulfill({
     body: CARD_PNG,
     contentType: "image/png",
     status: 200
   });
   await page.route("**/api/profile/card.png*", fulfillPng);
-  await page.route("**/u/postmelee/card.png*", fulfillPng);
+  await page.route("**/u/postmelee/card.png*", (route) => {
+    options.onPublicCardRequest?.(route.request());
+    return fulfillPng(route);
+  });
 }
 
 async function mockPublicProfile(page) {

@@ -53,6 +53,7 @@ export function createProfileSitesBackendHandler(options = {}) {
       githubClientId: options.config.githubClientId,
       mediaStore: dependencies.mediaStore,
       profileCardFetchImpl: options.fetchImpl,
+      profileCardAvatarFailureObserver: options.profileCardAvatarFailureObserver,
       profileCardRenderPng: options.profileCardRenderPng,
       profileCardRendererVersion: options.profileCardRendererVersion,
       publicBaseUrl: options.config.publicBaseUrl,

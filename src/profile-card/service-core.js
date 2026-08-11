@@ -23,8 +23,10 @@ import {
 
 export const DEFAULT_PROFILE_CARD_RENDERER_VERSION = "codex-share-card-2";
 export const DEFAULT_PROFILE_CARD_CACHE_ENTRIES = 32;
-export const DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS = 3_000;
+export const DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS = 5_000;
 export const DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const DEFAULT_PROFILE_CARD_AVATAR_RETRY_COUNT = 1;
+export const DEFAULT_PROFILE_CARD_AVATAR_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 const ALLOWED_AVATAR_HOST = "avatars.githubusercontent.com";
 const ALLOWED_AVATAR_CONTENT_TYPES = new Set([
@@ -43,8 +45,11 @@ export function createProfileCardServiceCore(options = {}) {
     rendererVersion = DEFAULT_PROFILE_CARD_RENDERER_VERSION,
     avatarTimeoutMs = DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS,
     avatarMaxBytes = DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES,
+    avatarRetryCount = DEFAULT_PROFILE_CARD_AVATAR_RETRY_COUNT,
+    avatarCacheTtlMs = DEFAULT_PROFILE_CARD_AVATAR_CACHE_TTL_MS,
     cacheEntries = DEFAULT_PROFILE_CARD_CACHE_ENTRIES
   } = options;
+  const observeAvatarLoadFailure = options.observeAvatarLoadFailure ?? null;
   const ensureCardStyleMedia = options.ensureCardStyleMedia ?? (async () => {});
   const renderSocialPng = options.renderSocialPng ??
     (typeof renderPng?.renderSocial === "function"
@@ -53,6 +58,12 @@ export function createProfileCardServiceCore(options = {}) {
 
   if (!store) {
     throw new TypeError("store is required");
+  }
+  if (
+    observeAvatarLoadFailure !== null &&
+    typeof observeAvatarLoadFailure !== "function"
+  ) {
+    throw new TypeError("observeAvatarLoadFailure must be a function");
   }
   const pngCache = createLruCache(cacheEntries);
   const pngInflight = new Map();
@@ -164,10 +175,10 @@ export function createProfileCardServiceCore(options = {}) {
       const locale = resolveCardLocale(renderOptions.locale);
       const theme = normalizeCardTheme(renderOptions.theme);
       const usage = normalizeAccountUsageReadResult(usageRecord.usage);
-      const avatarSource = await loadOwnerAvatar(owner);
+      const avatar = await loadOwnerAvatar(owner);
       const viewModel = buildCardViewModel({ locale, owner, theme, usage });
       const body = Buffer.from(
-        await renderSocialPng(viewModel, { avatarSource, theme })
+        await renderSocialPng(viewModel, { avatarSource: avatar.source, theme })
       );
 
       return {
@@ -222,8 +233,9 @@ export function createProfileCardServiceCore(options = {}) {
         pngInflight.set(sourceDigest, pending);
       }
       try {
-        body = await pending;
-        pngCache.set(sourceDigest, body);
+        const rendered = await pending;
+        body = rendered.body;
+        if (rendered.cacheable) pngCache.set(sourceDigest, body);
       } finally {
         if (pngInflight.get(sourceDigest) === pending) {
           pngInflight.delete(sourceDigest);
@@ -251,31 +263,64 @@ export function createProfileCardServiceCore(options = {}) {
     if (typeof renderPng !== "function") {
       throw new TypeError("renderPng must be a function");
     }
-    const avatarSource = await loadOwnerAvatar(owner);
+    const avatar = await loadOwnerAvatar(owner);
     const viewModel = buildCardViewModel({ locale, owner, theme, usage });
-    return Buffer.from(await renderPng(viewModel, { avatarSource, theme }));
+    return Object.freeze({
+      body: Buffer.from(await renderPng(viewModel, {
+        avatarSource: avatar.source,
+        theme
+      })),
+      cacheable: avatar.cacheable
+    });
   }
 
   async function loadOwnerAvatar(owner) {
     const avatarUrl = normalizeGitHubAvatarUrl(owner.avatarUrl);
-    if (!avatarUrl || typeof fetchImpl !== "function") return null;
-
-    const cacheKey = `${avatarUrl}|${owner.updatedAt ?? ""}`;
-    if (avatarCache.has(cacheKey)) return avatarCache.get(cacheKey);
-
-    let avatar = null;
-    try {
-      const response = await fetchImpl(avatarUrl, {
-        redirect: "error",
-        signal: AbortSignal.timeout(avatarTimeoutMs)
-      });
-      avatar = await readAvatarResponse(response, { maxBytes: avatarMaxBytes });
-    } catch {
-      avatar = null;
+    if (!avatarUrl || typeof fetchImpl !== "function") {
+      return Object.freeze({ cacheable: true, source: null });
     }
 
-    avatarCache.set(cacheKey, avatar);
-    return avatar;
+    const cached = avatarCache.get(avatarUrl);
+    const currentTime = normalizeServiceDate(now()).getTime();
+    if (cached && cached.expiresAt > currentTime) {
+      return Object.freeze({ cacheable: true, source: cached.source });
+    }
+    if (cached) avatarCache.delete(avatarUrl);
+
+    const retryCount = normalizeAvatarRetryCount(avatarRetryCount);
+    const attemptCount = retryCount + 1;
+    const attemptTimeoutMs = normalizeAvatarAttemptTimeout(
+      avatarTimeoutMs,
+      attemptCount
+    );
+
+    for (let attempt = 1; attempt <= attemptCount; attempt += 1) {
+      try {
+        const response = await fetchImpl(avatarUrl, {
+          redirect: "error",
+          signal: AbortSignal.timeout(attemptTimeoutMs)
+        });
+        const source = await readAvatarResponse(response, {
+          maxBytes: avatarMaxBytes
+        });
+        avatarCache.set(avatarUrl, Object.freeze({
+          expiresAt: currentTime + normalizeAvatarCacheTtl(avatarCacheTtlMs),
+          source
+        }));
+        return Object.freeze({ cacheable: true, source });
+      } catch (error) {
+        const failure = normalizeAvatarLoadFailure(error);
+        const retrying = failure.retryable && attempt < attemptCount;
+        notifyAvatarLoadFailure(observeAvatarLoadFailure, {
+          attempt,
+          errorCode: failure.code,
+          retrying
+        });
+        if (!retrying) break;
+      }
+    }
+
+    return Object.freeze({ cacheable: false, source: null });
   }
 }
 
@@ -399,14 +444,31 @@ function matchesIfNoneMatch(value, etag) {
 }
 
 async function readAvatarResponse(response, options) {
-  if (!response?.ok) return null;
+  if (!response?.ok) {
+    const status = Number(response?.status);
+    const retryable = status === 408 || status === 425 || status === 429 ||
+      (Number.isFinite(status) && status >= 500 && status <= 599);
+    await cancelAvatarResponseBody(response);
+    throw createAvatarLoadError(
+      retryable ? "avatar_http_unavailable" : "avatar_http_rejected",
+      retryable
+    );
+  }
   const contentType = (response.headers.get("content-type") ?? "")
     .split(";", 1)[0].trim().toLowerCase();
-  if (!ALLOWED_AVATAR_CONTENT_TYPES.has(contentType)) return null;
+  if (!ALLOWED_AVATAR_CONTENT_TYPES.has(contentType)) {
+    await cancelAvatarResponseBody(response);
+    throw createAvatarLoadError("avatar_content_type_invalid");
+  }
 
   const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > options.maxBytes) return null;
-  if (!response.body) return null;
+  if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
+    await cancelAvatarResponseBody(response);
+    throw createAvatarLoadError("avatar_too_large");
+  }
+  if (!response.body) {
+    throw createAvatarLoadError("avatar_body_invalid");
+  }
 
   const reader = response.body.getReader();
   const chunks = [];
@@ -417,11 +479,81 @@ async function readAvatarResponse(response, options) {
     byteLength += value.byteLength;
     if (byteLength > options.maxBytes) {
       await reader.cancel();
-      return null;
+      throw createAvatarLoadError("avatar_too_large");
     }
     chunks.push(Buffer.from(value));
   }
+  if (byteLength === 0) {
+    throw createAvatarLoadError("avatar_body_invalid");
+  }
   return Buffer.concat(chunks, byteLength);
+}
+
+async function cancelAvatarResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {
+    // Response validation already failed; cancellation is best-effort only.
+  }
+}
+
+function normalizeAvatarRetryCount(value) {
+  return Number.isSafeInteger(value) && value >= 0
+    ? Math.min(value, DEFAULT_PROFILE_CARD_AVATAR_RETRY_COUNT)
+    : DEFAULT_PROFILE_CARD_AVATAR_RETRY_COUNT;
+}
+
+function normalizeAvatarAttemptTimeout(value, attemptCount) {
+  const total = Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS;
+  return Math.max(1, Math.ceil(total / attemptCount));
+}
+
+function normalizeAvatarCacheTtl(value) {
+  return Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_PROFILE_CARD_AVATAR_CACHE_TTL_MS;
+}
+
+function createAvatarLoadError(code, retryable = false) {
+  const error = new Error("Profile card avatar is unavailable");
+  error.code = code;
+  error.retryable = retryable;
+  return error;
+}
+
+function normalizeAvatarLoadFailure(error) {
+  if (
+    typeof error?.code === "string" &&
+    /^avatar_[a-z0-9_]+$/.test(error.code)
+  ) {
+    return Object.freeze({
+      code: error.code,
+      retryable: error.retryable === true
+    });
+  }
+  if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+    return Object.freeze({ code: "avatar_timeout", retryable: true });
+  }
+  return Object.freeze({
+    code: "avatar_fetch_unavailable",
+    retryable: true
+  });
+}
+
+function notifyAvatarLoadFailure(observer, value) {
+  if (typeof observer !== "function") return;
+  const event = Object.freeze({
+    errorCode: value.errorCode,
+    attempt: value.attempt,
+    retrying: value.retrying === true
+  });
+  try {
+    observer(event);
+  } catch {
+    // Avatar logging must never affect card rendering or expose its failure.
+  }
 }
 
 function createLruCache(maxEntries) {
@@ -438,6 +570,7 @@ function createLruCache(maxEntries) {
       return value;
     },
     has(key) { return entries.has(key); },
+    delete(key) { return entries.delete(key); },
     set(key, value) {
       if (entries.has(key)) entries.delete(key);
       entries.set(key, value);

@@ -26,6 +26,10 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 - Stage 4.1은 private preview `private, no-store`, public media ETag/cache header,
   D1/R2 publication atomicity를 유지한다. Skeleton과 별개로 unique render/in-flight
   중복·avatar invalidation을 측정해 증명된 최소 성능 보정만 포함한다.
+- Stage 4.2는 Stage 4.1 뒤 확인한 카드 내부 GitHub avatar fallback 고착과 surface 간
+  동일 decoded image 재요청을 보정한다. avatar 성공 bytes만 server LRU에 저장하고
+  transient failure는 bounded 1회 재시도한다. client는 owner-scoped·TTL/LRU bounded
+  tab-memory resource cache만 사용하며 HTTP cache header와 persistent storage는 바꾸지 않는다.
 
 ## 단계 개요
 
@@ -36,6 +40,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 3 | Gate A owner-only 배포와 전체 기능 smoke | saved version, migration `1..5`, owner-only smoke | exact source, readiness, maintenance safe state, OAuth/CLI/card/OG |
 | 4 | Gate B public cache 실측과 baseline 원복 | cache/revision 관찰, owner-only·disposable cleanup, 공식 상태 문서 | anonymous 경계, cache header, revision 신선도, 원복·비노출 |
 | 4.1 | 카드 readiness·Skeleton·motion 회귀 보정 | 공통 card loading contract, intro/handoff gate, profile draft 안정화 | delayed/error/reduced-motion E2E, cache 계약, owner-only smoke |
+| 4.2 | avatar 복구성과 card resource 재사용 보정 | fail-soft avatar loader, tab-memory decoded resource cache | retry/failure eviction, cross-surface dedupe, owner 격리, 전체 회귀 |
 
 ## 문서 위치 확인
 
@@ -48,6 +53,7 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | 단계 검증 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage{N}.md` | OK | SHA, count/size와 redacted remote 결과를 task 범위에 보관 |
 | 최종 handoff | `mydocs/report/` | `mydocs/report/task_m100_83_report.md` | OK | #84 선행조건과 exact application source를 최종 정리 |
 | Stage 4.1 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_1.md` | OK | 사용자 식별자나 raw timing log 없이 상태 전환·검증 결과와 exact source만 기록 |
+| Stage 4.2 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_2.md` | OK | avatar URL·owner·provider error 원문 없이 retry/cache/resource 결과만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -913,6 +919,131 @@ environment revision 85의 safe baseline을 유지한다.
 Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정
 ```
 
+## Stage 4.2 — avatar 복구성과 card resource 재사용 보정
+
+### 발견 근거와 범위
+
+- production 후보에서 계정 UI의 GitHub avatar는 정상인데 server-rendered card만
+  initials fallback을 사용한다. avatar source URL과 원본 응답은 유효하지만 loader가
+  fetch/timeout/response 실패를 모두 `null`로 축약하고 그 실패까지 LRU에 저장해 hosted
+  실패 원인을 구분할 수 없고 transient failure가 고착될 수 있다.
+- Stage 4.1 공통 readiness는 hook instance 안에서만 object URL을 유지한다. 동일 document
+  runtime에서 다른 component가 같은 source를 acquire하거나 Share Studio를 닫았다 다시
+  열면 새 fetch/decode가 발생한다. 전체 document navigation은 module memory를 초기화하므로
+  이 Stage의 재사용 범위가 아니며, private `no-store`를 완화하거나 persistent storage를
+  추가하지 않는다.
+
+### 산출물
+
+수정:
+
+- `src/profile-card/service-core.js`
+- `src/profile-card/service.js`, `src/profile-card/index.js` — 새 bounded default export가
+  필요한 경우에만
+- `src/profile-card/__tests__/service.test.js`
+- `src/profile-backend/http.js`
+- `src/profile-runtime/sites/backend.js`
+- `src/profile-runtime/sites/worker.js`
+- `src/profile-runtime/sites/maintenance.js` — repair 경로도 같은 observer를 사용할 때만
+- `src/profile-runtime/sites/observability.js`
+- `src/profile-runtime/sites/__tests__/observability.test.js`
+- `src/profile-ui/cardImageReadiness.js`
+- `src/profile-ui/__tests__/cardImageReadiness.test.js`
+- `src/profile-ui/HomePage.jsx`
+- `src/profile-marketing/MarketingLanding.jsx` — home의 original source metadata와 Blob
+  display source를 분리할 때만
+- `src/App.jsx`
+- `tests/profile-ui.spec.js`
+- `mydocs/orders/20260811.md`
+
+신규:
+
+- `mydocs/working/task_m100_83_stage4_2.md` (Stage 완료 시 `task-stage-report`로 작성)
+
+### 서버 avatar 변경
+
+1. timeout은 bounded 5초로 유지하고 retry count 기본값을 1로 둔다. network/timeout,
+   `408/425/429/5xx`만 재시도하며 content type·size·body·non-retryable status 실패는 즉시
+   initials fallback으로 settle한다.
+2. 성공한 non-empty supported image bytes만 avatar LRU에 저장한다. 실패 `null`은 저장하지
+   않아 다음 독립 render가 다시 시도할 수 있어야 한다.
+3. avatar cache key는 normalized GitHub URL 기준으로 두고 bounded TTL을 추가해 card
+   theme/locale/settings의 owner revision 변경이 avatar bytes를 불필요하게 무효화하지
+   않게 한다. TTL 만료 뒤에는 같은 URL도 다시 확인해 실제 avatar 변경이 영구 stale하지
+   않게 한다.
+4. failure observer payload는 exact `{ errorCode, attempt, retrying }` bounded field만
+   노출한다. avatar URL, owner/provider id, handle, response body/status 원문과 caught error는
+   포함하지 않으며 observer failure가 card 응답을 바꾸지 않는다.
+5. Sites는 기존 bounded event writer로 별도 `profile_card_avatar` event를 기록한다.
+   request event schema는 변경하지 않는다.
+
+### client resource cache 변경
+
+1. `cardImageReadiness` 아래 module-level resource cache를 둔다. cache entry는 normalized
+   same-origin source, private owner scope, source kind, decoded object URL, pending promise,
+   refcount, last-used와 expiry를 보유한다.
+2. 동일 key의 concurrent/sequence acquire는 fetch와 decode를 1회만 수행한다. component
+   release는 refcount만 줄이고 object URL은 TTL/LRU eviction 또는 explicit clear 때 revoke한다.
+3. owner source는 non-empty owner scope를 key에 강제해 다른 account와 공유하지 않는다.
+   auth owner 변경·logout에서 owner entry를 clear/abort하고 public resource는 유지한다.
+4. source URL의 theme/locale/revision은 기존 URL key를 그대로 사용하므로 variant 변경은
+   새 resource다. failure와 aborted load는 cache하지 않고 다음 acquire에서 재시도한다.
+5. max entry와 TTL을 bounded constant로 두며 local/session storage, Cache Storage,
+   IndexedDB, Service Worker를 사용하지 않는다. full document navigation 뒤에는 기존
+   private/public HTTP cache와 server renderer cache 계약이 계속 적용된다.
+6. 홈 transition도 같은 acquire API를 사용하되 기존 operator → owner/sample fallback,
+   logout stale-generation 차단과 last-ready 상태 machine은 유지한다. DOM `img`에는 decoded
+   Blob URL을 사용하고 `data-card-source-url`에는 canonical 원본 source를 보존한다.
+
+### 검증
+
+focused Node:
+
+- avatar 첫 network failure 뒤 두 번째 성공과 bytes render
+- 최종 failure fallback 뒤 다른 card source render가 다시 fetch해 failure가 cache되지 않음
+- invalid content/oversize/non-retryable status는 retry하지 않음
+- avatar success cache가 settings revision 변경에도 유지되고 TTL 뒤 재확인
+- observer exact field, observer throw 무해성과 URL/identity/error 원문 비노출
+- resource same-key sequential/concurrent acquire의 fetch/decode 1회
+- release 뒤 TTL 내 재acquire, TTL/LRU/explicit clear의 exact-once revoke
+- owner scope·variant/revision 분리, failure eviction과 pending clear abort
+
+Playwright:
+
+- home의 decoded Blob display와 canonical `data-card-source-url`, 기존 fallback/logout 계약
+- Share Studio close/reopen의 동일 public source request 1회
+- public profile resting/intro의 shared decoded resource와 motion gate 회귀 부재
+- owner profile draft latest-generation, Skeleton/last-ready와 owner scope clear 회귀 부재
+- local/session storage에 private URL/blob/owner 값이 기록되지 않음
+
+전체:
+
+```bash
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+원격 owner-only 재배포는 Stage 4.2 exact source commit과 전체 검증 결과를 제시해 별도
+승인받은 뒤 수행한다. 이 Stage source 보정만으로 access, D1/R2, OAuth 또는 saved version을
+변경하지 않는다.
+
+### 중단·원복 조건
+
+- private/public response cache header나 publication atomicity를 변경해야 한다.
+- owner scope가 없는 private resource가 재사용되거나 logout 뒤 owner bitmap이 표시된다.
+- cache hit가 최신 source generation을 덮거나 error를 고착시킨다.
+- observer가 URL·identity·provider error 원문을 내보내거나 logging failure가 응답을 바꾼다.
+
+### 커밋
+
+```text
+Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -935,6 +1066,7 @@ Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정
   - `Task #83 [Stage 3.10]: Sites 소유자 프로필 경로 보정`
   - `Task #83 Stage 4: public cache 실측과 owner-only 원복`
   - `Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정`
+  - `Task #83 [Stage 4.2]: avatar 복구와 card resource cache 보정`
 
 ## 단계 의존성
 
@@ -963,6 +1095,14 @@ Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정
 - Stage 4.1 source·focused/전체 검증 승인 뒤에만 새 exact source owner-only saved
   version 배포 승인을 요청한다. public backend/media 계약이 불변이면 Gate B 전체
   mutation은 반복하지 않고 protected 사용자 흐름만 집중 확인한다.
+- Stage 4.2는 Stage 4.1 local 검증 뒤 확인한 server avatar failure 고착과 component-local
+  resource 수명을 근거로 작업지시자의 계획·source 수정 승인 후 진행한다.
+- Stage 4.2 source·focused/전체 검증과 완료보고서 승인 뒤에만 exact source owner-only
+  saved version 배포 승인을 다시 요청한다.
+- Stage 4.2 local source는 transient avatar 복구·safe failure observability와 bounded
+  same-document resource cache를 구현했고 focused/전체 test, E2E, production build와 두
+  artifact verifier를 통과했다. 완료보고서와 같은 commit으로 고정한 뒤 owner-only
+  saved version 배포 승인 경계에서 중단한다.
 - task-final-report는 Stage 4.1 완료보고서와 owner-only smoke 승인 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
@@ -999,6 +1139,11 @@ Task #83 [Stage 4.1]: 카드 readiness와 motion 회귀 보정
   decode만 의존한다.
 - **공통화 회귀**: 홈의 source allowlist, owner logout stale-card 차단과 share handoff를
   공통 hook으로 약화하지 않고 기존 focused transition test를 함께 유지한다.
+- **document 경계 과장**: module memory는 full document navigation을 넘지 않는다. 같은
+  runtime의 중복 제거와 서버 LRU 개선만 수용 기준으로 두고 persistent private cache나
+  response header 완화 없이 page reload 간 즉시 재사용을 약속하지 않는다.
+- **avatar retry 증폭**: invalid content까지 반복하면 외부 provider 부하와 응답 지연이
+  커진다. transient status/network만 1회 재시도하고 timeout·byte limit을 유지한다.
 
 ## 승인 요청 사항
 

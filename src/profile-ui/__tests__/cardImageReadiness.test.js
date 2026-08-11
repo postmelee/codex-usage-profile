@@ -2,10 +2,149 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createCardImageResourceCache,
   createCardImageRequest,
   isCardImageAbortError,
   loadCardImage
 } from "../cardImageReadiness.js";
+
+test("shares concurrent and sequential decoded resources until explicit eviction", async () => {
+  let releaseLoad;
+  let loadCount = 0;
+  let disposeCount = 0;
+  const gate = new Promise((resolve) => { releaseLoad = resolve; });
+  const cache = createCardImageResourceCache({
+    loadResource: async () => {
+      loadCount += 1;
+      await gate;
+      return {
+        displaySrc: "blob:shared-card",
+        release() { disposeCount += 1; }
+      };
+    },
+    now: () => 0
+  });
+
+  const firstPending = cache.acquire({
+    scopeKey: "owner_1",
+    sourceKind: "owner",
+    src: "/api/profile/card.png?theme=dark"
+  });
+  const secondPending = cache.acquire({
+    scopeKey: "owner_1",
+    sourceKind: "owner",
+    src: "/api/profile/card.png?theme=dark"
+  });
+  releaseLoad();
+  const [first, second] = await Promise.all([firstPending, secondPending]);
+
+  assert.equal(loadCount, 1);
+  assert.equal(first.displaySrc, "blob:shared-card");
+  assert.equal(second.displaySrc, "blob:shared-card");
+  first.release();
+  second.release();
+  const third = await cache.acquire({
+    scopeKey: "owner_1",
+    sourceKind: "owner",
+    src: "/api/profile/card.png?theme=dark"
+  });
+  assert.equal(loadCount, 1);
+  assert.equal(disposeCount, 0);
+
+  assert.equal(cache.clear({ sourceKind: "owner", scopeKey: "owner_1" }), 1);
+  assert.equal(disposeCount, 0);
+  third.release();
+  third.release();
+  assert.equal(disposeCount, 1);
+});
+
+test("bounds resources by TTL and least-recently-used eviction", async () => {
+  let currentTime = 0;
+  let loadCount = 0;
+  const disposed = [];
+  const cache = createCardImageResourceCache({
+    maxEntries: 2,
+    ttlMs: 10,
+    now: () => currentTime,
+    loadResource: async (src) => {
+      loadCount += 1;
+      const displaySrc = `blob:${src}:${loadCount}`;
+      return {
+        displaySrc,
+        release() { disposed.push(displaySrc); }
+      };
+    }
+  });
+  const request = (src) => ({ sourceKind: "public", src });
+
+  (await cache.acquire(request("/a.png"))).release();
+  (await cache.acquire(request("/b.png"))).release();
+  currentTime = 5;
+  (await cache.acquire(request("/a.png"))).release();
+  (await cache.acquire(request("/c.png"))).release();
+
+  assert.equal(loadCount, 3);
+  assert.deepEqual(disposed, ["blob:/b.png:2"]);
+  currentTime = 11;
+  const refreshedA = await cache.acquire(request("/a.png"));
+  assert.equal(loadCount, 4);
+  assert.equal(refreshedA.displaySrc, "blob:/a.png:4");
+  refreshedA.release();
+  assert.ok(disposed.includes("blob:/a.png:1"));
+});
+
+test("isolates owner scopes and never caches failed resource loads", async () => {
+  let loadCount = 0;
+  const cache = createCardImageResourceCache({
+    loadResource: async () => {
+      loadCount += 1;
+      if (loadCount === 1) throw new Error("temporary image failure");
+      return { displaySrc: `blob:card-${loadCount}`, release() {} };
+    },
+    now: () => 0
+  });
+  const ownerRequest = (scopeKey) => ({
+    scopeKey,
+    sourceKind: "owner",
+    src: "/api/profile/card.png"
+  });
+
+  await assert.rejects(cache.acquire(ownerRequest("owner_1")), /temporary/);
+  const recovered = await cache.acquire(ownerRequest("owner_1"));
+  const otherOwner = await cache.acquire(ownerRequest("owner_2"));
+
+  assert.equal(loadCount, 3);
+  assert.notEqual(recovered.displaySrc, otherOwner.displaySrc);
+  recovered.release();
+  otherOwner.release();
+  assert.throws(
+    () => cache.acquire({ sourceKind: "owner", src: "/card.png" }),
+    /scope key/
+  );
+});
+
+test("aborts a pending owner resource when its scope is cleared", async () => {
+  const cache = createCardImageResourceCache({
+    loadResource: async (_src, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+    }),
+    now: () => 0
+  });
+  const pending = cache.acquire({
+    scopeKey: "owner_1",
+    sourceKind: "owner",
+    src: "/api/profile/card.png"
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(cache.clear({ sourceKind: "owner", scopeKey: "owner_1" }), 1);
+  await assert.rejects(pending, isCardImageAbortError);
+  assert.equal(cache.size, 0);
+});
 
 test("fetches one same-origin PNG, decodes its object URL, and releases it once", async () => {
   const image = createFakeImage();

@@ -24,6 +24,7 @@ export function MarketingLanding({
   cardPreviewUrl,
   cardRef,
   cardSourceKind,
+  cardSourceUrl,
   cardStatus,
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
@@ -62,6 +63,7 @@ export function MarketingLanding({
             sourceKind={cardSourceKind ?? (
               resolvedCardUrl ? "sample" : null
             )}
+            sourceUrl={cardSourceUrl}
             src={resolvedCardUrl}
             status={cardStatus ?? (cardBusy ? "loading" : "ready")}
             transitionSuspended={cardTransitionSuspended}

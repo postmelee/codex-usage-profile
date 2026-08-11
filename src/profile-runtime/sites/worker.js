@@ -20,7 +20,10 @@ import {
   PROFILE_SITES_MAINTENANCE_PATH,
   createProfileSitesMaintenanceHandler
 } from "./maintenance.js";
-import { observeProfileSitesRequest } from "./observability.js";
+import {
+  observeProfileCardAvatarLoadFailure,
+  observeProfileSitesRequest
+} from "./observability.js";
 
 const INDEX_PATH = "/index.html";
 
@@ -52,6 +55,11 @@ async function handleProfileSitesRequest(
   options
 ) {
   const pathname = new URL(request.url).pathname;
+  const profileCardAvatarFailureObserver = (event) => (
+    observeProfileCardAvatarLoadFailure(event, {
+      writeEvent: options.writeEvent
+    })
+  );
   let config;
   try {
     config = loadProfileSitesConfig({
@@ -82,6 +90,7 @@ async function handleProfileSitesRequest(
       fetchImpl: options.fetchImpl ?? globalThis.fetch,
       media: config.media,
       migrations: options.migrations,
+      profileCardAvatarFailureObserver,
       profileCardRenderPng: options.profileCardRenderPng,
       profileCardRendererVersion: options.profileCardRendererVersion
     })(request);
@@ -105,6 +114,7 @@ async function handleProfileSitesRequest(
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
     githubClient: options.githubClient,
     media: config.media,
+    profileCardAvatarFailureObserver,
     profileCardRenderPng: options.profileCardRenderPng,
     profileCardRendererVersion: options.profileCardRendererVersion,
     rateLimiterOptions: options.rateLimiterOptions ??

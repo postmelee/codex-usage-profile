@@ -178,6 +178,7 @@ export function createProfileSitesMaintenanceService(options = {}) {
     store,
     now,
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
+    observeAvatarLoadFailure: options.profileCardAvatarFailureObserver,
     renderPng: options.profileCardRenderPng,
     rendererVersion: options.profileCardRendererVersion
   });

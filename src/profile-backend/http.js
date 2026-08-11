@@ -134,7 +134,10 @@ export function createProfileBackendHttpHandler(options = {}) {
     rendererVersion: options.profileCardRendererVersion,
     avatarTimeoutMs: options.profileCardAvatarTimeoutMs,
     avatarMaxBytes: options.profileCardAvatarMaxBytes,
+    avatarRetryCount: options.profileCardAvatarRetryCount,
+    avatarCacheTtlMs: options.profileCardAvatarCacheTtlMs,
     cacheEntries: options.profileCardCacheEntries,
+    observeAvatarLoadFailure: options.profileCardAvatarFailureObserver,
     ensureCardStyleMedia
   });
   const mediaStore = options.mediaStore ?? null;

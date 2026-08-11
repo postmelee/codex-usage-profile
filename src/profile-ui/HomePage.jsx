@@ -10,6 +10,10 @@ import { HomeQuickstart } from "./HomeQuickstart.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import {
+  acquireCardImageResource,
+  isCardImageAbortError
+} from "./cardImageReadiness.js";
+import {
   buildAccountLoginHref,
   getAccountAvatar,
   getAccountDisplayName,
@@ -23,8 +27,6 @@ import {
   beginHomeCardTransition,
   createHomeCardSource,
   createHomeCardTransition,
-  isHomeCardImageAbortError,
-  loadHomeCardImage,
   rejectHomeCardTransition,
   resetHomeCardTransition,
   resolveHomeCardTransition
@@ -49,12 +51,13 @@ export function HomePage({
     kind: HOME_CARD_SOURCE_KINDS.SAMPLE,
     src: HOME_MARKETING_CONFIG.sampleCardUrl
   }), []);
-  const [cardTransition, setCardTransition] = useState(
-    () => createHomeCardTransition({
+  const [cardState, setCardState] = useState(() => ({
+    transition: createHomeCardTransition({
       fallbackSrc: sampleCardSource.src,
       target: operatorCardSource
-    })
-  );
+    }),
+    visibleResource: null
+  }));
   const [profileState, setProfileState] = useState({
     error: null,
     profile: null,
@@ -68,6 +71,8 @@ export function HomePage({
   const [shareOpen, setShareOpen] = useState(false);
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
+  const cardTransition = cardState.transition;
+  const visibleCardDisplaySrc = cardState.visibleResource?.displaySrc ?? null;
   const isAuthenticated = status === "authenticated" && Boolean(owner);
   const ownerKey = owner?.id ?? owner?.handle ?? null;
   const loginHref = buildAccountLoginHref(client, location);
@@ -139,15 +144,19 @@ export function HomePage({
   ]);
 
   useEffect(() => {
-    setCardTransition((current) => {
-      const currentTarget = current.pending ?? current.visible;
+    setCardState((current) => {
+      const currentTarget = current.transition.pending ?? current.transition.visible;
       if (areHomeCardSourcesEqual(currentTarget, desiredCardSource)) {
         return current;
       }
 
-      return isAuthenticated
-        ? beginHomeCardTransition(current, desiredCardSource)
-        : resetHomeCardTransition(current, desiredCardSource);
+      const next = isAuthenticated
+        ? beginHomeCardTransition(current.transition, desiredCardSource)
+        : resetHomeCardTransition(current.transition, desiredCardSource);
+      return {
+        transition: next,
+        visibleResource: isAuthenticated ? current.visibleResource : null
+      };
     });
   }, [desiredCardSource, isAuthenticated]);
 
@@ -155,27 +164,49 @@ export function HomePage({
     const pending = cardTransition.pending;
     if (!pending) return undefined;
 
-    const controller = new AbortController();
+    let active = true;
     const generation = cardTransition.generation;
 
-    loadHomeCardImage(pending, { signal: controller.signal }).then(() => {
-      setCardTransition((current) => (
-        resolveHomeCardTransition(current, generation)
-      ));
+    acquireCardImageResource({
+      scopeKey: pending.kind === HOME_CARD_SOURCE_KINDS.OWNER
+        ? ownerKey ?? "authenticated-owner"
+        : "public-card",
+      sourceKind: pending.kind === HOME_CARD_SOURCE_KINDS.OWNER
+        ? "owner"
+        : pending.kind,
+      src: pending.src
+    }).then((resource) => {
+      if (!active) {
+        resource.release();
+        return;
+      }
+
+      setCardState((current) => {
+        const next = resolveHomeCardTransition(current.transition, generation);
+        if (next === current.transition) {
+          resource.release();
+          return current;
+        }
+        return { transition: next, visibleResource: resource };
+      });
     }).catch((error) => {
-      if (isHomeCardImageAbortError(error)) return;
-      setCardTransition((current) => (
-        rejectHomeCardTransition(current, generation)
-      ));
+      if (!active || isCardImageAbortError(error)) return;
+      setCardState((current) => {
+        const next = rejectHomeCardTransition(current.transition, generation);
+        return next === current.transition
+          ? current
+          : { ...current, transition: next };
+      });
     });
 
     return () => {
-      controller.abort();
+      active = false;
     };
   }, [
     cardTransition.generation,
     cardTransition.pending?.kind,
-    cardTransition.pending?.src
+    cardTransition.pending?.src,
+    ownerKey
   ]);
 
   const visibleCardSource = (
@@ -184,6 +215,11 @@ export function HomePage({
   )
     ? null
     : cardTransition.visible;
+
+  useEffect(() => {
+    const resource = cardState.visibleResource;
+    return () => resource?.release();
+  }, [cardState.visibleResource]);
   const profileIsResolving = isAuthenticated && (
     profileState.status === "idle" ||
     profileState.status === "loading"
@@ -216,10 +252,14 @@ export function HomePage({
   );
 
   function handleVisibleCardError() {
-    setCardTransition((current) => {
-      if (!current.visible || current.pending) return current;
-      const retry = beginHomeCardTransition(current, current.visible);
-      return rejectHomeCardTransition(retry, retry.generation);
+    setCardState((current) => {
+      if (!current.transition.visible || current.transition.pending) return current;
+      const retry = beginHomeCardTransition(
+        current.transition,
+        current.transition.visible
+      );
+      const next = rejectHomeCardTransition(retry, retry.generation);
+      return { transition: next, visibleResource: null };
     });
   }
 
@@ -278,9 +318,10 @@ export function HomePage({
         cardOverlay={showPersonalizedSample ? (
           <HomeSampleIdentity owner={owner} />
         ) : null}
-        cardPreviewUrl={visibleCardSource?.src ?? null}
+        cardPreviewUrl={visibleCardSource ? visibleCardDisplaySrc : null}
         cardRef={shareSourceCardRef}
         cardSourceKind={visibleCardSource?.kind ?? null}
+        cardSourceUrl={visibleCardSource?.src ?? null}
         cardStatus={cardLoading
           ? HOME_CARD_TRANSITION_STATUSES.LOADING
           : cardTransition.status}
