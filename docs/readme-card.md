@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 한 번 복사한 공개 이미지 URL을 GitHub README에 유지할 수 있고, 이후 사용량 제출이 성공하면 같은 URL이 최신 카드로 다시 렌더링된다.
 
 > [!IMPORTANT]
-> 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로까지 보정한 saved version 18, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
+> 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로와 카드 loading·resource reuse·공유 handoff·profile Skeleton을 보정한 saved version 23, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
 
 ## #84 공개 전환 뒤 사용자 흐름
 

@@ -68,9 +68,8 @@ GitHub Issue: [#83](https://github.com/postmelee/codex-usage-profile/issues/83)
 | Stage 4.2 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_2.md` | OK | avatar URL·owner·provider error 원문 없이 retry/cache/resource 결과만 기록 |
 | Stage 4.3 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_3.md` | OK | hosted URL·identity 원문 없이 redirect/handoff 상태와 검증 결과만 기록 |
 | Stage 4.4 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_4.md` | OK | 사용자 identity·hosted URL 원문 없이 target opacity와 Skeleton 상태·검증 결과만 기록 |
-| Stage 4.5 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_5.md` | 예정 | 사용자 identity·usage 없이 layout delta와 animation 계약만 기록 |
-
-| Stage 4.6 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_6.md` | 예정 | transform·stagger 제거와 local preview 검증만 기록하고 사용자 승인 전 remote 결과는 기록하지 않음 |
+| Stage 4.5 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_5.md` | OK | 사용자 identity·usage 없이 layout delta와 animation 계약만 기록 |
+| Stage 4.6 회귀 증적 | `mydocs/working/` | `mydocs/working/task_m100_83_stage4_6.md` | OK | transform·stagger 제거, local preview 승인과 exact source owner-only hosted smoke만 기록 |
 
 새 공식 문서는 만들지 않는다. raw request/response, credential, identity, usage bytes, backup path/payload와 disposable 식별자는 공식 문서나 task 문서에 기록하지 않는다.
 
@@ -1441,8 +1440,10 @@ Task #83 [Stage 4.6]: 프로필 reveal 공간 이동·stagger 제거
   않는다.
 - Stage 4.6은 saved version 22 직접 확인에서 발견한 upward entrance와 순차 reveal 잔여
   불일치에 대해 작업지시자의 source 수정·local preview 지시로 진행한다. local 검증과
-  직접 확인 승인 전에는 remote saved version을 생성하지 않는다.
-- task-final-report는 Stage 4.6 local 확인과 필요한 owner-only smoke 승인 뒤 재개한다.
+  직접 확인 승인 전에는 remote saved version을 생성하지 않는다. 직접 확인 승인 뒤 exact
+  source `c030339d848f961c54358d9d3523b340bed09670`을 saved version 23으로 owner-only
+  배포했고 동시 reveal·공유 card hosted smoke를 통과했다.
+- task-final-report는 Stage 4.6 local 확인과 owner-only version 23 smoke 통과 뒤 재개한다.
 - #84는 Task #83 PR merge·cleanup과 issue close가 끝난 뒤에만 `task-start`한다.
 
 ## 위험과 대응

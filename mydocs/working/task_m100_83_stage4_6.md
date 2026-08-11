@@ -61,6 +61,21 @@ git diff --check
   크기, `ok: true`
 - `git diff --check`: 이상 없음
 
+원격 owner-only 재배포 및 hosted smoke:
+
+- saved version 23은 exact source
+  `c030339d848f961c54358d9d3523b340bed09670`, archive 29파일·6,256,640 bytes로
+  저장하고 private deployment가 `succeeded`임을 확인했다.
+- current Site는 custom owner-only access revision 56을 유지하고 latest saved
+  version이 23임을 다시 조회했다.
+- protected owner profile의 identity, stats, activity, card 네 영역은 모두
+  `profile-content-enter`, duration `0.36s`, delay `0s`, transform `none`, 최종
+  opacity `1`이었다.
+- owner card와 공유 dialog의 image는 complete 상태와 1497x918 intrinsic size를
+  유지했고, inactive Skeleton은 opacity `0`·animation `none`이었다.
+- direct share document는 query를 제외한 canonical, `summary_large_image`, versioned
+  social image를 선언했고 intro dialog의 card도 complete·ready 상태로 나타났다.
+
 전체 Node 검증의 real-workerd D1 fixture는 localhost listen이 허용된 검증 환경에서
 실행했다. Playwright package browser revision 대신 설치된 Chrome을 사용했고, 다른 로컬
 앱의 5173 포트와 충돌하지 않도록 same-origin fixture URL만 5178로 바꾼 임시 테스트 사본을
@@ -68,18 +83,19 @@ git diff --check
 
 ## 잔여 위험
 
-- 로컬 지각 품질 확인은 승인됐다. exact source owner-only saved version 배포와 hosted
-  Skeleton/ready smoke는 이 커밋 다음에 수행한다.
-- public access 전환과 X·Threads·카카오톡 실측은 Task #84 Gate C 범위이며 이번 단계에
-  포함하지 않는다.
+- public access 전환과 X·Threads·카카오톡 최종 실측은 Task #84 Gate C 범위이며 이번
+  단계에 포함하지 않는다.
+- 외부 SNS scraper의 장기 cache와 투명 PNG 합성 색은 provider가 결정하므로 application
+  source만으로 보장하지 않는다.
 
 ## 다음 단계 영향
 
-- Stage 4.6 커밋을 exact source로 owner-only 재배포하고 protected owner profile에서
-  delay `0s`, transform `none`, 최종 opacity `1`을 확인한다.
-- hosted smoke 통과 뒤 최종 보고서와 `publish/task83` PR 게시 절차를 재개한다.
+- version 23 owner-only hosted smoke까지 통과했으므로 최종 보고서와
+  `publish/task83` PR 게시 절차를 진행한다.
+- #84는 Task #83 PR merge·cleanup 뒤 version 23 exact source를 선행 증적으로 사용해
+  `devel → main`, Gate C public 전환과 최종 SNS 실측을 수행한다.
 
 ## 승인 요청
 
-- 작업지시자가 로컬 preview를 확인하고 배포·마무리를 지시했으므로 Stage 4.6 산출물의
-  owner-only 배포 및 Task #83 최종 보고 절차 진입 승인을 반영한다.
+- 작업지시자의 로컬 preview 확인과 배포·마무리 지시를 반영해 Stage 4.6 owner-only
+  배포·hosted smoke를 완료했고 Task #83 최종 보고 절차로 진입한다.

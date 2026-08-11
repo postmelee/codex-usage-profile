@@ -11,8 +11,9 @@ README card는 `/u/{handle}/card.png`를 사용한다. Task #83의 최종 Gate B
 saved version 17의 canonical `/api/share/{handle}`, 정합한
 `/u/{handle}/social.png` 또는 packaged `/assets/codex-social-sample.png`, README
 card 변형과 공개·비공개 경계를 검증한 뒤 custom owner-only로 복원했다. 현재는
-owner profile 경로를 보정한 exact source의 saved version 18, custom owner-only
-상태다. 영구 public 전환과 CTA 활성화는 #84 Gate C에서 수행한다.
+owner profile 경로와 card readiness·resource reuse·공유 handoff·profile Skeleton을
+보정한 exact source의 saved version 23, custom owner-only 상태다. 영구 public 전환과
+CTA 활성화는 #84 Gate C에서 수행한다.
 
 owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
 extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
@@ -24,7 +25,7 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 18 / `e431cc88ba73b02341a170fe5c38117d4552e42a` |
+| saved version/source | 23 / `c030339d848f961c54358d9d3523b340bed09670` |
 | access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
 | environment | revision 85 |
 | service | `normal` |
@@ -35,7 +36,8 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
 user, workspace group과 tenant group은 0개로 둔다. 현재 application의 직전
 rollback target은 Gate B를 통과한 version 17이며, legacy public 동작 비교 기준은
-version 7이다. data/schema rollback은 별도 digest/count 승인 없이 수행하지 않는다.
+version 7이다. 현재 UX 후보의 직전 비교 대상은 version 22다. data/schema rollback은
+별도 digest/count 승인 없이 수행하지 않는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새

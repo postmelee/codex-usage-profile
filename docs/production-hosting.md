@@ -25,8 +25,8 @@ Sites project에서 사용한다. `stage5`가 포함된 기존 slug는 project�
 |---|---|
 | canonical origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 18 |
-| deployed source | `e431cc88ba73b02341a170fe5c38117d4552e42a` |
+| saved version | 23 |
+| deployed source | `c030339d848f961c54358d9d3523b340bed09670` |
 | access | custom owner-only, revision 56; owner 1명, 추가 user/group 0명 |
 | environment | revision 85, maintenance disabled, service normal, operator secret absent |
 | public rollback baseline | saved version 7 / source `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
@@ -36,9 +36,11 @@ migration과 media contract v4, Task #78의 `/api/share/{handle}` Open Graph doc
 2400x1260 `social.png`, Share Studio와 structured store contract v3 public summary
 projection을 포함한다. R2 authority/social 정합성이 없으면 packaged sample을
 선언하는 보정 뒤 owner-only와 제한된 public Gate B를 통과했고, 측정 직후 다시
-owner-only로 복원했다. 현재 version 18은 이 공개 계약을 유지하면서 Sites 소유자
-프로필 경로를 `/?view=profile`로 보정한 exact source다. owner-only 집중 smoke까지
-통과했으며 영구 public 전환과 CTA 활성화는 #84 Gate C에 남아 있다.
+owner-only로 복원했다. 현재 version 23은 이 공개 계약과 `/?view=profile` 소유자
+경로를 유지하면서 card readiness, decoded resource reuse, avatar 복구, 공유 handoff,
+공개·소유자 profile Skeleton과 transform-free 동시 reveal까지 보정한 exact source다.
+owner-only hosted smoke까지 통과했으며 영구 public 전환과 CTA 활성화는 #84 Gate C에
+남아 있다.
 
 ## 요청과 신뢰 경계
 
@@ -354,6 +356,10 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - Task #83 saved version 18, source
   `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
   공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
+- Task #83 saved version 23, source
+  `c030339d848f961c54358d9d3523b340bed09670`의 owner/public card readiness,
+  decoded resource reuse, avatar, source-image handoff, 구조형 profile Skeleton과
+  transform `none`·delay `0s` 동시 reveal owner-only hosted smoke
 - saved version 7, source
   `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0`와 production deployment
   `succeeded`
