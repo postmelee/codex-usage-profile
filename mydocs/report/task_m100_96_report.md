@@ -98,6 +98,17 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
   494개로 측정되어 기존 1,154개보다 약 57.2% 적고, 나머지 scoped transition·비활성 Skeleton
   정리 최적화는 유지한다.
 
+### PR 보정 검증 2 — 단일 timeline 보장 (2026-08-13)
+
+- ancestor surface와 descendant text의 중복 `color` transition을 제거해 semantic text가 하나의
+  240ms animation에서 시작색부터 최종색까지 이동하도록 보정했다.
+- heatmap은 theme swap 동안에만 동일한 240ms timeline을 사용하고 평상시 100ms 피드백은 유지한다.
+- frame-level 회귀는 text·heatmap의 시작 keyframe이 바뀌지 않고 animation currentTime이 단조
+  증가하는지 확인한다.
+- Chromium theme surface 10/10, 전체 Profile UI 86/86, WebKit Task #96 7/7, 관련 Node 25/25가
+  통과했다.
+- production Sites full-stack build와 artifact verify가 통과했다. 실제 배포는 수행하지 않았다.
+
 ## 잔여 위험과 후속 작업
 
 ### 잔여 위험

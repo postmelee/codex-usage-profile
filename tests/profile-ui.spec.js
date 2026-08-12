@@ -172,6 +172,33 @@ test.describe("theme surfaces", () => {
     });
   });
 
+  test("Task #96 theme text and heatmap keep one stable transition timeline", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto(OWNER_PROFILE_ROUTE);
+
+    const heading = page.locator(".profile-heading h1");
+    const heatmap = page.locator(".token-cell.token-level-4").first();
+    await expect(heading).toBeVisible();
+    await expect(heatmap).toBeVisible();
+
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(23, 23, 23)",
+      heatmap: "rgb(40, 116, 179)",
+      toggleName: "Switch to light theme"
+    });
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(242, 242, 242)",
+      heatmap: "rgb(140, 195, 255)",
+      toggleName: "Switch to dark theme"
+    });
+  });
+
   test("Task #96 theme swap avoids dense heatmap and inactive Skeleton animation fan-out", async ({ page }) => {
     await useThemePreference(page, "dark");
     await mockAuthenticatedAccount(page);
@@ -4422,6 +4449,77 @@ async function expectSemanticThemeTransition(page, targets, {
   await expect.poll(async () => targets.evaluateAll((elements) => (
     elements.map((element) => getComputedStyle(element).color)
   ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+}
+
+async function readThemeColors(page, heading, heatmap) {
+  return page.evaluate(({ headingElement, heatmapElement }) => {
+    const readTransition = (element, property) => {
+      const animation = element.getAnimations().find((candidate) => (
+        candidate.effect?.getKeyframes().some((frame) => property in frame)
+      ));
+      const frames = animation?.effect?.getKeyframes() ?? [];
+      return {
+        currentTime: Number(animation?.currentTime ?? 0),
+        duration: Number(animation?.effect?.getTiming().duration ?? 0),
+        startColor: frames[0]?.[property] ?? ""
+      };
+    };
+
+    return {
+      heading: getComputedStyle(headingElement).color,
+      headingAnimation: readTransition(headingElement, "color"),
+      heatmap: getComputedStyle(heatmapElement).backgroundColor,
+      heatmapAnimation: readTransition(heatmapElement, "backgroundColor")
+    };
+  }, {
+    headingElement: await heading.elementHandle(),
+    heatmapElement: await heatmap.elementHandle()
+  });
+}
+
+async function expectStableThemeTimeline(page, heading, heatmap, {
+  heading: finalHeading,
+  heatmap: finalHeatmap,
+  toggleName
+}) {
+  const initial = await readThemeColors(page, heading, heatmap);
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const samples = [];
+  for (const delay of [40, 80, 80]) {
+    await page.waitForTimeout(delay);
+    samples.push(await readThemeColors(page, heading, heatmap));
+  }
+
+  const activeHeadingSamples = samples.filter(({ headingAnimation }) => (
+    headingAnimation.duration > 0
+  ));
+  const activeHeatmapSamples = samples.filter(({ heatmapAnimation }) => (
+    heatmapAnimation.duration > 0
+  ));
+  expect(activeHeadingSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeadingSamples.every(({ headingAnimation }) => (
+    headingAnimation.duration === 240
+    && headingAnimation.startColor === initial.heading
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+  expect(activeHeadingSamples.map(({ headingAnimation }) => headingAnimation.currentTime))
+    .toEqual([...activeHeadingSamples]
+      .map(({ headingAnimation }) => headingAnimation.currentTime)
+      .sort((left, right) => left - right));
+  expect(activeHeatmapSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeatmapSamples.every(({ heatmapAnimation }) => (
+    heatmapAnimation.duration === 240
+    && heatmapAnimation.startColor === initial.heatmap
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+
+  await expect.poll(async () => readThemeColors(page, heading, heatmap), {
+    timeout: 360
+  }).toMatchObject({
+    heading: finalHeading,
+    heatmap: finalHeatmap
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
 }
 
 async function getMarketingMetrics(page) {

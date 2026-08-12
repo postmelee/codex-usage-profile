@@ -114,6 +114,27 @@ git diff --check
 - Home card·Share Studio·Profile card readiness 관련 시나리오 13개 모두 최종 통과
 - Sites 정적 build와 diff 검사 통과
 
+### PR 보정 검증 2 — 단일 color transition ownership (2026-08-13)
+
+실기기 관찰을 바탕으로 프레임별 Web Animations 상태를 추가 측정했다. surface ancestor와 semantic
+text descendant가 상속 `color`를 동시에 transition해 descendant 시작 keyframe이 매 프레임
+재설정되고, heatmap의 100ms 전환이 나머지 240ms 전환보다 먼저 끝나는 문제를 확인했다.
+
+- surface selector는 `background-color`와 `border-color`만 소유하도록 제한했다.
+- semantic text와 text-bearing control이 `color`를 직접 소유하도록 범위를 정리했다.
+- heatmap은 평상시 100ms 반응을 유지하되 theme swap 동안에만 240ms 공통 timeline을 사용한다.
+- 회귀 검증은 heading·heatmap의 시작 keyframe 고정, 240ms duration, currentTime 단조 증가와 최종
+  색 도달을 프레임 표본으로 확인한다.
+
+검증 결과:
+
+- Chromium theme surface 10/10, 전체 Profile UI 86/86 통과
+- WebKit Task #96 7/7 통과
+- theme·heatmap 관련 Node 25/25 통과
+- production Sites full-stack build 및 artifact verify 통과
+- 전체 Node suite는 실행 환경에서 장시간 정지해 중단했으며, 변경 범위 Node·전체 UI·production
+  artifact 검증으로 대체했다.
+
 ## 배포 감사
 
 - Sites hosting/deploy 명령을 실행하지 않았다.

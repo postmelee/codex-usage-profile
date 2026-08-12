@@ -328,10 +328,10 @@ button {
   }
 }
 
-/* Theme swaps opt semantic text and major surfaces into one short transition.
-   A universal selector would create hundreds of simultaneous animations for
-   the heatmap and an inactive card Skeleton, which is especially expensive on
-   mobile. Keep card motion and decorative animation ownership independent. */
+/* Theme swaps give each property one animation owner. Major containers own
+   their surfaces while semantic descendants own text color. Animating inherited
+   color on both levels retargets the descendant transition every frame and
+   produces a grey hold followed by a second transition. */
 :root[data-theme-animating] :where(
   body,
   .app-frame,
@@ -376,9 +376,7 @@ button {
 ) {
   transition:
     background-color 240ms ease,
-    border-color 240ms ease,
-    color 240ms ease,
-    fill 240ms ease !important;
+    border-color 240ms ease !important;
 }
 
 :root[data-theme-animating] :where(
@@ -388,6 +386,7 @@ button {
   .profile-actions > button,
   .profile-actions > a,
   .profile-actions > .account-menu > button,
+  .account-menu-item,
   .account-avatar-fallback,
   .account-popover-identity strong,
   .account-popover-identity span,
@@ -448,8 +447,16 @@ button {
   .settings-list-state,
   .settings-limit-note,
   .settings-error,
+  .settings-action-row input,
+  .settings-device-edit-row input,
+  .settings-token-code-row code,
+  .settings-muted-action,
+  .settings-danger-action,
   .device-header h1,
   .device-header p,
+  .device-form input,
+  .device-command-row code,
+  .device-copy-action,
   .device-form label,
   .device-security-note,
   .device-status,
@@ -473,6 +480,10 @@ button {
   .plugin-row,
   .activity-row dd,
   .plugin-runs,
+  .activity-empty,
+  .primary-command,
+  .secondary-command,
+  .icon-command,
   .site-footer-about p,
   .site-footer-about .site-footer-brand,
   .site-footer-privacy,
@@ -480,6 +491,13 @@ button {
   .site-footer-copyright
 ) {
   transition: color 240ms ease !important;
+}
+
+/* Heatmap cells keep their quicker 100ms feedback outside theme swaps. During
+   a theme swap they share the page timeline so their contrast does not settle
+   before the surrounding surface and text. */
+:root[data-theme-animating] .token-cell {
+  transition: background-color 240ms ease !important;
 }
 
 .profile-topbar-leading {
