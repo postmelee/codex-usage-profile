@@ -51,7 +51,7 @@
   --shadow-floating: light-dark(0 14px 38px rgba(17, 17, 17, 0.12), 0 14px 38px rgba(0, 0, 0, 0.28));
   --shadow-card: light-dark(0 16px 28px rgba(17, 17, 17, 0.2), 0 16px 28px rgba(0, 0, 0, 0.48));
   --card-filter-shadow: light-dark(rgba(17, 17, 17, 0.2), rgba(0, 0, 0, 0.48));
-  --usage-card-radius: clamp(22px, 6.4vw, 41px);
+  --usage-card-radius: 32px;
   --heatmap-empty: light-dark(#e5e5e3, #242424);
   --heatmap-level-1: light-dark(#c8dced, #31465f);
   --heatmap-level-2: light-dark(#91b8da, #446894);
@@ -3948,11 +3948,25 @@ button {
   }
 
   .profile-actions {
+    flex: 0 0 auto;
     gap: 10px;
   }
 
   .profile-topbar-leading {
+    flex: 1 1 auto;
     gap: 8px;
+    overflow: hidden;
+  }
+
+  .profile-topbar-github {
+    flex: 0 0 28px;
+    justify-content: center;
+    padding: 6px;
+    width: 28px;
+  }
+
+  .profile-topbar-github span {
+    display: none;
   }
 
   .profile-navigation a {
@@ -4179,7 +4193,7 @@ button {
 
   .account-login-link span,
   .account-status-button span:last-child {
-    max-width: 86px;
+    max-width: none;
   }
 
   .profile-view {

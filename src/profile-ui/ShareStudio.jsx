@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { createPortal } from "react-dom";
 
 import { CardImageFrame } from "../profile-marketing/MarketingLanding.jsx";
@@ -19,6 +26,7 @@ import {
   CARD_HANDOFF_PHASES,
   useCardHandoffMotion
 } from "./useCardHandoffMotion.js";
+import { useCardFrameRadius } from "./useCardFrameRadius.js";
 
 export function ShareStudio({
   cardLocale,
@@ -101,6 +109,17 @@ export function ShareStudio({
     sourceCardRef,
     sourceRect
   });
+  const {
+    radius: measuredRadius,
+    setElement: setRadiusElement
+  } = useCardFrameRadius(canRender);
+  const setMotionCardElement = useCallback((element) => {
+    motionCardRef.current = element;
+    setRadiusElement(element);
+  }, [motionCardRef, setRadiusElement]);
+  const cardStyle = measuredRadius === null
+    ? undefined
+    : { "--usage-card-radius": `${measuredRadius}px` };
 
   useEffect(() => {
     if (!canRender || !cardImage.failed) return;
@@ -280,7 +299,8 @@ export function ShareStudio({
           data-share-preview-source={showPublicTarget ? "public" : hasWarmSource ? "source" : "cold"}
           data-share-target-status={previewFailed ? "error" : cardImage.status}
           data-testid="share-studio-card-motion"
-          ref={motionCardRef}
+          ref={setMotionCardElement}
+          style={cardStyle}
         >
           <CardImageFrame
             alt={copy.previewAlt}

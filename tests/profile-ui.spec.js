@@ -668,7 +668,14 @@ test.describe("Home and share card flow", () => {
       (element) => Boolean(element.shadowRoot?.querySelector("[part=container]"))
     )).toBe(true);
     await expect(page.locator(".home-card-beam")).toHaveAttribute("data-beam", /.+/);
-    await expect(page.locator(".home-card-beam")).toHaveCSS("border-radius", "41px");
+    const cardFrame = await page.locator(".home-card-beam").evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        width: bounds.width
+      };
+    });
+    expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
     const tiltBox = await tilt.boundingBox();
     expect(tiltBox).not.toBeNull();
     await page.mouse.move(tiltBox.x + tiltBox.width * 0.82, tiltBox.y + tiltBox.height * 0.2);
@@ -683,8 +690,10 @@ test.describe("Home and share card flow", () => {
       (element) => Number.parseFloat(getComputedStyle(element).opacity)
     )).toBeLessThanOrEqual(0.22);
     await expect.poll(() => tilt.evaluate(
-      (element) => getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
-    )).toBe("41px");
+      (element) => Number.parseFloat(
+        getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
+      )
+    )).toBeCloseTo(cardFrame.radius, 1);
     await page.waitForTimeout(450);
     const quickstartBox = await page.getByRole("heading", { name: "Quickstart" }).boundingBox();
     expect(quickstartBox).not.toBeNull();
@@ -737,6 +746,58 @@ test.describe("Home and share card flow", () => {
       "cup_"
     ]) {
       expect(homeMarkup).not.toContain(internalValue);
+    }
+  });
+
+  test("Task #92 mobile anonymous header keeps Sign in fully visible", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAnonymousAccount(page);
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const signIn = page.getByRole("link", { name: "Sign in", exact: true });
+      await expect(signIn).toBeVisible();
+      await expect(page.locator(".profile-topbar-github span")).toBeHidden();
+      const layout = await page.locator(".profile-topbar").evaluate((topbar) => {
+        const bounds = (selector) => {
+          const element = topbar.querySelector(selector);
+          const rect = element?.getBoundingClientRect();
+          return rect ? { left: rect.left, right: rect.right } : null;
+        };
+        const signInText = topbar.querySelector(".account-login-link span");
+        return {
+          actions: bounds(".profile-actions"),
+          leading: bounds(".profile-topbar-leading"),
+          signIn: bounds(".account-login-link"),
+          signInTextFits: signInText
+            ? signInText.scrollWidth <= signInText.clientWidth
+            : false,
+          topbar: {
+            left: topbar.getBoundingClientRect().left,
+            right: topbar.getBoundingClientRect().right
+          }
+        };
+      });
+
+      expect(layout.signInTextFits).toBe(true);
+      expect(layout.actions.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.signIn.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.leading.right).toBeLessThanOrEqual(layout.actions.left);
+      expect(await page.evaluate(
+        () => document.body.scrollWidth > document.documentElement.clientWidth
+      )).toBe(false);
+      await page.screenshot({ path: testInfo.outputPath("home-mobile-anonymous-header.png") });
+    } finally {
+      await context.close();
     }
   });
 
@@ -2342,10 +2403,14 @@ test.describe("Home and share card flow", () => {
       await expect(sourceCard).toBeVisible();
       const source = await sourceCard.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
+        const media = element.querySelector(".home-card-media");
         return {
           borderRadius: getComputedStyle(element).borderTopLeftRadius,
           height: bounds.height,
           left: bounds.left,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
           top: bounds.top,
           width: bounds.width
         };
@@ -2364,10 +2429,14 @@ test.describe("Home and share card flow", () => {
         ).find((keyframe) => keyframe.transform)?.transform ?? "none";
         const matrix = new DOMMatrixReadOnly(firstTransform);
         const image = element.querySelector(".share-card-preview");
+        const media = element.querySelector(".home-card-media");
         return {
           borderRadius: getComputedStyle(element).borderTopLeftRadius,
           height: bounds.height,
           imageFilter: image ? getComputedStyle(image).filter : null,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
           scaleX: Math.round(matrix.a * 1000) / 1000,
           scaleY: Math.round(matrix.d * 1000) / 1000,
           startLeft: bounds.left + matrix.e,
@@ -2384,6 +2453,9 @@ test.describe("Home and share card flow", () => {
       });
       expect(target.width).toBeCloseTo(source.width, 0);
       expect(target.height).toBeCloseTo(source.height, 0);
+      expect(source.mediaRadius).toBeCloseTo(source.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(target.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(source.mediaRadius, 1);
       expect(target.startLeft).toBeCloseTo(source.left, 0);
       expect(target.startTop).toBeCloseTo(source.top, 0);
 
@@ -3184,6 +3256,19 @@ test.describe("Profile and Settings canvases", () => {
       expect(await page.evaluate(
         () => document.body.scrollWidth > document.documentElement.clientWidth
       )).toBe(false);
+
+      if (path === "/profile") {
+        const cardFrame = await page.locator(
+          ".profile-card-section .home-card-media"
+        ).evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+            width: bounds.width
+          };
+        });
+        expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
+      }
     }
   });
 });
