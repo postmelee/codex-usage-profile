@@ -1020,6 +1020,7 @@ button {
 }
 
 .home-account-identity strong {
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1061,6 +1062,7 @@ button {
 }
 
 .home-quickstart-heading h2 {
+  color: var(--text-primary);
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1178,6 +1180,7 @@ button {
 }
 
 .home-quickstart-steps h3 {
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
@@ -2999,6 +3002,7 @@ button {
 }
 
 .device-header h1 {
+  color: var(--text-primary);
   font-size: 28px;
   font-weight: 500;
   line-height: 1.15;
@@ -3297,6 +3301,7 @@ button {
 .profile-heading h1,
 .profile-heading h2,
 .profile-stage h2 {
+  color: var(--text-primary);
   font-size: 28px;
   font-weight: 500;
   line-height: 1.15;

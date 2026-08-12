@@ -12,13 +12,13 @@ const PROJECT_ROOT = join(
 );
 const STYLESHEET_PATH = join(PROJECT_ROOT, "src", "styles.css");
 
-test("Task #96 primary headings own their semantic text color", {
-  todo: "Stage 2 assigns semantic color directly to inherited headings"
-}, async () => {
+test("Task #96 primary headings own their semantic text color", async () => {
   const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
   const selectors = [
     ".home-quickstart-heading h2",
     ".home-quickstart-steps h3",
+    ".home-account-identity strong",
+    ".device-header h1",
     ".profile-heading h1",
     ".profile-heading h2",
     ".profile-stage h2"
@@ -60,11 +60,11 @@ test("Task #96 card Skeleton exposes an explicit card-theme variant", {
 });
 
 function findRule(stylesheet, selector) {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = stylesheet.match(new RegExp(
-    `(?:^|\\n)(?:[^{}]+,\\s*\\n)*\\s*${escapedSelector}(?:,\\s*\\n[^{}]+)*\\s*\\{([^}]*)\\}`,
-    "m"
-  ));
-  assert.ok(match, `Missing CSS rule for ${selector}`);
-  return match[1];
+  const bodies = Array.from(stylesheet.matchAll(/([^{}]+)\{([^{}]*)\}/g))
+    .filter((match) => match[1].split(",").some((candidate) => (
+      candidate.trim() === selector
+    )))
+    .map((match) => match[2]);
+  assert.ok(bodies.length > 0, `Missing CSS rule for ${selector}`);
+  return bodies.join("\n");
 }

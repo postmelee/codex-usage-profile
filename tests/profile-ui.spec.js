@@ -100,6 +100,62 @@ test.describe("theme surfaces", () => {
     await expect(cardPlaceholder).toHaveCSS("background-color", "rgb(24, 24, 24)");
   });
 
+  test("Task #96 semantic primary text stays inside one theme transition window", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const homeTargets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3",
+      ".home-account-identity strong"
+    ].join(", "));
+    await expect(homeTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, homeTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    const profileTargets = page.locator([
+      ".profile-heading h1",
+      ".profile-heading h2",
+      ".profile-stage h2"
+    ].join(", "));
+    await expect(profileTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, profileTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 reduced motion changes semantic text without a transition window", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    const targets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3"
+    ].join(", "));
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+    expect(await targets.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, duration: style.transitionDuration };
+    }))).toEqual(Array.from({ length: await targets.count() }, () => ({
+      color: "rgb(23, 23, 23)",
+      duration: "0s"
+    })));
+  });
+
   test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
     const approvedArtworkSelectors = [
       ".avatar-fallback",
@@ -4246,6 +4302,48 @@ async function getClippedHomeElements(page) {
       ? [`${element.tagName.toLowerCase()}.${element.className}`]
       : [];
   }));
+}
+
+async function expectSemanticThemeTransition(page, targets, {
+  finalColor,
+  toggleName
+}) {
+  const initialColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const transitionContract = await targets.evaluateAll((elements) => (
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration,
+        property: style.transitionProperty
+      };
+    })
+  ));
+  expect(transitionContract.every(({ duration, property }) => (
+    duration.split(", ").includes("0.24s") && property.includes("color")
+  ))).toBe(true);
+
+  await page.waitForTimeout(120);
+  const midpointColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  expect(midpointColors.every((color, index) => (
+    color !== initialColors[index] && color !== finalColor
+  ))).toBe(true);
+
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+
+  await page.waitForTimeout(80);
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
 }
 
 async function getMarketingMetrics(page) {
