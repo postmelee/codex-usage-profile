@@ -129,6 +129,7 @@ Task #91 Stage 2: login과 submit에 star prompt 연결
 
 - `docs/cli-submit.md`
 - `packages/codex-usage-profile-cli/README.md`
+- `scripts/verify-npm-release.mjs`
 
 신규:
 
@@ -142,6 +143,7 @@ Task #91 Stage 2: login과 submit에 star prompt 연결
 - 이미 starred, non-TTY, pipe/redirection, CI, `submit --json`, 기존 login shortcut과 실패 경로에서는 prompt가 나오지 않음을 문서화한다.
 - 제품 OAuth/submit credential을 GitHub star에 사용하거나 저장하지 않으며 브라우저를 열지 않는다는 보안 경계를 기록한다.
 - npm package README에도 동일한 핵심 계약과 local `gh` optional requirement를 간결하게 반영한다.
+- 신규 배포 파일 `src/github-star.js`를 npm release verifier의 exact package allowlist에 추가해 package entry count와 source·tarball 검증이 새 배포 surface를 명시적으로 허용하게 한다.
 - package test, root test, local npm package smoke, public release surface scan을 실행해 package contents와 기존 계약을 검증한다.
 
 ### 검증
@@ -159,6 +161,7 @@ git diff --check
 - 공식 CLI guide와 배포 package README가 실제 구현의 적용·제외 조건, 기본 Yes와 active account 경계를 일치하게 설명한다.
 - package/root test와 local package smoke가 모두 통과한다.
 - public release scan에서 credential, token, raw stderr 또는 내부 task 문서가 배포 surface에 새로 노출되지 않는다.
+- npm release verifier가 `src/github-star.js`를 포함한 exact package candidate를 승인하고 그 밖의 추가 파일은 계속 거부한다.
 - 전체 변경이 승인된 수행계획 범위와 문서 위치 판단을 벗어나지 않는다.
 
 ### 커밋

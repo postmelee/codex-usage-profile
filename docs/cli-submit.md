@@ -16,6 +16,8 @@
   `Applications` 위치에 설치된 `ChatGPT.app`/`Codex.app`
 - `account/usage/read`를 지원하는 ChatGPT 기반 Codex 로그인
 - 웹사이트에서 GitHub로 연결할 수 있는 계정
+- 선택적 terminal star 안내를 사용하려면 로컬 `gh` CLI와 authenticated
+  GitHub account
 
 API key-only와 Bedrock 인증은 이 account usage method를 제공하지 않는다. CLI는 OpenAI 또는 Codex token을 입력받지 않고 설치된 Codex 프로세스에 인증을 위임한다.
 
@@ -39,6 +41,43 @@ npx codex-usage-profile@latest status
 CLI는 production Sites origin을 기본값으로 사용하고 첫 로그인에서 credential과 함께 저장한다. `--server`는 local development 또는 명시적으로 검토한 대체 deployment에만 사용한다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
 
 raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
+
+## 선택적 GitHub star 안내
+
+새 device `login` 또는 human-readable `submit`이 내부적으로 성공하면 CLI는
+기존 성공 결과를 출력하기 전에 local `gh`의 active account가
+`postmelee/codex-usage-profile`을 star할지 한 줄로 묻는다.
+
+```text
+Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n)
+```
+
+Enter, `y`, `yes`는 동의이며 Enter 기본값은 **Yes**다. `n`, `no`는 star하지
+않고 원래 login 또는 submit 결과를 계속 표시한다. 다른 입력은 `y` 또는
+`n`을 다시 묻는다. 동의하면 브라우저를 열지 않고 다음 고정 작업과 같은
+local `gh api` 요청을 실행한다.
+
+```bash
+gh api --silent --method PUT \
+  /user/starred/postmelee/codex-usage-profile
+```
+
+prompt의 `@octocat`은 Codex Usage Profile owner가 아니라 local `gh`가 선택한
+active GitHub account다. CLI는 제품의 GitHub OAuth token이나 service submit
+credential을 이 작업에 사용하거나 `gh` credential을 읽어 저장하지 않는다.
+이미 star한 account이면 질문을 생략한다.
+
+다음 경우에는 prompt와 star 요청을 모두 생략한다.
+
+- 유효한 credential 때문에 `Already signed in`만 출력하는 `login`
+- 실패한 login 또는 submit, `status`, `logout`, help와 version
+- `submit --json`, stdin/stdout 중 하나라도 TTY가 아닌 pipe·redirection
+- `CI` 환경변수가 활성화된 unattended execution
+- `gh` 미설치·미인증, active account 조회 실패, 권한·network·timeout 오류
+
+credential이 없어서 submit 중 auto-login한 경우에는 login 경계가 아니라
+submit 성공 경계에서 한 번만 묻는다. `gh` 상태 확인이나 star 요청이 실패해도
+raw stderr를 출력하지 않고 원래 login/submit 결과와 exit status를 보존한다.
 
 ## Codex 실행 파일 탐색
 
@@ -77,6 +116,10 @@ npx --yes codex-usage-profile@0.1.1 submit --json
 ```
 
 여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
+
+`submit --json`, non-TTY와 활성화된 `CI` 환경에서는 선택적 GitHub star
+prompt가 실행되지 않으므로 stdout은 추가 문구 없는 단일 JSON document로
+유지된다.
 
 ## 로컬과 tarball 검증
 
@@ -247,5 +290,7 @@ CLI는 raw upstream stderr, RPC message, local path와 service error body를 그
 - submit token은 한 GitHub owner의 usage update에만 사용한다.
 - usage document의 identity/device/wrapper/unknown field는 거부된다.
 - public card visibility는 CLI가 아니라 웹 profile 설정에서만 변경한다.
+- 선택적 repository star는 local `gh` active account가 GitHub API에 직접
+  수행하며 제품 OAuth 또는 submit credential과 분리된다.
 - production Sites는 TLS, D1 shared rate limiter, durable D1/R2,
   backup/restore, operator deletion과 manual retention 정책을 사용한다.
