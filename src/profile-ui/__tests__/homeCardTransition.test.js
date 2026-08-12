@@ -38,6 +38,10 @@ test("starts with one immutable pending operator source", () => {
   assert.equal(state.visible, null);
 });
 
+test.todo(
+  "tracks the immutable selected target after a pending source becomes fallback"
+);
+
 test("commits only the current generation and preserves the visible card while pending", () => {
   const operatorReady = resolveHomeCardTransition(createTransition(), 1);
   assert.equal(operatorReady.status, HOME_CARD_TRANSITION_STATUSES.READY);
