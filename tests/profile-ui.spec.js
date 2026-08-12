@@ -1037,38 +1037,7 @@ test.describe("Home and share card flow", () => {
   });
 
   test("Task #95 authenticated Home reveals only the final owner target", async ({ page }, testInfo) => {
-    await page.addInitScript(() => {
-      globalThis.__task95HomeCardHistory = [];
-      let lastSnapshot = null;
-
-      const record = () => {
-        const media = document.querySelector(".home-card-media");
-        if (!media) return;
-
-        const snapshot = {
-          busy: media.getAttribute("aria-busy"),
-          kind: media.getAttribute("data-card-source-kind"),
-          status: media.getAttribute("data-card-status")
-        };
-        const serialized = JSON.stringify(snapshot);
-        if (serialized === lastSnapshot) return;
-
-        lastSnapshot = serialized;
-        globalThis.__task95HomeCardHistory.push(snapshot);
-      };
-
-      new MutationObserver(record).observe(document, {
-        attributeFilter: [
-          "aria-busy",
-          "data-card-source-kind",
-          "data-card-status"
-        ],
-        attributes: true,
-        childList: true,
-        subtree: true
-      });
-      requestAnimationFrame(record);
-    });
+    await installTask95HomeCardHistoryObserver(page);
 
     let releaseProfile;
     let releaseOwnerImage;
@@ -1127,24 +1096,47 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-status", "ready");
     await expect(media).toHaveAttribute("aria-busy", "false");
 
-    const history = await page.evaluate(
-      () => globalThis.__task95HomeCardHistory
-    );
-    const statuses = history
-      .map((entry) => entry.status)
-      .filter(Boolean)
-      .filter((status, index, values) => index === 0 || status !== values[index - 1]);
+    const { history, statuses } = await readTask95HomeCardHistory(page);
     await testInfo.attach("task95-home-card-history.json", {
       body: Buffer.from(JSON.stringify({ history, statuses }, null, 2)),
       contentType: "application/json"
     });
 
-    expect(statuses).toEqual(["loading", "ready"]);
-    expect(history).not.toContainEqual({
-      busy: "false",
-      kind: "operator",
-      status: "ready"
-    });
+    expectTask95FinalOwnerHistory({ history, statuses });
+  });
+
+  test("Task #95 Profile brand return reveals one final owner card", async ({ page }) => {
+    await installTask95HomeCardHistoryObserver(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    await expect(page.locator(".card-profile-view")).toBeVisible();
+    await page.locator(".profile-topbar-title").click();
+
+    await expect(page).toHaveURL(/\/$/);
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    expectTask95FinalOwnerHistory(await readTask95HomeCardHistory(page));
+  });
+
+  test("Task #95 cold and warm Home reloads remain monotonic", async ({ page }) => {
+    await installTask95HomeCardHistoryObserver(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "ready");
+
+    for (let reload = 0; reload < 2; reload += 1) {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const media = page.locator(".home-card-media");
+      await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+      await expect(media).toHaveAttribute("data-card-status", "ready");
+      expectTask95FinalOwnerHistory(await readTask95HomeCardHistory(page));
+    }
   });
 
   test("Home card transition keeps a stable skeleton box on mobile", async ({ page }, testInfo) => {
@@ -4040,6 +4032,68 @@ async function dismissCardIntro(page) {
   if (await intro.count() === 0) return;
   await page.locator(".public-card-intro-close").click();
   await expect(intro).toHaveCount(0);
+}
+
+async function installTask95HomeCardHistoryObserver(page) {
+  await page.addInitScript(() => {
+    globalThis.__task95HomeCardHistory = [];
+    let lastSnapshot = null;
+
+    const record = () => {
+      const media = document.querySelector(".home-card-media");
+      if (!media) return;
+
+      const snapshot = {
+        busy: media.getAttribute("aria-busy"),
+        kind: media.getAttribute("data-card-source-kind"),
+        status: media.getAttribute("data-card-status")
+      };
+      const serialized = JSON.stringify(snapshot);
+      if (serialized === lastSnapshot) return;
+
+      lastSnapshot = serialized;
+      globalThis.__task95HomeCardHistory.push(snapshot);
+    };
+
+    new MutationObserver(record).observe(document, {
+      attributeFilter: [
+        "aria-busy",
+        "data-card-source-kind",
+        "data-card-status"
+      ],
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+    requestAnimationFrame(record);
+  });
+}
+
+async function readTask95HomeCardHistory(page) {
+  const history = await page.evaluate(
+    () => globalThis.__task95HomeCardHistory
+  );
+  const statuses = history
+    .map((entry) => entry.status)
+    .filter(Boolean)
+    .filter((status, index, values) => (
+      index === 0 || status !== values[index - 1]
+    ));
+  return { history, statuses };
+}
+
+function expectTask95FinalOwnerHistory({ history, statuses }) {
+  expect(statuses).toEqual(["loading", "ready"]);
+  expect(history).not.toContainEqual({
+    busy: "false",
+    kind: "operator",
+    status: "ready"
+  });
+  expect(history.at(-1)).toEqual({
+    busy: "false",
+    kind: "owner",
+    status: "ready"
+  });
 }
 
 async function mockAnonymousAccount(page) {
