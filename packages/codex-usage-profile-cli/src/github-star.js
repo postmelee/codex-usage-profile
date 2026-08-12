@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import { createInterface } from "node:readline/promises";
 
 const GH_COMMAND_TIMEOUT_MS = 5_000;
@@ -117,8 +118,12 @@ async function promptForAnswer({ stdin, stdout, message }) {
     output: stdout,
     terminal: true
   });
+  const closed = once(readline, "close").then(() => null);
   try {
-    return await readline.question(message);
+    return await Promise.race([
+      readline.question(message),
+      closed
+    ]);
   } finally {
     readline.close();
   }

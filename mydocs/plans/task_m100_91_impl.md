@@ -11,6 +11,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 1 | GitHub star prompt core와 fail-soft 경계 | `src/github-star.js`, `test/github-star.test.js` | focused Node test |
 | 2 | login·submit 성공 흐름 통합 | `src/cli.js`, `test/cli.test.js` | CLI package test |
 | 3 | 사용자 문서와 package 통합 검증 | `docs/cli-submit.md`, CLI package `README.md` | package/root/smoke/release 검증 |
+| 3.1 | PR 리뷰 EOF 차단 항목 보정 | `src/github-star.js`, 실제 readline EOF 회귀 test | focused/package/root/smoke/release 재검증 |
 
 ## 문서 위치 확인
 
@@ -170,19 +171,70 @@ git diff --check
 Task #91 Stage 3: star prompt 문서화와 통합 검증
 ```
 
+## Stage 3.1 — PR 리뷰 EOF 차단 항목 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `보정을 진행해줘.`
+
+### 산출물
+
+수정:
+
+- `packages/codex-usage-profile-cli/src/github-star.js`
+- `packages/codex-usage-profile-cli/test/github-star.test.js`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_1.md`
+
+### 변경 내용
+
+- PR #93 owner review가 지적한 실제 `readline.question()` EOF 미정착을 재현하고, stdin 종료 시 질문 promise가 남지 않도록 `close` event와 질문 결과를 함께 기다린다.
+- EOF는 기존 계약대로 거절과 동일한 `null` 응답으로 정규화해 login/submit 성공 결과와 exit status를 보존한다.
+- TTY로 표시한 `PassThrough` stdin/stdout과 기본 prompt reader를 사용해 stdin `.end()`가 `maybePromptGithubStar()`를 `false`로 정착시키고 PUT을 호출하지 않는 회귀 test를 추가한다.
+- 기존 `prompt: async () => undefined` 주입 test는 실제 default readline 경로를 검증하는 test로 교체한다.
+- Ctrl+C, 질문 예외와 PUT 실패의 기존 fail-soft 계약은 유지하고 focused test 및 수동 PTY 확인 결과를 단계 보고서에 기록한다.
+- 명시적 No를 세션에 기억하는 UX, prompt 이전 `gh` 조회 timeout 개선, eligibility 중복 제거는 이번 EOF Blocker 보정 범위에서 제외한다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/github-star.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+```
+
+### 완료 조건
+
+- 실제 default readline 경로에서 stdin EOF가 발생해도 helper가 `false`로 정착하고 PUT을 호출하지 않는다.
+- fresh login과 성공한 interactive submit의 결과가 EOF 뒤 정상 출력되며 기존 성공 exit status가 유지된다.
+- Enter 기본 Yes, 명시적 No, invalid input 재질문, Ctrl+C와 모든 기존 fail-soft 경계에 회귀가 없다.
+- package/root/smoke/release 검증이 모두 통과하고 배포 surface는 변경되지 않는다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
 - 외부 GitHub mutation이 가능한 test는 작성하지 않으며 모든 `gh` 동작을 fake runner로 검증한다.
 - 실패한 검증은 단계 완료로 처리하지 않는다.
-- 각 단계 완료 시 `task-stage-report` 절차로 단계 보고서를 작성하고 단계 산출물과 함께 커밋한 뒤 다음 단계 승인을 요청한다.
+- 각 단계 완료 시 `task-stage-report` 절차로 단계 보고서를 작성하고 단계 산출물과 함께 커밋한 뒤 다음 단계 승인을 요청한다. 승인된 PR 리뷰 Blocker 보정은 Stage 3.1로 기록한다.
 - 계획 변경이 필요하면 이 구현계획서를 먼저 갱신하고 작업지시자 승인을 받는다.
 - 문서 위치가 수행계획서 판단과 달라지면 구현 전에 수행계획서 또는 구현계획서를 갱신하고 작업지시자 승인을 받는다.
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다.
-- 커밋 메시지는 `Task #91 Stage {N}: {핵심 내용 요약}` 형식을 따른다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`처럼 소수점을 밑줄로 표기한다.
+- 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
 ## 단계 의존성
@@ -190,6 +242,7 @@ Task #91 Stage 3: star prompt 문서화와 통합 검증
 - Stage 2는 Stage 1의 helper API와 fail-soft 동작이 검증되고 Stage 1 보고서가 승인된 뒤 진행한다.
 - Stage 3은 Stage 2의 login·submit 통합 검증과 보고서가 승인된 뒤 진행한다.
 - Stage 3 완료 뒤 전체 task 검증 결과를 확인하고 `task-final-report` 절차로 최종 보고서와 PR 게시를 진행한다.
+- Stage 3.1은 PR #93 리뷰 Blocker의 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 최종 보고서를 갱신한다.
 
 ## 위험과 대응
 
@@ -200,6 +253,7 @@ Task #91 Stage 3: star prompt 문서화와 통합 검증
 - **JSON과 automation 오염**: TTY/JSON gate를 subprocess보다 먼저 적용하고 CLI test에서 helper 호출 여부와 JSON parsing을 함께 검증한다.
 - **shell injection과 secret 노출**: shell을 사용하지 않고 고정 argument array만 전달하며 raw child process 오류를 terminal이나 assertion output에 반영하지 않는다.
 - **플랫폼 차이**: shell 문법이나 browser open에 의존하지 않고 missing executable을 정상적인 optional-unavailable 상태로 다룬다.
+- **readline EOF 미정착**: 질문 결과뿐 아니라 interface `close` event를 함께 기다리고 실제 stream EOF 회귀 test로 성공 결과 억제를 방지한다.
 
 ## 승인 요청 사항
 

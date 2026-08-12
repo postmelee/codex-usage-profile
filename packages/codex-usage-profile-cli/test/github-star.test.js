@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import {
@@ -46,22 +47,37 @@ test("skips gh entirely for JSON, CI, and non-TTY output", async () => {
   }
 });
 
-test("treats a prompt that closes without an answer as decline", async () => {
+test("treats EOF from the default readline prompt as decline", async () => {
   const calls = [];
-  const io = createIo();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  stdin.isTTY = true;
+  stdout.isTTY = true;
+  stdout.setEncoding("utf8");
+  let output = "";
+  stdout.on("data", (chunk) => {
+    output += chunk;
+  });
 
-  assert.equal(await maybePromptGithubStar({
-    ...io,
+  const result = maybePromptGithubStar({
+    stdin,
+    stdout,
     env: {},
     runGh: createSequenceRunner(calls, [
       { ok: true, stdout: "octocat\n" },
       { ok: false, statusCode: 404 }
-    ]),
-    prompt: async () => undefined
-  }), false);
+    ])
+  });
+  setImmediate(() => stdin.end());
 
+  assert.equal(await result, false);
   assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS]);
-  assert.equal(io.stdout.value, "");
+  assert.equal(
+    output.includes(
+      "Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n) "
+    ),
+    true
+  );
 });
 
 test("skips the prompt when the active account already starred the repository", async () => {
