@@ -12,6 +12,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 2 | login·submit 성공 흐름 통합 | `src/cli.js`, `test/cli.test.js` | CLI package test |
 | 3 | 사용자 문서와 package 통합 검증 | `docs/cli-submit.md`, CLI package `README.md` | package/root/smoke/release 검증 |
 | 3.1 | PR 리뷰 EOF 차단 항목 보정 | `src/github-star.js`, 실제 readline EOF 회귀 test | focused/package/root/smoke/release 재검증 |
+| 3.2 | star prompt 터미널 UX 보정 | 안내 블록·ANSI color·평문 fallback·공식 문서 | focused/package/root/smoke/release 재검증 |
 
 ## 문서 위치 확인
 
@@ -222,6 +223,62 @@ git diff --check
 Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 ```
 
+## Stage 3.2 — star prompt 터미널 UX 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `그렇게 적용해줘.`
+
+### 산출물
+
+수정:
+
+- `packages/codex-usage-profile-cli/src/github-star.js`
+- `packages/codex-usage-profile-cli/test/github-star.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_2.md`
+
+### 변경 내용
+
+- star prompt가 실제로 표시될 때 기존 login/submit 출력과 구분되도록 블록 앞뒤에 빈 줄을 한 줄씩 둔다.
+- 합의한 문구를 `Help us grow! 🌱`, `A GitHub star helps others discover Codex Usage Profile.`, `Would you like to star it on GitHub as @<active-gh-account>? (Y/n)` 순서로 표시한다.
+- 성공 시 `✓ Starred! Thank you for your support, @<active-gh-account>. ⭐`를 표시한다.
+- 실제 TTY color-capable 환경에서는 제목 cyan, 설명 bright black, 성공 문구 green을 dependency 추가 없이 ANSI SGR로 표시한다.
+- `NO_COLOR`가 설정됐거나 `TERM=dumb`이면 동일 문구와 빈 줄 구조를 ANSI escape 없는 평문으로 출력한다.
+- JSON·CI·비TTY·already-starred·`gh` unavailable 경로는 기존처럼 안내 블록과 ANSI를 모두 출력하지 않는다.
+- Enter 기본 Yes, `n`/`no` 거절, invalid input 재질문, EOF/Ctrl+C와 `gh` failure의 fail-soft 계약을 유지한다.
+- 공식 CLI guide와 npm package README의 예시를 실제 다중 행 안내 블록과 color fallback 계약으로 갱신한다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/github-star.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+```
+
+### 완료 조건
+
+- color-capable TTY에서 앞뒤 빈 줄, cyan 제목, 흐린 설명, 기본색 질문과 green 성공 문구가 합의한 순서로 출력된다.
+- `NO_COLOR`·`TERM=dumb`에서는 문구와 간격은 유지되고 ANSI escape가 전혀 없다.
+- 거절·EOF·실패에서도 prompt 블록 뒤 빈 줄이 유지되고 기존 성공 결과와 exit status가 보존된다.
+- prompt 제외 경로와 JSON output에는 신규 문구·emoji·ANSI가 나타나지 않는다.
+- package/root/smoke/release 검증이 모두 통과하고 신규 runtime dependency나 배포 entry가 추가되지 않는다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.2]: star prompt terminal UX 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -233,7 +290,7 @@ Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`처럼 소수점을 밑줄로 표기한다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`, `_stage3_2.md`처럼 소수점을 밑줄로 표기한다.
 - 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
@@ -243,6 +300,7 @@ Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 - Stage 3은 Stage 2의 login·submit 통합 검증과 보고서가 승인된 뒤 진행한다.
 - Stage 3 완료 뒤 전체 task 검증 결과를 확인하고 `task-final-report` 절차로 최종 보고서와 PR 게시를 진행한다.
 - Stage 3.1은 PR #93 리뷰 Blocker의 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 최종 보고서를 갱신한다.
+- Stage 3.2는 작업지시자의 terminal UX 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 사용자 문서를 갱신한다.
 
 ## 위험과 대응
 
@@ -254,6 +312,7 @@ Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 - **shell injection과 secret 노출**: shell을 사용하지 않고 고정 argument array만 전달하며 raw child process 오류를 terminal이나 assertion output에 반영하지 않는다.
 - **플랫폼 차이**: shell 문법이나 browser open에 의존하지 않고 missing executable을 정상적인 optional-unavailable 상태로 다룬다.
 - **readline EOF 미정착**: 질문 결과뿐 아니라 interface `close` event를 함께 기다리고 실제 stream EOF 회귀 test로 성공 결과 억제를 방지한다.
+- **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`·`TERM=dumb`에서 평문 fallback을 검증해 log와 제한된 terminal의 escape 오염을 막는다.
 
 ## 승인 요청 사항
 

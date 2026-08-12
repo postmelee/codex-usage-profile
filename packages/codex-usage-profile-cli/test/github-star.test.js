@@ -22,6 +22,24 @@ const STAR_ARGS = [
   "PUT",
   "/user/starred/postmelee/codex-usage-profile"
 ];
+const COLOR_PROMPT_HEADER = [
+  "",
+  "\u001B[36mHelp us grow! 🌱\u001B[0m",
+  "\u001B[90mA GitHub star helps others discover Codex Usage Profile.\u001B[0m",
+  ""
+].join("\n");
+const PLAIN_PROMPT_HEADER = [
+  "",
+  "Help us grow! 🌱",
+  "A GitHub star helps others discover Codex Usage Profile.",
+  ""
+].join("\n");
+const COLOR_SUCCESS =
+  "\u001B[32m✓ Starred! Thank you for your support, @octocat. ⭐\u001B[0m";
+const PLAIN_SUCCESS =
+  "✓ Starred! Thank you for your support, @octocat. ⭐";
+const PROMPT_MESSAGE =
+  "Would you like to star it on GitHub as @octocat? (Y/n) ";
 
 test("skips gh entirely for JSON, CI, and non-TTY output", async () => {
   for (const options of [
@@ -72,12 +90,9 @@ test("treats EOF from the default readline prompt as decline", async () => {
 
   assert.equal(await result, false);
   assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS]);
-  assert.equal(
-    output.includes(
-      "Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n) "
-    ),
-    true
-  );
+  assert.equal(output.includes("Help us grow! 🌱"), true);
+  assert.equal(output.includes(PROMPT_MESSAGE), true);
+  assert.equal(output.endsWith("\n"), true);
 });
 
 test("skips the prompt when the active account already starred the repository", async () => {
@@ -124,13 +139,35 @@ test("treats Enter, y, and yes as consent for the fixed repository", async () =>
     }), true);
 
     assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS, STAR_ARGS]);
-    assert.deepEqual(messages, [
-      "Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n) "
-    ]);
+    assert.deepEqual(messages, [PROMPT_MESSAGE]);
     assert.equal(
       io.stdout.value,
-      "Starred postmelee/codex-usage-profile as @octocat.\n"
+      `${COLOR_PROMPT_HEADER}${COLOR_SUCCESS}\n\n`
     );
+  }
+});
+
+test("uses plain prompt output when color is disabled", async () => {
+  for (const env of [{ NO_COLOR: "" }, { TERM: "dumb" }]) {
+    const calls = [];
+    const io = createIo({ env });
+
+    assert.equal(await maybePromptGithubStar({
+      ...io,
+      runGh: createSequenceRunner(calls, [
+        { ok: true, stdout: "octocat\n" },
+        { ok: false, statusCode: 404 },
+        { ok: true, stdout: "" }
+      ]),
+      prompt: async () => ""
+    }), true);
+
+    assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS, STAR_ARGS]);
+    assert.equal(
+      io.stdout.value,
+      `${PLAIN_PROMPT_HEADER}${PLAIN_SUCCESS}\n\n`
+    );
+    assert.equal(io.stdout.value.includes("\u001B"), false);
   }
 });
 
@@ -149,7 +186,7 @@ test("treats n and no as decline without a PUT request", async () => {
     }), false);
 
     assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS]);
-    assert.equal(io.stdout.value, "");
+    assert.equal(io.stdout.value, `${COLOR_PROMPT_HEADER}\n`);
   }
 });
 
@@ -173,7 +210,7 @@ test("re-prompts invalid input before accepting the default Yes", async () => {
   assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS, STAR_ARGS]);
   assert.equal(
     io.stdout.value,
-    "Please answer y or n.\nStarred postmelee/codex-usage-profile as @octocat.\n"
+    `${COLOR_PROMPT_HEADER}Please answer y or n.\n${COLOR_SUCCESS}\n\n`
   );
 });
 
@@ -215,7 +252,10 @@ test("fails soft without exposing raw errors when prompt or PUT fails", async ()
       throw new Error("cup_prompt_secret");
     }
   }), false);
-  assert.equal(promptFailureIo.stdout.value, "");
+  assert.equal(
+    promptFailureIo.stdout.value,
+    `${COLOR_PROMPT_HEADER}\n`
+  );
 
   const putFailureIo = createIo();
   assert.equal(await maybePromptGithubStar({
@@ -229,7 +269,7 @@ test("fails soft without exposing raw errors when prompt or PUT fails", async ()
   }), false);
   assert.equal(
     putFailureIo.stdout.value,
-    "Could not star the GitHub repository. Continuing.\n"
+    `${COLOR_PROMPT_HEADER}Could not star the GitHub repository. Continuing.\n\n`
   );
   assert.equal(putFailureIo.stdout.value.includes("cup_put_secret"), false);
 });

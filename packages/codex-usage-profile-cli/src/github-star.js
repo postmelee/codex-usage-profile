@@ -6,6 +6,13 @@ const GH_COMMAND_TIMEOUT_MS = 5_000;
 const GH_COMMAND_MAX_BUFFER_BYTES = 16 * 1_024;
 const GITHUB_REPOSITORY = "postmelee/codex-usage-profile";
 const STAR_ENDPOINT = `/user/starred/${GITHUB_REPOSITORY}`;
+const ANSI_CYAN = "\u001B[36m";
+const ANSI_BRIGHT_BLACK = "\u001B[90m";
+const ANSI_GREEN = "\u001B[32m";
+const ANSI_RESET = "\u001B[0m";
+const PROMPT_TITLE = "Help us grow! 🌱";
+const PROMPT_DESCRIPTION =
+  "A GitHub star helps others discover Codex Usage Profile.";
 
 const ACTIVE_ACCOUNT_ARGS = Object.freeze([
   "api",
@@ -44,6 +51,7 @@ export async function maybePromptGithubStar(options = {}) {
 
   const runGh = options.runGh ?? createGhRunner();
   const prompt = options.prompt ?? promptForAnswer;
+  let promptDisplayed = false;
 
   try {
     const accountResult = await runGh(ACTIVE_ACCOUNT_ARGS);
@@ -56,7 +64,17 @@ export async function maybePromptGithubStar(options = {}) {
     if (statusResult?.ok === true) return false;
     if (statusResult?.statusCode !== 404) return false;
 
-    const message = `Star ${GITHUB_REPOSITORY} on GitHub as @${login}? (Y/n) `;
+    const colorEnabled = supportsPromptColor({ env, stdout });
+    promptDisplayed = true;
+    stdout.write("\n");
+    stdout.write(`${styleText(PROMPT_TITLE, ANSI_CYAN, colorEnabled)}\n`);
+    stdout.write(`${styleText(
+      PROMPT_DESCRIPTION,
+      ANSI_BRIGHT_BLACK,
+      colorEnabled
+    )}\n`);
+
+    const message = `Would you like to star it on GitHub as @${login}? (Y/n) `;
     while (true) {
       const answer = normalizeAnswer(await prompt({ stdin, stdout, message }));
       if (answer === "cancel") return false;
@@ -71,11 +89,23 @@ export async function maybePromptGithubStar(options = {}) {
         stdout.write("Could not star the GitHub repository. Continuing.\n");
         return false;
       }
-      stdout.write(`Starred ${GITHUB_REPOSITORY} as @${login}.\n`);
+      stdout.write(`${styleText(
+        `✓ Starred! Thank you for your support, @${login}. ⭐`,
+        ANSI_GREEN,
+        colorEnabled
+      )}\n`);
       return true;
     }
   } catch {
     return false;
+  } finally {
+    if (promptDisplayed) {
+      try {
+        stdout.write("\n");
+      } catch {
+        // Formatting failure must not replace the original command result.
+      }
+    }
   }
 }
 
@@ -148,6 +178,16 @@ function isCiEnvironment(env) {
   if (!env || typeof env.CI !== "string") return false;
   const value = env.CI.trim().toLowerCase();
   return value !== "" && value !== "0" && value !== "false";
+}
+
+function supportsPromptColor({ env, stdout }) {
+  return stdout?.isTTY === true &&
+    env?.TERM !== "dumb" &&
+    !Object.hasOwn(env ?? {}, "NO_COLOR");
+}
+
+function styleText(value, color, enabled) {
+  return enabled ? `${color}${value}${ANSI_RESET}` : value;
 }
 
 function readHttpStatus(value) {

@@ -46,16 +46,23 @@ raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제�
 
 새 device `login` 또는 human-readable `submit`이 내부적으로 성공하면 CLI는
 기존 성공 결과를 출력하기 전에 local `gh`의 active account가
-`postmelee/codex-usage-profile`을 star할지 한 줄로 묻는다.
+`postmelee/codex-usage-profile`을 star할지 별도 안내 블록으로 묻는다.
 
 ```text
-Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n)
+Help us grow! 🌱
+A GitHub star helps others discover Codex Usage Profile.
+Would you like to star it on GitHub as @octocat? (Y/n)
+✓ Starred! Thank you for your support, @octocat. ⭐
 ```
 
 Enter, `y`, `yes`는 동의이며 Enter 기본값은 **Yes**다. `n`, `no`는 star하지
 않고 원래 login 또는 submit 결과를 계속 표시한다. 다른 입력은 `y` 또는
 `n`을 다시 묻는다. 동의하면 브라우저를 열지 않고 다음 고정 작업과 같은
 local `gh api` 요청을 실행한다.
+
+안내 블록 앞뒤에는 빈 줄을 둔다. color를 지원하는 TTY에서는 제목을 cyan,
+설명을 흐린 회색, 성공 문구를 green으로 표시한다. `NO_COLOR`가 설정됐거나
+`TERM=dumb`이면 문구와 간격은 유지하고 ANSI escape 없이 평문으로 출력한다.
 
 ```bash
 gh api --silent --method PUT \

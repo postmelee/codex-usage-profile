@@ -56,17 +56,23 @@ detailed CLI guide below for the complete approval flow.
 ## Optional GitHub Star Prompt
 
 After a fresh interactive `login` or a successful human-readable `submit`, the
-CLI waits for this prompt before printing the existing command result:
+CLI waits for this prompt block before printing the existing command result:
 
 ```text
-Star postmelee/codex-usage-profile on GitHub as @octocat? (Y/n)
+Help us grow! 🌱
+A GitHub star helps others discover Codex Usage Profile.
+Would you like to star it on GitHub as @octocat? (Y/n)
+✓ Starred! Thank you for your support, @octocat. ⭐
 ```
 
 Enter is **Yes**; `y` and `yes` also star, while `n` and `no` continue without
 starring. Consent runs a fixed `gh api --silent --method PUT` request for
 `/user/starred/postmelee/codex-usage-profile` and never opens a browser. The
 displayed account is the active local `gh` account, which may differ from the
-Codex Usage Profile owner.
+Codex Usage Profile owner. The block is separated from the surrounding login or
+submit output by blank lines. On a color-capable TTY the heading is cyan, the
+explanation is dim gray, and the success message is green. `NO_COLOR` and
+`TERM=dumb` preserve the same wording and spacing without ANSI escapes.
 
 The prompt is skipped when the repository is already starred, `gh` is missing
 or unavailable, an existing credential makes `login` return `Already signed
