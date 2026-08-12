@@ -258,6 +258,19 @@ macOS와 Linux에서는 directory `0700`, file `0600`을 사용한다. 저장은
 
 token 또는 machine을 더 이상 신뢰하지 않으면 웹 Settings의 API Tokens에서 즉시 **Revoke**한다. revoked token의 다음 submit은 거부된다.
 
+account별 active CLI/API token 한도는 3개다. 반복 first-run test처럼 local
+`logout` 뒤 새 device login을 여러 번 수행하면 server token은 폐기되지 않아
+한도에 도달할 수 있다. browser 승인은 완료됐지만 token exchange가 한도로
+거부되면 CLI는 다음처럼 조치 가능한 message를 표시한다.
+
+```text
+Active token limit reached. Revoke an API token in Settings, then try again.
+```
+
+웹 Settings의 **API Tokens**에서 이전 `Device login` token을 하나 이상
+**Revoke**한 뒤 새 code로 다시 실행한다. 이 message는 device-login poll의 HTTP
+409 conflict에만 적용하며 Account Usage submit conflict 안내는 변경하지 않는다.
+
 ## 제출 결과와 README
 
 성공한 `submit`은 accepted 또는 unchanged 상태, capture time, Profile URL, stable card URL과 README Markdown을 반환한다. raw token, owner numeric id, usage value 전체와 opaque private revision은 출력하지 않는다.

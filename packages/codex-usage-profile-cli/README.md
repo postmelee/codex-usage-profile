@@ -53,6 +53,17 @@ automatically; those actions remain under the user's control. Older clients
 without an intent receive a generic return-to-terminal message. See the
 detailed CLI guide below for the complete approval flow.
 
+An account can have up to three active CLI/API tokens. If browser approval
+completes after that limit is reached, the CLI reports:
+
+```text
+Active token limit reached. Revoke an API token in Settings, then try again.
+```
+
+Revoke an old `Device login` token under the web Settings **API Tokens** section
+and retry. CLI `logout` removes only the local credential file; it does not
+revoke the corresponding server token.
+
 ## Optional GitHub Star Prompt
 
 After a fresh interactive `login` or a successful human-readable `submit`, the

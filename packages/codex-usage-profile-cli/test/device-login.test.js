@@ -99,6 +99,40 @@ test("preserves an existing device id on re-login", async () => {
   assert.equal(saved.deviceId, "device_existing");
 });
 
+test("maps a device poll conflict to actionable token limit guidance", async () => {
+  let saved = false;
+
+  await assert.rejects(
+    () => loginWithDeviceCode({
+      client: createSequenceClient([
+        new ServiceClientError("conflict", "cup_server_secret", { status: 409 })
+      ]),
+      credentialStore: {
+        async load() { return null; },
+        async save() {
+          saved = true;
+          throw new Error("credential must not be stored");
+        }
+      },
+      serviceOrigin: "https://profiles.example.test",
+      stdout: createOutput(),
+      now: () => new Date("2026-07-13T00:00:00.000Z"),
+      openBrowser: () => {}
+    }),
+    (error) => {
+      assert.equal(error.code, "device_login_token_limit");
+      assert.equal(
+        error.message,
+        "Active token limit reached. Revoke an API token in Settings, then try again."
+      );
+      assert.equal(error.message.includes("cup_server_secret"), false);
+      return true;
+    }
+  );
+
+  assert.equal(saved, false);
+});
+
 test("rejects expired and cross-origin verification flows", async () => {
   await assert.rejects(
     () => loginWithDeviceCode({

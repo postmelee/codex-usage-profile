@@ -13,6 +13,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 3 | 사용자 문서와 package 통합 검증 | `docs/cli-submit.md`, CLI package `README.md` | package/root/smoke/release 검증 |
 | 3.1 | PR 리뷰 EOF 차단 항목 보정 | `src/github-star.js`, 실제 readline EOF 회귀 test | focused/package/root/smoke/release 재검증 |
 | 3.2 | star prompt 터미널 UX 보정 | 안내 블록·ANSI color·평문 fallback·공식 문서 | focused/package/root/smoke/release 재검증 |
+| 3.3 | first-run token 한도 오류 안내 보정 | device-login context message·회귀 test·사용자 문서 | focused/package/root/smoke/release 재검증 |
 
 ## 문서 위치 확인
 
@@ -279,6 +280,60 @@ git diff --check
 Task #91 [Stage 3.2]: star prompt terminal UX 보정
 ```
 
+## Stage 3.3 — first-run token 한도 오류 안내 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `제안한 메세지 보완도 적용하고.`
+
+### 산출물
+
+수정:
+
+- `packages/codex-usage-profile-cli/src/device-login.js`
+- `packages/codex-usage-profile-cli/test/device-login.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_3.md`
+
+### 변경 내용
+
+- 수동 first-run에서 browser device approval 뒤 token exchange가 활성 CLI token 3개 한도로 HTTP 409 `conflict`를 반환하는 경로를 재현한다.
+- device-login poll의 `ServiceClientError`가 status 409와 code `conflict`를 함께 가질 때만 `Active token limit reached. Revoke an API token in Settings, then try again.`으로 변환한다.
+- Account Usage submit의 stale·same-time conflict와 다른 service 요청의 일반 conflict mapping은 변경하지 않는다.
+- raw server message, token 수·id·digest와 credential은 출력하지 않고 사용자가 취할 수 있는 최소 조치만 안내한다.
+- `logout`은 local credential만 삭제하므로 반복 first-run test에서 server token이 누적될 수 있으며 웹 Settings의 API Tokens에서 기존 token을 revoke해야 함을 공식 CLI guide와 package README에 기록한다.
+- Profile·Card의 cyan clickable hyperlink 적용은 UX상 권장하지만 README Markdown의 복사 무손실과 함께 별도 승인이 필요한 output 계약 변경으로 분리해 이번 Stage에서는 구현하지 않는다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/device-login.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+```
+
+### 완료 조건
+
+- device-login poll의 409 conflict가 승인된 actionable message와 전용 CLI code로 정규화된다.
+- network·timeout·rate limit retry, expired·invalid login과 submit conflict 메시지는 기존 동작을 유지한다.
+- message에 raw service detail, credential 또는 내부 storage 상태가 포함되지 않는다.
+- 반복 first-run에서 local logout과 server token revoke의 차이를 두 공식 문서가 설명한다.
+- package/root/smoke/release 검증이 모두 통과하고 배포 entry나 runtime dependency는 변하지 않는다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.3]: device login token limit 안내 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -290,7 +345,7 @@ Task #91 [Stage 3.2]: star prompt terminal UX 보정
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`, `_stage3_2.md`처럼 소수점을 밑줄로 표기한다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`, `_stage3_2.md`, `_stage3_3.md`처럼 소수점을 밑줄로 표기한다.
 - 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
@@ -301,6 +356,7 @@ Task #91 [Stage 3.2]: star prompt terminal UX 보정
 - Stage 3 완료 뒤 전체 task 검증 결과를 확인하고 `task-final-report` 절차로 최종 보고서와 PR 게시를 진행한다.
 - Stage 3.1은 PR #93 리뷰 Blocker의 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 최종 보고서를 갱신한다.
 - Stage 3.2는 작업지시자의 terminal UX 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 사용자 문서를 갱신한다.
+- Stage 3.3은 작업지시자의 first-run token 한도 오류 안내 보정 승인을 받은 뒤 진행하며, output hyperlink 제안과 분리해 검증·보고서·커밋 후 기존 PR head를 갱신한다.
 
 ## 위험과 대응
 
@@ -313,6 +369,7 @@ Task #91 [Stage 3.2]: star prompt terminal UX 보정
 - **플랫폼 차이**: shell 문법이나 browser open에 의존하지 않고 missing executable을 정상적인 optional-unavailable 상태로 다룬다.
 - **readline EOF 미정착**: 질문 결과뿐 아니라 interface `close` event를 함께 기다리고 실제 stream EOF 회귀 test로 성공 결과 억제를 방지한다.
 - **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`·`TERM=dumb`에서 평문 fallback을 검증해 log와 제한된 terminal의 escape 오염을 막는다.
+- **generic conflict 오분류**: device-login poll에서 status 409와 code `conflict`가 함께 확인된 경우에만 token 한도 message로 바꾸고 submit·다른 endpoint의 conflict는 기존 mapping을 유지한다.
 
 ## 승인 요청 사항
 
