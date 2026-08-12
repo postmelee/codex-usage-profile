@@ -1829,6 +1829,7 @@ test.describe("Home and share card flow", () => {
     await expect(shareButton).toBeEnabled();
     await expect(shareButton.locator("svg")).toHaveCount(0);
     const sourceCard = page.locator('[data-card-source="true"]');
+    await expect(sourceCard).toBeVisible();
     const sourceBox = await sourceCard.boundingBox();
 
     await shareButton.click();
@@ -2007,6 +2008,14 @@ test.describe("Home and share card flow", () => {
     const sourceImage = sourceCard.getByRole("img", { name: "Your Codex usage card" });
     await expect(sourceImage).toHaveAttribute("src", /^blob:/);
     const sourceBlobUrl = await sourceImage.getAttribute("src");
+    const sourcePresentation = await sourceCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        width: bounds.width
+      };
+    });
 
     await page.getByRole("button", { name: "Share", exact: true }).click();
     const backdrop = page.getByTestId("share-studio-backdrop");
@@ -2019,12 +2028,37 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
     await expect(motionCard).toHaveAttribute("data-share-target-status", "loading");
     await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+    await expect(motionCard).toHaveAttribute("data-motion-mode", "scale");
     await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
     await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
     await expect(skeleton).toHaveAttribute("data-active", "false");
     await expect(skeleton).toHaveCSS("opacity", "0");
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     expect(publicPreviewFetches).toBe(1);
+    const targetPresentation = await motionCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const firstTransform = element.getAnimations().flatMap(
+        (animation) => animation.effect?.getKeyframes?.() ?? []
+      ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+      const matrix = new DOMMatrixReadOnly(firstTransform);
+      const image = element.querySelector(".share-card-preview");
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        imageFilter: image ? getComputedStyle(image).filter : null,
+        scaleX: Math.round(matrix.a * 1000) / 1000,
+        scaleY: Math.round(matrix.d * 1000) / 1000,
+        width: bounds.width
+      };
+    });
+    expect(targetPresentation).toMatchObject({
+      borderRadius: sourcePresentation.borderRadius,
+      imageFilter: "none",
+      scaleX: 1,
+      scaleY: 1
+    });
+    expect(targetPresentation.width).toBeCloseTo(sourcePresentation.width, 0);
+    expect(targetPresentation.height).toBeCloseTo(sourcePresentation.height, 0);
 
     releasePublicCard();
     await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
@@ -2280,6 +2314,93 @@ test.describe("Home and share card flow", () => {
         scaleY: 1,
         withinViewport: true
       });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #92 mobile Share Studio preserves the source card geometry", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const source = await sourceCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width
+        };
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+      await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+
+      const target = await motionCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const firstTransform = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const image = element.querySelector(".share-card-preview");
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          imageFilter: image ? getComputedStyle(image).filter : null,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          startLeft: bounds.left + matrix.e,
+          startTop: bounds.top + matrix.f,
+          width: bounds.width
+        };
+      });
+
+      expect(target).toMatchObject({
+        borderRadius: source.borderRadius,
+        imageFilter: "none",
+        scaleX: 1,
+        scaleY: 1
+      });
+      expect(target.width).toBeCloseTo(source.width, 0);
+      expect(target.height).toBeCloseTo(source.height, 0);
+      expect(target.startLeft).toBeCloseTo(source.left, 0);
+      expect(target.startTop).toBeCloseTo(source.top, 0);
+
+      await page.getByRole("button", { name: "Close Share Studio" }).tap();
+      const closing = await motionCard.evaluate((element) => {
+        const transforms = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).map((keyframe) => keyframe.transform).filter(Boolean);
+        const matrix = new DOMMatrixReadOnly(transforms.at(-1) ?? "none");
+        return {
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000
+        };
+      });
+      expect(closing).toEqual({ scaleX: 1, scaleY: 1 });
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+      await expect(sourceCard).toHaveCSS("opacity", "1");
     } finally {
       await context.close();
     }
