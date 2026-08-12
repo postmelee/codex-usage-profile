@@ -12,7 +12,7 @@ Stage: 3.2
 
 | 파일 | 변경 요약 |
 |---|---|
-| `packages/codex-usage-profile-cli/src/github-star.js` | 안내 블록 문구·앞뒤 빈 줄·ANSI color와 `NO_COLOR`·`TERM=dumb` 평문 fallback을 추가했다. |
+| `packages/codex-usage-profile-cli/src/github-star.js` | 안내 블록 문구·앞뒤 빈 줄·ANSI color와 color opt-out을 추가했다. 실제 readline cursor-control 정합성은 Stage 3.6에서 후속 보정했다. |
 | `packages/codex-usage-profile-cli/test/github-star.test.js` | color·평문 exact output과 거절·invalid·EOF·실패 뒤 간격을 포함한 focused 회귀 test를 12개로 확장했다. |
 | `packages/codex-usage-profile-cli/README.md` | 실제 안내 블록 예시와 color·평문 fallback 계약을 기록했다. |
 | `docs/cli-submit.md` | canonical CLI guide의 prompt 예시와 terminal 표현 규칙을 실제 구현에 맞췄다. |
@@ -52,7 +52,7 @@ git diff --check
 
 ## 잔여 위험
 
-- emoji 폭과 ANSI bright-black의 실제 명도는 terminal·font·theme에 따라 다를 수 있다. 문구와 줄 구조는 동일하며 `NO_COLOR`·`TERM=dumb`에서 ANSI 없는 평문으로 fallback한다.
+- emoji 폭과 ANSI bright-black의 실제 명도는 terminal·font·theme에 따라 다를 수 있다. Stage 3.2의 주입 prompt 검증은 `NO_COLOR`·`TERM=dumb`에서 CLI color SGR이 없음을 확인했지만 default readline cursor control은 우회했다. Stage 3.6 재리뷰 보정에서 `NO_COLOR`는 color opt-out으로 정확히 문서화하고 `TERM=dumb`는 실제 readline terminal mode를 꺼 ESC byte 없는 평문으로 고정했다.
 - color 지원 여부는 실제 TTY, `NO_COLOR` 존재, `TERM=dumb`만으로 보수적으로 판단한다. 사용자가 별도 terminal 설정으로 color를 제한하는 모든 경우를 자동 탐지하지는 않는다.
 - 외부 GitHub star mutation을 포함한 end-to-end test는 실행하지 않았다. 고정 `gh` argument와 출력 흐름은 fake runner와 사용자의 운영 수동 테스트로 확인했다.
 

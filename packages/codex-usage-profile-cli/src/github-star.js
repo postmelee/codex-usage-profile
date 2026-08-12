@@ -12,7 +12,7 @@ const ANSI_GREEN = "\u001B[32m";
 const ANSI_RESET = "\u001B[0m";
 const PROMPT_TITLE = "Help us grow! 🌱";
 const PROMPT_DESCRIPTION =
-  "A GitHub star helps others discover Codex Usage Profile.";
+  `A GitHub star helps others discover Codex Usage Profile (${GITHUB_REPOSITORY}).`;
 
 const ACTIVE_ACCOUNT_ARGS = Object.freeze([
   "api",
@@ -76,7 +76,7 @@ export async function maybePromptGithubStar(options = {}) {
 
     const message = `Would you like to star it on GitHub as @${login}? (Y/n) `;
     while (true) {
-      const answer = normalizeAnswer(await prompt({ stdin, stdout, message }));
+      const answer = normalizeAnswer(await prompt({ env, stdin, stdout, message }));
       if (answer === "cancel") return false;
       if (answer === "no") return false;
       if (answer === "invalid") {
@@ -142,11 +142,11 @@ export function createGhRunner(options = {}) {
   };
 }
 
-async function promptForAnswer({ stdin, stdout, message }) {
+async function promptForAnswer({ env, stdin, stdout, message }) {
   const readline = createInterface({
     input: stdin,
     output: stdout,
-    terminal: true
+    terminal: stdout?.isTTY === true && env?.TERM !== "dumb"
   });
   const closed = once(readline, "close").then(() => null);
   try {

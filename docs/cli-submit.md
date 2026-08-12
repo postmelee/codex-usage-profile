@@ -50,7 +50,7 @@ raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제�
 
 ```text
 Help us grow! 🌱
-A GitHub star helps others discover Codex Usage Profile.
+A GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).
 Would you like to star it on GitHub as @octocat? (Y/n)
 ✓ Starred! Thank you for your support, @octocat. ⭐
 ```
@@ -61,8 +61,10 @@ Enter, `y`, `yes`는 동의이며 Enter 기본값은 **Yes**다. `n`, `no`는 st
 local `gh api` 요청을 실행한다.
 
 안내 블록 앞뒤에는 빈 줄을 둔다. color를 지원하는 TTY에서는 제목을 cyan,
-설명을 흐린 회색, 성공 문구를 green으로 표시한다. `NO_COLOR`가 설정됐거나
-`TERM=dumb`이면 문구와 간격은 유지하고 ANSI escape 없이 평문으로 출력한다.
+설명을 흐린 회색, 성공 문구를 green으로 표시한다. `NO_COLOR`가 설정됐으면
+CLI가 추가하는 color SGR 없이 같은 문구를 표시하되 interactive readline의
+cursor control은 사용할 수 있다. `TERM=dumb`이면 readline terminal mode도
+비활성화해 color와 cursor control escape 없이 같은 문구와 간격을 표시한다.
 
 ```bash
 gh api --silent --method PUT \

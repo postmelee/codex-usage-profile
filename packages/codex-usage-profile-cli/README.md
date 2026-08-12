@@ -92,7 +92,7 @@ CLI waits for this prompt block before printing the existing command result:
 
 ```text
 Help us grow! 🌱
-A GitHub star helps others discover Codex Usage Profile.
+A GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).
 Would you like to star it on GitHub as @octocat? (Y/n)
 ✓ Starred! Thank you for your support, @octocat. ⭐
 ```
@@ -104,7 +104,10 @@ displayed account is the active local `gh` account, which may differ from the
 Codex Usage Profile owner. The block is separated from the surrounding login or
 submit output by blank lines. On a color-capable TTY the heading is cyan, the
 explanation is dim gray, and the success message is green. `NO_COLOR` and
-`TERM=dumb` preserve the same wording and spacing without ANSI escapes.
+`TERM=dumb` preserve the same wording and spacing without color SGR. The
+`TERM=dumb` prompt also disables readline terminal mode so it emits no cursor
+control escapes; an interactive `NO_COLOR` prompt may still use readline cursor
+control while adding no color.
 
 The prompt is skipped when the repository is already starred, `gh` is missing
 or unavailable, an existing credential makes `login` return `Already signed

@@ -16,6 +16,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 3.3 | first-run token 한도 오류 안내 보정 | device-login context message·회귀 test·사용자 문서 | focused/package/root/smoke/release 재검증 |
 | 3.4 | submit 결과 URL hyperlink 보정 | Profile·Card cyan OSC 8·README 평문·fallback·preview runner | focused/package/root/smoke/release 재검증 |
 | 3.5 | submit 결과 Links block 가독성 보정 | 성공 표시·Links 제목·들여쓰기·정렬·fallback | focused/package/root/smoke/release 재검증 |
+| 3.6 | 재리뷰 범위·terminal prompt 정합성 보정 | Issue 범위 확장 기록·devel 충돌 해소·TERM=dumb readline·repository slug | focused/package/root/smoke/release·CI 재검증 |
 
 ## 문서 위치 확인
 
@@ -238,8 +239,10 @@ Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 - `packages/codex-usage-profile-cli/test/github-star.test.js`
 - `packages/codex-usage-profile-cli/README.md`
 - `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91.md`
 - `mydocs/plans/task_m100_91_impl.md`
 - `mydocs/report/task_m100_91_report.md`
+- `mydocs/working/task_m100_91_stage3_2.md`
 - `mydocs/orders/20260812.md`
 
 신규:
@@ -252,7 +255,7 @@ Task #91 [Stage 3.1]: EOF prompt fail-soft 보정
 - 합의한 문구를 `Help us grow! 🌱`, `A GitHub star helps others discover Codex Usage Profile.`, `Would you like to star it on GitHub as @<active-gh-account>? (Y/n)` 순서로 표시한다.
 - 성공 시 `✓ Starred! Thank you for your support, @<active-gh-account>. ⭐`를 표시한다.
 - 실제 TTY color-capable 환경에서는 제목 cyan, 설명 bright black, 성공 문구 green을 dependency 추가 없이 ANSI SGR로 표시한다.
-- `NO_COLOR`가 설정됐거나 `TERM=dumb`이면 동일 문구와 빈 줄 구조를 ANSI escape 없는 평문으로 출력한다.
+- `NO_COLOR`가 설정되면 CLI가 추가하는 color SGR을 비활성화한다. `TERM=dumb`이면 color SGR뿐 아니라 default readline의 terminal cursor control도 비활성화해 escape 없는 평문으로 출력한다.
 - JSON·CI·비TTY·already-starred·`gh` unavailable 경로는 기존처럼 안내 블록과 ANSI를 모두 출력하지 않는다.
 - Enter 기본 Yes, `n`/`no` 거절, invalid input 재질문, EOF/Ctrl+C와 `gh` failure의 fail-soft 계약을 유지한다.
 - 공식 CLI guide와 npm package README의 예시를 실제 다중 행 안내 블록과 color fallback 계약으로 갱신한다.
@@ -271,7 +274,7 @@ git diff --check
 ### 완료 조건
 
 - color-capable TTY에서 앞뒤 빈 줄, cyan 제목, 흐린 설명, 기본색 질문과 green 성공 문구가 합의한 순서로 출력된다.
-- `NO_COLOR`·`TERM=dumb`에서는 문구와 간격은 유지되고 ANSI escape가 전혀 없다.
+- `NO_COLOR`에서는 문구와 간격을 유지하며 color SGR이 없고, `TERM=dumb`의 실제 default readline 경로에는 ESC byte가 전혀 없다.
 - 거절·EOF·실패에서도 prompt 블록 뒤 빈 줄이 유지되고 기존 성공 결과와 exit status가 보존된다.
 - prompt 제외 경로와 JSON output에는 신규 문구·emoji·ANSI가 나타나지 않는다.
 - package/root/smoke/release 검증이 모두 통과하고 신규 runtime dependency나 배포 entry가 추가되지 않는다.
@@ -450,6 +453,67 @@ git diff --check
 Task #91 [Stage 3.5]: submit 결과 Links block 가독성 보정
 ```
 
+## Stage 3.6 — 재리뷰 범위·terminal prompt 정합성 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `보정 진행해줘. 완료 후 보정 반영 내용을 코멘트로 게시해줘.`
+
+재리뷰: [PR #93 issuecomment-5267591084](https://github.com/postmelee/codex-usage-profile/pull/93#issuecomment-5267591084)
+
+### 산출물
+
+수정:
+
+- GitHub Issue #91 본문
+- `packages/codex-usage-profile-cli/src/github-star.js`
+- `packages/codex-usage-profile-cli/test/github-star.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+- PR #93 본문과 재리뷰 대응 comment
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_6.md`
+
+### 변경 내용
+
+- Issue #91 본문에 작업지시자가 같은 thread에서 승인한 Stage 3.3 token-limit 안내, Stage 3.4 submit hyperlink, Stage 3.5 Links block과 Stage 3.6 재리뷰 보정의 범위·추가 수용 기준·검증 기준을 기록한다.
+- 최신 `origin/devel`을 진행 중인 `local/task91`에 merge하고 PR #93의 충돌을 해결한다. 기존 Task #91 변경과 Task #92 산출물을 모두 보존한다.
+- default readline prompt가 `TERM=dumb`에서 terminal cursor control을 사용하지 않게 `createInterface()`의 `terminal` 여부를 TTY와 `TERM`으로 결정한다.
+- 주입 prompt가 아닌 실제 `promptForAnswer()` 경로를 사용하는 회귀 test에서 `TERM=dumb`의 escape 0개, Enter 기본 Yes와 fixed PUT을 함께 검증한다.
+- star 설명줄에 정확한 mutation 대상 `postmelee/codex-usage-profile`을 표시해 Enter 기본 Yes 전에 account와 repository가 모두 드러나게 한다.
+- 문서의 `NO_COLOR` 계약은 색상 SGR 비활성화로 정확히 표현한다. `TERM=dumb`는 readline cursor control까지 포함해 escape 없는 평문으로 기록한다.
+- `NO_COLOR=""` 처리 관례, unsafe URL raw 출력, terminal helper 분리, backend `active_token_limit` 구체 code는 실질 Blocker가 아니며 별도 설계가 필요한 후속 후보로 남긴다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/github-star.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+gh pr checks 93 --watch --interval 10
+```
+
+### 완료 조건
+
+- Issue #91에서 Stage 3.3~3.6의 승인 근거와 추가 수용·검증 기준을 직접 확인할 수 있다.
+- PR #93이 최신 `devel`과 충돌하지 않고 Task #92의 병합 산출물을 보존한다.
+- 실제 readline 경로의 `TERM=dumb` output에는 ESC byte가 없고 Enter는 fixed repository PUT 한 번으로 이어진다.
+- prompt가 active `@account`뿐 아니라 정확한 `postmelee/codex-usage-profile` 대상도 mutation 전에 표시한다.
+- `NO_COLOR`와 `TERM=dumb` 문서가 실제 제어문자 계약을 과장하지 않는다.
+- package/root/smoke/release와 Node 20·22·24 CI가 모두 통과한다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.6]: 재리뷰 terminal prompt 정합성 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -461,7 +525,7 @@ Task #91 [Stage 3.5]: submit 결과 Links block 가독성 보정
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`~`_stage3_5.md`처럼 소수점을 밑줄로 표기한다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`~`_stage3_6.md`처럼 소수점을 밑줄로 표기한다.
 - 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
@@ -475,6 +539,7 @@ Task #91 [Stage 3.5]: submit 결과 Links block 가독성 보정
 - Stage 3.3은 작업지시자의 first-run token 한도 오류 안내 보정 승인을 받은 뒤 진행하며, output hyperlink 제안과 분리해 검증·보고서·커밋 후 기존 PR head를 갱신한다.
 - Stage 3.4는 작업지시자의 output hyperlink 승인을 받은 뒤 진행하며, Profile·Card URL만 link로 표시하고 README Markdown의 복사 무손실을 보존한 채 기존 PR head를 갱신한다.
 - Stage 3.5는 작업지시자가 선택한 두 번째 output 구조 승인 뒤 진행하며, 성공 표시와 Links 계층만 보정하고 Stage 3.4의 hyperlink·fallback·README 무손실 계약을 유지한 채 기존 PR head를 갱신한다.
+- Stage 3.6은 작업지시자의 재리뷰 보정·comment 게시 승인 뒤 진행하며, Issue 범위 추적성·최신 devel 충돌·실제 readline의 TERM=dumb 계약·repository 대상 표시를 보정한 뒤 기존 PR head와 CI를 갱신한다.
 
 ## 위험과 대응
 
@@ -486,7 +551,7 @@ Task #91 [Stage 3.5]: submit 결과 Links block 가독성 보정
 - **shell injection과 secret 노출**: shell을 사용하지 않고 고정 argument array만 전달하며 raw child process 오류를 terminal이나 assertion output에 반영하지 않는다.
 - **플랫폼 차이**: shell 문법이나 browser open에 의존하지 않고 missing executable을 정상적인 optional-unavailable 상태로 다룬다.
 - **readline EOF 미정착**: 질문 결과뿐 아니라 interface `close` event를 함께 기다리고 실제 stream EOF 회귀 test로 성공 결과 억제를 방지한다.
-- **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`·`TERM=dumb`에서 평문 fallback을 검증해 log와 제한된 terminal의 escape 오염을 막는다.
+- **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`의 color SGR opt-out과 `TERM=dumb`의 readline terminal-mode opt-out을 실제 default prompt 경로에서 구분해 검증한다.
 - **generic conflict 오분류**: device-login poll에서 status 409와 code `conflict`가 함께 확인된 경우에만 token 한도 message로 바꾸고 submit·다른 endpoint의 conflict는 기존 mapping을 유지한다.
 - **OSC 8 복사·log 오염**: display write 단계에서 지원 TTY의 Profile·Card에만 escape를 적용하고 README·JSON·non-TTY·color opt-out에는 exact plain text를 유지한다.
 - **과도한 장식과 좁은 terminal wrapping**: 결과 블록에는 성공 표시 하나와 흐린 제목만 추가하고 링크별 emoji·줄간격은 늘리지 않으며, 짧은 label column만 정렬한다.

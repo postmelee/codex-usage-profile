@@ -25,13 +25,13 @@ const STAR_ARGS = [
 const COLOR_PROMPT_HEADER = [
   "",
   "\u001B[36mHelp us grow! 🌱\u001B[0m",
-  "\u001B[90mA GitHub star helps others discover Codex Usage Profile.\u001B[0m",
+  "\u001B[90mA GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).\u001B[0m",
   ""
 ].join("\n");
 const PLAIN_PROMPT_HEADER = [
   "",
   "Help us grow! 🌱",
-  "A GitHub star helps others discover Codex Usage Profile.",
+  "A GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).",
   ""
 ].join("\n");
 const COLOR_SUCCESS =
@@ -169,6 +169,38 @@ test("uses plain prompt output when color is disabled", async () => {
     );
     assert.equal(io.stdout.value.includes("\u001B"), false);
   }
+});
+
+test("uses the real readline prompt without escapes for TERM=dumb", async () => {
+  const calls = [];
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  stdin.isTTY = true;
+  stdout.isTTY = true;
+  stdout.setEncoding("utf8");
+  let output = "";
+  stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+
+  const result = maybePromptGithubStar({
+    env: { TERM: "dumb" },
+    stdin,
+    stdout,
+    runGh: createSequenceRunner(calls, [
+      { ok: true, stdout: "octocat\n" },
+      { ok: false, statusCode: 404 },
+      { ok: true, stdout: "" }
+    ])
+  });
+  setImmediate(() => stdin.end("\n"));
+
+  assert.equal(await result, true);
+  assert.deepEqual(calls, [ACCOUNT_ARGS, STATUS_ARGS, STAR_ARGS]);
+  assert.equal(output.includes("postmelee/codex-usage-profile"), true);
+  assert.equal(output.includes(PROMPT_MESSAGE), true);
+  assert.equal(output.includes("\u001B"), false);
+  assert.equal(output.endsWith("\n\n"), true);
 });
 
 test("treats n and no as decline without a PUT request", async () => {
