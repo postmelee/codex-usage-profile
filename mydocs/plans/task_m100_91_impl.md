@@ -15,6 +15,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 3.2 | star prompt 터미널 UX 보정 | 안내 블록·ANSI color·평문 fallback·공식 문서 | focused/package/root/smoke/release 재검증 |
 | 3.3 | first-run token 한도 오류 안내 보정 | device-login context message·회귀 test·사용자 문서 | focused/package/root/smoke/release 재검증 |
 | 3.4 | submit 결과 URL hyperlink 보정 | Profile·Card cyan OSC 8·README 평문·fallback·preview runner | focused/package/root/smoke/release 재검증 |
+| 3.5 | submit 결과 Links block 가독성 보정 | 성공 표시·Links 제목·들여쓰기·정렬·fallback | focused/package/root/smoke/release 재검증 |
 
 ## 문서 위치 확인
 
@@ -394,6 +395,61 @@ git diff --check
 Task #91 [Stage 3.4]: submit 결과 URL hyperlink 보정
 ```
 
+## Stage 3.5 — submit 결과 Links block 가독성 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `두번째로 적용해줘,`
+
+### 산출물
+
+수정:
+
+- `packages/codex-usage-profile-cli/src/output.js`
+- `packages/codex-usage-profile-cli/test/output.test.js`
+- `packages/codex-usage-profile-cli/test/cli.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_5.md`
+
+### 변경 내용
+
+- human-readable 성공 문구 앞에 `✓`를 붙여 submit 결과의 시작점을 분명히 한다. idempotent 결과에도 같은 성공 표시를 사용한다.
+- `Captured:` 다음에 빈 줄을 두고, Profile·Card·README가 하나라도 있을 때만 `Links` 블록을 출력한다.
+- `Links` 제목은 color 지원 TTY에서 bright black으로 낮춰 표시하고, 각 항목은 두 칸 들여쓰기와 정렬된 label(`Profile:`, `Card:`, `README:`)을 사용한다.
+- Stage 3.4의 hyperlink 경계를 유지해 Profile·Card URL만 cyan OSC 8 hyperlink로 표시하고 README Markdown은 ANSI 없는 평문으로 보존한다.
+- non-TTY, JSON, `NO_COLOR`, `TERM=dumb`에서는 ANSI 없이 같은 줄바꿈·들여쓰기 구조를 출력한다.
+- profile 산출물이 모두 비어 있으면 불필요한 빈 줄과 `Links` 제목을 출력하지 않는다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/output.test.js packages/codex-usage-profile-cli/test/cli.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+```
+
+### 완료 조건
+
+- human-readable 결과가 성공 표시, capture metadata, 분리된 Links 블록 순서로 읽힌다.
+- Profile·Card·README label이 들여쓰기와 정렬을 유지하며 좁은 terminal의 자연 줄바꿈을 방해하는 padding은 URL 본문에 삽입하지 않는다.
+- 지원 TTY에서 `Links`만 흐린 계층으로 표시되고 Profile·Card hyperlink와 README 평문 계약이 유지된다.
+- JSON·non-TTY·`NO_COLOR`·`TERM=dumb`에서 escape 없이 동일한 정보 구조가 유지된다.
+- package/root/smoke/release 검증이 모두 통과하고 신규 runtime dependency나 npm entry는 추가되지 않는다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.5]: submit 결과 Links block 가독성 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -405,7 +461,7 @@ Task #91 [Stage 3.4]: submit 결과 URL hyperlink 보정
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`~`_stage3_4.md`처럼 소수점을 밑줄로 표기한다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`~`_stage3_5.md`처럼 소수점을 밑줄로 표기한다.
 - 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
@@ -418,6 +474,7 @@ Task #91 [Stage 3.4]: submit 결과 URL hyperlink 보정
 - Stage 3.2는 작업지시자의 terminal UX 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 사용자 문서를 갱신한다.
 - Stage 3.3은 작업지시자의 first-run token 한도 오류 안내 보정 승인을 받은 뒤 진행하며, output hyperlink 제안과 분리해 검증·보고서·커밋 후 기존 PR head를 갱신한다.
 - Stage 3.4는 작업지시자의 output hyperlink 승인을 받은 뒤 진행하며, Profile·Card URL만 link로 표시하고 README Markdown의 복사 무손실을 보존한 채 기존 PR head를 갱신한다.
+- Stage 3.5는 작업지시자가 선택한 두 번째 output 구조 승인 뒤 진행하며, 성공 표시와 Links 계층만 보정하고 Stage 3.4의 hyperlink·fallback·README 무손실 계약을 유지한 채 기존 PR head를 갱신한다.
 
 ## 위험과 대응
 
@@ -432,6 +489,7 @@ Task #91 [Stage 3.4]: submit 결과 URL hyperlink 보정
 - **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`·`TERM=dumb`에서 평문 fallback을 검증해 log와 제한된 terminal의 escape 오염을 막는다.
 - **generic conflict 오분류**: device-login poll에서 status 409와 code `conflict`가 함께 확인된 경우에만 token 한도 message로 바꾸고 submit·다른 endpoint의 conflict는 기존 mapping을 유지한다.
 - **OSC 8 복사·log 오염**: display write 단계에서 지원 TTY의 Profile·Card에만 escape를 적용하고 README·JSON·non-TTY·color opt-out에는 exact plain text를 유지한다.
+- **과도한 장식과 좁은 terminal wrapping**: 결과 블록에는 성공 표시 하나와 흐린 제목만 추가하고 링크별 emoji·줄간격은 늘리지 않으며, 짧은 label column만 정렬한다.
 
 ## 승인 요청 사항
 

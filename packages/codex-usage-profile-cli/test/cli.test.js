@@ -392,11 +392,12 @@ test("waits for the star prompt before printing a human submit result", async ()
 
   releasePrompt.resolve();
   assert.equal(await command, 0);
-  assert.match(stdout.value, /^Usage submitted successfully\.\n/);
-  assert.match(stdout.value, /Profile: \u001B\[36m\u001B\]8;;https:/);
+  assert.match(stdout.value, /^✓ Usage submitted successfully\.\n/);
+  assert.match(stdout.value, /\n\n\u001B\[90mLinks\u001B\[0m\n/);
+  assert.match(stdout.value, /  Profile: \u001B\[36m\u001B\]8;;https:/);
   assert.equal(
-    stdout.value.split("\n").find((line) => line.startsWith("README:")),
-    "README: ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+    stdout.value.split("\n").find((line) => line.startsWith("  README:")),
+    "  README:  ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
   );
   assert.equal(io.stderr.value, "");
 });
@@ -543,7 +544,7 @@ test("preserves successful login and submit results when the star helper rejects
   });
 
   assert.equal(await runCli(["submit"], submitIo), 0);
-  assert.match(submitIo.stdout.value, /^Usage submitted successfully\.\n/);
+  assert.match(submitIo.stdout.value, /^✓ Usage submitted successfully\.\n/);
   assert.equal(submitIo.stdout.value.includes("cup_star_prompt_secret"), false);
   assert.equal(submitIo.stderr.value, "");
 });

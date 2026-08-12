@@ -276,18 +276,23 @@ Active token limit reached. Revoke an API token in Settings, then try again.
 성공한 `submit`은 accepted 또는 unchanged 상태, capture time, Profile URL, stable card URL과 README Markdown을 반환한다. raw token, owner numeric id, usage value 전체와 opaque private revision은 출력하지 않는다.
 
 ```text
-Usage submitted successfully.
+✓ Usage submitted successfully.
 Captured: 2026-07-11T00:00:00.000Z
-Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
-Card: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
-README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
+
+Links
+  Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
+  Card:    https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
+  README:  ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
 
-지원되는 interactive terminal에서 `Profile`과 `Card`의 URL만 device login의
-`Open` URL과 같은 cyan OSC 8 hyperlink로 표시한다. `README` 값은 GitHub
+성공 표시는 결과 시작점을 나타내고 capture metadata 뒤의 빈 줄과 들여쓴
+`Links` block은 복사 가능한 산출물을 구분한다. 지원되는 interactive terminal에서
+`Links` 제목은 bright black으로 낮춰 표시하고, `Profile`과 `Card`의 URL만 device
+login의 `Open` URL과 같은 cyan OSC 8 hyperlink로 표시한다. `README` 값은 GitHub
 README에 그대로 복사할 Markdown 산출물이므로 ANSI·OSC 8을 넣지 않은 exact
-plain text를 유지한다. `submit --json`, pipe·redirection, `NO_COLOR`,
-`TERM=dumb`, hyperlink 미지원 terminal에서도 세 값 모두 같은 평문으로 출력한다.
+plain text를 유지한다. `submit --json`은 기존 JSON schema를 유지한다. pipe·redirection,
+`NO_COLOR`, `TERM=dumb`, hyperlink 미지원 terminal에서는 같은 줄바꿈·들여쓰기
+구조를 유지하되 적용할 수 없는 색상과 hyperlink 없이 평문으로 출력한다.
 
 같은 document의 network ambiguity retry는 server idempotency를 이용해 한 번만 수행한다. 두 요청이 모두 실패하면 결과가 불명임을 표시하며 같은 document를 다시 제출해도 안전하다.
 

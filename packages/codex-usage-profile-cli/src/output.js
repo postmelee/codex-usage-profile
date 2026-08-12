@@ -3,6 +3,9 @@ import {
   supportsTerminalHyperlinks
 } from "./device-login.js";
 
+const ANSI_BRIGHT_BLACK = "\u001B[90m";
+const ANSI_RESET = "\u001B[0m";
+
 export function projectSubmitOutput(value, options = {}) {
   const forbiddenValues = normalizeForbiddenValues(options.forbiddenValues);
   return {
@@ -43,33 +46,43 @@ export function writeSubmitOutput(value, options = {}) {
     return output;
   }
 
+  const env = options.env ?? process.env;
   const hyperlinkEnabled = options.hyperlinks !== false &&
     supportsTerminalHyperlinks({
-      env: options.env,
+      env,
       stdout
     });
+  const colorEnabled = supportsOutputColor({ env, stdout });
 
   const status = output.submission?.idempotent
-    ? "Usage is already up to date."
-    : "Usage submitted successfully.";
+    ? "✓ Usage is already up to date."
+    : "✓ Usage submitted successfully.";
   stdout.write(`${status}\n`);
   if (output.submission?.capturedAt) {
     stdout.write(`Captured: ${output.submission.capturedAt}\n`);
   }
+  const hasLinks = Boolean(
+    output.profile?.profileUrl ||
+    output.profile?.imageUrl ||
+    output.profile?.readmeMarkdown
+  );
+  if (hasLinks) {
+    stdout.write(`\n${formatLinksHeading(colorEnabled)}\n`);
+  }
   if (output.profile?.profileUrl) {
-    stdout.write(`Profile: ${formatSubmitHyperlink(
+    stdout.write(`  Profile: ${formatSubmitHyperlink(
       output.profile.profileUrl,
       hyperlinkEnabled
     )}\n`);
   }
   if (output.profile?.imageUrl) {
-    stdout.write(`Card: ${formatSubmitHyperlink(
+    stdout.write(`  Card:    ${formatSubmitHyperlink(
       output.profile.imageUrl,
       hyperlinkEnabled
     )}\n`);
   }
   if (output.profile?.readmeMarkdown) {
-    stdout.write(`README: ${output.profile.readmeMarkdown}\n`);
+    stdout.write(`  README:  ${output.profile.readmeMarkdown}\n`);
   }
 
   return output;
@@ -88,6 +101,16 @@ function sanitizeString(value, forbiddenValues) {
 function formatSubmitHyperlink(value, enabled) {
   if (!enabled || !isSafeHttpUrl(value)) return value;
   return formatTerminalHyperlink(value, { enabled: true });
+}
+
+function supportsOutputColor({ env, stdout }) {
+  return stdout.isTTY === true &&
+    env.TERM !== "dumb" &&
+    !Object.hasOwn(env, "NO_COLOR");
+}
+
+function formatLinksHeading(enabled) {
+  return enabled ? `${ANSI_BRIGHT_BLACK}Links${ANSI_RESET}` : "Links";
 }
 
 function isSafeHttpUrl(value) {

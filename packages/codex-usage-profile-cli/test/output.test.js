@@ -22,11 +22,12 @@ test("writes useful human and JSON submit results", () => {
   writeSubmitOutput(createResponse(), { stdout: human });
   writeSubmitOutput(createResponse(), { stdout: json, json: true });
 
-  assert.match(human.value, /Usage submitted successfully/);
+  assert.match(human.value, /^✓ Usage submitted successfully\./);
   assert.match(human.value, /Captured:/);
-  assert.match(human.value, /Profile:/);
-  assert.match(human.value, /Card:/);
-  assert.match(human.value, /README:/);
+  assert.match(human.value, /\n\nLinks\n/);
+  assert.match(human.value, /  Profile:/);
+  assert.match(human.value, /  Card:/);
+  assert.match(human.value, /  README:/);
   assert.equal(human.value.includes("usage_private_revision"), false);
   assert.equal(JSON.parse(json.value).submission.status, "accepted");
   assert.equal(json.value.includes("cup_secret_value"), false);
@@ -41,16 +42,17 @@ test("renders only Profile and Card as cyan terminal hyperlinks", () => {
 
   assert.match(
     stdout.value,
-    /Profile: \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/profile/
+    /  Profile: \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/profile/
   );
   assert.match(
     stdout.value,
-    /Card: \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/u\/postmelee\/card\.png/
+    /  Card:    \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/u\/postmelee\/card\.png/
   );
+  assert.match(stdout.value, /\n\n\u001B\[90mLinks\u001B\[0m\n/);
   assert.match(stdout.value, /\u001B\]8;;\u001B\\\u001B\[39m/);
   assert.equal(
-    stdout.value.split("\n").find((line) => line.startsWith("README:")),
-    "README: ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+    stdout.value.split("\n").find((line) => line.startsWith("  README:")),
+    "  README:  ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
   );
   assert.equal(result.profile.profileUrl, "https://profiles.example.test/profile");
   assert.equal(result.profile.imageUrl, "https://profiles.example.test/u/postmelee/card.png");
@@ -70,6 +72,7 @@ test("keeps submit links plain when hyperlink output is disabled", () => {
     {
       env: { TERM_PROGRAM: "iTerm.app" },
       hyperlinks: false,
+      expectColor: true,
       stdout: createOutput({ isTTY: true })
     },
     {
@@ -81,15 +84,20 @@ test("keeps submit links plain when hyperlink output is disabled", () => {
 
   for (const options of cases) {
     writeSubmitOutput(createResponse(), options);
-    assert.equal(options.stdout.value.includes("\u001B"), false);
+    assert.equal(options.stdout.value.includes("\u001B]8;;"), false);
+    if (options.expectColor) {
+      assert.match(options.stdout.value, /\u001B\[90mLinks\u001B\[0m/);
+    } else {
+      assert.equal(options.stdout.value.includes("\u001B"), false);
+    }
     if (options.json) {
       assert.equal(
         JSON.parse(options.stdout.value).profile.profileUrl,
         "https://profiles.example.test/profile"
       );
     } else {
-      assert.match(options.stdout.value, /Profile: https:\/\/profiles\.example\.test\/profile/);
-      assert.match(options.stdout.value, /Card: https:\/\/profiles\.example\.test/);
+      assert.match(options.stdout.value, /  Profile: https:\/\/profiles\.example\.test\/profile/);
+      assert.match(options.stdout.value, /  Card:    https:\/\/profiles\.example\.test/);
     }
   }
 });
@@ -108,9 +116,9 @@ test("never creates terminal hyperlinks for non-HTTP profile values", () => {
     stdout
   });
 
-  assert.equal(stdout.value.includes("\u001B"), false);
-  assert.match(stdout.value, /Profile: javascript:alert\(1\)/);
-  assert.match(stdout.value, /Card: file:\/\/\/tmp\/card\.png/);
+  assert.equal(stdout.value.includes("\u001B]8;;"), false);
+  assert.match(stdout.value, /  Profile: javascript:alert\(1\)/);
+  assert.match(stdout.value, /  Card:    file:\/\/\/tmp\/card\.png/);
 });
 
 test("labels idempotent retries as already up to date", () => {
@@ -124,7 +132,23 @@ test("labels idempotent retries as already up to date", () => {
     }
   }, { stdout });
 
-  assert.match(stdout.value, /already up to date/);
+  assert.match(stdout.value, /^✓ Usage is already up to date\./);
+});
+
+test("omits the Links block when the response has no profile output", () => {
+  const stdout = createOutput({ isTTY: true });
+  writeSubmitOutput({
+    ...createResponse(),
+    profile: null
+  }, {
+    env: { TERM_PROGRAM: "iTerm.app" },
+    stdout
+  });
+
+  assert.equal(
+    stdout.value,
+    "✓ Usage submitted successfully.\nCaptured: 2026-07-13T00:00:00.000Z\n"
+  );
 });
 
 test("redacts a credential echoed inside otherwise allowed fields", () => {
