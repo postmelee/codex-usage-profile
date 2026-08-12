@@ -1311,10 +1311,6 @@ test.describe("Home and share card flow", () => {
   test("Task #92 mobile account menu preserves touch activation after null blur", async ({
     browser
   }, testInfo) => {
-    test.fail(
-      true,
-      "Known regression: a null-relatedTarget blur closes the menu before touch activation"
-    );
     const context = await browser.newContext({
       baseURL: E2E_ORIGIN,
       hasTouch: true,
@@ -1324,34 +1320,50 @@ test.describe("Home and share card flow", () => {
     const page = await context.newPage();
 
     try {
+      let logoutRequests = 0;
       await page.emulateMedia({ colorScheme: "dark" });
       await mockAuthenticatedAccount(page);
+      await mockSettingsData(page);
       await mockCardImages(page);
+      await page.route("**/api/auth/logout", (route) => {
+        logoutRequests += 1;
+        return fulfillJson(route, {
+          data: { session: null },
+          ok: true
+        });
+      });
       await page.goto("/");
 
-      const trigger = page.getByRole("button", {
+      const diagnostics = [];
+      for (const destination of [
+        { href: OWNER_PROFILE_ROUTE, label: "Profile" },
+        { href: "/?view=settings", label: "Settings" }
+      ]) {
+        await page.getByRole("button", {
+          name: "Account menu for postmelee"
+        }).tap();
+        const item = page.getByRole("menuitem", { name: destination.label });
+        await expect(item).toBeVisible();
+        diagnostics.push(await preserveMenuTouchActivation(page, item));
+        await item.tap();
+        await expect(page).toHaveURL(`${E2E_ORIGIN}${destination.href}`);
+        await page.goto("/");
+      }
+
+      await page.getByRole("button", {
         name: "Account menu for postmelee"
-      });
-      await trigger.tap();
-      const profileItem = page.getByRole("menuitem", { name: "Profile" });
-      await expect(profileItem).toBeFocused();
+      }).tap();
+      const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+      diagnostics.push(await preserveMenuTouchActivation(page, logoutItem));
+      await logoutItem.tap();
+      await expect(page.getByRole("link", { name: "Sign in", exact: true }))
+        .toBeVisible();
+      expect(logoutRequests).toBe(1);
 
-      await profileItem.evaluate((element) => element.blur());
-      await page.waitForTimeout(0);
-
-      const diagnostic = await page.evaluate(() => ({
-        activeElement: document.activeElement?.tagName ?? null,
-        menuCount: document.querySelectorAll("#account-menu-popover").length,
-        url: globalThis.location.href
-      }));
       await testInfo.attach("task-92-mobile-account-menu.json", {
-        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        body: Buffer.from(JSON.stringify(diagnostics, null, 2)),
         contentType: "application/json"
       });
-
-      expect(diagnostic).toMatchObject({ menuCount: 1 });
-      await profileItem.tap();
-      await expect(page).toHaveURL(`${E2E_ORIGIN}${OWNER_PROFILE_ROUTE}`);
     } finally {
       await context.close();
     }
@@ -3730,6 +3742,27 @@ async function mockSettingsData(page) {
     data: { devices: [] },
     ok: true
   }));
+}
+
+async function preserveMenuTouchActivation(page, item) {
+  await item.evaluate((element) => {
+    element.blur();
+    element.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "touch"
+    }));
+  });
+  await page.waitForTimeout(20);
+
+  const diagnostic = await page.evaluate(() => ({
+    activeElement: document.activeElement?.tagName ?? null,
+    menuCount: document.querySelectorAll("#account-menu-popover").length,
+    url: globalThis.location.href
+  }));
+  expect(diagnostic).toMatchObject({ menuCount: 1 });
+  return diagnostic;
 }
 
 async function useThemePreference(page, preference) {
