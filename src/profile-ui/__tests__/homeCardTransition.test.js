@@ -8,6 +8,7 @@ import {
   beginHomeCardTransition,
   createHomeCardSource,
   createHomeCardTransition,
+  isHomeCardTransitionReadyForTarget,
   isHomeCardImageAbortError,
   loadHomeCardImage,
   rejectHomeCardTransition,
@@ -34,13 +35,40 @@ test("starts with one immutable pending operator source", () => {
   assert.equal(state.generation, 1);
   assert.equal(state.status, HOME_CARD_TRANSITION_STATUSES.LOADING);
   assert.deepEqual(state.pending, OPERATOR_SOURCE);
+  assert.deepEqual(state.target, OPERATOR_SOURCE);
+  assert.equal(Object.isFrozen(state.target), true);
   assert.equal(state.pendingIsFallback, false);
   assert.equal(state.visible, null);
 });
 
-test.todo(
-  "tracks the immutable selected target after a pending source becomes fallback"
-);
+test("tracks the immutable selected target after a pending source becomes fallback", () => {
+  const ownerPending = beginHomeCardTransition(createTransition(), OWNER_SOURCE);
+  const fallbackPending = rejectHomeCardTransition(
+    ownerPending,
+    ownerPending.generation
+  );
+
+  assert.deepEqual(fallbackPending.target, OWNER_SOURCE);
+  assert.equal(fallbackPending.pendingIsFallback, true);
+  assert.equal(
+    isHomeCardTransitionReadyForTarget(fallbackPending, OWNER_SOURCE),
+    false
+  );
+
+  const fallbackReady = resolveHomeCardTransition(
+    fallbackPending,
+    fallbackPending.generation
+  );
+  assert.deepEqual(fallbackReady.target, OWNER_SOURCE);
+  assert.equal(
+    isHomeCardTransitionReadyForTarget(fallbackReady, OWNER_SOURCE),
+    true
+  );
+  assert.equal(
+    isHomeCardTransitionReadyForTarget(fallbackReady, OPERATOR_SOURCE),
+    false
+  );
+});
 
 test("commits only the current generation and preserves the visible card while pending", () => {
   const operatorReady = resolveHomeCardTransition(createTransition(), 1);
@@ -53,6 +81,8 @@ test("commits only the current generation and preserves the visible card while p
   assert.equal(ownerPending.status, HOME_CARD_TRANSITION_STATUSES.LOADING);
   assert.deepEqual(ownerPending.visible, OPERATOR_SOURCE);
   assert.deepEqual(ownerPending.pending, OWNER_SOURCE);
+  assert.deepEqual(ownerPending.target, OWNER_SOURCE);
+  assert.equal(isHomeCardTransitionReadyForTarget(ownerPending, OWNER_SOURCE), false);
 
   assert.equal(
     resolveHomeCardTransition(ownerPending, 1),
@@ -67,6 +97,7 @@ test("commits only the current generation and preserves the visible card while p
   assert.equal(ownerReady.status, HOME_CARD_TRANSITION_STATUSES.READY);
   assert.deepEqual(ownerReady.visible, OWNER_SOURCE);
   assert.equal(ownerReady.pending, null);
+  assert.equal(isHomeCardTransitionReadyForTarget(ownerReady, OWNER_SOURCE), true);
 });
 
 test("falls back once and stops after a sample failure", () => {
@@ -122,6 +153,7 @@ test("logout reset removes the owner source before a new operator load", () => {
   assert.equal(reset.status, HOME_CARD_TRANSITION_STATUSES.LOADING);
   assert.equal(reset.visible, null);
   assert.deepEqual(reset.pending, OPERATOR_SOURCE);
+  assert.deepEqual(reset.target, OPERATOR_SOURCE);
   assert.doesNotMatch(JSON.stringify(reset), /api\/profile|owner_1|avatar/i);
 });
 

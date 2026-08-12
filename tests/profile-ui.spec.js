@@ -1037,8 +1037,6 @@ test.describe("Home and share card flow", () => {
   });
 
   test("Task #95 authenticated Home reveals only the final owner target", async ({ page }, testInfo) => {
-    test.fail();
-
     await page.addInitScript(() => {
       globalThis.__task95HomeCardHistory = [];
       let lastSnapshot = null;
