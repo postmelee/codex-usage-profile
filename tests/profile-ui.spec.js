@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { expect, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
@@ -1312,10 +1312,8 @@ test.describe("Home and share card flow", () => {
     browser
   }, testInfo) => {
     const context = await browser.newContext({
-      baseURL: E2E_ORIGIN,
-      hasTouch: true,
-      isMobile: true,
-      viewport: { height: 844, width: 390 }
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
     });
     const page = await context.newPage();
 
@@ -2170,10 +2168,8 @@ test.describe("Home and share card flow", () => {
     browser
   }, testInfo) => {
     const context = await browser.newContext({
-      baseURL: E2E_ORIGIN,
-      hasTouch: true,
-      isMobile: true,
-      viewport: { height: 844, width: 390 }
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
     });
     const page = await context.newPage();
 
@@ -2214,6 +2210,15 @@ test.describe("Home and share card flow", () => {
       await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
 
       const diagnostic = await motionCard.evaluate((element, sourceRect) => {
+        const dynamicViewportProbe = document.createElement("div");
+        dynamicViewportProbe.style.cssText = [
+          "height:1px",
+          "pointer-events:none",
+          "position:fixed",
+          "visibility:hidden",
+          "width:100dvw"
+        ].join(";");
+        document.body.append(dynamicViewportProbe);
         const keyframes = element.getAnimations().flatMap(
           (animation) => animation.effect?.getKeyframes?.() ?? []
         );
@@ -2232,8 +2237,14 @@ test.describe("Home and share card flow", () => {
           right: target.left + matrix.e + (target.width * matrix.a),
           top: target.top + matrix.f
         };
-        return {
+        const result = {
           firstTransform,
+          layoutViewport: {
+            clientWidth: document.documentElement.clientWidth,
+            dynamicWidth: dynamicViewportProbe.getBoundingClientRect().width,
+            innerWidth: globalThis.innerWidth,
+            screenWidth: globalThis.screen.width
+          },
           motionMode: element.dataset.motionMode,
           motionOrigin: element.dataset.motionOrigin,
           scaleX: Math.round(matrix.a * 1000) / 1000,
@@ -2254,6 +2265,8 @@ test.describe("Home and share card flow", () => {
             start.bottom <= viewport.height
           )
         };
+        dynamicViewportProbe.remove();
+        return result;
       }, syntheticSource);
       await testInfo.attach("task-92-mobile-card-handoff.json", {
         body: Buffer.from(JSON.stringify(diagnostic, null, 2)),

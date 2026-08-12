@@ -1998,6 +1998,8 @@ button {
   aspect-ratio: 499 / 306;
   border-radius: clamp(22px, 3.2vw, 41px);
   margin-top: 28px;
+  max-width: 100%;
+  min-width: 0;
   position: relative;
   transform-origin: top left;
   will-change: transform, opacity;
