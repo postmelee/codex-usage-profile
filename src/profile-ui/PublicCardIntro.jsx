@@ -34,6 +34,7 @@ const INTRO_FRAMES = Object.freeze([
 export function PublicCardIntro({
   cardAlt,
   cardImage,
+  cardTheme,
   cardUrl,
   createCardHref,
   onClose,
@@ -166,6 +167,7 @@ export function PublicCardIntro({
           <MarketingCardPreview
             alt={cardAlt}
             busy={cardImage.busy}
+            cardTheme={cardTheme}
             errorLabel={t("home.cardUnavailable")}
             loadingLabel={t("home.loadingCardPreview")}
             sourceKind="public"

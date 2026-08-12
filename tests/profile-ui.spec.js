@@ -73,8 +73,6 @@ test("card readiness releases reacquired same-source leases", async ({ page }) =
 
 test.describe("theme surfaces", () => {
   test("Task #96 light Profile Skeleton uses a site-theme palette", async ({ page }) => {
-    test.fail(true, "Stage 1 captures the dark-card palette leaking into page Skeletons");
-
     await useThemePreference(page, "light");
     await mockAnonymousAccount(page);
     await page.route("**/api/profiles/public/postmelee", () => new Promise(() => {}));
@@ -98,6 +96,46 @@ test.describe("theme surfaces", () => {
     expect(palette.sheen).not.toContain("rgba(255, 255, 255");
 
     await expect(cardPlaceholder).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  });
+
+  test("Task #96 card Skeleton follows the card theme instead of the site theme", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await page.route("**/u/postmelee/card.png*", () => new Promise(() => {}));
+    await page.goto(SITES_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const publicCard = page.locator(
+      ".public-profile-stage .profile-card-section .home-card-media"
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(publicCard).toHaveAttribute("data-card-theme", "light");
+    await expect(publicCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(publicCard.locator(".home-card-skeleton-avatar"))
+      .toHaveCSS("background-color", "rgb(238, 238, 238)");
+  });
+
+  test("Task #96 owner draft switches the card Skeleton palette independently", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", () => new Promise(() => {}));
+    await page.goto(OWNER_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const ownerCard = page.locator(".profile-card-section .home-card-media");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "dark");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(24, 24, 24)");
+
+    await page.getByRole("radio", { name: "Light" }).click();
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "light");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
   });
 
   test("Task #96 semantic primary text stays inside one theme transition window", async ({ page }) => {

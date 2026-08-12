@@ -8,6 +8,7 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
 import { useCardFrameRadius } from "../profile-ui/useCardFrameRadius.js";
+import { normalizeCardTheme } from "../profile-card/theme.js";
 import {
   createMarketingConfig,
   resolveMarketingCopy
@@ -31,6 +32,7 @@ export function MarketingLanding({
   cardSourceKind,
   cardSourceUrl,
   cardStatus,
+  cardTheme = "dark",
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
   heroAction = null,
@@ -71,6 +73,7 @@ export function MarketingLanding({
             sourceUrl={cardSourceUrl}
             src={resolvedCardUrl}
             status={cardStatus ?? (cardBusy ? "loading" : "ready")}
+            cardTheme={cardTheme}
             transitionSuspended={cardTransitionSuspended}
           />
 
@@ -97,6 +100,7 @@ export function MarketingCardPreview({
   sourceUrl,
   src,
   status = "ready",
+  cardTheme = "dark",
   transitionSuspended = false
 }) {
   const { t } = useLocale();
@@ -147,6 +151,7 @@ export function MarketingCardPreview({
           sourceUrl={sourceUrl}
           src={src}
           status={status}
+          cardTheme={cardTheme}
         />
       </BorderBeam>
     </MarketingCardTilt>
@@ -164,12 +169,14 @@ export function CardImageFrame({
   sourceKind = null,
   sourceUrl,
   src,
-  status = "ready"
+  status = "ready",
+  cardTheme = "dark"
 }) {
   return (
     <div
       aria-busy={busy}
       className="home-card-media"
+      data-card-theme={normalizeCardTheme(cardTheme)}
       data-card-source-kind={sourceKind ?? undefined}
       data-card-source-url={sourceUrl ?? undefined}
       data-card-status={status}

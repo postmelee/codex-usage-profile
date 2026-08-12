@@ -129,6 +129,7 @@ export function ProfileLoadingSkeleton({
         <MarketingCardPreview
           alt=""
           busy
+          cardTheme="dark"
           loadingLabel={loadingLabel ?? description ?? title}
           sourceKind={surface}
           src={null}

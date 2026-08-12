@@ -82,11 +82,22 @@
   --card-preview-divider: #242424;
   --card-preview-text: #ffffff;
   --card-preview-muted: #aeaeae;
+  --card-preview-light-background: #ffffff;
+  --card-preview-light-placeholder: #eeeeee;
+  --card-preview-light-placeholder-subtle: #e3e3e1;
+  --card-preview-light-divider: #ececec;
+  --card-preview-light-text: #202123;
+  --card-preview-light-muted: #686868;
   --card-preview-glare-bright: rgba(210, 235, 255, 0.14);
   --card-preview-glare-mid: rgba(82, 164, 255, 0.06);
   --card-preview-glare-faint: rgba(41, 106, 190, 0.02);
-  --skeleton-sheen-edge: rgba(255, 255, 255, 0.025);
-  --skeleton-sheen-center: rgba(255, 255, 255, 0.065);
+  --card-skeleton-sheen-edge: rgba(255, 255, 255, 0.025);
+  --card-skeleton-sheen-center: rgba(255, 255, 255, 0.065);
+  --card-skeleton-light-sheen-edge: rgba(17, 17, 17, 0.025);
+  --card-skeleton-light-sheen-center: rgba(17, 17, 17, 0.075);
+  --page-skeleton-base: light-dark(#dededc, #292929);
+  --page-skeleton-sheen-edge: light-dark(rgba(17, 17, 17, 0.025), rgba(255, 255, 255, 0.025));
+  --page-skeleton-sheen-center: light-dark(rgba(17, 17, 17, 0.075), rgba(255, 255, 255, 0.065));
   --avatar-placeholder-start: light-dark(#c7ccd6, #3b4050);
   --avatar-placeholder-end: light-dark(#e4e4e2, #232323);
   --profile-placeholder-background: light-dark(#e0e0de, #252525);
@@ -670,6 +681,17 @@ button {
   position: relative;
 }
 
+.home-card-media[data-card-theme="light"] {
+  --card-preview-background: var(--card-preview-light-background);
+  --card-preview-placeholder: var(--card-preview-light-placeholder);
+  --card-preview-placeholder-subtle: var(--card-preview-light-placeholder-subtle);
+  --card-preview-divider: var(--card-preview-light-divider);
+  --card-preview-text: var(--card-preview-light-text);
+  --card-preview-muted: var(--card-preview-light-muted);
+  --card-skeleton-sheen-edge: var(--card-skeleton-light-sheen-edge);
+  --card-skeleton-sheen-center: var(--card-skeleton-light-sheen-center);
+}
+
 .home-card-skeleton {
   background: var(--card-preview-background);
   border-radius: inherit;
@@ -714,9 +736,9 @@ button {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--skeleton-sheen-edge) 38%,
-    var(--skeleton-sheen-center) 50%,
-    var(--skeleton-sheen-edge) 62%,
+    var(--card-skeleton-sheen-edge) 38%,
+    var(--card-skeleton-sheen-center) 50%,
+    var(--card-skeleton-sheen-edge) 62%,
     transparent 100%
   );
   content: "";
@@ -1492,7 +1514,7 @@ button {
 }
 
 .profile-loading-shimmer {
-  background: var(--card-preview-placeholder-subtle);
+  background: var(--page-skeleton-base);
   display: block;
   overflow: hidden;
   position: relative;
@@ -1504,9 +1526,9 @@ button {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--skeleton-sheen-edge) 38%,
-    var(--skeleton-sheen-center) 50%,
-    var(--skeleton-sheen-edge) 62%,
+    var(--page-skeleton-sheen-edge) 38%,
+    var(--page-skeleton-sheen-center) 50%,
+    var(--page-skeleton-sheen-edge) 62%,
     transparent 100%
   );
   content: "";

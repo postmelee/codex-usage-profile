@@ -303,6 +303,9 @@ function CardProfileContent(props) {
           <MarketingCardPreview
             alt={t("profile.card.alt.owner")}
             busy={props.cardImage.busy}
+            cardTheme={props.cardSettingsState.draftStyle?.theme
+              ?? props.profile.cardStyle?.theme
+              ?? "dark"}
             cardRef={props.sourceCardRef}
             errorLabel={t("home.cardUnavailable")}
             sourceKind="owner"

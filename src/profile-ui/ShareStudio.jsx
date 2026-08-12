@@ -305,6 +305,7 @@ export function ShareStudio({
           <CardImageFrame
             alt={copy.previewAlt}
             busy={previewBusy}
+            cardTheme={cardTheme}
             errorLabel={copy.previewUnavailable}
             imageClassName={`share-card-preview share-studio-card${showPublicTarget ? ` is-public-target${hasWarmSource ? " is-warm-handoff-target" : ""}` : hasWarmSource ? " is-handoff-source" : ""}`}
             loadingLabel={copy.previewAlt}
