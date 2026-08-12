@@ -2157,10 +2157,6 @@ test.describe("Home and share card flow", () => {
   test("Task #92 mobile Share Studio rejects an unsafe source scale", async ({
     browser
   }, testInfo) => {
-    test.fail(
-      true,
-      "Known regression: mobile handoff accepts an unbounded source-to-target scale"
-    );
     const context = await browser.newContext({
       baseURL: E2E_ORIGIN,
       hasTouch: true,
@@ -2226,6 +2222,7 @@ test.describe("Home and share card flow", () => {
         };
         return {
           firstTransform,
+          motionMode: element.dataset.motionMode,
           motionOrigin: element.dataset.motionOrigin,
           scaleX: Math.round(matrix.a * 1000) / 1000,
           scaleY: Math.round(matrix.d * 1000) / 1000,
@@ -2252,6 +2249,8 @@ test.describe("Home and share card flow", () => {
       });
 
       expect(diagnostic).toMatchObject({
+        motionMode: "target",
+        motionOrigin: "target",
         scaleX: 1,
         scaleY: 1,
         withinViewport: true
