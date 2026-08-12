@@ -328,17 +328,164 @@ button {
   }
 }
 
-/* Theme swaps flip every surface at once, so colour transitions are enabled
-   only while a swap is in flight. Leaving them on permanently would slow every
-   hover and interfere with the card motion work. */
-:root[data-theme-animating] *,
-:root[data-theme-animating] *::before,
-:root[data-theme-animating] *::after {
+/* Theme swaps opt semantic text and major surfaces into one short transition.
+   A universal selector would create hundreds of simultaneous animations for
+   the heatmap and an inactive card Skeleton, which is especially expensive on
+   mobile. Keep card motion and decorative animation ownership independent. */
+:root[data-theme-animating] :where(
+  body,
+  .app-frame,
+  .profile-shell,
+  .profile-topbar,
+  .profile-topbar-theme-track,
+  .profile-topbar-theme-knob,
+  .account-popover,
+  .account-menu-items,
+  .account-menu-item,
+  .home-view,
+  .home-quickstart,
+  .home-command-row,
+  .card-profile-view,
+  .public-profile-view,
+  .profile-view,
+  .profile-stats,
+  .profile-card-section,
+  .card-style-settings,
+  .card-style-option,
+  .public-profile-owner-banner,
+  .settings-view,
+  .settings-appearance-option,
+  .settings-panel,
+  .settings-note,
+  .settings-token-reveal,
+  .settings-action-row input,
+  .settings-device-edit-row input,
+  .settings-token-code-row code,
+  .settings-muted-action,
+  .settings-danger-action,
+  .device-view,
+  .device-panel,
+  .device-form input,
+  .device-command-row code,
+  .device-copy-action,
+  .activity-empty,
+  .primary-command,
+  .secondary-command,
+  .icon-command,
+  .site-footer
+) {
   transition:
     background-color 240ms ease,
     border-color 240ms ease,
     color 240ms ease,
     fill 240ms ease !important;
+}
+
+:root[data-theme-animating] :where(
+  .profile-topbar-title,
+  .profile-topbar-github,
+  .profile-topbar-theme-icon,
+  .profile-actions > button,
+  .profile-actions > a,
+  .profile-actions > .account-menu > button,
+  .account-avatar-fallback,
+  .account-popover-identity strong,
+  .account-popover-identity span,
+  .account-menu-error,
+  .home-heading h1,
+  .home-heading p,
+  .home-account-identity strong,
+  .home-account-identity small,
+  .home-status,
+  .home-quickstart-heading h2,
+  .home-quickstart-heading p,
+  .home-quickstart-access p,
+  .home-quickstart-status,
+  .home-command-label,
+  .home-command-row code,
+  .home-command-copy,
+  .home-copy-status,
+  .home-step-number,
+  .home-quickstart-steps h3,
+  .home-quickstart-steps p,
+  .card-profile-heading h2,
+  .card-profile-message h1,
+  .card-profile-message > p,
+  .card-profile-empty-description,
+  .card-profile-empty-privacy,
+  .visibility-status,
+  .card-style-settings-heading h3,
+  .card-style-settings-heading p,
+  .card-style-settings-heading a,
+  .card-style-option-group legend,
+  .card-style-option strong,
+  .card-style-option small,
+  .card-style-settings-status,
+  .public-profile-heading h1,
+  .public-profile-heading p,
+  .public-profile-state h1,
+  .public-profile-state p,
+  .public-profile-owner-banner-copy strong,
+  .public-profile-owner-banner-copy span,
+  .settings-heading h1,
+  .settings-appearance-title,
+  .settings-appearance-description,
+  .settings-appearance-copy strong,
+  .settings-appearance-copy small,
+  .settings-state-heading h2,
+  .settings-state-heading p,
+  .settings-panel-heading h2,
+  .settings-token-count,
+  .settings-account-copy strong,
+  .settings-account-copy span,
+  .settings-note,
+  .settings-detail-row dt,
+  .settings-detail-row dd,
+  .settings-token-form label,
+  .settings-token-reveal strong,
+  .settings-token-info strong,
+  .settings-token-info span,
+  .settings-list-state,
+  .settings-limit-note,
+  .settings-error,
+  .device-header h1,
+  .device-header p,
+  .device-form label,
+  .device-security-note,
+  .device-status,
+  .device-copy-status,
+  .device-success-links a,
+  .device-help-link,
+  .profile-heading h1,
+  .profile-heading h2,
+  .profile-heading p,
+  .profile-stage h2,
+  .profile-stage p,
+  .plan-pill,
+  .profile-stat dd,
+  .profile-stat dt,
+  .token-activity h2,
+  .activity-panel h3,
+  .token-tabs button,
+  .exact-token-toggle,
+  .month-labels,
+  .activity-row,
+  .plugin-row,
+  .activity-row dd,
+  .plugin-runs,
+  .site-footer-about p,
+  .site-footer-about .site-footer-brand,
+  .site-footer-privacy,
+  .site-footer-links a,
+  .site-footer-copyright
+) {
+  transition: color 240ms ease !important;
+}
+
+/* Heatmap cells retain their interaction transition outside theme swaps, but
+   do not each allocate a CSS transition while the global palette changes. */
+:root[data-theme-animating] .token-cell {
+  transition: none !important;
 }
 
 .profile-topbar-leading {
@@ -732,7 +879,6 @@ button {
 }
 
 .home-card-skeleton::after {
-  animation: home-card-skeleton-progress 1.6s linear infinite;
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -746,6 +892,10 @@ button {
   position: absolute;
   transform: translateX(-100%);
   z-index: 1;
+}
+
+.home-card-skeleton[data-active="true"]::after {
+  animation: home-card-skeleton-progress 1.6s linear infinite;
 }
 
 .home-card-skeleton-header {
@@ -3774,7 +3924,8 @@ button {
     animation: none;
   }
 
-  .home-card-skeleton::after {
+  .home-card-skeleton::after,
+  .home-card-skeleton[data-active="true"]::after {
     animation: none;
     opacity: 0;
     transform: none;

@@ -21,6 +21,7 @@ const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = (
   HOME_CARD_SKELETON_HEATMAP_ROW_COUNT
 );
 const HOME_CARD_SKELETON_STAT_COUNT = 4;
+const HOME_CARD_SKELETON_EXIT_DURATION_MS = 240;
 
 export function MarketingLanding({
   cardAlt,
@@ -216,6 +217,25 @@ export function CardImageFrame({
 }
 
 export function CardImageSkeleton({ active }) {
+  const [retained, setRetained] = useState(active);
+
+  useEffect(() => {
+    if (active) {
+      setRetained(true);
+      return undefined;
+    }
+
+    const timeoutId = globalThis.setTimeout(() => {
+      setRetained(false);
+    }, HOME_CARD_SKELETON_EXIT_DURATION_MS);
+
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [active]);
+
+  if (!active && !retained) {
+    return null;
+  }
+
   return (
     <div
       aria-hidden="true"

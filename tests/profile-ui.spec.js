@@ -172,6 +172,48 @@ test.describe("theme surfaces", () => {
     });
   });
 
+  test("Task #96 theme swap avoids dense heatmap and inactive Skeleton animation fan-out", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "ready");
+    await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const homeAnimationCount = await page.evaluate(() => (
+      document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    ));
+    expect(homeAnimationCount).toBeLessThan(160);
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    await expect(page.locator(".token-cell").first()).toBeVisible();
+    await expect(page.locator(".profile-card-section .home-card-skeleton"))
+      .toHaveCount(0);
+    await page.getByRole("switch").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const profileAnimationContract = await page.evaluate(() => ({
+      heatmap: Array.from(document.querySelectorAll(".token-cell")).reduce(
+        (sum, element) => sum + element.getAnimations().length,
+        0
+      ),
+      total: document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    }));
+    expect(profileAnimationContract.heatmap).toBe(0);
+    expect(profileAnimationContract.total).toBeLessThan(160);
+  });
+
   test("Task #96 reduced motion changes semantic text without a transition window", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
     await useThemePreference(page, "dark");
@@ -1022,7 +1064,7 @@ test.describe("Home and share card flow", () => {
         "data-card-source-url",
         "/assets/codex-card-sample.png"
       );
-      await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
+      await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
       if (failureStatus === 503) {
         await page.screenshot({
           path: testInfo.outputPath("home-card-fallback-desktop.png")
@@ -1135,9 +1177,7 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
     await expect(media).toHaveAttribute("data-card-status", "ready");
     await expect(media).toHaveAttribute("aria-busy", "false");
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0.24s");
+    await expect(skeleton).toHaveCount(0);
     await expect(loadingStatus).toHaveText("");
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
     await expect(page.locator('[data-card-source="true"]'))
@@ -1196,7 +1236,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     const readyQuickstartBox = await page
       .getByRole("heading", { name: "Quickstart" })
@@ -1258,8 +1298,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     expectRectNear(readyCardBox, loadingCardBox, 1);
     await page.screenshot({
@@ -2214,8 +2253,7 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-motion-mode", "scale");
     await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
     await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     expect(publicPreviewFetches).toBe(1);
     const targetPresentation = await motionCard.evaluate((element) => {
@@ -3666,7 +3704,7 @@ test.describe("Settings appearance control", () => {
     );
     await expect(preview).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => preview.getAttribute("src")).not.toBe(initialBlobUrl);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCount(0);
     expect(previewRequests.some(
       (url) => url.includes("locale=ko&theme=light")
     )).toBe(true);

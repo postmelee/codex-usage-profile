@@ -84,6 +84,40 @@ test("Task #96 every shared card frame receives an explicit card theme", async (
   assert.match(sources.loading, /cardTheme="dark"/);
 });
 
+test("Task #96 theme transitions stay scoped away from dense content", async () => {
+  const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
+
+  assert.doesNotMatch(
+    stylesheet,
+    /:root\[data-theme-animating\]\s+\*(?=\s*[,\{])/,
+    "theme transitions must not fan out through a universal selector"
+  );
+  assert.match(
+    stylesheet,
+    /:root\[data-theme-animating\]\s+:where\([\s\S]*?\.home-quickstart-heading h2[\s\S]*?\.profile-heading h1[\s\S]*?\)\s*\{\s*transition:\s*color 240ms ease !important;/
+  );
+  assert.match(
+    stylesheet,
+    /:root\[data-theme-animating\]\s+\.token-cell\s*\{\s*transition:\s*none !important;/
+  );
+});
+
+test("Task #96 inactive card Skeleton stops shimmer and leaves the DOM", async () => {
+  const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
+  const marketing = await readFile(SOURCE_PATHS.marketing, "utf8");
+
+  assert.doesNotMatch(
+    findRule(stylesheet, ".home-card-skeleton::after"),
+    /animation:\s*home-card-skeleton-progress/
+  );
+  assert.match(
+    findRule(stylesheet, '.home-card-skeleton[data-active="true"]::after'),
+    /animation:\s*home-card-skeleton-progress 1\.6s linear infinite;/
+  );
+  assert.match(marketing, /HOME_CARD_SKELETON_EXIT_DURATION_MS = 240/);
+  assert.match(marketing, /if \(!active && !retained\) \{\s*return null;/);
+});
+
 function findRule(stylesheet, selector) {
   const bodies = Array.from(stylesheet.matchAll(/([^{}]+)\{([^{}]*)\}/g))
     .filter((match) => match[1].split(",").some((candidate) => (

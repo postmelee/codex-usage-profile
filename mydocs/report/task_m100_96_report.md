@@ -10,21 +10,23 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 - 단계 수: 4
 - 작업 목적: Home·Profile primary text가 하나의 테마 전환 창에서 함께 바뀌도록 semantic color
   ownership을 명시하고, page Skeleton은 site theme, card Skeleton은 card theme를 따르도록 분리한다.
+  PR 검토 중 확인한 모바일 성능 회귀에 대해서는 semantic surface로 transition 대상을 제한하고,
+  card Skeleton은 퇴장 전환 뒤 DOM과 shimmer를 함께 정리한다.
 
 ## 변경 파일 목록과 영향 범위
 
 | 경로 | 변경 요약 | 영향 범위 |
 |---|---|---|
-| `src/styles.css` | primary text direct token, page/card Skeleton token과 light card variant 추가 | dark/light 전환, Profile loading, 공용 card preview |
-| `src/profile-marketing/MarketingLanding.jsx` | card theme prop과 정규화된 `data-card-theme` context 추가 | Home·Profile·intro 공용 card frame |
+| `src/styles.css` | primary text direct token, page/card Skeleton token과 light card variant, semantic transition scope 추가 | dark/light 전환, Profile loading, 공용 card preview |
+| `src/profile-marketing/MarketingLanding.jsx` | card theme context와 Skeleton 240ms 퇴장 후 unmount 추가 | Home·Profile·intro 공용 card frame |
 | `src/profile-ui/HomePage.jsx` | owner는 saved theme, operator/sample은 canonical dark 전달 | Home card Skeleton |
 | `src/profile-ui/CardProfilePage.jsx` | owner draft theme를 card frame에 전달 | Profile card 설정 변경 중 preview |
 | `src/profile-ui/PublicProfilePage.jsx` | public profile theme를 card와 intro에 전달 | 공개 Profile·공유 링크 |
 | `src/profile-ui/PublicCardIntro.jsx` | intro frame에 card theme 전달 | 공유 링크 최초 card modal |
 | `src/profile-ui/ShareStudio.jsx` | share frame에 card theme 전달 | 공유 modal warm/cold preview |
 | `src/profile-ui/ProfileLoadingSkeleton.jsx` | 응답 전 내부 card theme를 canonical dark로 명시 | owner/public Profile loading |
-| `src/profile-ui/__tests__/themeSurfaceContract.test.js` | semantic text·page/card token·공용 callsite 계약 4건 | source regression |
-| `tests/profile-ui.spec.js` | transition history, reduced motion, site/card 교차 palette E2E 5건 | Chromium·WebKit regression |
+| `src/profile-ui/__tests__/themeSurfaceContract.test.js` | semantic text·page/card token·공용 callsite·transition fan-out 계약 6건 | source regression |
+| `tests/profile-ui.spec.js` | transition history, reduced motion, site/card 교차 palette, animation fan-out E2E 6건 | Chromium·WebKit regression |
 | `mydocs/plans/task_m100_96*.md` | 비배포 구현·검증 계획 | 내부 작업 근거 |
 | `mydocs/working/task_m100_96_stage{1..4}.md` | 단계별 audit·구현·검증 결과 | 내부 검증 추적 |
 | `mydocs/orders/20260812.md` | 오늘할일 상태와 완료 시각 | 내부 작업 보드 |
@@ -51,7 +53,11 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | card Skeleton theme context | 공용 frame에 없음 | 모든 공용 frame이 explicit `light|dark` 보유 |
 | site dark × card light | dark placeholder 노출 가능 | white/light renderer palette와 일치 |
 | site light × card dark | site와 혼동 가능 | canonical dark palette 독립 유지 |
-| Task #96 WebKit 회귀 | 전용 교차·timing 검증 없음 | 5/5 통과 |
+| Home theme swap 활성 animation | 353개 | 83개, 약 76.5% 감소 |
+| Profile theme swap 활성 animation | 1,154개 | 130개, 약 88.7% 감소 |
+| theme swap heatmap cell animation | 364개 | 0개; 평상시 interaction transition은 유지 |
+| ready card의 숨은 Skeleton | 203개 element와 shimmer 1개 유지 | 240ms 퇴장 뒤 DOM 제거, shimmer 0개 |
+| Task #96 WebKit 회귀 | 전용 교차·timing 검증 없음 | 6/6 통과 |
 | 전체 Playwright | Task #96 회귀 없음 | Chromium 84/84 통과 |
 | 전체 Node | 전용 source contract 없음 | 738건 중 732 통과, 실패 0, skip 6 |
 | Sites local smoke | 변경 후 증거 없음 | 50 routes, cold 136.13ms, warm 67.53ms |
@@ -67,6 +73,8 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | card Skeleton이 card theme만 따름 | OK — site/card 교차 조합과 owner draft radio 전환 통과 |
 | Home·Profile·intro·Share Studio 공용 frame context 누락 없음 | OK — source contract 4/4와 기존 handoff E2E 통과 |
 | geometry·readiness·share motion 회귀 없음 | OK — Chromium 전체 84/84 통과 |
+| theme transition이 dense content 전체로 확산되지 않음 | OK — Home 83, Profile 130, heatmap 0개 실측과 E2E 상한 고정 |
+| ready card가 비활성 Skeleton 비용을 유지하지 않음 | OK — 240ms fade 뒤 subtree 제거, reduced motion shimmer 0 검증 |
 | production Sites 산출물과 route 계약 유지 | OK — build, artifact verifier, 50-route local smoke 통과 |
 | 실제 배포 없이 PR·로컬 확인 handoff | OK — hosting/deploy 명령 미실행 |
 
@@ -77,12 +85,24 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 - Stage 3: [`task_m100_96_stage3.md`](../working/task_m100_96_stage3.md) — site/card Skeleton palette와 모든 공용 card theme context를 분리했다.
 - Stage 4: [`task_m100_96_stage4.md`](../working/task_m100_96_stage4.md) — 전체 Node·Playwright·production artifact·50-route smoke를 통과하고 비배포 handoff를 확정했다.
 
+### PR 보정 검증 (2026-08-13)
+
+- frontend Node 회귀: 119/119 통과
+- Task #96 및 reduced-motion 브라우저 회귀: 7/7 통과
+- Task #96 WebKit 회귀: 6/6 통과
+- Home card·Share Studio·Profile card readiness 관련 시나리오: 13개 모두 최종 통과
+- `npm run build:sites`: 통과
+- `git diff --check`: 통과
+- BorderBeam의 지속 애니메이션과 기존 화면 밖 정지 로직은 변경하지 않았다.
+
 ## 잔여 위험과 후속 작업
 
 ### 잔여 위험
 
 - 실제 iOS Safari·Chrome의 compositor와 화면 밝기 체감은 자동 WebKit이 완전히 대체하지 않는다.
   작업지시자가 merge 전 로컬 서버와 실제 기기에서 최종 확인해야 한다.
+- BorderBeam은 의도한 지속 효과이므로 이번 보정에서 유지했다. 위 두 병목 보정 뒤에도 실기기 스크롤
+  저하가 재현될 때만 별도 측정 근거로 observer 범위·compositor 비용을 후속 검토한다.
 - PR 게시 전후 모두 실제 Sites 배포를 수행하지 않는다. 배포는 #95·#96 merge 뒤 별도 요청에만
   진행한다.
 

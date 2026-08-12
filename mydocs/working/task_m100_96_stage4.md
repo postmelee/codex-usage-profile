@@ -49,7 +49,7 @@ PROFILE_E2E_ORIGIN=http://127.0.0.1:5196 npx playwright test tests/profile-ui.sp
 PROFILE_E2E_ORIGIN=http://127.0.0.1:5196 npx playwright test tests/profile-ui.spec.js --config=/private/tmp/task96.playwright.config.mjs --browser=webkit --grep "Task #96" --workers=1
 ```
 
-- 통과 5/5
+- 통과 6/6
 - site/card theme 교차 palette, owner draft, 일반/reduced text transition 포함
 
 ### production Sites artifact
@@ -84,6 +84,32 @@ git diff --check
 ```
 
 - 경고 없음.
+
+### PR 보정 검증 (2026-08-13)
+
+PR 게시 뒤 모바일 성능 측정에서 universal theme transition과 ready 상태에서도 남아 있는 card
+Skeleton 비용을 확인해 #96 범위 안에서 보정했다. 카드 BorderBeam과 기존 화면 밖 정지 로직은
+의도한 효과이므로 변경하지 않았다.
+
+| 지표 | 보정 전 | 보정 후 |
+|---|---:|---:|
+| Home theme swap 활성 animation | 353 | 83 |
+| Profile theme swap 활성 animation | 1,154 | 130 |
+| Profile heatmap cell animation | 364 | 0 |
+| ready card 비활성 Skeleton | 203 elements + shimmer 1 | 240ms 뒤 DOM 제거 + shimmer 0 |
+
+```bash
+node --test src/profile-ui/__tests__/*.test.js src/profile-marketing/__tests__/*.test.js
+PROFILE_E2E_ORIGIN=http://127.0.0.1:5196 npx playwright test tests/profile-ui.spec.js --grep "Task #96|removes shimmer and crossfade" --config playwright.task96.config.js
+npm run build:sites
+git diff --check
+```
+
+- frontend Node 119/119 통과
+- Task #96 + reduced-motion E2E 7/7 통과
+- Task #96 WebKit E2E 6/6 통과
+- Home card·Share Studio·Profile card readiness 관련 시나리오 13개 모두 최종 통과
+- Sites 정적 build와 diff 검사 통과
 
 ## 배포 감사
 
