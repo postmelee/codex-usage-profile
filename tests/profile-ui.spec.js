@@ -11,6 +11,7 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
+const E2E_ORIGIN = process.env.PROFILE_E2E_ORIGIN ?? "http://127.0.0.1:5173";
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
@@ -389,7 +390,7 @@ test.describe("Stage 3 locale surfaces", () => {
       data: {
         ...ownerProfile("public"),
         cardLocale: "ko",
-        selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark&locale=ko"
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark&locale=ko`
       },
       ok: true
     }));
@@ -512,7 +513,7 @@ test.describe("Marketing mirror", () => {
     })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create your card" })).toHaveAttribute(
       "href",
-      "http://127.0.0.1:5173/"
+      `${E2E_ORIGIN}/`
     );
     const desktopCta = await page.getByRole("link", {
       name: "Create your card"
@@ -1307,6 +1308,55 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
 
+  test("Task #92 mobile account menu preserves touch activation after null blur", async ({
+    browser
+  }, testInfo) => {
+    test.fail(
+      true,
+      "Known regression: a null-relatedTarget blur closes the menu before touch activation"
+    );
+    const context = await browser.newContext({
+      baseURL: E2E_ORIGIN,
+      hasTouch: true,
+      isMobile: true,
+      viewport: { height: 844, width: 390 }
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const trigger = page.getByRole("button", {
+        name: "Account menu for postmelee"
+      });
+      await trigger.tap();
+      const profileItem = page.getByRole("menuitem", { name: "Profile" });
+      await expect(profileItem).toBeFocused();
+
+      await profileItem.evaluate((element) => element.blur());
+      await page.waitForTimeout(0);
+
+      const diagnostic = await page.evaluate(() => ({
+        activeElement: document.activeElement?.tagName ?? null,
+        menuCount: document.querySelectorAll("#account-menu-popover").length,
+        url: globalThis.location.href
+      }));
+      await testInfo.attach("task-92-mobile-account-menu.json", {
+        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        contentType: "application/json"
+      });
+
+      expect(diagnostic).toMatchObject({ menuCount: 1 });
+      await profileItem.tap();
+      await expect(page).toHaveURL(`${E2E_ORIGIN}${OWNER_PROFILE_ROUTE}`);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("account menu exposes Profile and supports keyboard focus", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     await mockCardImages(page);
@@ -1585,7 +1635,7 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Enter");
 
     const command =
-      "npx codex-usage-profile@latest submit --server http://127.0.0.1:5173";
+      `npx codex-usage-profile@latest submit --server ${E2E_ORIGIN}`;
     await expect(page.getByText(command, { exact: true })).toBeVisible();
     await expect(page.locator(".device-success")).toHaveCSS("animation-name", "none");
     await expect(page.getByText(command, { exact: true })).not.toContainText("ABCD-1234");
@@ -1844,19 +1894,19 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy share link" }).click();
     await expect(page.getByText("Share link copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/api/share/postmelee"
+      `${E2E_ORIGIN}/api/share/postmelee`
     );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
     );
 
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png?theme=dark)"
+      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png?theme=dark)`
     );
 
     const downloadPromise = page.waitForEvent("download");
@@ -2102,6 +2152,113 @@ test.describe("Home and share card flow", () => {
       `@${AUTH_OWNER.githubLogin}`
     );
     await page.screenshot({ path: testInfo.outputPath("home-no-usage.png") });
+  });
+
+  test("Task #92 mobile Share Studio rejects an unsafe source scale", async ({
+    browser
+  }, testInfo) => {
+    test.fail(
+      true,
+      "Known regression: mobile handoff accepts an unbounded source-to-target scale"
+    );
+    const context = await browser.newContext({
+      baseURL: E2E_ORIGIN,
+      hasTouch: true,
+      isMobile: true,
+      viewport: { height: 844, width: 390 }
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const syntheticSource = await sourceCard.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const synthetic = {
+          bottom: rect.top + (rect.height * 3.2),
+          height: rect.height * 3.2,
+          left: rect.left,
+          right: rect.left + (rect.width * 3.2),
+          top: rect.top,
+          width: rect.width * 3.2,
+          x: rect.x,
+          y: rect.y
+        };
+        element.getBoundingClientRect = () => ({
+          ...synthetic,
+          toJSON: () => synthetic
+        });
+        return synthetic;
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+      const diagnostic = await motionCard.evaluate((element, sourceRect) => {
+        const keyframes = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        );
+        const firstTransform = keyframes.find(
+          (keyframe) => keyframe.transform && keyframe.transform !== "none"
+        )?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const target = element.getBoundingClientRect();
+        const viewport = {
+          height: globalThis.visualViewport?.height ?? globalThis.innerHeight,
+          width: globalThis.visualViewport?.width ?? globalThis.innerWidth
+        };
+        const start = {
+          bottom: target.top + matrix.f + (target.height * matrix.d),
+          left: target.left + matrix.e,
+          right: target.left + matrix.e + (target.width * matrix.a),
+          top: target.top + matrix.f
+        };
+        return {
+          firstTransform,
+          motionOrigin: element.dataset.motionOrigin,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          sourceRect,
+          start,
+          target: {
+            height: target.height,
+            left: target.left,
+            top: target.top,
+            width: target.width
+          },
+          viewport,
+          withinViewport: (
+            start.left >= 0 &&
+            start.top >= 0 &&
+            start.right <= viewport.width &&
+            start.bottom <= viewport.height
+          )
+        };
+      }, syntheticSource);
+      await testInfo.attach("task-92-mobile-card-handoff.json", {
+        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        contentType: "application/json"
+      });
+
+      expect(diagnostic).toMatchObject({
+        scaleX: 1,
+        scaleY: 1,
+        withinViewport: true
+      });
+    } finally {
+      await context.close();
+    }
   });
 
   test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
@@ -2961,7 +3118,7 @@ test.describe("Settings appearance control", () => {
     const restoredPage = await restoredContext.newPage();
     await mockAuthenticatedAccount(restoredPage);
     await mockSettingsData(restoredPage);
-    await restoredPage.goto("http://127.0.0.1:5173/settings");
+    await restoredPage.goto(`${E2E_ORIGIN}/settings`);
     await expect(restoredPage.getByRole("radio", { name: /Light/ }))
       .toBeChecked();
     await expect(restoredPage.locator("html")).toHaveAttribute("data-theme", "light");
@@ -3020,7 +3177,7 @@ test.describe("Settings appearance control", () => {
         ...profile,
         cardLocale: savedPayload.cardLocale,
         cardStyle: savedPayload.cardStyle,
-        selectedPublicCardUrl: `http://127.0.0.1:5173/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
       };
       await fulfillJson(route, { data: profile, ok: true });
     });
@@ -3094,7 +3251,7 @@ test.describe("Settings appearance control", () => {
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
       );
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
@@ -3312,7 +3469,7 @@ test.describe("Public profile", () => {
     await expect(page.locator(".profile-card-section .home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=light&locale=ko"
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=light&locale=ko`
       );
     await expect(card).toHaveAttribute("src", /^blob:/);
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
@@ -3883,8 +4040,8 @@ function publicProfile() {
       githubLogin: "postmelee",
       handle: "postmelee"
     },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",
@@ -3913,22 +4070,22 @@ function ownerProfile(visibility) {
     cardLocale: "en",
     cardStyle,
     owner: { ...AUTH_OWNER, visibility },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
     publicCardUrls: {
-      dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-      light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+      dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+      light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
     },
     publicCardVariantUrls: {
       en: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
       },
       ko: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`
       }
     },
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",
