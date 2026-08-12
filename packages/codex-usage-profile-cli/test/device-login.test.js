@@ -221,6 +221,10 @@ test("renders a terminal hyperlink only for supported interactive terminals", as
     env: { TERM: "dumb", TERM_PROGRAM: "iTerm.app" },
     stdout: createOutput({ isTTY: true })
   }), false);
+  assert.equal(supportsTerminalHyperlinks({
+    env: { NO_COLOR: "", TERM_PROGRAM: "iTerm.app" },
+    stdout: createOutput({ isTTY: true })
+  }), false);
 });
 
 test("keeps JSON and explicitly disabled login output free of ANSI escapes", async () => {

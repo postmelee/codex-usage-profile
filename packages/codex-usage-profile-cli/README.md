@@ -42,7 +42,7 @@ service origin and a narrow submit credential are stored locally. Use
 `--server` only for local development or an explicitly reviewed alternative
 deployment.
 
-During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
+During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `NO_COLOR`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
 
 After browser approval, `Device approved` means only that device authorization
 is complete. A `submit` flow continues in the same CLI process, and the terminal
@@ -63,6 +63,12 @@ Active token limit reached. Revoke an API token in Settings, then try again.
 Revoke an old `Device login` token under the web Settings **API Tokens** section
 and retry. CLI `logout` removes only the local credential file; it does not
 revoke the corresponding server token.
+
+After a successful human-readable submit, supported interactive terminals
+render the `Profile` and `Card` URLs as clickable cyan OSC 8 hyperlinks. The
+`README` value remains exact plain Markdown so it can be copied without terminal
+control sequences. JSON, piped output, `NO_COLOR`, `TERM=dumb`, and unsupported
+terminals keep all three values plain.
 
 ## Optional GitHub Star Prompt
 

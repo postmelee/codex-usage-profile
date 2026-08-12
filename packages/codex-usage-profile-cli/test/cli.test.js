@@ -350,7 +350,7 @@ test("waits for the star prompt before printing a human submit result", async ()
   const releasePrompt = createDeferred();
   const events = [];
   let promptOptions;
-  const env = {};
+  const env = { TERM_PROGRAM: "iTerm.app" };
   const stdin = createInput({ isTTY: true });
   const stdout = createOutput({ isTTY: true });
   const io = createIo({
@@ -393,6 +393,11 @@ test("waits for the star prompt before printing a human submit result", async ()
   releasePrompt.resolve();
   assert.equal(await command, 0);
   assert.match(stdout.value, /^Usage submitted successfully\.\n/);
+  assert.match(stdout.value, /Profile: \u001B\[36m\u001B\]8;;https:/);
+  assert.equal(
+    stdout.value.split("\n").find((line) => line.startsWith("README:")),
+    "README: ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+  );
   assert.equal(io.stderr.value, "");
 });
 

@@ -135,7 +135,12 @@ export function supportsTerminalHyperlinks(options = {}) {
   const stdout = options.stdout;
   const env = options.env ?? process.env;
 
-  if (stdout?.isTTY !== true || env.TERM === "dumb" || env.FORCE_HYPERLINK === "0") {
+  if (
+    stdout?.isTTY !== true ||
+    env.TERM === "dumb" ||
+    env.FORCE_HYPERLINK === "0" ||
+    Object.hasOwn(env, "NO_COLOR")
+  ) {
     return false;
   }
   if (env.FORCE_HYPERLINK === "1") return true;

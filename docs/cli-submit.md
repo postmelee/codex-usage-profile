@@ -156,7 +156,7 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
 3. 사용자가 웹에서 GitHub 로그인 후 code를 승인한다.
 4. CLI가 server가 지정한 interval과 expiry를 지키며 `POST /api/auth/device/poll`을 호출한다.
 
-지원되는 interactive terminal에서는 verification URL 자체가 cyan OSC 8 hyperlink로 표시되어 클릭할 수 있다. `Open` label과 뒤따르는 출력은 terminal 기본색을 유지한다. 파이프 출력, `submit --json`, `TERM=dumb` 또는 hyperlink 지원 신호가 없는 terminal에는 ANSI control sequence 없이 같은 plain URL을 출력한다. 브라우저 자동 열기가 실패해도 plain URL과 user code는 항상 남는다.
+지원되는 interactive terminal에서는 verification URL 자체가 cyan OSC 8 hyperlink로 표시되어 클릭할 수 있다. `Open` label과 뒤따르는 출력은 terminal 기본색을 유지한다. 파이프 출력, `submit --json`, `NO_COLOR`, `TERM=dumb` 또는 hyperlink 지원 신호가 없는 terminal에는 ANSI control sequence 없이 같은 plain URL을 출력한다. 브라우저 자동 열기가 실패해도 plain URL과 user code는 항상 남는다.
 5. 승인된 poll 응답에서 raw service token을 한 번만 받고 로컬 credential file에 저장한다.
 6. `submit`에서 시작한 경우 즉시 analyzer와 usage submit을 이어서 실행한다.
 
@@ -282,6 +282,12 @@ Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view
 Card: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
 README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
+
+지원되는 interactive terminal에서 `Profile`과 `Card`의 URL만 device login의
+`Open` URL과 같은 cyan OSC 8 hyperlink로 표시한다. `README` 값은 GitHub
+README에 그대로 복사할 Markdown 산출물이므로 ANSI·OSC 8을 넣지 않은 exact
+plain text를 유지한다. `submit --json`, pipe·redirection, `NO_COLOR`,
+`TERM=dumb`, hyperlink 미지원 terminal에서도 세 값 모두 같은 평문으로 출력한다.
 
 같은 document의 network ambiguity retry는 server idempotency를 이용해 한 번만 수행한다. 두 요청이 모두 실패하면 결과가 불명임을 표시하며 같은 document를 다시 제출해도 안전하다.
 

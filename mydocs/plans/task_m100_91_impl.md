@@ -14,6 +14,7 @@ GitHub Issue: [#91](https://github.com/postmelee/codex-usage-profile/issues/91)
 | 3.1 | PR 리뷰 EOF 차단 항목 보정 | `src/github-star.js`, 실제 readline EOF 회귀 test | focused/package/root/smoke/release 재검증 |
 | 3.2 | star prompt 터미널 UX 보정 | 안내 블록·ANSI color·평문 fallback·공식 문서 | focused/package/root/smoke/release 재검증 |
 | 3.3 | first-run token 한도 오류 안내 보정 | device-login context message·회귀 test·사용자 문서 | focused/package/root/smoke/release 재검증 |
+| 3.4 | submit 결과 URL hyperlink 보정 | Profile·Card cyan OSC 8·README 평문·fallback·preview runner | focused/package/root/smoke/release 재검증 |
 
 ## 문서 위치 확인
 
@@ -334,6 +335,65 @@ git diff --check
 Task #91 [Stage 3.3]: device login token limit 안내 보정
 ```
 
+## Stage 3.4 — submit 결과 URL hyperlink 보정
+
+보정 승인: 2026-08-12 작업지시자 지시 `링크 변경도 적용해주고 내가 로컬에서 테스트할 수 있게 해줘.`
+
+### 산출물
+
+수정:
+
+- `packages/codex-usage-profile-cli/src/output.js`
+- `packages/codex-usage-profile-cli/src/cli.js`
+- `packages/codex-usage-profile-cli/src/device-login.js`
+- `packages/codex-usage-profile-cli/test/output.test.js`
+- `packages/codex-usage-profile-cli/test/device-login.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `docs/cli-submit.md`
+- `mydocs/plans/task_m100_91_impl.md`
+- `mydocs/report/task_m100_91_report.md`
+- `mydocs/orders/20260812.md`
+
+신규:
+
+- `mydocs/working/task_m100_91_stage3_4.md`
+- `/private/tmp/cup-task91-manual-first-run/preview-output.mjs` (로컬 preview 전용, repository commit 제외)
+
+### 변경 내용
+
+- human-readable submit 결과의 `Profile:` URL과 `Card:` URL만 device login의 `Open:`과 동일한 cyan ANSI SGR + OSC 8 clickable hyperlink로 표시한다.
+- `README:` 뒤의 Markdown 전체는 GitHub README에 복사·붙여넣는 산출물이므로 ANSI와 OSC 8을 삽입하지 않고 원문 그대로 유지한다.
+- hyperlink는 stdout이 TTY이고 지원 terminal signal이 있으며 `NO_COLOR`가 없고 `TERM=dumb`가 아닐 때만 활성화한다.
+- non-TTY, JSON, `NO_COLOR`, `TERM=dumb`, 명시적 hyperlink disable에서는 Profile·Card·README를 ANSI 없는 기존 평문으로 출력한다.
+- `writeSubmitOutput()`이 반환하는 projection과 JSON document에는 terminal escape를 넣지 않고 display write 단계에서만 hyperlink를 적용한다.
+- device login `Open:`도 `NO_COLOR` 존재 시 평문으로 fallback해 terminal color opt-out을 일관되게 적용한다.
+- 네트워크·credential·GitHub mutation 없이 실제 terminal에서 링크 표현을 확인할 수 있는 임시 preview runner를 제공한다. 기존 격리 runner의 `submit`으로 production end-to-end도 선택적으로 확인할 수 있다.
+
+### 검증
+
+```bash
+node --test packages/codex-usage-profile-cli/test/output.test.js packages/codex-usage-profile-cli/test/device-login.test.js
+npm --workspace packages/codex-usage-profile-cli test
+npm test
+npm run smoke:npm-package:local
+npm run scan:public-release
+git diff --check
+```
+
+### 완료 조건
+
+- 지원 TTY에서 Profile·Card URL만 cyan clickable OSC 8이며 README Markdown은 exact plain text다.
+- JSON·non-TTY·`NO_COLOR`·`TERM=dumb`에서 ANSI와 OSC 8이 없고 기존 output schema와 문구가 유지된다.
+- projection 반환값, credential redaction과 star prompt 출력 순서에 회귀가 없다.
+- preview runner가 외부 mutation 없이 로컬 terminal 표현을 재현한다.
+- package/root/smoke/release 검증이 모두 통과하고 신규 runtime dependency나 npm entry는 추가되지 않는다.
+
+### 커밋
+
+```text
+Task #91 [Stage 3.4]: submit 결과 URL hyperlink 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -345,7 +405,7 @@ Task #91 [Stage 3.3]: device login token limit 안내 보정
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`, `_stage3_2.md`, `_stage3_3.md`처럼 소수점을 밑줄로 표기한다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_m100_91_stage{N}.md`를 함께 묶는다. 하위 단계는 `_stage3_1.md`~`_stage3_4.md`처럼 소수점을 밑줄로 표기한다.
 - 커밋 메시지는 일반 단계는 `Task #91 Stage {N}: {핵심 내용 요약}`, 하위 단계는 `Task #91 [Stage {N.M}]: {핵심 내용 요약}` 형식을 따른다.
 - 구현계획서 승인 전에 제품 소스·test·공식 사용자 문서를 수정하지 않는다.
 
@@ -357,6 +417,7 @@ Task #91 [Stage 3.3]: device login token limit 안내 보정
 - Stage 3.1은 PR #93 리뷰 Blocker의 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 최종 보고서를 갱신한다.
 - Stage 3.2는 작업지시자의 terminal UX 보정 승인을 받은 뒤 진행하며, 검증·보고서·커밋 후 기존 PR head와 사용자 문서를 갱신한다.
 - Stage 3.3은 작업지시자의 first-run token 한도 오류 안내 보정 승인을 받은 뒤 진행하며, output hyperlink 제안과 분리해 검증·보고서·커밋 후 기존 PR head를 갱신한다.
+- Stage 3.4는 작업지시자의 output hyperlink 승인을 받은 뒤 진행하며, Profile·Card URL만 link로 표시하고 README Markdown의 복사 무손실을 보존한 채 기존 PR head를 갱신한다.
 
 ## 위험과 대응
 
@@ -370,6 +431,7 @@ Task #91 [Stage 3.3]: device login token limit 안내 보정
 - **readline EOF 미정착**: 질문 결과뿐 아니라 interface `close` event를 함께 기다리고 실제 stream EOF 회귀 test로 성공 결과 억제를 방지한다.
 - **ANSI와 terminal 호환성**: TTY prompt에만 color를 적용하고 `NO_COLOR`·`TERM=dumb`에서 평문 fallback을 검증해 log와 제한된 terminal의 escape 오염을 막는다.
 - **generic conflict 오분류**: device-login poll에서 status 409와 code `conflict`가 함께 확인된 경우에만 token 한도 message로 바꾸고 submit·다른 endpoint의 conflict는 기존 mapping을 유지한다.
+- **OSC 8 복사·log 오염**: display write 단계에서 지원 TTY의 Profile·Card에만 escape를 적용하고 README·JSON·non-TTY·color opt-out에는 exact plain text를 유지한다.
 
 ## 승인 요청 사항
 

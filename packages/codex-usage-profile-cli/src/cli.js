@@ -350,7 +350,9 @@ async function runSubmit(options) {
   });
   await runGithubStarPrompt(options);
   writeSubmitOutput(result, {
+    env: options.env,
     forbiddenValues: [credentialSource.token],
+    hyperlinks: options.hyperlinks,
     json: options.json,
     stdout: options.stdout
   });

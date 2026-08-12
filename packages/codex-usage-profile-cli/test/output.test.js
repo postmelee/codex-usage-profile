@@ -32,6 +32,87 @@ test("writes useful human and JSON submit results", () => {
   assert.equal(json.value.includes("cup_secret_value"), false);
 });
 
+test("renders only Profile and Card as cyan terminal hyperlinks", () => {
+  const stdout = createOutput({ isTTY: true });
+  const result = writeSubmitOutput(createResponse(), {
+    env: { TERM_PROGRAM: "iTerm.app" },
+    stdout
+  });
+
+  assert.match(
+    stdout.value,
+    /Profile: \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/profile/
+  );
+  assert.match(
+    stdout.value,
+    /Card: \u001B\[36m\u001B\]8;;https:\/\/profiles\.example\.test\/u\/postmelee\/card\.png/
+  );
+  assert.match(stdout.value, /\u001B\]8;;\u001B\\\u001B\[39m/);
+  assert.equal(
+    stdout.value.split("\n").find((line) => line.startsWith("README:")),
+    "README: ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+  );
+  assert.equal(result.profile.profileUrl, "https://profiles.example.test/profile");
+  assert.equal(result.profile.imageUrl, "https://profiles.example.test/u/postmelee/card.png");
+});
+
+test("keeps submit links plain when hyperlink output is disabled", () => {
+  const cases = [
+    { env: { TERM_PROGRAM: "iTerm.app" }, stdout: createOutput() },
+    {
+      env: { NO_COLOR: "", TERM_PROGRAM: "iTerm.app" },
+      stdout: createOutput({ isTTY: true })
+    },
+    {
+      env: { TERM: "dumb", TERM_PROGRAM: "iTerm.app" },
+      stdout: createOutput({ isTTY: true })
+    },
+    {
+      env: { TERM_PROGRAM: "iTerm.app" },
+      hyperlinks: false,
+      stdout: createOutput({ isTTY: true })
+    },
+    {
+      env: { TERM_PROGRAM: "iTerm.app" },
+      json: true,
+      stdout: createOutput({ isTTY: true })
+    }
+  ];
+
+  for (const options of cases) {
+    writeSubmitOutput(createResponse(), options);
+    assert.equal(options.stdout.value.includes("\u001B"), false);
+    if (options.json) {
+      assert.equal(
+        JSON.parse(options.stdout.value).profile.profileUrl,
+        "https://profiles.example.test/profile"
+      );
+    } else {
+      assert.match(options.stdout.value, /Profile: https:\/\/profiles\.example\.test\/profile/);
+      assert.match(options.stdout.value, /Card: https:\/\/profiles\.example\.test/);
+    }
+  }
+});
+
+test("never creates terminal hyperlinks for non-HTTP profile values", () => {
+  const stdout = createOutput({ isTTY: true });
+  writeSubmitOutput({
+    ...createResponse(),
+    profile: {
+      ...createResponse().profile,
+      profileUrl: "javascript:alert(1)",
+      imageUrl: "file:///tmp/card.png"
+    }
+  }, {
+    env: { TERM_PROGRAM: "iTerm.app" },
+    stdout
+  });
+
+  assert.equal(stdout.value.includes("\u001B"), false);
+  assert.match(stdout.value, /Profile: javascript:alert\(1\)/);
+  assert.match(stdout.value, /Card: file:\/\/\/tmp\/card\.png/);
+});
+
 test("labels idempotent retries as already up to date", () => {
   const stdout = createOutput();
   writeSubmitOutput({
@@ -88,8 +169,9 @@ function createResponse() {
   };
 }
 
-function createOutput() {
+function createOutput(options = {}) {
   return {
+    isTTY: options.isTTY === true,
     value: "",
     write(value) { this.value += value; }
   };

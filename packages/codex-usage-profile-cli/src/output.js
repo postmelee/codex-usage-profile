@@ -1,3 +1,8 @@
+import {
+  formatTerminalHyperlink,
+  supportsTerminalHyperlinks
+} from "./device-login.js";
+
 export function projectSubmitOutput(value, options = {}) {
   const forbiddenValues = normalizeForbiddenValues(options.forbiddenValues);
   return {
@@ -38,6 +43,12 @@ export function writeSubmitOutput(value, options = {}) {
     return output;
   }
 
+  const hyperlinkEnabled = options.hyperlinks !== false &&
+    supportsTerminalHyperlinks({
+      env: options.env,
+      stdout
+    });
+
   const status = output.submission?.idempotent
     ? "Usage is already up to date."
     : "Usage submitted successfully.";
@@ -46,10 +57,16 @@ export function writeSubmitOutput(value, options = {}) {
     stdout.write(`Captured: ${output.submission.capturedAt}\n`);
   }
   if (output.profile?.profileUrl) {
-    stdout.write(`Profile: ${output.profile.profileUrl}\n`);
+    stdout.write(`Profile: ${formatSubmitHyperlink(
+      output.profile.profileUrl,
+      hyperlinkEnabled
+    )}\n`);
   }
   if (output.profile?.imageUrl) {
-    stdout.write(`Card: ${output.profile.imageUrl}\n`);
+    stdout.write(`Card: ${formatSubmitHyperlink(
+      output.profile.imageUrl,
+      hyperlinkEnabled
+    )}\n`);
   }
   if (output.profile?.readmeMarkdown) {
     stdout.write(`README: ${output.profile.readmeMarkdown}\n`);
@@ -66,4 +83,20 @@ function normalizeForbiddenValues(value) {
 function sanitizeString(value, forbiddenValues) {
   if (typeof value !== "string") return null;
   return forbiddenValues.some((secret) => value.includes(secret)) ? null : value;
+}
+
+function formatSubmitHyperlink(value, enabled) {
+  if (!enabled || !isSafeHttpUrl(value)) return value;
+  return formatTerminalHyperlink(value, { enabled: true });
+}
+
+function isSafeHttpUrl(value) {
+  if (typeof value !== "string" || /[\u0000-\u001F\u007F]/.test(value)) {
+    return false;
+  }
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 }
