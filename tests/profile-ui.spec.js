@@ -72,6 +72,34 @@ test("card readiness releases reacquired same-source leases", async ({ page }) =
 });
 
 test.describe("theme surfaces", () => {
+  test("Task #96 light Profile Skeleton uses a site-theme palette", async ({ page }) => {
+    test.fail(true, "Stage 1 captures the dark-card palette leaking into page Skeletons");
+
+    await useThemePreference(page, "light");
+    await mockAnonymousAccount(page);
+    await page.route("**/api/profiles/public/postmelee", () => new Promise(() => {}));
+    await page.goto(PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const loadingSkeleton = page.getByTestId("public-profile-loading-skeleton");
+    const pagePlaceholder = loadingSkeleton.locator(".profile-loading-shimmer").first();
+    const cardPlaceholder = loadingSkeleton.locator(".home-card-skeleton");
+    await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
+
+    const palette = await pagePlaceholder.evaluate((element) => {
+      const background = getComputedStyle(element).backgroundColor;
+      const channels = background.match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+      return {
+        background,
+        lightness: channels.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3,
+        sheen: getComputedStyle(element, "::after").backgroundImage
+      };
+    });
+    expect(palette.lightness).toBeGreaterThan(180);
+    expect(palette.sheen).not.toContain("rgba(255, 255, 255");
+
+    await expect(cardPlaceholder).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  });
+
   test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
     const approvedArtworkSelectors = [
       ".avatar-fallback",
