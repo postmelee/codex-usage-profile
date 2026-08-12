@@ -28,8 +28,9 @@ effect 사이의 중간 operator paint를 제거한다.
 
 공개 API, URL, backend, profile 데이터와 full navigation 의미는 변경하지 않았다. Home은 기존처럼
 operator resource를 즉시 선로드하고 같은 owner refresh에서 last-ready resource를 유지한다. 다만
-auth/profile이 unresolved이거나 transition target이 current selection과 다르면 decoded resource가
-있어도 이미지 `src`를 DOM에 commit하지 않고 같은 Skeleton을 계속 표시한다.
+auth/profile이 unresolved이거나 transition target이 current selection과 다르면 operator 선로드
+이미지가 DOM에 있어도 `card-status=loading`과 불투명 Skeleton을 유지해 presentation-ready로
+commit하지 않는다.
 
 transition state에는 same-origin `kind`·`src`만 가진 frozen `target`을 추가했다. owner identity,
 session, avatar와 handle을 storage 또는 serialized state에 추가하지 않았다.

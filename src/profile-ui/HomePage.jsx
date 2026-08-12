@@ -231,9 +231,7 @@ export function HomePage({
     cardTarget.status === HOME_CARD_TARGET_STATUSES.SELECTED &&
     isHomeCardTransitionReadyForTarget(cardTransition, desiredCardSource)
   );
-  const visibleCardDisplaySrc = cardTargetReady
-    ? loadedCardDisplaySrc
-    : null;
+  const visibleCardDisplaySrc = loadedCardDisplaySrc;
 
   useEffect(() => {
     const resource = cardState.visibleResource;
