@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { expect, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
@@ -11,6 +11,7 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
+const E2E_ORIGIN = process.env.PROFILE_E2E_ORIGIN ?? "http://127.0.0.1:5173";
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
@@ -389,7 +390,7 @@ test.describe("Stage 3 locale surfaces", () => {
       data: {
         ...ownerProfile("public"),
         cardLocale: "ko",
-        selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark&locale=ko"
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark&locale=ko`
       },
       ok: true
     }));
@@ -512,7 +513,7 @@ test.describe("Marketing mirror", () => {
     })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create your card" })).toHaveAttribute(
       "href",
-      "http://127.0.0.1:5173/"
+      `${E2E_ORIGIN}/`
     );
     const desktopCta = await page.getByRole("link", {
       name: "Create your card"
@@ -667,7 +668,14 @@ test.describe("Home and share card flow", () => {
       (element) => Boolean(element.shadowRoot?.querySelector("[part=container]"))
     )).toBe(true);
     await expect(page.locator(".home-card-beam")).toHaveAttribute("data-beam", /.+/);
-    await expect(page.locator(".home-card-beam")).toHaveCSS("border-radius", "41px");
+    const cardFrame = await page.locator(".home-card-beam").evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        width: bounds.width
+      };
+    });
+    expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
     const tiltBox = await tilt.boundingBox();
     expect(tiltBox).not.toBeNull();
     await page.mouse.move(tiltBox.x + tiltBox.width * 0.82, tiltBox.y + tiltBox.height * 0.2);
@@ -682,8 +690,10 @@ test.describe("Home and share card flow", () => {
       (element) => Number.parseFloat(getComputedStyle(element).opacity)
     )).toBeLessThanOrEqual(0.22);
     await expect.poll(() => tilt.evaluate(
-      (element) => getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
-    )).toBe("41px");
+      (element) => Number.parseFloat(
+        getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
+      )
+    )).toBeCloseTo(cardFrame.radius, 1);
     await page.waitForTimeout(450);
     const quickstartBox = await page.getByRole("heading", { name: "Quickstart" }).boundingBox();
     expect(quickstartBox).not.toBeNull();
@@ -736,6 +746,58 @@ test.describe("Home and share card flow", () => {
       "cup_"
     ]) {
       expect(homeMarkup).not.toContain(internalValue);
+    }
+  });
+
+  test("Task #92 mobile anonymous header keeps Sign in fully visible", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAnonymousAccount(page);
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const signIn = page.getByRole("link", { name: "Sign in", exact: true });
+      await expect(signIn).toBeVisible();
+      await expect(page.locator(".profile-topbar-github span")).toBeHidden();
+      const layout = await page.locator(".profile-topbar").evaluate((topbar) => {
+        const bounds = (selector) => {
+          const element = topbar.querySelector(selector);
+          const rect = element?.getBoundingClientRect();
+          return rect ? { left: rect.left, right: rect.right } : null;
+        };
+        const signInText = topbar.querySelector(".account-login-link span");
+        return {
+          actions: bounds(".profile-actions"),
+          leading: bounds(".profile-topbar-leading"),
+          signIn: bounds(".account-login-link"),
+          signInTextFits: signInText
+            ? signInText.scrollWidth <= signInText.clientWidth
+            : false,
+          topbar: {
+            left: topbar.getBoundingClientRect().left,
+            right: topbar.getBoundingClientRect().right
+          }
+        };
+      });
+
+      expect(layout.signInTextFits).toBe(true);
+      expect(layout.actions.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.signIn.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.leading.right).toBeLessThanOrEqual(layout.actions.left);
+      expect(await page.evaluate(
+        () => document.body.scrollWidth > document.documentElement.clientWidth
+      )).toBe(false);
+      await page.screenshot({ path: testInfo.outputPath("home-mobile-anonymous-header.png") });
+    } finally {
+      await context.close();
     }
   });
 
@@ -1307,6 +1369,65 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
   });
 
+  test("Task #92 mobile account menu preserves touch activation after null blur", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      let logoutRequests = 0;
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await mockSettingsData(page);
+      await mockCardImages(page);
+      await page.route("**/api/auth/logout", (route) => {
+        logoutRequests += 1;
+        return fulfillJson(route, {
+          data: { session: null },
+          ok: true
+        });
+      });
+      await page.goto("/");
+
+      const diagnostics = [];
+      for (const destination of [
+        { href: OWNER_PROFILE_ROUTE, label: "Profile" },
+        { href: "/?view=settings", label: "Settings" }
+      ]) {
+        await page.getByRole("button", {
+          name: "Account menu for postmelee"
+        }).tap();
+        const item = page.getByRole("menuitem", { name: destination.label });
+        await expect(item).toBeVisible();
+        diagnostics.push(await preserveMenuTouchActivation(page, item));
+        await item.tap();
+        await expect(page).toHaveURL(`${E2E_ORIGIN}${destination.href}`);
+        await page.goto("/");
+      }
+
+      await page.getByRole("button", {
+        name: "Account menu for postmelee"
+      }).tap();
+      const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+      diagnostics.push(await preserveMenuTouchActivation(page, logoutItem));
+      await logoutItem.tap();
+      await expect(page.getByRole("link", { name: "Sign in", exact: true }))
+        .toBeVisible();
+      expect(logoutRequests).toBe(1);
+
+      await testInfo.attach("task-92-mobile-account-menu.json", {
+        body: Buffer.from(JSON.stringify(diagnostics, null, 2)),
+        contentType: "application/json"
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
   test("account menu exposes Profile and supports keyboard focus", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     await mockCardImages(page);
@@ -1585,7 +1706,7 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Enter");
 
     const command =
-      "npx codex-usage-profile@latest submit --server http://127.0.0.1:5173";
+      `npx codex-usage-profile@latest submit --server ${E2E_ORIGIN}`;
     await expect(page.getByText(command, { exact: true })).toBeVisible();
     await expect(page.locator(".device-success")).toHaveCSS("animation-name", "none");
     await expect(page.getByText(command, { exact: true })).not.toContainText("ABCD-1234");
@@ -1769,6 +1890,7 @@ test.describe("Home and share card flow", () => {
     await expect(shareButton).toBeEnabled();
     await expect(shareButton.locator("svg")).toHaveCount(0);
     const sourceCard = page.locator('[data-card-source="true"]');
+    await expect(sourceCard).toBeVisible();
     const sourceBox = await sourceCard.boundingBox();
 
     await shareButton.click();
@@ -1844,19 +1966,19 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy share link" }).click();
     await expect(page.getByText("Share link copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/api/share/postmelee"
+      `${E2E_ORIGIN}/api/share/postmelee`
     );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
     );
 
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png?theme=dark)"
+      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png?theme=dark)`
     );
 
     const downloadPromise = page.waitForEvent("download");
@@ -1947,6 +2069,14 @@ test.describe("Home and share card flow", () => {
     const sourceImage = sourceCard.getByRole("img", { name: "Your Codex usage card" });
     await expect(sourceImage).toHaveAttribute("src", /^blob:/);
     const sourceBlobUrl = await sourceImage.getAttribute("src");
+    const sourcePresentation = await sourceCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        width: bounds.width
+      };
+    });
 
     await page.getByRole("button", { name: "Share", exact: true }).click();
     const backdrop = page.getByTestId("share-studio-backdrop");
@@ -1959,12 +2089,37 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
     await expect(motionCard).toHaveAttribute("data-share-target-status", "loading");
     await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+    await expect(motionCard).toHaveAttribute("data-motion-mode", "scale");
     await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
     await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
     await expect(skeleton).toHaveAttribute("data-active", "false");
     await expect(skeleton).toHaveCSS("opacity", "0");
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     expect(publicPreviewFetches).toBe(1);
+    const targetPresentation = await motionCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const firstTransform = element.getAnimations().flatMap(
+        (animation) => animation.effect?.getKeyframes?.() ?? []
+      ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+      const matrix = new DOMMatrixReadOnly(firstTransform);
+      const image = element.querySelector(".share-card-preview");
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        imageFilter: image ? getComputedStyle(image).filter : null,
+        scaleX: Math.round(matrix.a * 1000) / 1000,
+        scaleY: Math.round(matrix.d * 1000) / 1000,
+        width: bounds.width
+      };
+    });
+    expect(targetPresentation).toMatchObject({
+      borderRadius: sourcePresentation.borderRadius,
+      imageFilter: "none",
+      scaleX: 1,
+      scaleY: 1
+    });
+    expect(targetPresentation.width).toBeCloseTo(sourcePresentation.width, 0);
+    expect(targetPresentation.height).toBeCloseTo(sourcePresentation.height, 0);
 
     releasePublicCard();
     await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
@@ -2102,6 +2257,225 @@ test.describe("Home and share card flow", () => {
       `@${AUTH_OWNER.githubLogin}`
     );
     await page.screenshot({ path: testInfo.outputPath("home-no-usage.png") });
+  });
+
+  test("Task #92 mobile Share Studio rejects an unsafe source scale", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const syntheticSource = await sourceCard.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const synthetic = {
+          bottom: rect.top + (rect.height * 3.2),
+          height: rect.height * 3.2,
+          left: rect.left,
+          right: rect.left + (rect.width * 3.2),
+          top: rect.top,
+          width: rect.width * 3.2,
+          x: rect.x,
+          y: rect.y
+        };
+        element.getBoundingClientRect = () => ({
+          ...synthetic,
+          toJSON: () => synthetic
+        });
+        return synthetic;
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+      const diagnostic = await motionCard.evaluate((element, sourceRect) => {
+        const dynamicViewportProbe = document.createElement("div");
+        dynamicViewportProbe.style.cssText = [
+          "height:1px",
+          "pointer-events:none",
+          "position:fixed",
+          "visibility:hidden",
+          "width:100dvw"
+        ].join(";");
+        document.body.append(dynamicViewportProbe);
+        const keyframes = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        );
+        const firstTransform = keyframes.find(
+          (keyframe) => keyframe.transform && keyframe.transform !== "none"
+        )?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const target = element.getBoundingClientRect();
+        const viewport = {
+          height: globalThis.visualViewport?.height ?? globalThis.innerHeight,
+          width: globalThis.visualViewport?.width ?? globalThis.innerWidth
+        };
+        const start = {
+          bottom: target.top + matrix.f + (target.height * matrix.d),
+          left: target.left + matrix.e,
+          right: target.left + matrix.e + (target.width * matrix.a),
+          top: target.top + matrix.f
+        };
+        const result = {
+          firstTransform,
+          layoutViewport: {
+            clientWidth: document.documentElement.clientWidth,
+            dynamicWidth: dynamicViewportProbe.getBoundingClientRect().width,
+            innerWidth: globalThis.innerWidth,
+            screenWidth: globalThis.screen.width
+          },
+          motionMode: element.dataset.motionMode,
+          motionOrigin: element.dataset.motionOrigin,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          sourceRect,
+          start,
+          target: {
+            height: target.height,
+            left: target.left,
+            top: target.top,
+            width: target.width
+          },
+          viewport,
+          withinViewport: (
+            start.left >= 0 &&
+            start.top >= 0 &&
+            start.right <= viewport.width &&
+            start.bottom <= viewport.height
+          )
+        };
+        dynamicViewportProbe.remove();
+        return result;
+      }, syntheticSource);
+      await testInfo.attach("task-92-mobile-card-handoff.json", {
+        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        contentType: "application/json"
+      });
+
+      expect(diagnostic).toMatchObject({
+        motionMode: "target",
+        motionOrigin: "target",
+        scaleX: 1,
+        scaleY: 1,
+        withinViewport: true
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #92 mobile Share Studio preserves the source card geometry", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const source = await sourceCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const media = element.querySelector(".home-card-media");
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          left: bounds.left,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
+          top: bounds.top,
+          width: bounds.width
+        };
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+      await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+
+      const target = await motionCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const firstTransform = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const image = element.querySelector(".share-card-preview");
+        const media = element.querySelector(".home-card-media");
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          imageFilter: image ? getComputedStyle(image).filter : null,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          startLeft: bounds.left + matrix.e,
+          startTop: bounds.top + matrix.f,
+          width: bounds.width
+        };
+      });
+
+      expect(target).toMatchObject({
+        borderRadius: source.borderRadius,
+        imageFilter: "none",
+        scaleX: 1,
+        scaleY: 1
+      });
+      expect(target.width).toBeCloseTo(source.width, 0);
+      expect(target.height).toBeCloseTo(source.height, 0);
+      expect(source.mediaRadius).toBeCloseTo(source.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(target.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(source.mediaRadius, 1);
+      expect(target.startLeft).toBeCloseTo(source.left, 0);
+      expect(target.startTop).toBeCloseTo(source.top, 0);
+
+      await page.getByRole("button", { name: "Close Share Studio" }).tap();
+      const closing = await motionCard.evaluate((element) => {
+        const transforms = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).map((keyframe) => keyframe.transform).filter(Boolean);
+        const matrix = new DOMMatrixReadOnly(transforms.at(-1) ?? "none");
+        return {
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000
+        };
+      });
+      expect(closing).toEqual({ scaleX: 1, scaleY: 1 });
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+      await expect(sourceCard).toHaveCSS("opacity", "1");
+    } finally {
+      await context.close();
+    }
   });
 
   test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
@@ -2882,6 +3256,19 @@ test.describe("Profile and Settings canvases", () => {
       expect(await page.evaluate(
         () => document.body.scrollWidth > document.documentElement.clientWidth
       )).toBe(false);
+
+      if (path === "/profile") {
+        const cardFrame = await page.locator(
+          ".profile-card-section .home-card-media"
+        ).evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+            width: bounds.width
+          };
+        });
+        expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
+      }
     }
   });
 });
@@ -2961,7 +3348,7 @@ test.describe("Settings appearance control", () => {
     const restoredPage = await restoredContext.newPage();
     await mockAuthenticatedAccount(restoredPage);
     await mockSettingsData(restoredPage);
-    await restoredPage.goto("http://127.0.0.1:5173/settings");
+    await restoredPage.goto(`${E2E_ORIGIN}/settings`);
     await expect(restoredPage.getByRole("radio", { name: /Light/ }))
       .toBeChecked();
     await expect(restoredPage.locator("html")).toHaveAttribute("data-theme", "light");
@@ -3020,7 +3407,7 @@ test.describe("Settings appearance control", () => {
         ...profile,
         cardLocale: savedPayload.cardLocale,
         cardStyle: savedPayload.cardStyle,
-        selectedPublicCardUrl: `http://127.0.0.1:5173/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
       };
       await fulfillJson(route, { data: profile, ok: true });
     });
@@ -3094,7 +3481,7 @@ test.describe("Settings appearance control", () => {
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
       );
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
@@ -3312,7 +3699,7 @@ test.describe("Public profile", () => {
     await expect(page.locator(".profile-card-section .home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=light&locale=ko"
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=light&locale=ko`
       );
     await expect(card).toHaveAttribute("src", /^blob:/);
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
@@ -3574,6 +3961,27 @@ async function mockSettingsData(page) {
     data: { devices: [] },
     ok: true
   }));
+}
+
+async function preserveMenuTouchActivation(page, item) {
+  await item.evaluate((element) => {
+    element.blur();
+    element.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "touch"
+    }));
+  });
+  await page.waitForTimeout(20);
+
+  const diagnostic = await page.evaluate(() => ({
+    activeElement: document.activeElement?.tagName ?? null,
+    menuCount: document.querySelectorAll("#account-menu-popover").length,
+    url: globalThis.location.href
+  }));
+  expect(diagnostic).toMatchObject({ menuCount: 1 });
+  return diagnostic;
 }
 
 async function useThemePreference(page, preference) {
@@ -3883,8 +4291,8 @@ function publicProfile() {
       githubLogin: "postmelee",
       handle: "postmelee"
     },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",
@@ -3913,22 +4321,22 @@ function ownerProfile(visibility) {
     cardLocale: "en",
     cardStyle,
     owner: { ...AUTH_OWNER, visibility },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
     publicCardUrls: {
-      dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-      light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+      dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+      light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
     },
     publicCardVariantUrls: {
       en: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
       },
       ko: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`
       }
     },
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
       uploadedAt: "2026-06-11T00:01:00.000Z",
