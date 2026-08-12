@@ -50,8 +50,8 @@
   --shadow-elevated: light-dark(0 18px 48px rgba(17, 17, 17, 0.14), 0 18px 48px rgba(0, 0, 0, 0.4));
   --shadow-floating: light-dark(0 14px 38px rgba(17, 17, 17, 0.12), 0 14px 38px rgba(0, 0, 0, 0.28));
   --shadow-card: light-dark(0 16px 28px rgba(17, 17, 17, 0.2), 0 16px 28px rgba(0, 0, 0, 0.48));
-  --card-filter-outline: light-dark(rgba(17, 17, 17, 0.22), rgba(255, 255, 255, 0.5));
   --card-filter-shadow: light-dark(rgba(17, 17, 17, 0.2), rgba(0, 0, 0, 0.48));
+  --usage-card-radius: 32px;
   --heatmap-empty: light-dark(#e5e5e3, #242424);
   --heatmap-level-1: light-dark(#c8dced, #31465f);
   --heatmap-level-2: light-dark(#91b8da, #446894);
@@ -654,18 +654,12 @@ button {
 .home-card-preview,
 .share-card-preview {
   aspect-ratio: 499 / 306;
+  border-radius: inherit;
   display: block;
-  filter:
-    drop-shadow(0 0 1px var(--card-filter-outline))
-    drop-shadow(0 16px 28px var(--card-filter-shadow));
+  filter: none;
   height: auto;
   object-fit: contain;
   width: 100%;
-}
-
-.home-card-preview {
-  border-radius: inherit;
-  filter: none;
 }
 
 .home-card-media {
@@ -939,7 +933,7 @@ button {
 }
 
 .home-card-tilt {
-  border-radius: clamp(22px, 6.4vw, 41px);
+  border-radius: var(--usage-card-radius);
   display: block;
   margin-top: 24px;
   max-width: min(600px, calc(100% - 24px));
@@ -1996,12 +1990,15 @@ button {
 
 .share-studio-card-motion {
   aspect-ratio: 499 / 306;
-  border-radius: clamp(22px, 3.2vw, 41px);
+  border-radius: var(--usage-card-radius);
+  filter: drop-shadow(0 16px 28px var(--card-filter-shadow));
   margin-top: 28px;
+  max-width: 100%;
+  min-width: 0;
   position: relative;
   transform-origin: top left;
   will-change: transform, opacity;
-  width: min(600px, calc(100vw - 48px));
+  width: min(600px, calc(100% - 24px));
 }
 
 .share-studio-card-motion .home-card-media {
@@ -3864,6 +3861,10 @@ button {
     max-width: 400px;
   }
 
+  .share-studio-card-motion {
+    width: min(400px, calc(100% - 24px));
+  }
+
   .home-quickstart-inner {
     padding-top: 30px;
   }
@@ -3894,10 +3895,7 @@ button {
   }
 
   .share-studio-card-motion {
-    height: min(306px, calc(100dvh - 286px));
     margin-top: 14px;
-    max-width: calc(100vw - 48px);
-    width: auto;
   }
 
   .share-studio-primary-actions {
@@ -3950,11 +3948,25 @@ button {
   }
 
   .profile-actions {
+    flex: 0 0 auto;
     gap: 10px;
   }
 
   .profile-topbar-leading {
+    flex: 1 1 auto;
     gap: 8px;
+    overflow: hidden;
+  }
+
+  .profile-topbar-github {
+    flex: 0 0 28px;
+    justify-content: center;
+    padding: 6px;
+    width: 28px;
+  }
+
+  .profile-topbar-github span {
+    display: none;
   }
 
   .profile-navigation a {
@@ -4101,7 +4113,6 @@ button {
 
   .share-studio-card-motion {
     margin-top: 22px;
-    width: 100%;
   }
 
   .share-studio-primary-actions {
@@ -4182,7 +4193,7 @@ button {
 
   .account-login-link span,
   .account-status-button span:last-child {
-    max-width: 86px;
+    max-width: none;
   }
 
   .profile-view {

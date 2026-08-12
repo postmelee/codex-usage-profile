@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState
+} from "react";
 import { BorderBeam } from "border-beam";
 
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
+import { useCardFrameRadius } from "../profile-ui/useCardFrameRadius.js";
 import {
   createMarketingConfig,
   resolveMarketingCopy
@@ -95,20 +100,35 @@ export function MarketingCardPreview({
   transitionSuspended = false
 }) {
   const { t } = useLocale();
+  const {
+    radius: measuredRadius,
+    setElement: setRadiusElement
+  } = useCardFrameRadius();
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const supportsCardTilt = useMediaQuery(
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
   );
+  const setCardElement = useCallback((element) => {
+    setRadiusElement(element);
+    if (element && measuredRadius !== null) {
+      setCardRadiusStyle(element, measuredRadius);
+    }
+    if (typeof cardRef === "function") {
+      cardRef(element);
+    } else if (cardRef) {
+      cardRef.current = element;
+    }
+  }, [cardRef, measuredRadius, setRadiusElement]);
 
   return (
     <MarketingCardTilt
-      elementRef={cardRef}
+      elementRef={setCardElement}
       enabled={supportsCardTilt && !prefersReducedMotion && !busy}
       suspended={transitionSuspended}
     >
       <BorderBeam
         active={!busy && !prefersReducedMotion && !transitionSuspended}
-        borderRadius={41}
+        borderRadius={measuredRadius ?? undefined}
         brightness={1.05}
         className="home-card-beam"
         colorVariant="ocean"
@@ -381,6 +401,18 @@ function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
       {children}
     </hover-tilt>
   );
+}
+
+function setCardRadiusStyle(element, radius) {
+  const existingStyle = element.getAttribute("style") ?? "";
+  const preservedStyle = existingStyle
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => (
+      declaration && !declaration.startsWith("--usage-card-radius:")
+    ));
+  preservedStyle.push(`--usage-card-radius: ${radius}px`);
+  element.setAttribute("style", `${preservedStyle.join("; ")};`);
 }
 
 function useMediaQuery(mediaQuery) {
