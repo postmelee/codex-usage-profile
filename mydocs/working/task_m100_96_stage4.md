@@ -94,9 +94,12 @@ Skeleton 비용을 확인해 #96 범위 안에서 보정했다. 카드 BorderBea
 | 지표 | 보정 전 | 보정 후 |
 |---|---:|---:|
 | Home theme swap 활성 animation | 353 | 83 |
-| Profile theme swap 활성 animation | 1,154 | 130 |
-| Profile heatmap cell animation | 364 | 0 |
+| Profile theme swap 활성 animation | 1,154 | 494 |
+| Profile heatmap cell animation | 364 | 364 |
 | ready card 비활성 Skeleton | 203 elements + shimmer 1 | 240ms 뒤 DOM 제거 + shimmer 0 |
+
+heatmap transition 제거 뒤 실제 브라우저에서 palette가 먼저 snap하는 회귀가 확인되어 해당 예외만
+철회했다. Profile 전체 활성 animation은 494개로 기존 1,154개 대비 약 57.2% 감소 상태를 유지한다.
 
 ```bash
 node --test src/profile-ui/__tests__/*.test.js src/profile-marketing/__tests__/*.test.js

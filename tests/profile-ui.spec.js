@@ -202,6 +202,7 @@ test.describe("theme surfaces", () => {
     await page.getByRole("switch").click();
     await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
     const profileAnimationContract = await page.evaluate(() => ({
+      heatmapCellCount: document.querySelectorAll(".token-cell").length,
       heatmap: Array.from(document.querySelectorAll(".token-cell")).reduce(
         (sum, element) => sum + element.getAnimations().length,
         0
@@ -210,8 +211,9 @@ test.describe("theme surfaces", () => {
         animation.playState !== "finished"
       )).length
     }));
-    expect(profileAnimationContract.heatmap).toBe(0);
-    expect(profileAnimationContract.total).toBeLessThan(160);
+    expect(profileAnimationContract.heatmap)
+      .toBe(profileAnimationContract.heatmapCellCount);
+    expect(profileAnimationContract.total).toBeLessThan(560);
   });
 
   test("Task #96 reduced motion changes semantic text without a transition window", async ({ page }) => {

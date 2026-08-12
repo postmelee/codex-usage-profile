@@ -482,12 +482,6 @@ button {
   transition: color 240ms ease !important;
 }
 
-/* Heatmap cells retain their interaction transition outside theme swaps, but
-   do not each allocate a CSS transition while the global palette changes. */
-:root[data-theme-animating] .token-cell {
-  transition: none !important;
-}
-
 .profile-topbar-leading {
   align-items: center;
   display: flex;

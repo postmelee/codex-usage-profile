@@ -54,8 +54,8 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | site dark × card light | dark placeholder 노출 가능 | white/light renderer palette와 일치 |
 | site light × card dark | site와 혼동 가능 | canonical dark palette 독립 유지 |
 | Home theme swap 활성 animation | 353개 | 83개, 약 76.5% 감소 |
-| Profile theme swap 활성 animation | 1,154개 | 130개, 약 88.7% 감소 |
-| theme swap heatmap cell animation | 364개 | 0개; 평상시 interaction transition은 유지 |
+| Profile theme swap 활성 animation | 1,154개 | 494개, 약 57.2% 감소 |
+| theme swap heatmap cell animation | 364개 | 364개; palette 전환의 연속성을 유지 |
 | ready card의 숨은 Skeleton | 203개 element와 shimmer 1개 유지 | 240ms 퇴장 뒤 DOM 제거, shimmer 0개 |
 | Task #96 WebKit 회귀 | 전용 교차·timing 검증 없음 | 6/6 통과 |
 | 전체 Playwright | Task #96 회귀 없음 | Chromium 84/84 통과 |
@@ -73,7 +73,7 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | card Skeleton이 card theme만 따름 | OK — site/card 교차 조합과 owner draft radio 전환 통과 |
 | Home·Profile·intro·Share Studio 공용 frame context 누락 없음 | OK — source contract 4/4와 기존 handoff E2E 통과 |
 | geometry·readiness·share motion 회귀 없음 | OK — Chromium 전체 84/84 통과 |
-| theme transition이 dense content 전체로 확산되지 않음 | OK — Home 83, Profile 130, heatmap 0개 실측과 E2E 상한 고정 |
+| theme transition이 dense content 전체로 확산되지 않음 | OK — Home 83, Profile 494로 기존 1,154 대비 fan-out을 제한하면서 heatmap 364개의 연속 전환 유지 |
 | ready card가 비활성 Skeleton 비용을 유지하지 않음 | OK — 240ms fade 뒤 subtree 제거, reduced motion shimmer 0 검증 |
 | production Sites 산출물과 route 계약 유지 | OK — build, artifact verifier, 50-route local smoke 통과 |
 | 실제 배포 없이 PR·로컬 확인 handoff | OK — hosting/deploy 명령 미실행 |
@@ -94,6 +94,9 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 - `npm run build:sites`: 통과
 - `git diff --check`: 통과
 - BorderBeam의 지속 애니메이션과 기존 화면 밖 정지 로직은 변경하지 않았다.
+- heatmap transition 제거가 palette의 즉시 snap 회귀를 만들었으므로 해당 예외만 철회했다. Profile 전환은
+  494개로 측정되어 기존 1,154개보다 약 57.2% 적고, 나머지 scoped transition·비활성 Skeleton
+  정리 최적화는 유지한다.
 
 ## 잔여 위험과 후속 작업
 

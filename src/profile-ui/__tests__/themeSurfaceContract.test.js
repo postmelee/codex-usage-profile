@@ -96,9 +96,14 @@ test("Task #96 theme transitions stay scoped away from dense content", async () 
     stylesheet,
     /:root\[data-theme-animating\]\s+:where\([\s\S]*?\.home-quickstart-heading h2[\s\S]*?\.profile-heading h1[\s\S]*?\)\s*\{\s*transition:\s*color 240ms ease !important;/
   );
-  assert.match(
+  assert.doesNotMatch(
     stylesheet,
-    /:root\[data-theme-animating\]\s+\.token-cell\s*\{\s*transition:\s*none !important;/
+    /:root\[data-theme-animating\]\s+\.token-cell\s*\{\s*transition:\s*none !important;/,
+    "heatmap palette changes must retain their smooth background transition"
+  );
+  assert.match(
+    findRule(stylesheet, ".token-cell"),
+    /transition:\s*background-color 100ms cubic-bezier\(0\.2, 0, 0, 1\);/
   );
 });
 
