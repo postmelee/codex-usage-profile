@@ -3,7 +3,7 @@
 - 수행계획서: [`task_m100_95.md`](task_m100_95.md)
 - GitHub Issue: [#95](https://github.com/postmelee/codex-usage-profile/issues/95)
 - 마일스톤: M100 — v1.0 MVP
-- 상태: 구현 승인 대기
+- 상태: 구현 승인
 
 ## 단계 개요
 
@@ -12,7 +12,7 @@
 | 1 | 상태 이력 재현과 단일 reveal 계약 확정 | Home 상태 관찰 fixture, known-failure E2E와 순수 target 계약 | 집중 Chromium·WebKit, transition 단위 기준선 |
 | 2 | 최종 target authority와 단조 presentation 구현 | unresolved/selected resolver, current target provenance와 표시 준비 판정 | target·transition 단위 테스트, owner/anonymous/fallback E2E |
 | 3 | 복귀·logout·cache·revision 회귀 보강 | full navigation·scope change·cold/warm·lease 회귀 | desktop/mobile Chromium·WebKit, 상태 이력·DOM commit 검증 |
-| 4 | 통합 검증과 실제 모바일 Gate | 전체 검증, Sites 산출물, Safari·Chrome 실측 | unit/E2E/build/verify/smoke, 실제 기기 확인 |
+| 4 | 통합 검증과 로컬 확인 handoff | 전체 검증, Sites 산출물, 로컬 확인 절차 | unit/E2E/build/verify/smoke, 작업지시자 merge 전 확인 대기 |
 
 ## 상태 모델과 불변식
 
@@ -67,7 +67,7 @@ target에서 시작됐는지 잃는다. current selected target과 presentation�
 |---|---|---|---|---|
 | 수행·구현 계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_95*.md` | OK | 내부 구현 판단과 승인 경계 |
 | 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_95_stage{N}.md` | OK | 각 Stage 소스·검증과 함께 커밋 |
-| 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_95_report.md` | OK | 전체 검증과 실제 모바일 Gate 기록 |
+| 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_95_report.md` | OK | 전체 자동 검증과 merge 전 로컬·모바일 Gate 기록 |
 | README·공개 문서 | 변경 없음 | 해당 없음 | OK | 사용자 흐름·API·URL 계약 변경 없음 |
 
 ## Stage 1 — 상태 이력 재현과 단일 reveal 계약 확정
@@ -233,7 +233,7 @@ git diff --check
 Task #95 Stage 3: Home 복귀와 카드 lifecycle 회귀 보강
 ```
 
-## Stage 4 — 통합 검증과 실제 모바일 Gate
+## Stage 4 — 통합 검증과 로컬 확인 handoff
 
 ### 산출물
 
@@ -250,15 +250,15 @@ Task #95 Stage 3: Home 복귀와 카드 lifecycle 회귀 보강
 
 - 전체 Node·Playwright와 production Sites build·artifact·local full-stack smoke를 실행한다.
 - Chromium과 가용한 WebKit에서 Task #95 전체 상태 이력 회귀를 재실행한다.
-- 로컬 또는 승인된 owner-only 배포 URL과 다음 실제 모바일 체크리스트를 제공한다.
+- 실제 배포 없이 로컬 확인 URL과 다음 실제 모바일 체크리스트를 제공한다.
   1. 로그아웃 Home → GitHub 로그인 → Home 복귀
   2. Profile → topbar brand → Home 복귀
   3. Home reload cold/warm 반복
   4. logout 뒤 stale owner 카드 비노출
-- 실제 Safari·Chrome에서 Skeleton이 중단되지 않고 최종 카드가 한 번만 나타나는지 작업지시자
-  확인을 받는다.
-- 실제 기기에서 새 결함이 나오면 임의로 Stage 4를 완료하지 않고 Task #95 범위 여부와 보정
-  하위 단계를 제안해 승인을 받는다.
+- PR 게시 뒤 실제 Safari·Chrome에서 Skeleton이 중단되지 않고 최종 카드가 한 번만 나타나는지
+  작업지시자가 merge 전에 확인할 수 있도록 절차와 판정 기준을 최종 보고서와 PR에 남긴다.
+- 실제 기기 확인은 PR 생성 뒤 작업지시자 merge Gate로 남긴다. 새 결함이 나오면 merge하지 않고
+  Task #95 범위 여부와 보정 하위 단계를 다시 판단한다.
 - 결과를 #96 시작 조건과 #84 exact release candidate 재검증 handoff에 기록한다.
 
 ### 검증
@@ -277,7 +277,7 @@ git status --short
 ### 커밋
 
 ```text
-Task #95 Stage 4: 통합 검증과 모바일 단일 reveal 실측 완료
+Task #95 Stage 4: 통합 검증과 로컬 확인 handoff 완료
 ```
 
 ## 검증
@@ -288,7 +288,7 @@ Task #95 Stage 4: 통합 검증과 모바일 단일 reveal 실측 완료
 - fallback·logout·scope change 검증은 화면 상태뿐 아니라 stale source/owner 문자열과 DOM image
   commit도 확인한다.
 - resource lifecycle 검증은 object URL revoke·lease release의 기존 정확성을 유지한다.
-- 실제 기기와 자동화가 다르면 실제 기기 결과를 우선해 재현 계약을 보강한다.
+- 실제 기기와 자동화가 다르면 PR을 merge하지 않고 실제 기기 결과를 우선해 재현 계약을 보강한다.
 - 계획된 파일 밖의 API·backend·router·공개 문서 변경이 필요하면 구현 전 계획 변경 승인을 받는다.
 - 각 Stage 완료 뒤 보고서와 source/test를 함께 커밋하고 다음 Stage 승인을 요청한다.
 
@@ -297,7 +297,7 @@ Task #95 Stage 4: 통합 검증과 모바일 단일 reveal 실측 완료
 - Stage 1: `Task #95 Stage 1: Home 카드 상태 이력 재현과 계약 고정`
 - Stage 2: `Task #95 Stage 2: Home 카드 최종 target 단일 reveal 보정`
 - Stage 3: `Task #95 Stage 3: Home 복귀와 카드 lifecycle 회귀 보강`
-- Stage 4: `Task #95 Stage 4: 통합 검증과 모바일 단일 reveal 실측 완료`
+- Stage 4: `Task #95 Stage 4: 통합 검증과 로컬 확인 handoff 완료`
 - 전체 Stage 완료 뒤 `task-final-report`로 최종 보고서·오늘할일·`devel` 대상 PR을 처리한다.
 
 ## 단계 의존성
@@ -306,7 +306,8 @@ Task #95 Stage 4: 통합 검증과 모바일 단일 reveal 실측 완료
 - Stage 2는 Stage 1의 실제 상태 이력·target provenance 계약과 단계 보고 승인 뒤 시작한다.
 - Stage 3은 Stage 2 단조 transition 구현·집중 검증과 단계 보고 승인 뒤 시작한다.
 - Stage 4는 Stage 3 navigation·lifecycle 검증과 단계 보고 승인 뒤 시작한다.
-- #96은 #95 실제 모바일 Gate 완료 뒤 시작한다.
+- #96은 #95 PR 게시 뒤 같은 방식으로 구현·PR까지 진행하며, 두 PR의 실제 모바일 Gate는 merge 전
+  작업지시자 확인으로 묶는다.
 - #84 Gate C와 마케팅은 #95·#96 완료 및 exact candidate 재검증 전까지 중단한다.
 
 ## 위험과 대응
