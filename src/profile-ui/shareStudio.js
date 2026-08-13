@@ -117,8 +117,7 @@ export function buildShareTargets(options = {}) {
       label: copy.x,
       accessibleLabel: copy.shareX,
       params: {
-        text: copy.socialText,
-        url: profileUrl
+        text: `${copy.socialText}\n${profileUrl}`
       }
     }),
     createTarget({

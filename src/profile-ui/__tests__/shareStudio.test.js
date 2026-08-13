@@ -168,9 +168,13 @@ test("builds allowlisted external share composition URLs", () => {
     .map((target) => new URL(target.href));
   assert.equal(x.origin, "https://x.com");
   assert.equal(x.pathname, "/intent/tweet");
-  assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
-  assert.equal(x.searchParams.get("url"), profileUrl);
-  assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
+  assert.equal(
+    x.searchParams.get("text"),
+    `나의 Codex 사용량 활동을 확인해 보세요.\n${profileUrl}`
+  );
+  assert.equal(x.searchParams.get("url"), null);
+  assert.deepEqual([...x.searchParams.keys()], ["text"]);
+  assert.match(x.href, /[?&]text=[^&]*%0Ahttps%3A%2F%2F/);
 
   assert.equal(threads.origin, "https://www.threads.net");
   assert.equal(threads.pathname, "/intent/post");

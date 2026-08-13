@@ -2293,6 +2293,16 @@ test.describe("Home and share card flow", () => {
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+    const xHref = new URL(
+      await page.getByRole("link", { name: "Share on X" }).getAttribute("href")
+    );
+    expect(xHref.searchParams.get("text")).toBe(
+      `See my Codex usage activity.\n${E2E_ORIGIN}/api/share/postmelee`
+    );
+    expect(xHref.searchParams.get("url")).toBeNull();
+    expect(xHref.search).toContain(
+      `%0A${encodeURIComponent(`${E2E_ORIGIN}/api/share/postmelee`)}`
+    );
     await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
     await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
       "viewBox",

@@ -11,6 +11,7 @@ GitHub Issue: [#102](https://github.com/postmelee/codex-usage-profile/issues/102
 | 1 | 모바일 대상과 provider URL 순수 계약 고정 | `src/profile-ui/shareStudio.js`, helper 단위 테스트 | navigator matrix, target 목록, X path, Threads raw encoding |
 | 2 | Share Studio 연결과 모바일 한 줄 layout | `ShareStudio.jsx`, `styles.css`, mobile/desktop E2E | DOM·접근성, 320/390px 한 줄, 44px hit target |
 | 3 | 사용자 문서 현행화와 전체 회귀 | `docs/readme-card.md`, 전체 검증 | Node·Playwright·build, #101 handoff |
+| 4 | X 본문·링크 개행 보완과 실기기 재배포 | X intent 계약 테스트, 전체 검증, owner-only Sites version | `%0A` raw query, composer text, production response |
 
 ## 문서 위치 확인
 
@@ -20,7 +21,7 @@ GitHub Issue: [#102](https://github.com/postmelee/codex-usage-profile/issues/102
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
 | 사용자 공유 문서 | `docs/` | `docs/readme-card.md` | OK | Stage 3에서 모바일·desktop 대상 차이를 설명하는 기존 절만 최소 수정한다. |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_102_stage{1..3}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
+| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_102_stage{1..4}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_102_report.md` | OK | Stage 3 승인 뒤 최종 보고 절차에서 작성한다. |
 | 오늘할일 | `mydocs/orders/` | `mydocs/orders/20260813.md` | OK | 승인·단계 상태만 기존 행에서 갱신한다. |
 | README·아키텍처·운영 문서 | 변경 없음 | 변경 없음 | OK | #84 production 상태와 #101 revision·cache 계약을 침범하지 않는다. |
@@ -36,7 +37,8 @@ GitHub Issue: [#102](https://github.com/postmelee/codex-usage-profile/issues/102
   모바일로 분류한다. 일반 Mac은 `maxTouchPoints`가 없거나 1 이하이므로 desktop이다.
 - `buildShareTargets`의 기본값은 desktop 호환이다. `mobile: true`일 때만 LinkedIn과
   Facebook을 제외하고 X, Threads, Reddit 순서를 유지한다.
-- X target은 `https://x.com/intent/tweet`과 `text`, `url`만 사용한다.
+- X target은 `https://x.com/intent/tweet`과 단일 `text`만 사용한다. `text` 값은 공유 문구,
+  단일 LF(`\n`), profile URL 순서이며 별도 `url` query는 두지 않는다.
 - Threads target은 `https://www.threads.net/intent/post`와 `text`, `url`을 유지하되 raw
   form space `+`를 `%20`으로 바꾼다. 실제 plus는 `%2B`로 남아 decode round-trip한다.
 - LinkedIn, Facebook, Reddit의 desktop origin·path·query 계약은 변경하지 않는다.
@@ -195,6 +197,62 @@ git diff --check
 Task #102 Stage 3: 모바일 공유 문서와 전체 회귀 검증
 ```
 
+## Stage 4 — X 본문·링크 개행 보완과 실기기 재배포
+
+### 산출물
+
+신규:
+
+- `mydocs/working/task_m100_102_stage4.md`
+
+수정:
+
+- `src/profile-ui/shareStudio.js`
+- `src/profile-ui/__tests__/shareStudio.test.js`
+- `tests/profile-ui.spec.js`
+- `mydocs/plans/task_m100_102_impl.md`
+- `mydocs/orders/20260813.md`
+- `mydocs/report/task_m100_102_report.md`
+
+### 변경 내용
+
+- X Web Intent의 별도 `text`, `url` query를 단일 `text` query로 합친다.
+- X `text` 값은 `${공유 문구}\n${profile URL}`로 구성해 본문과 링크 사이를 한 번
+  줄바꿈한다. 빈 줄은 추가하지 않는다.
+- `URLSearchParams`가 LF를 raw `%0A`로 직렬화하는지, decoded `text`가 정확히 문구·LF·URL
+  순서인지, 별도 `url` query가 없는지 단위 테스트로 고정한다.
+- Playwright에서 X link의 decoded query와 raw `%0A`를 확인하고 다른 provider target,
+  모바일 대상 수와 layout 계약이 유지되는지 회귀 검증한다.
+- 전체 Node·Playwright·production Sites build를 통과한 exact commit만 기존 owner-only
+  Sites project의 새 saved version으로 배포하고 실제 HTML 200 응답을 확인한다.
+
+### 검증
+
+```bash
+node --test src/profile-ui/__tests__/shareStudio.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Share Studio|Share card dialog"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+git diff --check
+```
+
+### 완료 조건
+
+- X 작성창의 decoded text가 공유 문구, LF 1개, profile URL 순서다.
+- X raw query에 `%0A`가 있고 별도 `url` query가 없다.
+- Threads·Reddit과 desktop/mobile target·layout 계약에 회귀가 없다.
+- 전체 Node·Playwright와 Sites production artifact 검증이 통과한다.
+- PR #103의 exact commit이 owner-only Sites에 배포되고 HTML 200 응답을 반환한다.
+
+### 커밋
+
+```text
+Task #102 Stage 4: X 본문과 링크 개행 보완
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -205,6 +263,8 @@ Task #102 Stage 3: 모바일 공유 문서와 전체 회귀 검증
 - 문서 위치가 수행계획서 판단과 달라지면 구현 전에 계획 변경 승인을 받는다.
 - Stage 3 뒤 실제 실기기 검증용 서버·validation target은 credential, 외부 배포와
   production mutation 여부를 확인한 뒤 승인된 안전한 경로만 사용한다.
+- Stage 4는 승인된 기존 owner-only Sites project와 환경·D1·R2 binding을 그대로 유지하고
+  exact Stage 4 commit의 새 version만 저장·배포한다.
 
 ## 커밋
 
@@ -216,6 +276,8 @@ Task #102 Stage 3: 모바일 공유 문서와 전체 회귀 검증
 
 - Stage 2는 Stage 1의 helper·target·raw URL 계약과 단계 보고 승인 후 진행한다.
 - Stage 3은 Stage 2의 실제 device context E2E와 단계 보고 승인 후 진행한다.
+- Stage 4는 Stage 3 owner-only 실기기 확인에서 발견된 X separator 결과를 반영하며,
+  작업지시자의 구현·배포 승인을 근거로 진행한다.
 - #101 Stage 4는 #102 병합 뒤 최신 `devel`을 반영하고 mobile filter 회귀를 검증해야 한다.
 
 ## 위험과 대응
