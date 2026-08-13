@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { devices, expect, test } from "@playwright/test";
 
+import { resolveE2eOrigin } from "./e2eOrigin.js";
+
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
 const OWNER_PROFILE_ROUTE = "/?view=profile";
@@ -11,7 +13,7 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
-const E2E_ORIGIN = process.env.PROFILE_E2E_ORIGIN ?? "http://127.0.0.1:5173";
+const E2E_ORIGIN = resolveE2eOrigin(process.env.PROFILE_E2E_ORIGIN).origin;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
@@ -2396,7 +2398,7 @@ test.describe("Home and share card flow", () => {
     await expect(backdrop).toHaveClass(/\bis-open\b/);
 
     const socialTargets = [
-      ["Share on X", "X", "https://x.com", "/intent/post"],
+      ["Share on X", "X", "https://x.com", "/intent/tweet"],
       ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
       ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
     ];
@@ -2410,6 +2412,16 @@ test.describe("Home and share card flow", () => {
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+    const xHref = new URL(
+      await page.getByRole("link", { name: "Share on X" }).getAttribute("href")
+    );
+    expect(xHref.searchParams.get("text")).toBe(
+      `See my Codex usage activity.\n${E2E_ORIGIN}/api/share/postmelee`
+    );
+    expect(xHref.searchParams.get("url")).toBeNull();
+    expect(xHref.search).toContain(
+      `%0A${encodeURIComponent(`${E2E_ORIGIN}/api/share/postmelee`)}`
+    );
     await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
     await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
       "viewBox",
@@ -3123,7 +3135,7 @@ test.describe("Home and share card flow", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
+  test("Share card dialog keeps all destinations at 320 and 390 desktop widths", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -3131,63 +3143,189 @@ test.describe("Home and share card flow", () => {
     }));
     await mockCardImages(page);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    await page.getByRole("button", { name: "Share", exact: true }).click();
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await page.getByRole("button", { name: "Share", exact: true }).click();
 
-    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
-    await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
-      "aspect-ratio",
-      "499 / 306"
-    );
-    await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
-    await expect(page.locator(".share-studio-primary-action").first()).toHaveCSS(
-      "opacity",
-      "1"
-    );
-    const mobileTargets = await page.locator(".share-studio-primary-action")
-      .evaluateAll((elements) => elements.map((element) => {
-        const bounds = element.getBoundingClientRect();
-        return {
-          bottom: bounds.bottom,
-          height: bounds.height,
-          left: bounds.left,
-          right: bounds.right
-        };
-      }));
-    expect(mobileTargets).toHaveLength(6);
-    for (const target of mobileTargets) {
-      expect(target.height).toBeGreaterThanOrEqual(44);
-      expect(target.left).toBeGreaterThanOrEqual(0);
-      expect(target.right).toBeLessThanOrEqual(390);
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
+      await expect(page.getByRole("img", { name: "Codex usage card preview" }))
+        .toHaveCSS("aspect-ratio", "499 / 306");
+      await expect(page.getByTestId("share-studio-backdrop"))
+        .toHaveClass(/\bis-open\b/);
+      await expect(page.locator(".share-studio-primary-action").first())
+        .toHaveCSS("opacity", "1");
+      await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+        .toBeVisible();
+      await expect(page.getByRole("link", { name: "Share on Facebook" }))
+        .toBeVisible();
+
+      const compactLayout = await page.locator(".share-studio-primary-action")
+        .evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          const rowTops = [];
+          for (const target of targets) {
+            const existing = rowTops.find((top) => Math.abs(top - target.top) <= 1);
+            if (existing === undefined) rowTops.push(target.top);
+          }
+          const actions = document.querySelector(".share-studio-primary-actions")
+            .getBoundingClientRect();
+          const card = document.querySelector(".share-studio-card-motion")
+            .getBoundingClientRect();
+          return {
+            actionCenter: actions.left + (actions.width / 2),
+            actionWidth: actions.width,
+            cardCenter: card.left + (card.width / 2),
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            rowCounts: rowTops.map((top) => targets.filter(
+              (target) => Math.abs(top - target.top) <= 1
+            ).length),
+            targets
+          };
+        });
+      expect(compactLayout.targets).toHaveLength(6);
+      expect(compactLayout.rowCounts).toEqual([4, 2]);
+      expect(compactLayout.horizontalOverflow).toBe(false);
+      for (const target of compactLayout.targets) {
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expect(target.left).toBeGreaterThanOrEqual(0);
+        expect(target.right).toBeLessThanOrEqual(width);
+      }
+      expect(compactLayout.actionWidth).toBeLessThanOrEqual(280);
+      expect(
+        Math.abs(compactLayout.actionCenter - compactLayout.cardCenter)
+      ).toBeLessThanOrEqual(1);
+
+      const secondaryTargetHeights = await page
+        .locator(".share-studio-secondary-action, .share-studio-privacy-action")
+        .evaluateAll((elements) => elements.map(
+          (element) => element.getBoundingClientRect().height
+        ));
+      expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
+      await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+      await page.screenshot({
+        path: testInfo.outputPath(`share-narrow-desktop-${width}.png`)
+      });
     }
-    const compactActionLayout = await page.evaluate(() => {
-      const actions = document.querySelector(".share-studio-primary-actions")
-        .getBoundingClientRect();
-      const card = document.querySelector(".share-studio-card-motion")
-        .getBoundingClientRect();
-      return {
-        actionCenter: actions.left + (actions.width / 2),
-        actionWidth: actions.width,
-        cardCenter: card.left + (card.width / 2)
-      };
-    });
-    expect(compactActionLayout.actionWidth).toBeLessThanOrEqual(280);
-    expect(
-      Math.abs(compactActionLayout.actionCenter - compactActionLayout.cardCenter)
-    ).toBeLessThanOrEqual(1);
-    const secondaryTargetHeights = await page
-      .locator(".share-studio-secondary-action, .share-studio-privacy-action")
-      .evaluateAll((elements) => elements.map(
-        (element) => element.getBoundingClientRect().height
-      ));
-    expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
-    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+  });
 
-    await page.screenshot({
-      path: testInfo.outputPath("share-mobile-with-instructions.png")
-    });
+  test("Task #102 mobile Share Studio keeps four actions on one row", async ({
+    browser
+  }, testInfo) => {
+    const scenarios = [
+      {
+        device: devices["iPhone 13"],
+        label: "iphone-390",
+        viewport: { height: 844, width: 390 }
+      },
+      {
+        device: devices["Pixel 5"],
+        label: "android-320",
+        viewport: { height: 800, width: 320 }
+      }
+    ];
+
+    for (const { device, label, viewport } of scenarios) {
+      const context = await browser.newContext({
+        ...device,
+        baseURL: E2E_ORIGIN,
+        viewport
+      });
+      const page = await context.newPage();
+
+      try {
+        await page.emulateMedia({ colorScheme: "dark" });
+        await mockAuthenticatedAccount(page);
+        await page.route("**/api/profile", (route) => fulfillJson(route, {
+          data: ownerProfile("public"),
+          ok: true
+        }));
+        await mockCardImages(page);
+        await page.goto("/");
+        await page.evaluate(() => {
+          globalThis.__shareActionCounts = [];
+          globalThis.__shareActionObserver = new MutationObserver(() => {
+            const count = document.querySelectorAll(
+              ".share-studio-primary-action"
+            ).length;
+            if (count > 0) globalThis.__shareActionCounts.push(count);
+          });
+          globalThis.__shareActionObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+        });
+
+        await page.getByRole("button", { name: "Share", exact: true }).tap();
+        const dialog = page.getByRole("dialog", { name: "Share activity" });
+        const actions = page.locator(".share-studio-primary-action");
+        await expect(dialog).toBeVisible();
+        await expect(actions).toHaveCount(4);
+        await expect(page.getByRole("link", { name: "Share on X" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Threads" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Save PNG" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+          .toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Share on Facebook" }))
+          .toHaveCount(0);
+        await expect(actions.last()).toHaveCSS("opacity", "1");
+
+        const layout = await actions.evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          return {
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            targets,
+            viewportWidth: document.documentElement.clientWidth
+          };
+        });
+        expect(layout.targets).toHaveLength(4);
+        expect(
+          Math.max(...layout.targets.map(({ top }) => top))
+            - Math.min(...layout.targets.map(({ top }) => top))
+        ).toBeLessThanOrEqual(1);
+        for (const target of layout.targets) {
+          expect(target.height).toBeGreaterThanOrEqual(44);
+          expect(target.left).toBeGreaterThanOrEqual(0);
+          expect(target.right).toBeLessThanOrEqual(layout.viewportWidth);
+        }
+        expect(layout.horizontalOverflow).toBe(false);
+
+        const observedCounts = await page.evaluate(() => {
+          globalThis.__shareActionObserver.disconnect();
+          return [...new Set(globalThis.__shareActionCounts)];
+        });
+        expect(observedCounts).toEqual([4]);
+        await page.screenshot({
+          path: testInfo.outputPath(`share-${label}.png`)
+        });
+      } finally {
+        await context.close();
+      }
+    }
   });
 
   test("Share Studio settles after resize and fits a short desktop", async ({ page }, testInfo) => {
@@ -4142,10 +4280,12 @@ test.describe("Settings appearance control", () => {
     });
     const shareStudio = page.getByRole("dialog", { name: "Share activity" });
     await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-share-preview-source", "public");
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+        "/u/postmelee/card.png?theme=dark"
       );
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
