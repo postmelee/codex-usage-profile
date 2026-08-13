@@ -242,7 +242,14 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
   const profile = profileState.profile;
 
   if (profileState.status === "loading") {
-    return <PublicProfileLoadingSkeleton />;
+    return (
+      <ProfileLoadingSkeleton
+        description={t("profile.public.fetching")}
+        loadingLabel={t("profile.public.fetching")}
+        surface="public"
+        title={t("profile.public.loading")}
+      />
+    );
   }
 
   if (!profile?.usage) {

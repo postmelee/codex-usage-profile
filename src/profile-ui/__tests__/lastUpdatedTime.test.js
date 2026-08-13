@@ -9,6 +9,7 @@ import { createServer } from "vite";
 const UPLOADED_AT = "2026-08-12T20:20:00.000Z";
 let localeProvider;
 let lastUpdatedTime;
+let profileHeader;
 let viteServer;
 
 test.before(async () => {
@@ -23,6 +24,9 @@ test.before(async () => {
   ));
   ({ LastUpdatedTime: lastUpdatedTime } = await viteServer.ssrLoadModule(
     "/src/profile-ui/LastUpdatedTime.jsx"
+  ));
+  ({ ProfileHeader: profileHeader } = await viteServer.ssrLoadModule(
+    "/src/profile-ui/ProfileHeader.jsx"
   ));
 });
 
@@ -45,6 +49,22 @@ test("does not render semantic time markup for invalid timestamps", () => {
   assert.equal(renderLastUpdatedTime("en", "UTC", "not-a-date"), "");
 });
 
+test("keeps a stable Profile update slot for valid and invalid timestamps", () => {
+  const validMarkup = renderProfileHeader(UPLOADED_AT);
+  assert.match(validMarkup, /class="profile-last-updated-slot"/u);
+  assert.match(
+    validMarkup,
+    /<time class="profile-last-updated" dateTime="2026-08-12T20:20:00.000Z">/u
+  );
+
+  const invalidMarkup = renderProfileHeader("not-a-date");
+  assert.match(
+    invalidMarkup,
+    /<div class="profile-last-updated-slot"><\/div>/u
+  );
+  assert.doesNotMatch(invalidMarkup, /<time/u);
+});
+
 function renderLastUpdatedTime(locale, timeZone, uploadedAt = UPLOADED_AT) {
   return renderToStaticMarkup(createElement(
     localeProvider,
@@ -56,6 +76,27 @@ function renderLastUpdatedTime(locale, timeZone, uploadedAt = UPLOADED_AT) {
     createElement(lastUpdatedTime, {
       className: "test-updated-at",
       timeZone,
+      uploadedAt
+    })
+  ));
+}
+
+function renderProfileHeader(uploadedAt) {
+  return renderToStaticMarkup(createElement(
+    localeProvider,
+    {
+      initialLocale: "en",
+      targetDocument: null,
+      targetWindow: null
+    },
+    createElement(profileHeader, {
+      header: {
+        avatarAsset: { url: "https://avatars.example.test/postmelee.png" },
+        displayName: "Post Melee",
+        username: "postmelee"
+      },
+      headingId: "profile-title",
+      headingLevel: 1,
       uploadedAt
     })
   ));

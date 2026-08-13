@@ -480,6 +480,7 @@ button {
   .profile-heading h1,
   .profile-heading h2,
   .profile-heading p,
+  .profile-last-updated,
   .profile-stage h2,
   .profile-stage p,
   .plan-pill,
@@ -1763,7 +1764,8 @@ button {
 }
 
 .profile-loading-name,
-.profile-loading-handle {
+.profile-loading-handle,
+.profile-loading-updated {
   border-radius: 999px;
 }
 
@@ -1777,6 +1779,12 @@ button {
   height: 22px;
   margin-top: 8px;
   width: min(24%, 150px);
+}
+
+.profile-loading-updated {
+  height: 16px;
+  margin-top: 6px;
+  width: min(30%, 180px);
 }
 
 .profile-loading-stats {
@@ -3547,6 +3555,20 @@ button {
   font-size: 15px;
   line-height: 1.45;
   margin: 8px 0 0;
+}
+
+.profile-last-updated-slot {
+  line-height: 16px;
+  margin-top: 6px;
+  min-height: 16px;
+}
+
+.profile-last-updated {
+  color: var(--text-tertiary);
+  display: inline-block;
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
 }
 
 .plan-pill {

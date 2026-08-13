@@ -3718,7 +3718,7 @@ test.describe("Profile and Settings canvases", () => {
     expect(unavailableTopOffset).toBe(48);
   });
 
-  test("owner Profile loading geometry matches ready content and reveals together in place", async ({ page }) => {
+  test("Task #99 Profile owner loading geometry matches the ready update slot", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     let releaseProfile;
     const profileGate = new Promise((resolve) => {
@@ -3736,9 +3736,15 @@ test.describe("Profile and Settings canvases", () => {
     await page.goto("/profile", { waitUntil: "domcontentloaded" });
 
     const loadingGeometry = await readProfileGeometry(page, "loading");
+    await expect(page.locator(".profile-loading-updated"))
+      .toHaveAttribute("data-skeleton-part", "updated");
     releaseProfile();
     await expect(page.locator(".card-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
 
     const revealMotion = await page.evaluate(() => [
       ".profile-header",
@@ -4540,7 +4546,7 @@ test.describe("Public profile", () => {
     )).toBe(false);
   });
 
-  test("public profile moves from a neutral loading state to ready", async ({ page }) => {
+  test("Task #99 Profile public loading state matches the ready update slot", async ({ page }) => {
     await mockAnonymousAccount(page);
     let releaseResponse;
     const responseGate = new Promise((resolve) => {
@@ -4571,6 +4577,8 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(loadingSkeleton.locator("[data-skeleton-part=activity-row]"))
       .toHaveCount(7);
+    await expect(loadingSkeleton.locator("[data-skeleton-part=updated]"))
+      .toBeVisible();
     await expect(loadingSkeleton.locator(".home-card-media"))
       .toHaveAttribute("data-card-status", "loading");
     await expect(loadingSkeleton.locator(".home-card-skeleton"))
@@ -4603,6 +4611,29 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(page.locator(".public-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+  });
+
+  test("Task #99 Profile private owner preview uses the shared update slot", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profiles/public/postmelee", (route) => fulfillJson(route, {
+      error: { code: "not_found", message: "Public profile not found" },
+      ok: false
+    }, 404));
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator(".public-profile-owner-banner")).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "Last updated ·"
+    );
   });
 
   test("profile loading Skeleton stops decorative motion for reduced motion", async ({ page }) => {
@@ -5332,7 +5363,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-loading-handle",
         name: ".profile-loading-name",
         option: ".profile-loading-activity-option",
-        stats: ".profile-loading-stats"
+        stats: ".profile-loading-stats",
+        updated: ".profile-loading-updated"
       }
     : {
         activity: ".token-activity",
@@ -5344,7 +5376,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-heading p",
         name: ".profile-heading h1",
         option: ".token-activity-options",
-        stats: ".profile-stats"
+        stats: ".profile-stats",
+        updated: ".profile-last-updated-slot"
       };
 
   return page.evaluate((geometrySelectors) => Object.fromEntries(
