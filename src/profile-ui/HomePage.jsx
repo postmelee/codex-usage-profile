@@ -389,8 +389,9 @@ export function HomePage({
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
-        publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
+        publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
+        selectedPublicCardUrl={profile?.selectedPublicCardUrl}
         sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}

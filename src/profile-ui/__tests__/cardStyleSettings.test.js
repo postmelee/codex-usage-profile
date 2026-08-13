@@ -46,13 +46,23 @@ test("home owner card and share studio use the saved card selection", async () =
 
   assert.match(source, /const cardLocale = profile\?\.cardLocale \?\? "en"/u);
   assert.match(source, /const cardTheme = profile\?\.cardStyle\?\.theme \?\? "dark"/u);
-  assert.match(source, /publicCardUrl=\{profile\?\.selectedPublicCardUrl/u);
+  assert.match(source, /publicCardUrl=\{profile\?\.publicCardUrl\}/u);
+  assert.match(
+    source,
+    /selectedPublicCardUrl=\{profile\?\.selectedPublicCardUrl\}/u
+  );
   assert.doesNotMatch(source, /useTheme/u);
 });
 
-test("share studio keeps product copy locale separate from saved card locale", async () => {
+test("share studio separates canonical copy from the saved card asset", async () => {
   const source = await readFile(join(SOURCE_ROOT, "ShareStudio.jsx"), "utf8");
 
   assert.match(source, /getShareStudioCopy\(locale\)/u);
-  assert.match(source, /publicCardUrl,[\s\S]*cardLocale \?\? locale,[\s\S]*cardTheme/u);
+  assert.match(
+    source,
+    /resolveShareStudioCardUrls\(\{[\s\S]*publicCardUrl,[\s\S]*selectedPublicCardUrl/u
+  );
+  assert.match(source, /buildReadmeCardSnippet\(copyImageUrl\)/u);
+  assert.match(source, /href=\{selectedImageUrl\}/u);
+  assert.match(source, /fetch\(previewImageUrl \?\? selectedImageUrl/u);
 });

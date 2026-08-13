@@ -6,7 +6,8 @@ import {
   buildShareTargets,
   formatShareStudioPlatformMessage,
   getShareStudioCopy,
-  isMobileShareEnvironment
+  isMobileShareEnvironment,
+  resolveShareStudioCardUrls
 } from "../shareStudio.js";
 
 test("resolves Korean and English Share Studio copy", () => {
@@ -55,6 +56,39 @@ test("rejects unsupported platform message keys and invalid labels", () => {
     () => formatShareStudioPlatformMessage("en", "openComposer", " "),
     /non-empty string/
   );
+});
+
+test("separates the canonical copy URL from the selected card asset", () => {
+  assert.deepEqual(resolveShareStudioCardUrls({
+    cardLocale: "ko",
+    cardTheme: "light",
+    publicCardUrl: "https://profiles.example.test/u/postmelee/card.png?v=old",
+    selectedPublicCardUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=dark"
+  }), {
+    copyImageUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedImageUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko"
+  });
+});
+
+test("never promotes a selected asset to the canonical copy URL", () => {
+  const selected =
+    "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko";
+  assert.deepEqual(resolveShareStudioCardUrls({
+    publicCardUrl: null,
+    selectedPublicCardUrl: selected
+  }), { copyImageUrl: null, selectedImageUrl: null });
+  assert.deepEqual(resolveShareStudioCardUrls({
+    cardLocale: "ko",
+    cardTheme: "light",
+    publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedPublicCardUrl: "data:image/png;base64,abc"
+  }), {
+    copyImageUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedImageUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko"
+  });
 });
 
 test("builds the canonical Sites public profile URL", () => {

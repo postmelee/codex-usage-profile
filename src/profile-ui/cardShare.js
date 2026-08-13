@@ -9,6 +9,28 @@ export function resolveShareTheme(value) {
   return value === "light" ? "light" : "dark";
 }
 
+export function buildCanonicalCardUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password
+  ) {
+    return null;
+  }
+
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 export function buildLocalizedCardUrl(value, locale = "en", theme) {
   if (typeof value !== "string" || value.trim() === "") return null;
 

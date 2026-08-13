@@ -93,6 +93,7 @@ test("updates the owner's versioned card settings", async () => {
         ok: true,
         data: {
           cardStyle: JSON.parse(options.body).cardStyle,
+          publicCardUrl: "/u/postmelee/card.png",
           selectedPublicCardUrl: "/u/postmelee/card.png?theme=light"
         }
       });
@@ -114,6 +115,11 @@ test("updates the owner's versioned card settings", async () => {
     cardLocale: "ko"
   });
   assert.deepEqual(result.cardStyle, cardStyle);
+  assert.equal(result.publicCardUrl, "/u/postmelee/card.png");
+  assert.equal(
+    result.selectedPublicCardUrl,
+    "/u/postmelee/card.png?theme=light"
+  );
 });
 
 test("loads a public Account Usage profile from the allowlisted endpoint", async () => {

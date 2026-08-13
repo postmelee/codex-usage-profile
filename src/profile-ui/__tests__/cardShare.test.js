@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCanonicalCardUrl,
   buildLocalizedCardUrl,
   buildProfileLoginHref,
   buildReadmeCardSnippet,
@@ -33,6 +34,28 @@ test("builds localized image URLs and README snippets", () => {
   assert.equal(
     buildReadmeCardSnippet(korean),
     `![Codex usage profile](${korean})`
+  );
+});
+
+test("keeps canonical README card URLs absolute and queryless", () => {
+  const canonical = buildCanonicalCardUrl(
+    "https://profiles.example.test/u/postmelee/card.png" +
+    "?theme=light&locale=ko&v=stale#preview"
+  );
+  assert.equal(
+    canonical,
+    "https://profiles.example.test/u/postmelee/card.png"
+  );
+  assert.equal(
+    buildReadmeCardSnippet(canonical),
+    "![Codex usage profile]" +
+      "(https://profiles.example.test/u/postmelee/card.png)"
+  );
+  assert.equal(buildCanonicalCardUrl("/u/postmelee/card.png"), null);
+  assert.equal(buildCanonicalCardUrl("javascript:alert(1)"), null);
+  assert.equal(
+    buildCanonicalCardUrl("https://user:secret@profiles.example.test/card.png"),
+    null
   );
 });
 

@@ -619,7 +619,7 @@ test.describe("Stage 3 locale surfaces", () => {
     await expect(page.locator(".month-labels")).toContainText("6월");
   });
 
-  test("locale share uses the global Korean copy and localized card URL", async ({ page }) => {
+  test("Share Studio locale copy keeps the canonical image URL queryless", async ({ page }) => {
     await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
@@ -641,7 +641,11 @@ test.describe("Stage 3 locale surfaces", () => {
     await expect(dialog.getByLabel("공유 대상")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "이미지 URL 복사" })).toHaveAttribute(
       "title",
-      /[?&]locale=ko(?:&|$)/
+      `${E2E_ORIGIN}/u/postmelee/card.png`
+    );
+    await expect(dialog.locator(".home-card-media")).toHaveAttribute(
+      "data-card-source-url",
+      "/u/postmelee/card.png?theme=dark&locale=ko"
     );
     await expect(dialog.getByRole("button", { name: "공유 스튜디오 닫기" }))
       .toBeVisible();
@@ -2457,15 +2461,23 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+      `${E2E_ORIGIN}/u/postmelee/card.png`
     );
 
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png?theme=dark)`
+      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png)`
     );
 
+    await page.getByRole("button", { name: "Copy image", exact: true }).click();
+    await expect(page.getByText("Image copied", { exact: true })).toBeVisible();
+    expect(publicPreviewFetches).toBe(2);
+
+    await expect(page.getByRole("link", { name: "Save PNG" })).toHaveAttribute(
+      "href",
+      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+    );
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Save PNG" }).click();
     const download = await downloadPromise;
@@ -2517,7 +2529,7 @@ test.describe("Home and share card flow", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
-    expect(publicPreviewFetches).toBe(1);
+    expect(publicPreviewFetches).toBe(2);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
 
@@ -4199,7 +4211,8 @@ test.describe("Settings appearance control", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
-  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ page }) => {
+  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ context, page }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.addInitScript((storageKey) => {
       if (localStorage.getItem(storageKey) === null) {
         localStorage.setItem(storageKey, "light");
@@ -4299,9 +4312,22 @@ test.describe("Settings appearance control", () => {
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
-      .toHaveAttribute("title", /[?&]theme=dark(?:&|$)/);
+      .toHaveAttribute("title", `${E2E_ORIGIN}/u/postmelee/card.png`);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
       .not.toHaveAttribute("title", /[?&]locale=/);
+    await shareStudio.getByRole("button", { name: "Copy image URL" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `${E2E_ORIGIN}/u/postmelee/card.png`
+    );
+    await shareStudio.getByRole("button", { name: "Copy README Markdown" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png)`
+    );
+    await expect(shareStudio.getByRole("link", { name: "Save PNG" }))
+      .toHaveAttribute(
+        "href",
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+      );
   });
 
   test("card appearance keeps the last decoded preview until the latest draft is ready", async ({ page }) => {

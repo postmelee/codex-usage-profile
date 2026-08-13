@@ -1,4 +1,8 @@
-import { resolveShareLocale } from "./cardShare.js";
+import {
+  buildCanonicalCardUrl,
+  buildLocalizedCardUrl,
+  resolveShareLocale
+} from "./cardShare.js";
 import { formatMessage } from "./i18n.js";
 
 const SHARE_MESSAGE_IDS = Object.freeze({
@@ -69,6 +73,24 @@ export function formatShareStudioPlatformMessage(locale, key, platform) {
   return formatMessage(resolveShareLocale(locale), messageId, {
     platform: platform.trim()
   });
+}
+
+export function resolveShareStudioCardUrls(options = {}) {
+  const copyImageUrl = buildCanonicalCardUrl(options.publicCardUrl);
+  if (!copyImageUrl) {
+    return Object.freeze({ copyImageUrl: null, selectedImageUrl: null });
+  }
+
+  const selectedImageUrl = buildLocalizedCardUrl(
+    options.selectedPublicCardUrl,
+    options.cardLocale ?? options.locale,
+    options.cardTheme
+  ) ?? buildLocalizedCardUrl(
+    copyImageUrl,
+    options.cardLocale ?? options.locale,
+    options.cardTheme
+  );
+  return Object.freeze({ copyImageUrl, selectedImageUrl });
 }
 
 export function buildPublicProfileShareUrl(origin, handle) {
