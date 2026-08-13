@@ -70,10 +70,6 @@ export function ShareStudio({
       selectedPublicCardUrl
     ]
   );
-  const markdown = useMemo(
-    () => buildReadmeCardSnippet(copyImageUrl),
-    [copyImageUrl]
-  );
   const previewImageUrl = useMemo(
     () => buildSameOriginCardPreviewUrl(
       selectedImageUrl,
@@ -85,6 +81,10 @@ export function ShareStudio({
   const publicProfileUrl = useMemo(
     () => buildPublicProfileShareUrl(locationOrigin, publicOwnerHandle),
     [locationOrigin, publicOwnerHandle]
+  );
+  const markdown = useMemo(
+    () => buildReadmeCardSnippet(copyImageUrl, publicProfileUrl),
+    [copyImageUrl, publicProfileUrl]
   );
   const shareTargets = useMemo(
     () => buildShareTargets({

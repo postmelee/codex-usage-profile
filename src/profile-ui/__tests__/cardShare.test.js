@@ -31,10 +31,6 @@ test("builds localized image URLs and README snippets", () => {
     buildLocalizedCardUrl(korean, "en"),
     "https://profiles.example.test/u/postmelee/card.png"
   );
-  assert.equal(
-    buildReadmeCardSnippet(korean),
-    `![Codex usage profile](${korean})`
-  );
 });
 
 test("keeps canonical README card URLs absolute and queryless", () => {
@@ -47,10 +43,16 @@ test("keeps canonical README card URLs absolute and queryless", () => {
     "https://profiles.example.test/u/postmelee/card.png"
   );
   assert.equal(
-    buildReadmeCardSnippet(canonical),
-    "![Codex usage profile]" +
-      "(https://profiles.example.test/u/postmelee/card.png)"
+    buildReadmeCardSnippet(
+      canonical,
+      "https://profiles.example.test/api/share/postmelee"
+    ),
+    '<a href="https://profiles.example.test/api/share/postmelee">'
+      + '<img width="50%" '
+      + 'src="https://profiles.example.test/u/postmelee/card.png" '
+      + 'alt="Codex usage profile" /></a>'
   );
+  assert.equal(buildReadmeCardSnippet(canonical, null), null);
   assert.equal(buildCanonicalCardUrl("/u/postmelee/card.png"), null);
   assert.equal(buildCanonicalCardUrl("javascript:alert(1)"), null);
   assert.equal(

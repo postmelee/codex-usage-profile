@@ -3,7 +3,7 @@
 - 수행계획서: [`task_m100_100.md`](task_m100_100.md)
 - GitHub Issue: [#100](https://github.com/postmelee/codex-usage-profile/issues/100)
 - 마일스톤: M100 — v1.0 MVP
-- 상태: 구현 승인 대기
+- 상태: Stage 6 구현 중
 
 ## 단계 개요
 
@@ -14,6 +14,7 @@
 | 3 | 설정 publication commit과 public endpoint 전환 | owner CAS 이후 publish, exact retry, queryless canonical 응답 | service·backend·runtime·API contract |
 | 4 | Share Studio 고정 README URL 전환 | canonical copy와 explicit preview/download 분리 | UI unit·settings E2E |
 | 5 | 통합 검증과 문서·#84 handoff | 공개 문서, 전체 build/smoke, 비배포 handoff | unit/E2E/build/verify/smoke |
+| 6 | README 임베드 크기·클릭 대상 보정 | 50% HTML image, 공유 페이지 anchor, 재배포 smoke | unit/E2E/build/GitHub render/production smoke |
 
 ## 구현 불변식
 
@@ -73,6 +74,9 @@
   기존 selected representation을 유지한다.
 - CLI/API client는 `publicCardUrl`을 소비하는 현재 계약을 보강하되 새 CLI option이나 output field는
   만들지 않는다.
+- README 복사 문자열은 GitHub Markdown이 허용하는 `<a><img></a>` HTML을 사용한다. `img`의 기본
+  `width`는 `50%`, `src`는 query 없는 `publicCardUrl`, `a`의 `href`는 `/api/share/{handle}`이다.
+  API와 CLI의 기존 `readmeMarkdown` field shape는 유지하고 같은 문자열 생성 계약을 공유한다.
 
 ## 문서 위치 확인
 
@@ -342,16 +346,83 @@ git status --short
 Task #100 Stage 5: canonical README card 통합 검증과 문서 handoff
 ```
 
+## Stage 6 — README 임베드 크기·클릭 대상 보정
+
+### 산출물
+
+신규:
+
+- `src/profile-card/readme-embed.js`
+- `src/profile-card/__tests__/readme-embed.test.js`
+- `mydocs/working/task_m100_100_stage6.md`
+
+수정:
+
+- `src/profile-ui/cardShare.js`
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/__tests__/cardShare.test.js`
+- `src/profile-ui/__tests__/cardStyleSettings.test.js`
+- `src/profile-backend/http.js`
+- `src/profile-backend/__tests__/http.test.js`
+- `packages/codex-usage-profile-cli/test/output.test.js`
+- `packages/codex-usage-profile-cli/test/cli.test.js`
+- `packages/codex-usage-profile-cli/README.md`
+- `tests/profile-ui.spec.js`
+- `README.md`
+- `docs/readme-card.md`
+- `docs/cli-submit.md`
+- `mydocs/orders/20260813.md`
+
+### 변경 내용
+
+- README 임베드 문자열 생성기를 UI와 backend가 함께 쓰는 browser-safe module로 분리한다. 두 URL은
+  credential 없는 absolute HTTP(S)만 허용하고 HTML attribute를 escape하며, 유효하지 않으면 fail-close한다.
+- 기본 복사 결과는 `<a href="공유 URL"><img width="50%" src="고정 카드 URL" alt="Codex usage profile" /></a>`
+  형식으로 고정한다. 사용자는 복사한 `width` 값만 바꿔 크기를 조절할 수 있고 `src`에는 selector나
+  cache-buster query를 추가하지 않는다.
+- Share Studio는 기존 `publicProfileUrl`과 `copyImageUrl`을 함께 생성기에 전달한다. 카드 클릭은
+  `/api/share/{handle}`로 이동하고 preview/download/PNG clipboard는 Stage 4의 explicit asset 동작을 유지한다.
+- account usage API와 CLI가 반환·출력하는 기존 `readmeMarkdown`도 같은 생성기를 사용한다. `profileUrl`과
+  `imageUrl` field 의미 및 response shape는 변경하지 않는다.
+- GitHub Markdown render API로 anchor `href`, image `width`, canonical source 보존을 확인한다. GitHub가
+  image `src`를 Camo로 변환하는 것은 정상이며 바깥 anchor는 서비스 공유 URL로 남아야 한다.
+- 사용자 문서는 새 기본 복사 형식, `width` 조절 방법, queryless image URL과 Camo 갱신 특성을 설명한다.
+- 전체 검증 후 승인된 기존 Sites project에 재배포하고 Share Studio clipboard, 공유 페이지, stable PNG와
+  GitHub renderer를 production URL로 smoke 검증한다.
+
+### 검증
+
+```bash
+node --test src/profile-card/__tests__/readme-embed.test.js src/profile-ui/__tests__/cardShare.test.js src/profile-ui/__tests__/cardStyleSettings.test.js src/profile-backend/__tests__/http.test.js packages/codex-usage-profile-cli/test/output.test.js packages/codex-usage-profile-cli/test/cli.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Share Studio|card appearance" --workers=1
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+npm run smoke:sites-fullstack:local
+git diff --check
+git status --short
+```
+
+### 커밋
+
+```text
+Task #100 Stage 6: README 임베드 크기와 공유 링크 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다. 실패한 검증은 완료로 처리하지 않는다.
 - Stage 1·2는 memory/R2/S3 behavior matrix, Stage 3은 transaction/concurrency, Stage 4는 사용자 복사
-  동작, Stage 5는 전체 artifact와 운영 계약을 각각 독립 Gate로 삼는다.
+  동작, Stage 5는 전체 artifact와 운영 계약, Stage 6은 README HTML 생성 계약과 production 복사 결과를
+  각각 독립 Gate로 삼는다.
 - failure/concurrency test는 owner CAS 이전 authority 미변경, 최신 owner/usage supersession, exact retry
   수렴, social mismatch fail-close를 반드시 포함한다.
 - 계획된 파일 밖 변경 또는 공개 문서 위치 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자
   승인을 받는다.
-- 실제 Cloudflare/Sites 배포, 원격 storage migration과 cleanup 실행은 이 task 범위에 포함하지 않는다.
+- Stage 6에서 승인된 기존 Sites project 재배포와 읽기·복사 smoke만 수행한다. 원격 storage migration과
+  cleanup 실행은 이 task 범위에 포함하지 않는다.
 
 ## 커밋
 
@@ -365,6 +436,8 @@ Task #100 Stage 5: canonical README card 통합 검증과 문서 handoff
 - Stage 3은 Stage 2의 R2/S3 authority read/write/restore 정합성 승인 후 진행한다.
 - Stage 4는 Stage 3의 API URL 의미와 queryless endpoint가 확정된 뒤 진행한다.
 - Stage 5는 Stage 4의 copy/preview 분리 검증과 단계 보고서 승인 후 진행한다.
+- Stage 6은 Stage 5 production Gate에서 확인한 stable URL·Camo 동작을 전제로 README 임베드 표현만
+  보정하며, 기존 publication과 cache 계약은 변경하지 않는다.
 
 ## 위험과 대응
 
@@ -378,6 +451,8 @@ Task #100 Stage 5: canonical README card 통합 검증과 문서 handoff
   복사 책임만 분리한다.
 - **cache 때문에 같은 URL 갱신이 늦어 보임**: 기존 publication cache/ETag 계약과 invalidate 동작을
   adapter·HTTP·운영 smoke에서 확인하고 새 query cache-buster를 공개 계약으로 만들지 않는다.
+- **GitHub가 HTML image를 Camo로 치환함**: image `src` 치환은 허용하되 바깥 anchor `href`와 `width`가
+  보존되는지를 GitHub renderer와 실제 README에서 확인한다.
 - **social card와 canonical card 불일치**: 동일 publication id로 publish하고 reader mismatch fail-close와
   post-CAS failure retry를 검증한다.
 - **Task #84 진행 중 worktree 충돌**: `.worktrees/task84`를 수정하지 않고 #100 merge 뒤 재정렬할 검증
@@ -385,7 +460,7 @@ Task #100 Stage 5: canonical README card 통합 검증과 문서 handoff
 
 ## 승인 요청 사항
 
-- 다섯 Stage의 분할, 산출물 경로, 검증 명령과 커밋 메시지를 승인한다.
+- 여섯 Stage의 분할, 산출물 경로, 검증 명령과 커밋 메시지를 승인한다.
 - `v4`를 유지하면서 `canonicalTheme`, `canonicalLocale`을 additive publication field로 추가하고,
   legacy pair 전체 부재만 dark/en으로 읽는 계약을 승인한다.
 - `publicCardUrl`은 canonical queryless, `selectedPublicCardUrl`은 explicit selected variant로 유지하는
@@ -395,3 +470,5 @@ Task #100 Stage 5: canonical README card 통합 검증과 문서 handoff
 - Share Studio의 README·이미지 URL 텍스트 복사는 canonical URL, preview/download/PNG clipboard는
   explicit selected URL을 사용하는 동작 분리를 승인한다.
 - README와 기존 docs 세 문서를 Stage 5에서 수정하고 실제 배포는 하지 않는 범위를 승인한다.
+- Stage 6에서 README 복사 결과를 50% HTML image와 `/api/share/{handle}` anchor로 바꾸고 API/CLI를
+  통일하며, 검증된 source를 기존 Sites project에 재배포해 production smoke하는 범위를 승인한다.

@@ -2467,7 +2467,9 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png)`
+      `<a href="${E2E_ORIGIN}/api/share/postmelee">`
+        + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
+        + 'alt="Codex usage profile" /></a>'
     );
 
     await page.getByRole("button", { name: "Copy image", exact: true }).click();
@@ -4321,7 +4323,9 @@ test.describe("Settings appearance control", () => {
     );
     await shareStudio.getByRole("button", { name: "Copy README Markdown" }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `![Codex usage profile](${E2E_ORIGIN}/u/postmelee/card.png)`
+      `<a href="${E2E_ORIGIN}/api/share/postmelee">`
+        + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
+        + 'alt="Codex usage profile" /></a>'
     );
     await expect(shareStudio.getByRole("link", { name: "Save PNG" }))
       .toHaveAttribute(

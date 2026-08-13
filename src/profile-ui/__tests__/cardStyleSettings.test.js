@@ -62,7 +62,10 @@ test("share studio separates canonical copy from the saved card asset", async ()
     source,
     /resolveShareStudioCardUrls\(\{[\s\S]*publicCardUrl,[\s\S]*selectedPublicCardUrl/u
   );
-  assert.match(source, /buildReadmeCardSnippet\(copyImageUrl\)/u);
+  assert.match(
+    source,
+    /buildReadmeCardSnippet\(copyImageUrl, publicProfileUrl\)/u
+  );
   assert.match(source, /href=\{selectedImageUrl\}/u);
   assert.match(source, /fetch\(previewImageUrl \?\? selectedImageUrl/u);
 });

@@ -1,6 +1,7 @@
 import { createAccountService } from "./accounts.js";
 import { createAccountUsageSubmitService } from "./account-usage-submit.js";
 import { normalizeAccountUsageReadResult } from "../profile-card/account-usage.js";
+import { buildReadmeCardSnippet } from "../profile-card/readme-embed.js";
 import { createProfileCardServiceCore } from "../profile-card/service-core.js";
 import {
   CARD_STYLE_MAX_BYTES,
@@ -1178,13 +1179,17 @@ function serializeAccountUsageStatus(result, request, publicBaseUrl) {
 function buildAccountUsageProfileMetadata(owner, request, publicBaseUrl) {
   const baseUrl = publicBaseUrl ?? new URL(request.url).origin;
   const imageUrl = buildPublicCardUrl(owner.handle, request, publicBaseUrl);
+  const shareUrl = new URL(
+    `/api/share/${encodeURIComponent(owner.handle)}`,
+    baseUrl
+  ).toString();
 
   return {
     handle: owner.handle,
     visibility: owner.visibility,
     profileUrl: new URL(OWNER_PROFILE_PATH, baseUrl).toString(),
     imageUrl,
-    readmeMarkdown: `![Codex usage profile](${imageUrl})`
+    readmeMarkdown: buildReadmeCardSnippet(imageUrl, shareUrl)
   };
 }
 

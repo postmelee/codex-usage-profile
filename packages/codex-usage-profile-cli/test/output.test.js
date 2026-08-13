@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { projectSubmitOutput, writeSubmitOutput } from "../src/output.js";
 
+const README_EMBED = '<a href="https://profiles.example.test/api/share/postmelee">'
+  + '<img width="50%" '
+  + 'src="https://profiles.example.test/u/postmelee/card.png" '
+  + 'alt="Codex usage profile" /></a>';
+
 test("projects submit output without credentials, owner ids, or private revision", () => {
   const output = projectSubmitOutput(createResponse());
   const serialized = JSON.stringify(output);
@@ -52,7 +57,7 @@ test("renders only Profile and Card as cyan terminal hyperlinks", () => {
   assert.match(stdout.value, /\u001B\]8;;\u001B\\\u001B\[39m/);
   assert.equal(
     stdout.value.split("\n").find((line) => line.startsWith("  README:")),
-    "  README:  ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+    `  README:  ${README_EMBED}`
   );
   assert.equal(result.profile.profileUrl, "https://profiles.example.test/profile");
   assert.equal(result.profile.imageUrl, "https://profiles.example.test/u/postmelee/card.png");
@@ -186,7 +191,7 @@ function createResponse() {
       visibility: "public",
       profileUrl: "https://profiles.example.test/profile",
       imageUrl: "https://profiles.example.test/u/postmelee/card.png",
-      readmeMarkdown: "![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)",
+      readmeMarkdown: README_EMBED,
       ownerId: "owner_1"
     },
     usage: { lifetimeTokens: 999 }

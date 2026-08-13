@@ -1706,7 +1706,9 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
   );
   assert.equal(
     submitted.body.data.profile.readmeMarkdown,
-    `![Codex usage profile](${BASE_URL}/u/postmelee/card.png)`
+    `<a href="${BASE_URL}/api/share/postmelee">`
+      + `<img width="50%" src="${BASE_URL}/u/postmelee/card.png" `
+      + 'alt="Codex usage profile" /></a>'
   );
   assert.equal(submitted.body.data.device.deviceKey, "macbook-pro");
   assert.equal(submitted.body.data.device.displayName, "Office Mac");

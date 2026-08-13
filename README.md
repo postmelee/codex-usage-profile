@@ -10,13 +10,9 @@ Turn Codex account usage into a private-by-default profile and a stable GitHub R
 Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The public MVP is available at [codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site), and the CLI uses that origin by default.
 
 > [!IMPORTANT]
-> The current production service supports the private preview, publish flow, and stable README card. A metadata-enhanced `/api/share/{handle}` page and social preview are included in the next deployment candidate but are not yet live. The preview embed below will be replaced only after that deployment passes production smoke checks.
+> The current production service supports private preview, publish/unpublish, the stable README card, and the metadata-enhanced `/api/share/{handle}` page.
 
-<!-- PROFILE_CARD_EMBED_PLACEHOLDER
-Replace after the next production deployment and `/api/share/{handle}` smoke:
-
-[![Codex usage profile](<PRODUCTION_CARD_URL>)](<PRODUCTION_PROFILE_URL>)
--->
+<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/postmelee"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/postmelee/card.png" alt="Codex usage profile" /></a>
 
 ## Support
 
@@ -46,7 +42,7 @@ the same URL. Your README Markdown does not need to change.
 - **Private by default:** a new profile is visible only to its authenticated GitHub owner until it is published.
 - **Stable README card:** a 1497x918 PNG designed for GitHub README embedding.
 - **Cache-aware updates:** changed usage produces a new ETag at the same image URL.
-- **Social sharing:** the next deployment candidate adds a dedicated profile page backed by a 2400x1260 social preview image.
+- **Social sharing:** a dedicated profile page is backed by a 2400x1260 social preview image.
 - **No separate usage export:** the CLI reads the identity-free account usage document through [`codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer) and submits it directly.
 
 ## Share surfaces
@@ -54,22 +50,24 @@ the same URL. Your README Markdown does not need to change.
 | Surface | URL | Availability | Purpose |
 |---|---|---|---|
 | README card | `/u/{handle}/card.png` | Available now | Stable PNG for GitHub profile and project READMEs |
-| Public profile | `/api/share/{handle}` | Next deployment | Human-readable share page with link-preview metadata |
-| Social preview | `/u/{handle}/social.png` | Next deployment | Link preview image for social platforms |
+| Public profile | `/api/share/{handle}` | Available now | Human-readable share page with link-preview metadata |
+| Social preview | `/u/{handle}/social.png` | Available now | Link preview image for social platforms |
 
-Use the README card in Markdown after replacing `{handle}` with your published profile handle:
+Use the README embed after replacing `{handle}` with your published profile handle:
 
-```md
-![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png)
+```html
+<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
 ```
 
-The queryless URL is the canonical README link. It follows the card theme and
+Change only the `width` value when you want a different displayed size. Clicking
+the card opens the public share page. The queryless image URL is canonical and
+follows the card theme and
 language saved in your profile, so changing either setting does not require new
 Markdown. Explicit `?theme=dark|light` and `?locale=en|ko` selectors remain
 available when you need a specific variant outside the README flow. When you
 make the profile private, its public image endpoint returns `404`.
 
-GitHub's image proxy can delay a visible refresh even after the origin serves the new card. See [README card usage and cache behavior](docs/readme-card.md) for the endpoint contract and troubleshooting steps.
+GitHub's image proxy can delay a visible refresh even after the origin serves the new card. GitHub rewrites the image `src` to Camo but keeps the outer share-page link. See [README card usage and cache behavior](docs/readme-card.md) for the endpoint contract and troubleshooting steps.
 
 ## Requirements
 

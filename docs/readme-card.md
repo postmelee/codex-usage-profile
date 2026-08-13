@@ -1,6 +1,6 @@
 # GitHub README 카드
 
-Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 URL이 저장된 대표 카드로 갱신된다.
+Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 카드를 클릭하면 `/api/share/{handle}` 공개 공유 페이지로 이동한다.
 
 > [!IMPORTANT]
 > 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로와 카드 loading·resource reuse·공유 handoff·profile Skeleton을 보정한 saved version 23, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
@@ -13,9 +13,11 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 4. **Publish card**를 선택해 프로필을 public으로 전환한다.
 5. **Share**에서 stable image URL 또는 README Markdown을 복사해 GitHub profile이나 repository README에 삽입한다.
 
-```md
-![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
+```html
+<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
+
+표시 크기를 바꾸려면 복사한 코드에서 `width="50%"`만 `40%`, `300px`처럼 조절한다. 이미지 `src`와 클릭 대상 `href`는 그대로 둔다.
 
 Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
 
@@ -25,11 +27,11 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 검증됐다. 일반 사용자에게는 #84 Gate C와 영구 public 전환 뒤 활성화한다.
 
 1. `/?view=profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
-2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. README Markdown과 이미지 URL은 query 없는 고정 URL이며, 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
+2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. README Markdown은 공유 페이지를 클릭 대상으로 감싼 기본 폭 50%의 HTML 임베드이고, 그 이미지 `src`와 이미지 URL은 query 없는 고정 URL이다. 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
 3. SNS에는 `https://{origin}/api/share/{handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
 4. 데스크톱 Share Studio는 X, Threads, LinkedIn, Facebook, Reddit과 저장을 primary action으로 제공한다. 모바일 실행 환경에서는 X, Threads, Reddit과 저장 네 action을 한 줄로 제공하며, viewport가 좁은 데스크톱은 여섯 action을 유지한다.
 5. SNS 버튼은 해당 서비스의 작성 화면을 공유 링크와 함께 연다. X와 Threads에는 현지화된 문구와 링크를 전달하지만 provider API나 OAuth로 자동 게시하지 않으며, 서비스가 미리 입력된 내용을 반영하는지는 보장하지 않는다. Facebook과 LinkedIn은 모바일 앱에서 작성 화면과 내용 자동 입력을 안정적으로 열 수 없어 모바일 primary action에서 제외한다. 필요하면 **공유 링크**를 복사해 원하는 앱에 직접 붙여넣는다.
-6. README에는 **README Markdown**을 사용하고, 이미지를 직접 첨부할 때만 Share Studio의 **이미지 복사** 안내를 따른다.
+6. README에는 **README Markdown**을 사용한다. 표시 크기는 복사 결과의 `width`만 바꾸고, 이미지를 직접 첨부할 때만 Share Studio의 **이미지 복사** 안내를 따른다.
 
 #84 공개 전환 뒤 private으로 전환하면 README card와 social image는 같은 존재
 비노출 `404`를 반환한다. `/api/share/{handle}` HTML은 비공개와 미존재를
@@ -130,7 +132,13 @@ profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 �
 
 ## URL, 테마와 언어
 
-README와 이미지 URL 복사에는 다음 query 없는 canonical URL 하나만 사용한다.
+README 복사는 다음 두 stable URL을 한 HTML 임베드로 조합한다.
+
+```html
+<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
+```
+
+`href`는 클릭할 때 여는 공개 공유 페이지이고 `src`는 다음 query 없는 canonical 이미지 URL이다.
 
 ```text
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
@@ -197,7 +205,7 @@ public card GET/HEAD는 R2 stable authority와 immutable revision만 읽는다. 
 
 ## GitHub Camo
 
-GitHub는 README의 외부 이미지를 Camo proxy로 제공하므로 원본 endpoint가 갱신된 뒤에도 README 반영이 지연될 수 있다.
+GitHub는 README의 외부 이미지 `src`를 Camo proxy URL로 바꾸므로 원본 endpoint가 갱신된 뒤에도 README 반영이 지연될 수 있다. 바깥 `<a href=".../api/share/{handle}">`와 이미지의 `width`는 유지되므로 카드를 클릭하면 Camo 원본 화면이 아니라 서비스 공유 페이지로 이동한다.
 
 1. 먼저 원본 카드 URL을 브라우저에서 열어 최신 이미지와 `Cache-Control`을 확인한다.
 2. README를 다시 불러오고 잠시 기다린다.

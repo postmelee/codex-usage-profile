@@ -1,6 +1,8 @@
 import { resolveLocale } from "./i18n.js";
 import { OWNER_PROFILE_HREF } from "./appRoutes.js";
 
+export { buildReadmeCardSnippet } from "../profile-card/readme-embed.js";
+
 export function resolveShareLocale(value) {
   return resolveLocale(value);
 }
@@ -98,11 +100,6 @@ export function buildSameOriginCardPreviewUrl(
   }
 
   return `${url.pathname}${url.search}`;
-}
-
-export function buildReadmeCardSnippet(cardUrl) {
-  if (!cardUrl) return null;
-  return `![Codex usage profile](${cardUrl})`;
 }
 
 export function buildProfileLoginHref(client) {
