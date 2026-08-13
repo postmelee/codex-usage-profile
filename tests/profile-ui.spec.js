@@ -2471,7 +2471,7 @@ test.describe("Home and share card flow", () => {
     );
 
     await page.getByRole("button", { name: "Copy image", exact: true }).click();
-    await expect(page.getByText("Image copied", { exact: true })).toBeVisible();
+    await expect(page.getByText("Copied image", { exact: true })).toBeVisible();
     expect(publicPreviewFetches).toBe(2);
 
     await expect(page.getByRole("link", { name: "Save PNG" })).toHaveAttribute(

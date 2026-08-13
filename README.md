@@ -38,7 +38,8 @@ Maintained with support from **OpenAI’s [Codex for Open Source](https://develo
 5. Select **Publish card** when you are ready to make the card public.
 6. Copy the stable image URL or README Markdown from **Share** and add it to your GitHub profile or project README.
 
-Future submits update the same image URL. Your README Markdown does not need to change when the usage data changes.
+Future usage submits and saved card appearance changes update the image served at
+the same URL. Your README Markdown does not need to change.
 
 ## What you get
 
@@ -62,7 +63,11 @@ Use the README card in Markdown after replacing `{handle}` with your published p
 ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png)
 ```
 
-The default card renders in English. Add `?locale=ko` for Korean. When you make the profile private, its public image endpoint returns `404`.
+The queryless URL is the canonical README link. It follows the card theme and
+language saved in your profile, so changing either setting does not require new
+Markdown. Explicit `?theme=dark|light` and `?locale=en|ko` selectors remain
+available when you need a specific variant outside the README flow. When you
+make the profile private, its public image endpoint returns `404`.
 
 GitHub's image proxy can delay a visible refresh even after the origin serves the new card. See [README card usage and cache behavior](docs/readme-card.md) for the endpoint contract and troubleshooting steps.
 

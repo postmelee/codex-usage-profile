@@ -1,6 +1,6 @@
 # GitHub README 카드
 
-Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 한 번 복사한 공개 이미지 URL을 GitHub README에 유지할 수 있고, 이후 사용량 제출이 성공하면 같은 URL이 최신 카드로 다시 렌더링된다.
+Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 URL이 저장된 대표 카드로 갱신된다.
 
 > [!IMPORTANT]
 > 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로와 카드 loading·resource reuse·공유 handoff·profile Skeleton을 보정한 saved version 23, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
@@ -25,7 +25,7 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 검증됐다. 일반 사용자에게는 #84 Gate C와 영구 public 전환 뒤 활성화한다.
 
 1. `/?view=profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
-2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공하며 primary action의 **저장**으로 PNG를 내려받을 수 있다.
+2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. README Markdown과 이미지 URL은 query 없는 고정 URL이며, 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
 3. SNS에는 `https://{origin}/api/share/{handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
 4. 데스크톱 Share Studio는 X, Threads, LinkedIn, Facebook, Reddit과 저장을 primary action으로 제공한다. 모바일 실행 환경에서는 X, Threads, Reddit과 저장 네 action을 한 줄로 제공하며, viewport가 좁은 데스크톱은 여섯 action을 유지한다.
 5. SNS 버튼은 해당 서비스의 작성 화면을 공유 링크와 함께 연다. X와 Threads에는 현지화된 문구와 링크를 전달하지만 provider API나 OAuth로 자동 게시하지 않으며, 서비스가 미리 입력된 내용을 반영하는지는 보장하지 않는다. Facebook과 LinkedIn은 모바일 앱에서 작성 화면과 내용 자동 입력을 안정적으로 열 수 없어 모바일 primary action에서 제외한다. 필요하면 **공유 링크**를 복사해 원하는 앱에 직접 붙여넣는다.
@@ -56,7 +56,9 @@ public smoke에서 검증됐다. root query는 정적 asset으로 처리되고 e
 소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. D1 공개 projection 뒤 README authority와 social object의 owner/publication id가 일치할 때만 개인화 URL을 선언한다. 기존 publication에 social object가 없거나 metadata가 불일치하거나 media read가 실패하면 실제 계정을 변경하거나 R2에 즉석 쓰기하지 않고 저장소에 포함된 2400x1260 sample을 선언한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 같은 개인화 URL의 이미지가 갱신된다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
 
 README용 `/u/{handle}/card.png`는 legacy version 7부터 사용하는 1497x918
-원본이며 릴리스 후보에서도 URL이나 응답 계약이 달라지지 않는다.
+원본이며 릴리스 후보에서도 URL이나 응답 계약이 달라지지 않는다. query 없는
+요청은 publication에 저장된 대표 테마·언어를 따르므로 설정을 바꿔도 README
+Markdown을 교체할 필요가 없다.
 
 비공개 handle과 존재하지 않는 handle은 구분 없이 사이트 기본 메타데이터와 packaged sample로 폴백한다. legacy public profile은 handle별 title/canonical을 유지하되 sample image를 사용한다. fallback은 실제 사용자 handle의 media object에 의존하지 않으므로 응답으로 private/missing handle 존재 여부를 알 수 없다.
 
@@ -128,39 +130,48 @@ profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 �
 
 ## URL, 테마와 언어
 
-query 없는 URL은 기존 README와 consumer를 위한 영문 카드를 제공한다.
+README와 이미지 URL 복사에는 다음 query 없는 canonical URL 하나만 사용한다.
 
 ```text
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
 ```
 
-한국어 카드는 `?locale=ko`로 선택한다.
+publication authority는 `canonicalTheme`과 `canonicalLocale`을 함께 저장한다.
+query 없는 요청은 이 대표 pair가 가리키는 기존 immutable revision을 읽는다.
+Profile 설정을 저장하면 pair와 같은 publication id의 social object가 갱신되므로
+URL은 그대로이고 응답 이미지와 ETag만 새 설정을 반영한다.
 
-```text
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
-```
-
-검증된 릴리스 후보에서는 테마를 `theme=dark|light`, 한국어를 `locale=ko`로 명시한다.
-영어는 locale query를 생략하며 Profile에서 저장한 선택은 Share Studio가 아래
-조합 중 하나로 복사한다.
+특정 변형을 직접 조회해야 하는 consumer를 위해 explicit selector는 하위
+호환으로 유지한다. `theme` 또는 `locale` 중 하나라도 있으면 explicit mode이며
+누락한 축은 기존 기본값 dark/en을 사용한다.
 
 ```text
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light
+https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark&locale=ko
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light&locale=ko
 ```
 
-후보가 지원하는 테마는 `dark`, `light`, 언어는 `en`, `ko`다. Profile 설정을
-저장하면 대표 URL만 바뀌며 기존 query 없는 URL의 bytes가 light로 바뀌지는 않는다.
-이미 README에 삽입한 카드의 모양을 바꾸려면 #84 공개 전환 뒤 Share Studio에서 새 대표
-URL 또는 Markdown을 복사해 교체한다.
+후보가 지원하는 테마는 `dark`, `light`, 언어는 `en`, `ko`다. `v` 같은 다른
+query만 있는 요청은 selector가 아니므로 canonical 대표 이미지를 유지한다.
+Share Studio는 explicit URL을 미리보기·저장·PNG 복사에만 사용하고 README
+Markdown과 이미지 URL에는 승격하지 않는다.
 
 #84 공개 전환 뒤 최초 **Publish card**는 dark/light × en/ko 네 immutable revision을 모두 생성한다.
 dark stable object가 publication authority이며 light stable object와 네 revision을
 같은 publication id로 연결한다. 네 변형 준비와 authority commit이 끝나기 전에는
-public visibility를 노출하지 않는다. 기존 contract v3 dark publication은 query 없는
-dark URL에 한해 계속 읽을 수 있다.
+public visibility를 노출하지 않는다. canonical pair가 모두 없는 기존 v4와 contract
+v3 publication은 dark/en으로 읽는다. pair가 하나만 없거나 값이 유효하지 않으면
+추측해서 복구하지 않고 `404`로 fail-close한다.
+
+공개 상태의 설정 저장은 네 immutable revision과 social render 결과를 먼저
+준비하고 owner 설정 CAS 전에는 stable/social authority를 바꾸지 않는다. owner
+CAS 성공 뒤 committed owner `updatedAt`, latest usage `uploadedAt`과 준비 snapshot이
+같을 때만 storage ETag 조건부로 stable과 social authority를 같은 publication id에
+commit한다. 더 최신 설정·사용량이 앞섰으면 이전 요청은 `superseded`로 끝난다.
+DB 설정은 저장됐지만 media commit이 실패하면 같은 설정을 다시 저장해 authority를
+복구할 수 있다.
 
 ## 자동 갱신 방식
 
@@ -173,11 +184,16 @@ ETag: "..."
 ```
 
 - CLI submit이 변경된 최신 사용량을 저장하면 public owner의 카드 콘텐츠 hash와 ETag가 바뀐다. exact retry도 누락된 publication을 복구하지만 콘텐츠가 같으면 같은 ETag를 유지한다.
+- 공개 설정 저장 뒤 media commit이 실패해도 같은 theme·locale PATCH를 다시 보내면 저장된 owner/latest usage 기준으로 canonical card와 social object를 수렴시킨다.
 - 브라우저나 이미지 프록시는 기존 URL을 다시 요청할 때 `If-None-Match`로 검증한다.
 - 콘텐츠가 같으면 `304 Not Modified`, 달라지면 새 PNG와 ETag를 받는다.
 - URL에 timestamp나 무작위 query를 붙일 필요가 없다.
 
 서버의 `no-cache`는 저장 금지가 아니라 사용 전 재검증을 의미한다. 따라서 동일 URL을 유지하면서 최신 이미지를 제공할 수 있다.
+
+public card GET/HEAD는 R2 stable authority와 immutable revision만 읽는다. queryless
+대표 이미지를 결정하기 위해 D1, owner/usage record 또는 on-demand renderer를
+조회하지 않는다.
 
 ## GitHub Camo
 
