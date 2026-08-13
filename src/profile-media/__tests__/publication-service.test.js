@@ -61,6 +61,8 @@ test("publishes all theme and locale revisions before exposing public visibility
   assert.equal(english.publicationId, korean.publicationId);
   assert.equal(english.publicationId, lightEnglish.publicationId);
   assert.equal(english.contractVersion, 4);
+  assert.equal(english.canonicalLocale, "en");
+  assert.equal(english.canonicalTheme, "dark");
   assert.equal(english.representations.dark.en.etag, english.etag);
   assert.equal(english.representations.dark.ko.etag, korean.etag);
   assert.equal(english.representations.light.en.etag, lightEnglish.etag);

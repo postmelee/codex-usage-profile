@@ -69,6 +69,12 @@ export function themePublicationInput(representations, options = {}) {
   if (Object.hasOwn(options, "expectedStorageEtag")) {
     input.expectedStorageEtag = options.expectedStorageEtag;
   }
+  if (Object.hasOwn(options, "canonicalLocale")) {
+    input.canonicalLocale = options.canonicalLocale;
+  }
+  if (Object.hasOwn(options, "canonicalTheme")) {
+    input.canonicalTheme = options.canonicalTheme;
+  }
   return input;
 }
 

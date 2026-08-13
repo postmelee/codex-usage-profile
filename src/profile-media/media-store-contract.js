@@ -127,6 +127,48 @@ export function normalizeProfileMediaTheme(value, options = {}) {
   throw new TypeError("theme must be dark or light");
 }
 
+export function normalizeProfileMediaCanonicalSelection(options = {}) {
+  const hasLocale = Object.hasOwn(options, "canonicalLocale");
+  const hasTheme = Object.hasOwn(options, "canonicalTheme");
+  if (!hasLocale && !hasTheme) {
+    return {
+      canonicalLocale: PROFILE_MEDIA_DEFAULT_LOCALE,
+      canonicalTheme: PROFILE_MEDIA_DEFAULT_THEME
+    };
+  }
+  if (!hasLocale || !hasTheme) {
+    throw new TypeError(
+      "canonicalLocale and canonicalTheme must be provided together"
+    );
+  }
+  return {
+    canonicalLocale: normalizeProfileMediaLocale(options.canonicalLocale, {
+      fallback: false
+    }),
+    canonicalTheme: normalizeProfileMediaTheme(options.canonicalTheme, {
+      fallback: false
+    })
+  };
+}
+
+export function resolveProfileMediaSelection(publication, options = {}) {
+  const explicit = Object.hasOwn(options, "locale") ||
+    Object.hasOwn(options, "theme");
+  if (explicit) {
+    return {
+      locale: normalizeProfileMediaLocale(options.locale),
+      mode: "explicit",
+      theme: normalizeProfileMediaTheme(options.theme)
+    };
+  }
+  const canonical = normalizeProfileMediaCanonicalSelection(publication);
+  return {
+    locale: canonical.canonicalLocale,
+    mode: "canonical",
+    theme: canonical.canonicalTheme
+  };
+}
+
 export function normalizeProfileMediaRevisionRecord(options = {}) {
   const ownerId = requireKeySegment(options.ownerId, "ownerId");
   const locale = normalizeProfileMediaLocale(options.locale, { fallback: false });
@@ -178,7 +220,8 @@ export function normalizeProfileMediaPublicationInput(options = {}) {
   const handle = requireProfileMediaHandle(options.handle);
   const publicationId = requireKeySegment(options.publicationId, "publicationId");
   const isV4 = isThemeRepresentationMap(options.representations) ||
-    options.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
+    options.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION ||
+    hasCanonicalSelectionInput(options);
 
   if (!isV4) {
     return {
@@ -204,6 +247,7 @@ export function normalizeProfileMediaPublicationInput(options = {}) {
     options.presentationDigest,
     "presentationDigest"
   );
+  const canonicalSelection = normalizeProfileMediaCanonicalSelection(options);
   const format = requireFormat(options.format);
   const representations = Object.fromEntries(
     PROFILE_MEDIA_SUPPORTED_THEMES.map((theme) => [
@@ -216,6 +260,7 @@ export function normalizeProfileMediaPublicationInput(options = {}) {
     ])
   );
   return {
+    ...canonicalSelection,
     contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
     format,
     handle,
@@ -309,12 +354,12 @@ export function createMemoryProfileMediaStore() {
 
     async getPublishedCard(options = {}) {
       const handle = requireProfileMediaHandle(options.handle);
-      const theme = normalizeProfileMediaTheme(options.theme);
       const stable = stableByHandle.get(handle);
       if (!stable || stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) {
         return null;
       }
-      if (theme === "light") {
+      const selection = resolveProfileMediaSelection(stable.publication, options);
+      if (selection.theme === "light") {
         if (stable.publication.contractVersion !== PROFILE_MEDIA_STORE_CONTRACT_VERSION) {
           return null;
         }
@@ -323,7 +368,7 @@ export function createMemoryProfileMediaStore() {
       }
       return selectPublishedRepresentation(stable.publication, {
         ...options,
-        theme
+        ...selection
       });
     },
 
@@ -409,10 +454,10 @@ export function createMemoryProfileMediaStore() {
         }),
         storageEtag
       });
-      return selectPublishedRepresentation(published, {
-        locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-        theme: PROFILE_MEDIA_DEFAULT_THEME
-      });
+      return selectPublishedRepresentation(
+        published,
+        resolveProfileMediaSelection(published)
+      );
     },
 
     async unpublishCard(options = {}) {
@@ -436,10 +481,10 @@ export function createMemoryProfileMediaStore() {
         unpublishedAt: normalizeIsoDate(options.unpublishedAt)
       });
       return {
-        ...selectPublishedRepresentation(previous.publication, {
-          locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-          theme: PROFILE_MEDIA_DEFAULT_THEME
-        }),
+        ...selectPublishedRepresentation(
+          previous.publication,
+          resolveProfileMediaSelection(previous.publication)
+        ),
         unpublishedStorageEtag: storageEtag
       };
     }
@@ -499,6 +544,11 @@ function normalizeLocaleRepresentations(value, identity) {
 function isThemeRepresentationMap(value) {
   return Boolean(value && typeof value === "object" &&
     (Object.hasOwn(value, "dark") || Object.hasOwn(value, "light")));
+}
+
+function hasCanonicalSelectionInput(value) {
+  return Object.hasOwn(value, "canonicalLocale") ||
+    Object.hasOwn(value, "canonicalTheme");
 }
 
 function normalizeRevisionContractVersion(identity) {
@@ -574,6 +624,10 @@ function createPublishedRecord(input, records) {
     ]))
     : cloneBodyMap(darkRecords);
   return {
+    ...(isV4 ? {
+      canonicalLocale: input.canonicalLocale,
+      canonicalTheme: input.canonicalTheme
+    } : {}),
     body: Buffer.from(defaultRevision.body),
     cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
     contentType: PROFILE_MEDIA_CONTENT_TYPE,
@@ -619,10 +673,9 @@ function selectPublishedRepresentation(publication, options) {
     notModified,
     revision: representation.revision,
     revisionKey: representation.revisionKey,
-    stableKey: createProfileMediaStableKey({
-      handle: publication.handle,
-      theme
-    }),
+    stableKey: options.mode === "canonical"
+      ? publication.stableKey
+      : createProfileMediaStableKey({ handle: publication.handle, theme }),
     theme
   };
 }

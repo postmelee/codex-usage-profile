@@ -13,8 +13,11 @@ import {
   createProfileMediaRevisionDigest,
   createProfileMediaRevisionKey,
   createProfileMediaStableKey,
+  normalizeProfileMediaCanonicalSelection,
   normalizeProfileMediaLocale,
-  normalizeProfileMediaTheme
+  normalizeProfileMediaPublicationInput,
+  normalizeProfileMediaTheme,
+  resolveProfileMediaSelection
 } from "../media-store-contract.js";
 
 const EN_REVISION = createProfileMediaRevisionDigest(Buffer.from("english-png"));
@@ -90,6 +93,44 @@ test("normalizes supported media locales and falls back to English", () => {
     () => normalizeProfileMediaLocale("fr", { fallback: false }),
     /locale must be en or ko/
   );
+});
+
+test("normalizes canonical selection as an atomic v4 publication pair", () => {
+  assert.deepEqual(normalizeProfileMediaCanonicalSelection(), {
+    canonicalLocale: "en",
+    canonicalTheme: "dark"
+  });
+  assert.deepEqual(normalizeProfileMediaCanonicalSelection({
+    canonicalLocale: "ko-KR",
+    canonicalTheme: "LIGHT"
+  }), {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  });
+  assert.throws(
+    () => normalizeProfileMediaCanonicalSelection({ canonicalLocale: "ko" }),
+    /must be provided together/
+  );
+  assert.throws(
+    () => normalizeProfileMediaCanonicalSelection({
+      canonicalLocale: "ko",
+      canonicalTheme: "system"
+    }),
+    /theme must be dark or light/
+  );
+  assert.deepEqual(resolveProfileMediaSelection({}), {
+    locale: "en",
+    mode: "canonical",
+    theme: "dark"
+  });
+  assert.deepEqual(resolveProfileMediaSelection({
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  }, { theme: "dark" }), {
+    locale: "en",
+    mode: "explicit",
+    theme: "dark"
+  });
 });
 
 test("media contract publishes one atomic locale set behind a stable handle", async () => {
@@ -209,6 +250,98 @@ test("media contract v4 publishes coherent dark and light variants", async () =>
       theme: "light"
     })).theme,
     "light"
+  );
+});
+
+test("queryless v4 reads follow canonical selection while selectors stay explicit", async () => {
+  const store = createMemoryProfileMediaStore();
+  const darkEn = createThemeRevision("dark", "en", "dark-english");
+  const darkKo = createThemeRevision("dark", "ko", "dark-korean");
+  const lightEn = createThemeRevision("light", "en", "light-english");
+  const lightKo = createThemeRevision("light", "ko", "light-korean");
+  const representations = {
+    dark: { en: darkEn, ko: darkKo },
+    light: { en: lightEn, ko: lightKo }
+  };
+
+  for (const revision of [darkEn, darkKo, lightEn, lightKo]) {
+    await store.putRevision(revision);
+  }
+  const input = createV4Publication(representations, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  });
+  const normalizedInput = normalizeProfileMediaPublicationInput(input);
+  assert.deepEqual(
+    {
+      canonicalLocale: normalizedInput.canonicalLocale,
+      canonicalTheme: normalizedInput.canonicalTheme
+    },
+    { canonicalLocale: "ko", canonicalTheme: "light" }
+  );
+
+  const published = await store.publishRevision(input);
+  assert.equal(published.canonicalLocale, "ko");
+  assert.equal(published.canonicalTheme, "light");
+  assert.equal(published.locale, "ko");
+  assert.equal(published.theme, "light");
+  assert.equal(published.stableKey, "cards/v2/public/postmelee/card.png");
+  assert.deepEqual(published.body, Buffer.from("light-korean"));
+
+  const selectorFree = await store.getPublishedCard({
+    handle: "postmelee",
+    ifNoneMatch: lightKo.etag
+  });
+  assert.equal(selectorFree.notModified, true);
+  assert.equal(selectorFree.locale, "ko");
+  assert.equal(selectorFree.theme, "light");
+  assert.equal(selectorFree.stableKey, "cards/v2/public/postmelee/card.png");
+
+  const themeOnly = await store.getPublishedCard({
+    handle: "postmelee",
+    theme: "light"
+  });
+  assert.equal(themeOnly.locale, "en");
+  assert.equal(themeOnly.theme, "light");
+  assert.equal(
+    themeOnly.stableKey,
+    "cards/v2/public/postmelee/themes/light/card.png"
+  );
+  assert.deepEqual(themeOnly.body, Buffer.from("light-english"));
+
+  const localeOnly = await store.getPublishedCard({
+    handle: "postmelee",
+    locale: "ko"
+  });
+  assert.equal(localeOnly.locale, "ko");
+  assert.equal(localeOnly.theme, "dark");
+  assert.equal(localeOnly.stableKey, "cards/v2/public/postmelee/card.png");
+  assert.deepEqual(localeOnly.body, Buffer.from("dark-korean"));
+});
+
+test("partial or invalid canonical publication selection fails closed", () => {
+  const darkEn = createThemeRevision("dark", "en", "dark-english");
+  const darkKo = createThemeRevision("dark", "ko", "dark-korean");
+  const lightEn = createThemeRevision("light", "en", "light-english");
+  const lightKo = createThemeRevision("light", "ko", "light-korean");
+  const representations = {
+    dark: { en: darkEn, ko: darkKo },
+    light: { en: lightEn, ko: lightKo }
+  };
+
+  assert.throws(
+    () => normalizeProfileMediaPublicationInput(createV4Publication(
+      representations,
+      { canonicalLocale: "ko" }
+    )),
+    /must be provided together/
+  );
+  assert.throws(
+    () => resolveProfileMediaSelection({
+      canonicalLocale: "ko",
+      canonicalTheme: "system"
+    }),
+    /theme must be dark or light/
   );
 });
 
