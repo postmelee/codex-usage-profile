@@ -3006,7 +3006,7 @@ test.describe("Home and share card flow", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
+  test("Share card dialog keeps all destinations in a narrow desktop viewport", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -3029,7 +3029,9 @@ test.describe("Home and share card flow", () => {
       "opacity",
       "1"
     );
-    const mobileTargets = await page.locator(".share-studio-primary-action")
+    await expect(page.getByRole("link", { name: "Share on LinkedIn" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Share on Facebook" })).toBeVisible();
+    const narrowDesktopTargets = await page.locator(".share-studio-primary-action")
       .evaluateAll((elements) => elements.map((element) => {
         const bounds = element.getBoundingClientRect();
         return {
@@ -3039,8 +3041,8 @@ test.describe("Home and share card flow", () => {
           right: bounds.right
         };
       }));
-    expect(mobileTargets).toHaveLength(6);
-    for (const target of mobileTargets) {
+    expect(narrowDesktopTargets).toHaveLength(6);
+    for (const target of narrowDesktopTargets) {
       expect(target.height).toBeGreaterThanOrEqual(44);
       expect(target.left).toBeGreaterThanOrEqual(0);
       expect(target.right).toBeLessThanOrEqual(390);
@@ -3069,8 +3071,115 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
 
     await page.screenshot({
-      path: testInfo.outputPath("share-mobile-with-instructions.png")
+      path: testInfo.outputPath("share-narrow-desktop.png")
     });
+  });
+
+  test("Task #102 mobile Share Studio keeps four actions on one row", async ({
+    browser
+  }, testInfo) => {
+    const scenarios = [
+      {
+        device: devices["iPhone 13"],
+        label: "iphone-390",
+        viewport: { height: 844, width: 390 }
+      },
+      {
+        device: devices["Pixel 5"],
+        label: "android-320",
+        viewport: { height: 800, width: 320 }
+      }
+    ];
+
+    for (const { device, label, viewport } of scenarios) {
+      const context = await browser.newContext({
+        ...device,
+        baseURL: E2E_ORIGIN,
+        viewport
+      });
+      const page = await context.newPage();
+
+      try {
+        await page.emulateMedia({ colorScheme: "dark" });
+        await mockAuthenticatedAccount(page);
+        await page.route("**/api/profile", (route) => fulfillJson(route, {
+          data: ownerProfile("public"),
+          ok: true
+        }));
+        await mockCardImages(page);
+        await page.goto("/");
+        await page.evaluate(() => {
+          globalThis.__shareActionCounts = [];
+          globalThis.__shareActionObserver = new MutationObserver(() => {
+            const count = document.querySelectorAll(
+              ".share-studio-primary-action"
+            ).length;
+            if (count > 0) globalThis.__shareActionCounts.push(count);
+          });
+          globalThis.__shareActionObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+        });
+
+        await page.getByRole("button", { name: "Share", exact: true }).tap();
+        const dialog = page.getByRole("dialog", { name: "Share activity" });
+        const actions = page.locator(".share-studio-primary-action");
+        await expect(dialog).toBeVisible();
+        await expect(actions).toHaveCount(4);
+        await expect(page.getByRole("link", { name: "Share on X" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Threads" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Save PNG" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+          .toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Share on Facebook" }))
+          .toHaveCount(0);
+        await expect(actions.last()).toHaveCSS("opacity", "1");
+
+        const layout = await actions.evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          return {
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            targets,
+            viewportWidth: document.documentElement.clientWidth
+          };
+        });
+        expect(layout.targets).toHaveLength(4);
+        expect(
+          Math.max(...layout.targets.map(({ top }) => top))
+            - Math.min(...layout.targets.map(({ top }) => top))
+        ).toBeLessThanOrEqual(1);
+        for (const target of layout.targets) {
+          expect(target.height).toBeGreaterThanOrEqual(44);
+          expect(target.left).toBeGreaterThanOrEqual(0);
+          expect(target.right).toBeLessThanOrEqual(layout.viewportWidth);
+        }
+        expect(layout.horizontalOverflow).toBe(false);
+
+        const observedCounts = await page.evaluate(() => {
+          globalThis.__shareActionObserver.disconnect();
+          return [...new Set(globalThis.__shareActionCounts)];
+        });
+        expect(observedCounts).toEqual([4]);
+        await page.screenshot({
+          path: testInfo.outputPath(`share-${label}.png`)
+        });
+      } finally {
+        await context.close();
+      }
+    }
   });
 
   test("Share Studio settles after resize and fits a short desktop", async ({ page }, testInfo) => {
