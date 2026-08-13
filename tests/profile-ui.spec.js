@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { devices, expect, test } from "@playwright/test";
 
+import { resolveE2eOrigin } from "./e2eOrigin.js";
+
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
 const OWNER_PROFILE_ROUTE = "/?view=profile";
@@ -11,7 +13,7 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
-const E2E_ORIGIN = process.env.PROFILE_E2E_ORIGIN ?? "http://127.0.0.1:5173";
+const E2E_ORIGIN = resolveE2eOrigin(process.env.PROFILE_E2E_ORIGIN).origin;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
@@ -3016,7 +3018,7 @@ test.describe("Home and share card flow", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("Share card dialog keeps all destinations in a narrow desktop viewport", async ({ page }, testInfo) => {
+  test("Share card dialog keeps all destinations at 320 and 390 desktop widths", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -3024,65 +3026,82 @@ test.describe("Home and share card flow", () => {
     }));
     await mockCardImages(page);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    await page.getByRole("button", { name: "Share", exact: true }).click();
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await page.getByRole("button", { name: "Share", exact: true }).click();
 
-    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
-    await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
-      "aspect-ratio",
-      "499 / 306"
-    );
-    await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
-    await expect(page.locator(".share-studio-primary-action").first()).toHaveCSS(
-      "opacity",
-      "1"
-    );
-    await expect(page.getByRole("link", { name: "Share on LinkedIn" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Share on Facebook" })).toBeVisible();
-    const narrowDesktopTargets = await page.locator(".share-studio-primary-action")
-      .evaluateAll((elements) => elements.map((element) => {
-        const bounds = element.getBoundingClientRect();
-        return {
-          bottom: bounds.bottom,
-          height: bounds.height,
-          left: bounds.left,
-          right: bounds.right
-        };
-      }));
-    expect(narrowDesktopTargets).toHaveLength(6);
-    for (const target of narrowDesktopTargets) {
-      expect(target.height).toBeGreaterThanOrEqual(44);
-      expect(target.left).toBeGreaterThanOrEqual(0);
-      expect(target.right).toBeLessThanOrEqual(390);
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
+      await expect(page.getByRole("img", { name: "Codex usage card preview" }))
+        .toHaveCSS("aspect-ratio", "499 / 306");
+      await expect(page.getByTestId("share-studio-backdrop"))
+        .toHaveClass(/\bis-open\b/);
+      await expect(page.locator(".share-studio-primary-action").first())
+        .toHaveCSS("opacity", "1");
+      await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+        .toBeVisible();
+      await expect(page.getByRole("link", { name: "Share on Facebook" }))
+        .toBeVisible();
+
+      const compactLayout = await page.locator(".share-studio-primary-action")
+        .evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          const rowTops = [];
+          for (const target of targets) {
+            const existing = rowTops.find((top) => Math.abs(top - target.top) <= 1);
+            if (existing === undefined) rowTops.push(target.top);
+          }
+          const actions = document.querySelector(".share-studio-primary-actions")
+            .getBoundingClientRect();
+          const card = document.querySelector(".share-studio-card-motion")
+            .getBoundingClientRect();
+          return {
+            actionCenter: actions.left + (actions.width / 2),
+            actionWidth: actions.width,
+            cardCenter: card.left + (card.width / 2),
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            rowCounts: rowTops.map((top) => targets.filter(
+              (target) => Math.abs(top - target.top) <= 1
+            ).length),
+            targets
+          };
+        });
+      expect(compactLayout.targets).toHaveLength(6);
+      expect(compactLayout.rowCounts).toEqual([4, 2]);
+      expect(compactLayout.horizontalOverflow).toBe(false);
+      for (const target of compactLayout.targets) {
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expect(target.left).toBeGreaterThanOrEqual(0);
+        expect(target.right).toBeLessThanOrEqual(width);
+      }
+      expect(compactLayout.actionWidth).toBeLessThanOrEqual(280);
+      expect(
+        Math.abs(compactLayout.actionCenter - compactLayout.cardCenter)
+      ).toBeLessThanOrEqual(1);
+
+      const secondaryTargetHeights = await page
+        .locator(".share-studio-secondary-action, .share-studio-privacy-action")
+        .evaluateAll((elements) => elements.map(
+          (element) => element.getBoundingClientRect().height
+        ));
+      expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
+      await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+      await page.screenshot({
+        path: testInfo.outputPath(`share-narrow-desktop-${width}.png`)
+      });
     }
-    const compactActionLayout = await page.evaluate(() => {
-      const actions = document.querySelector(".share-studio-primary-actions")
-        .getBoundingClientRect();
-      const card = document.querySelector(".share-studio-card-motion")
-        .getBoundingClientRect();
-      return {
-        actionCenter: actions.left + (actions.width / 2),
-        actionWidth: actions.width,
-        cardCenter: card.left + (card.width / 2)
-      };
-    });
-    expect(compactActionLayout.actionWidth).toBeLessThanOrEqual(280);
-    expect(
-      Math.abs(compactActionLayout.actionCenter - compactActionLayout.cardCenter)
-    ).toBeLessThanOrEqual(1);
-    const secondaryTargetHeights = await page
-      .locator(".share-studio-secondary-action, .share-studio-privacy-action")
-      .evaluateAll((elements) => elements.map(
-        (element) => element.getBoundingClientRect().height
-      ));
-    expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
-    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
-
-    await page.screenshot({
-      path: testInfo.outputPath("share-narrow-desktop.png")
-    });
   });
 
   test("Task #102 mobile Share Studio keeps four actions on one row", async ({
@@ -4138,6 +4157,8 @@ test.describe("Settings appearance control", () => {
     });
     const shareStudio = page.getByRole("dialog", { name: "Share activity" });
     await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-share-preview-source", "public");
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",

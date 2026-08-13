@@ -12,6 +12,7 @@ GitHub Issue: [#102](https://github.com/postmelee/codex-usage-profile/issues/102
 | 2 | Share Studio 연결과 모바일 한 줄 layout | `ShareStudio.jsx`, `styles.css`, mobile/desktop E2E | DOM·접근성, 320/390px 한 줄, 44px hit target |
 | 3 | 사용자 문서 현행화와 전체 회귀 | `docs/readme-card.md`, 전체 검증 | Node·Playwright·build, #101 handoff |
 | 4 | X 본문·링크 개행 보완과 실기기 재배포 | X intent 계약 테스트, 전체 검증, owner-only Sites version | `%0A` raw query, composer text, production response |
+| 5 | PR 리뷰 반영과 E2E 격리 강화 | 공용 E2E origin helper, 320px desktop·handoff phase 회귀, 문서·PR 정합화 | helper unit, Node·Playwright·build, 최신 CI |
 
 ## 문서 위치 확인
 
@@ -21,8 +22,8 @@ GitHub Issue: [#102](https://github.com/postmelee/codex-usage-profile/issues/102
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
 | 사용자 공유 문서 | `docs/` | `docs/readme-card.md` | OK | Stage 3에서 모바일·desktop 대상 차이를 설명하는 기존 절만 최소 수정한다. |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_102_stage{1..4}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
-| 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_102_report.md` | OK | Stage 3 승인 뒤 최종 보고 절차에서 작성한다. |
+| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_102_stage{1..5}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
+| 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_102_report.md` | OK | Stage 5 검증 뒤 최종 결과까지 현행화한다. |
 | 오늘할일 | `mydocs/orders/` | `mydocs/orders/20260813.md` | OK | 승인·단계 상태만 기존 행에서 갱신한다. |
 | README·아키텍처·운영 문서 | 변경 없음 | 변경 없음 | OK | #84 production 상태와 #101 revision·cache 계약을 침범하지 않는다. |
 
@@ -253,6 +254,68 @@ git diff --check
 Task #102 Stage 4: X 본문과 링크 개행 보완
 ```
 
+## Stage 5 — PR 리뷰 반영과 E2E 격리 강화
+
+### 산출물
+
+신규:
+
+- `tests/e2eOrigin.js`
+- `tests/e2eOrigin.test.js`
+- `mydocs/working/task_m100_102_stage5.md`
+
+수정:
+
+- `playwright.config.js`
+- `tests/profile-ui.spec.js`
+- `docs/readme-card.md`
+- `mydocs/plans/task_m100_102_impl.md`
+- `mydocs/orders/20260813.md`
+- `mydocs/report/task_m100_102_report.md`
+- PR #103 본문과 conversation comment
+
+### 변경 내용
+
+- Playwright config와 spec이 같은 helper로 `PROFILE_E2E_ORIGIN`을 정규화한다. trailing
+  slash는 제거하고 빈 문자열은 미설정과 같이 worktree 기본 origin으로 처리한다.
+- 환경 변수가 없으면 current working directory를 결정적으로 hash한 loopback port를
+  사용한다. `reuseExistingServer`는 끄고 다른 worktree source 재사용으로 생기는 false-green을
+  차단한다. Playwright discovery는 `*.spec.js`로 한정하고 Vite는 `--strictPort`로 시작한다.
+- origin helper의 explicit loopback, trailing slash, 빈 값, worktree별 기본 port와 invalid
+  origin 오류 계약을 Node 단위 테스트로 고정한다.
+- Settings의 Save & share 검증은 `data-share-preview-source="public"` phase를 먼저 단언한 뒤
+  same-origin 상대 public target URL을 확인한다.
+- 좁은 desktop UA의 390px뿐 아니라 삭제한 360px 이하 CSS 범위 안인 320px에서도 SNS 5개와
+  Save가 남고 4+2 row, 44px hit target, horizontal overflow 없음이 유지되는지 확인한다.
+- 한국어 사용자 문서의 primary action label을 실제 locale copy인 `저장`으로 맞춘다.
+- Stage 5 검증 뒤 오늘할일을 새 완료 시각으로 마감하고, 최종 보고서와 PR 본문을 최신
+  Stage·commit·CI·실기기 결과로 맞춘다.
+
+### 검증
+
+```bash
+node --test tests/e2eOrigin.test.js src/profile-ui/__tests__/shareStudio.test.js
+PROFILE_E2E_ORIGIN=http://127.0.0.1:5300/ npx playwright test tests/profile-ui.spec.js --grep "narrow desktop|card appearance saves"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build
+git diff --check
+```
+
+### 완료 조건
+
+- config와 spec은 빈 값·trailing slash·기본 origin을 동일하게 해석한다.
+- env가 없는 동시 worktree 실행은 같은 5173 서버를 재사용하지 않는다.
+- Settings handoff assertion은 source phase를 명시하고 320px desktop 6개 action 회귀가 통과한다.
+- 한국어 문서, 오늘할일, 최종 보고서, PR 본문이 Stage 5와 최신 CI를 가리킨다.
+- 전체 Node·Playwright·build와 diff 검증이 통과한다.
+
+### 커밋
+
+```text
+Task #102 Stage 5: PR 리뷰 반영과 E2E 격리 강화
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
@@ -265,6 +328,8 @@ Task #102 Stage 4: X 본문과 링크 개행 보완
   production mutation 여부를 확인한 뒤 승인된 안전한 경로만 사용한다.
 - Stage 4는 승인된 기존 owner-only Sites project와 환경·D1·R2 binding을 그대로 유지하고
   exact Stage 4 commit의 새 version만 저장·배포한다.
+- Stage 5는 제품 공유 동작과 Sites runtime을 변경하지 않고 test harness·회귀 근거·문서와
+  PR metadata만 정합화한다. 따라서 별도 Sites 배포 없이 최신 PR CI를 배포 외 검증으로 쓴다.
 
 ## 커밋
 
@@ -278,6 +343,8 @@ Task #102 Stage 4: X 본문과 링크 개행 보완
 - Stage 3은 Stage 2의 실제 device context E2E와 단계 보고 승인 후 진행한다.
 - Stage 4는 Stage 3 owner-only 실기기 확인에서 발견된 X separator 결과를 반영하며,
   작업지시자의 구현·배포 승인을 근거로 진행한다.
+- Stage 5는 PR #103의 top-level review comment와 작업지시자의 8개 항목 반영·push·comment
+  게시 승인을 근거로 진행한다.
 - #101 Stage 4는 #102 병합 뒤 최신 `devel`을 반영하고 mobile filter 회귀를 검증해야 한다.
 
 ## 위험과 대응
