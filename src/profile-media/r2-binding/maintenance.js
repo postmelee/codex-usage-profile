@@ -461,6 +461,10 @@ function sanitizePublication(value) {
     ]))
     : sanitizeRepresentations(value.representations, "dark");
   return {
+    ...(isV4 ? {
+      canonicalLocale: value.canonicalLocale,
+      canonicalTheme: value.canonicalTheme
+    } : {}),
     contractVersion: value.contractVersion,
     format: value.format,
     handle: value.handle,

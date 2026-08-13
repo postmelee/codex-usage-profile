@@ -217,6 +217,93 @@ test("native R2 binding serves light only when it matches the dark authority", a
   );
 });
 
+test("native R2 binding serves canonical queryless selection and explicit variants", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("canonical-v4");
+  await putThemeRepresentations(store, revisions);
+  const published = await store.publishRevision(themePublicationInput(revisions, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light",
+    expectedStorageEtag: null
+  }));
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  const stableMetadata = bucket.objects.get(stableKey).customMetadata;
+
+  assert.equal(stableMetadata["canonical-locale"], "ko");
+  assert.equal(stableMetadata["canonical-theme"], "light");
+  assert.equal(published.locale, "ko");
+  assert.equal(published.theme, "light");
+  assert.equal(published.stableKey, stableKey);
+  assert.deepEqual(published.body, revisions.light.ko.body);
+
+  const queryless = await store.getPublishedCard({ handle: HANDLE });
+  assert.equal(queryless.locale, "ko");
+  assert.equal(queryless.theme, "light");
+  assert.equal(queryless.stableKey, stableKey);
+  assert.deepEqual(queryless.body, revisions.light.ko.body);
+
+  const themeOnly = await store.getPublishedCard({
+    handle: HANDLE,
+    theme: "light"
+  });
+  assert.equal(themeOnly.locale, "en");
+  assert.equal(themeOnly.theme, "light");
+  assert.deepEqual(themeOnly.body, revisions.light.en.body);
+
+  const localeOnly = await store.getPublishedCard({
+    handle: HANDLE,
+    locale: "ko"
+  });
+  assert.equal(localeOnly.locale, "ko");
+  assert.equal(localeOnly.theme, "dark");
+  assert.deepEqual(localeOnly.body, revisions.dark.ko.body);
+
+  const notModified = await store.getPublishedCard({
+    handle: HANDLE,
+    ifNoneMatch: revisions.light.ko.etag
+  });
+  assert.equal(notModified.notModified, true);
+  assert.equal(notModified.stableKey, stableKey);
+
+  const inspected = await store.inspectStableCard({ handle: HANDLE });
+  assert.equal(inspected.publication.canonicalLocale, "ko");
+  assert.equal(inspected.publication.canonicalTheme, "light");
+  assert.equal(inspected.publication.locale, "en");
+  assert.equal(inspected.publication.theme, "dark");
+});
+
+test("native R2 binding defaults legacy v4 selection and rejects partial metadata", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("legacy-v4");
+  await putThemeRepresentations(store, revisions);
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  const metadata = bucket.objects.get(stableKey).customMetadata;
+  delete metadata["canonical-locale"];
+  delete metadata["canonical-theme"];
+
+  const legacy = await store.getPublishedCard({ handle: HANDLE });
+  assert.equal(legacy.locale, "en");
+  assert.equal(legacy.theme, "dark");
+  assert.deepEqual(legacy.body, revisions.dark.en.body);
+
+  metadata["canonical-locale"] = "ko";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE }),
+    (error) => error.code === "invalid"
+  );
+
+  metadata["canonical-theme"] = "system";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE }),
+    (error) => error.code === "invalid"
+  );
+});
+
 test("native R2 binding fails closed when the light object is missing or stale", async () => {
   const bucket = createFakeR2Bucket();
   const store = createR2BindingProfileMediaStore({ bucket });
