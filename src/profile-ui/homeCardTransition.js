@@ -52,25 +52,29 @@ export function createHomeCardTransition({ fallbackSrc, target } = {}) {
     src: fallbackSrc
   });
 
+  const normalizedTarget = createHomeCardSource(target);
   return freezeTransition({
     fallbackSource,
     generation: 1,
-    pending: createHomeCardSource(target),
+    pending: normalizedTarget,
     pendingIsFallback: false,
     status: HOME_CARD_TRANSITION_STATUSES.LOADING,
+    target: normalizedTarget,
     visible: null
   });
 }
 
 export function beginHomeCardTransition(state, target) {
   const current = requireTransition(state);
+  const normalizedTarget = createHomeCardSource(target);
 
   return freezeTransition({
     ...current,
     generation: current.generation + 1,
-    pending: createHomeCardSource(target),
+    pending: normalizedTarget,
     pendingIsFallback: false,
-    status: HOME_CARD_TRANSITION_STATUSES.LOADING
+    status: HOME_CARD_TRANSITION_STATUSES.LOADING,
+    target: normalizedTarget
   });
 }
 
@@ -117,15 +121,34 @@ export function rejectHomeCardTransition(state, generation) {
 
 export function resetHomeCardTransition(state, target) {
   const current = requireTransition(state);
+  const normalizedTarget = createHomeCardSource(target);
 
   return freezeTransition({
     ...current,
     generation: current.generation + 1,
-    pending: createHomeCardSource(target),
+    pending: normalizedTarget,
     pendingIsFallback: false,
     status: HOME_CARD_TRANSITION_STATUSES.LOADING,
+    target: normalizedTarget,
     visible: null
   });
+}
+
+export function isHomeCardTransitionReadyForTarget(state, target) {
+  const current = requireTransition(state);
+  if (!target) return false;
+
+  const normalizedTarget = createHomeCardSource(target);
+  if (!areHomeCardSourcesEqual(current.target, normalizedTarget)) return false;
+
+  if (current.status === HOME_CARD_TRANSITION_STATUSES.READY) {
+    return areHomeCardSourcesEqual(current.visible, normalizedTarget);
+  }
+
+  return (
+    current.status === HOME_CARD_TRANSITION_STATUSES.FALLBACK &&
+    areHomeCardSourcesEqual(current.visible, current.fallbackSource)
+  );
 }
 
 export function loadHomeCardImage(source, options = {}) {
@@ -220,6 +243,7 @@ function freezeTransition(state) {
     pending: state.pending,
     pendingIsFallback: state.pendingIsFallback,
     status: state.status,
+    target: state.target,
     visible: state.visible
   });
 }
