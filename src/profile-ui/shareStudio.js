@@ -121,6 +121,9 @@ export function buildShareTargets(options = {}) {
       }
     }),
     createTarget({
+      // The Threads iOS app shows the raw query verbatim, so form-encoded
+      // spaces reach the composer as literal plus signs. X and Reddit decode
+      // "+" as a space, so only Threads needs the percent-escaped form.
       baseUrl: "https://www.threads.net/intent/post",
       id: "threads",
       label: copy.threads,
