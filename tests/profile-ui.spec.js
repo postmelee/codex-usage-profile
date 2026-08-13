@@ -2279,7 +2279,7 @@ test.describe("Home and share card flow", () => {
     await expect(backdrop).toHaveClass(/\bis-open\b/);
 
     const socialTargets = [
-      ["Share on X", "X", "https://x.com", "/intent/post"],
+      ["Share on X", "X", "https://x.com", "/intent/tweet"],
       ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
       ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
     ];
@@ -4131,7 +4131,7 @@ test.describe("Settings appearance control", () => {
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+        "/u/postmelee/card.png?theme=dark"
       );
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
