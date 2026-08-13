@@ -68,25 +68,37 @@ git status --short
 - OK — GitHub Markdown render API가 `width="50%"`와 바깥 `/api/share/postmelee`
   anchor를 보존했다. image `src`는 Camo로 변환됐지만 `data-canonical-src`는 query
   없는 stable card URL로 유지됐다.
+- OK — Sites version 32가 exact Stage 6 commit
+  `6cf2bab664e5a1f0b1e6051cc35887721c307e99`로 production 게시됐다.
+- OK — production queryless card는 `200 image/png`, 143,666 bytes,
+  `Cache-Control: public, no-cache, must-revalidate`, ETag
+  `"u-FSOdmkTILngkqFbrERjiggFNnA30FSXp0zinckP9s"`를 반환했다.
+- OK — production `/api/share/postmelee`는 `200 text/html`과 handle별 canonical,
+  Open Graph, Twitter metadata를 반환했다.
+- OK — production Share Studio를 새로고침한 뒤 실제 clipboard가 기본 폭 50%,
+  `/api/share/postmelee` anchor, query 없는 `/u/postmelee/card.png` source의 exact
+  HTML 임베드를 반환했다. 이미지 URL 복사는 기존 queryless URL을 유지했다.
+- OK — 최초 확인에서 GitHub Camo ICN edge는 이전 dark/ko PNG를 `HIT`, age 2,483으로
+  반환했다. 작업지시자 승인 뒤 정확한 Camo URL 한 건만 purge했고, 직후 `MISS`,
+  age 0으로 현재 light/en PNG를 다시 가져왔다. 원본과 Camo의 byte length는 모두
+  143,666, SHA-256은 모두
+  `bbe15239d9a44c82e7824a856eb1118e282014d9c0df41525e9d338a77243fdb`로 일치했다.
 - OK — `git diff --check` 통과. 검증용 dependency 연결을 원래 worktree 상태로
   복원했으며 단계 산출물 외 변경은 없다.
 
 ## 잔여 위험
 
-- 현재 production은 Stage 5 배포이므로 Share Studio와 CLI/API의 복사 문자열은
-  Stage 6 커밋 게시 전까지 이전 Markdown image 형식이다.
 - GitHub Camo의 실제 재검증 시점은 GitHub가 관리한다. 새 HTML은 바깥 anchor를
-  서비스 공유 페이지로 고정하지만 image bytes 갱신 지연 자체를 제거하지 않는다.
+  서비스 공유 페이지로 고정하지만 이후 대표 이미지가 다시 바뀔 때 Camo 갱신이
+  지연될 가능성 자체를 제거하지 않는다. purge는 상시 제품 흐름이 아니라 실제
+  지연이 장시간 지속될 때만 사용하는 운영 예외다.
 
 ## 다음 단계 영향
 
-- 이 보고서와 단계 소스를 한 커밋으로 고정한 뒤, 승인된 기존 Sites project에
-  그 commit을 게시한다.
-- production에서 Share Studio clipboard, account usage API/CLI 응답, 공유 페이지
-  anchor, queryless PNG와 GitHub renderer를 smoke 검증한다.
-- production smoke가 통과하면 Task #100 최종 보고서와 PR 게시 승인 단계로 진행한다.
+- Stage 6 production 게시와 smoke가 완료됐다. Task #100 최종 보고서와 PR 게시
+  승인 단계로 진행한다.
 
 ## 승인 요청
 
-- Stage 6 산출물과 검증 결과를 승인하면 production smoke 결과를 확정하고 최종
-  보고서·PR 게시 단계로 진행한다.
+- Stage 6 산출물과 production 검증 결과를 승인하면 최종 보고서·PR 게시 단계로
+  진행한다.

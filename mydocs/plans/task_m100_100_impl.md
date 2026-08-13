@@ -3,7 +3,7 @@
 - 수행계획서: [`task_m100_100.md`](task_m100_100.md)
 - GitHub Issue: [#100](https://github.com/postmelee/codex-usage-profile/issues/100)
 - 마일스톤: M100 — v1.0 MVP
-- 상태: Stage 6 구현 중
+- 상태: Stage 6 완료, 최종 보고서·PR 게시 승인 대기
 
 ## 단계 개요
 
