@@ -342,14 +342,25 @@ button {
   .account-popover,
   .account-menu-items,
   .account-menu-item,
+  .account-status-dot,
   .home-view,
+  .home-account-identity > img,
+  .home-account-identity > span,
+  .home-quickstart-access,
+  .home-quickstart-status,
+  .home-quickstart-steps li,
   .home-quickstart,
   .home-command-row,
   .card-profile-view,
   .public-profile-view,
   .profile-view,
   .profile-stats,
+  .profile-loading-shimmer,
+  .profile-loading-stats,
+  .profile-loading-stat + .profile-loading-stat::before,
+  .profile-loading-card,
   .profile-card-section,
+  .card-preview-fallback,
   .card-style-settings,
   .card-style-option,
   .public-profile-owner-banner,
@@ -357,6 +368,8 @@ button {
   .settings-appearance-option,
   .settings-panel,
   .settings-note,
+  .settings-token-list,
+  .settings-token-row,
   .settings-token-reveal,
   .settings-action-row input,
   .settings-device-edit-row input,
@@ -1134,6 +1147,13 @@ button {
   border-radius: inherit;
   filter: drop-shadow(0 16px 28px var(--card-filter-shadow));
   width: 100%;
+}
+
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam::before,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam::after,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam [data-beam-bloom] {
+  animation-play-state: paused !important;
 }
 
 @keyframes home-card-skeleton-progress {

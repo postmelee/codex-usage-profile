@@ -132,7 +132,7 @@ export function MarketingCardPreview({
       suspended={transitionSuspended}
     >
       <BorderBeam
-        active={!busy && !prefersReducedMotion && !transitionSuspended}
+        active={!busy && !prefersReducedMotion}
         borderRadius={measuredRadius ?? undefined}
         brightness={1.05}
         className="home-card-beam"

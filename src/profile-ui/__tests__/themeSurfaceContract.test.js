@@ -86,6 +86,21 @@ test("Task #96 every shared card frame receives an explicit card theme", async (
 
 test("Task #96 theme transitions stay scoped away from dense content", async () => {
   const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
+  const surfaceAllowlist = findThemeSurfaceAllowlist(stylesheet);
+  const requiredSurfaceSelectors = [
+    ".account-status-dot",
+    ".home-account-identity > img",
+    ".home-account-identity > span",
+    ".home-quickstart-access",
+    ".home-quickstart-status",
+    ".home-quickstart-steps li",
+    ".profile-loading-shimmer",
+    ".profile-loading-stats",
+    ".profile-loading-stat + .profile-loading-stat::before",
+    ".profile-loading-card",
+    ".settings-token-list",
+    ".settings-token-row"
+  ];
 
   assert.doesNotMatch(
     stylesheet,
@@ -105,6 +120,12 @@ test("Task #96 theme transitions stay scoped away from dense content", async () 
     findRule(stylesheet, ".token-cell"),
     /transition:\s*background-color 100ms cubic-bezier\(0\.2, 0, 0, 1\);/
   );
+  for (const selector of requiredSurfaceSelectors) {
+    assert.ok(
+      surfaceAllowlist.includes(selector),
+      `${selector} must participate in the bounded theme surface transition`
+    );
+  }
 });
 
 test("Task #96 inactive card Skeleton stops shimmer and leaves the DOM", async () => {
@@ -120,15 +141,68 @@ test("Task #96 inactive card Skeleton stops shimmer and leaves the DOM", async (
     /animation:\s*home-card-skeleton-progress 1\.6s linear infinite;/
   );
   assert.match(marketing, /HOME_CARD_SKELETON_EXIT_DURATION_MS = 240/);
-  assert.match(marketing, /if \(!active && !retained\) \{\s*return null;/);
+});
+
+test("Task #96 Share handoff pauses the existing BorderBeam without restarting it", async () => {
+  const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
+  const marketing = await readFile(SOURCE_PATHS.marketing, "utf8");
+
+  assert.match(
+    marketing,
+    /<BorderBeam[\s\S]*?active=\{!busy && !prefersReducedMotion\}/
+  );
+  assert.doesNotMatch(
+    marketing,
+    /<BorderBeam[\s\S]*?active=\{[^}]*transitionSuspended[^}]*\}/
+  );
+  assert.match(
+    stylesheet,
+    /\.home-card-tilt\[data-share-transition-active="true"\] \.home-card-beam[\s\S]*?animation-play-state:\s*paused !important;/
+  );
 });
 
 function findRule(stylesheet, selector) {
-  const bodies = Array.from(stylesheet.matchAll(/([^{}]+)\{([^{}]*)\}/g))
-    .filter((match) => match[1].split(",").some((candidate) => (
-      candidate.trim() === selector
-    )))
-    .map((match) => match[2]);
-  assert.ok(bodies.length > 0, `Missing CSS rule for ${selector}`);
+  let cursor = 0;
+  const bodies = [];
+
+  while (cursor < stylesheet.length) {
+    const openingBrace = stylesheet.indexOf("{", cursor);
+    if (openingBrace < 0) {
+      break;
+    }
+
+    let depth = 1;
+    let closingBrace = openingBrace + 1;
+    while (closingBrace < stylesheet.length && depth > 0) {
+      if (stylesheet[closingBrace] === "{") {
+        depth += 1;
+      } else if (stylesheet[closingBrace] === "}") {
+        depth -= 1;
+      }
+      closingBrace += 1;
+    }
+
+    const heading = stylesheet
+      .slice(cursor, openingBrace)
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .trim();
+    if (
+      !heading.includes(":where(")
+      && heading.split(",").some((candidate) => candidate.trim() === selector)
+    ) {
+      bodies.push(stylesheet.slice(openingBrace + 1, closingBrace - 1));
+    }
+    cursor = closingBrace;
+  }
+
+  assert.ok(bodies.length > 0, `Missing top-level CSS rule for ${selector}`);
   return bodies.join("\n");
+}
+
+function findThemeSurfaceAllowlist(stylesheet) {
+  const match = stylesheet.match(
+    /:root\[data-theme-animating\]\s+:where\(([\s\S]*?)\)\s*\{\s*transition:\s*background-color 240ms ease,\s*border-color 240ms ease !important;/
+  );
+  assert.ok(match, "Missing bounded theme surface transition rule");
+  return match[1].split(",").map((selector) => selector.trim());
 }

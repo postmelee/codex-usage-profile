@@ -10,8 +10,9 @@ import {
 } from "./useCardHandoffMotion.js";
 
 export const PUBLIC_CARD_INTRO_ROTATION_DURATION = 900;
-// Decelerating curve: the card leaves fast and settles slowly into its slot.
-export const PUBLIC_CARD_INTRO_CLOSE_EASING = "cubic-bezier(0.05, 0.7, 0.1, 1)";
+// The resting slot may be below the mobile viewport. Start slowly enough for
+// the spatial relationship to remain visible, then accelerate out of view.
+export const PUBLIC_CARD_INTRO_CLOSE_EASING = "cubic-bezier(0.3, 0, 1, 1)";
 
 // Every frame stays fully opaque so a stalled or unsupported Web Animation can
 // never leave the card invisible; the rotation alone carries the entrance.
@@ -55,6 +56,7 @@ export function PublicCardIntro({
     requestCloseRef
   } = useCardHandoffMotion({
     active: canRender,
+    allowOffscreenCloseHandoff: true,
     closeEasing: PUBLIC_CARD_INTRO_CLOSE_EASING,
     introDuration: prefersReducedMotion()
       ? 140

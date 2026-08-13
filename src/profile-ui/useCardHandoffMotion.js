@@ -24,6 +24,8 @@ export const CARD_HANDOFF_PHASES = Object.freeze({
 export function useCardHandoffMotion(options = {}) {
   const {
     active,
+    allowOffscreenCloseHandoff = false,
+    allowPartiallyVisibleHandoff = false,
     closeEasing = "cubic-bezier(0.3, 0, 1, 1)",
     introDuration = 280,
     introFrames = null,
@@ -96,6 +98,7 @@ export function useCardHandoffMotion(options = {}) {
     // already in the DOM below the fold, but the opening is not a handoff.
     const sourceTransform = !reduceMotion && !introFrames
       ? resolveCardHandoffMotion({
+        allowPartialTranslate: allowPartiallyVisibleHandoff,
         coarsePointer: prefersCoarsePointer(),
         source: resolvedSourceRect,
         target: targetRect,
@@ -169,7 +172,14 @@ export function useCardHandoffMotion(options = {}) {
         animationRef.current = null;
       }
     };
-  }, [active, ready, restartKey, sourceCardRef, sourceRect]);
+  }, [
+    active,
+    allowPartiallyVisibleHandoff,
+    ready,
+    restartKey,
+    sourceCardRef,
+    sourceRect
+  ]);
 
   useLayoutEffect(() => {
     if (!active) return undefined;
@@ -227,7 +237,7 @@ export function useCardHandoffMotion(options = {}) {
     const currentTransform = currentStyle.transform === "none"
       ? CARD_HANDOFF_IDENTITY_TRANSFORM
       : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+    const currentOpacity = readCardOpacity(currentStyle.opacity);
 
     animationRef.current?.cancel();
     animationRef.current = null;
@@ -235,12 +245,15 @@ export function useCardHandoffMotion(options = {}) {
     const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect, true);
     const sourceTransform = !reduceMotion
       ? resolveCardHandoffMotion({
+        allowOffscreenTranslate: allowOffscreenCloseHandoff,
+        allowPartialTranslate: allowPartiallyVisibleHandoff,
         coarsePointer: prefersCoarsePointer(),
         source: resolvedSourceRect,
         target: targetRect,
         viewport: getMotionViewportRect()
       })
       : null;
+    card.dataset.motionMode = sourceTransform?.mode ?? CARD_HANDOFF_MODES.TARGET;
     const usesSourceMotion = Boolean(
       sourceTransform
       && sourceTransform.mode !== CARD_HANDOFF_MODES.TARGET
@@ -296,7 +309,7 @@ export function useCardHandoffMotion(options = {}) {
     const previousStyle = revealedSourceStyleRef.current?.trim();
     source.setAttribute(
       "style",
-      `${previousStyle ? `${previousStyle};` : ""}opacity: 1;`
+      `${previousStyle ? `${previousStyle};` : ""}opacity: 1; transition: none;`
     );
 
     const duration = reduceMotion ? 80 : CARD_HANDOFF_SOURCE_DURATION;
@@ -306,7 +319,7 @@ export function useCardHandoffMotion(options = {}) {
     const currentTransform = currentStyle.transform === "none"
       ? CARD_HANDOFF_IDENTITY_TRANSFORM
       : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+    const currentOpacity = readCardOpacity(currentStyle.opacity);
     const frames = reduceMotion
       ? [
         { opacity: currentOpacity },
@@ -376,6 +389,8 @@ export function buildRectTransform(source, target) {
 }
 
 export function resolveCardHandoffMotion({
+  allowOffscreenTranslate = false,
+  allowPartialTranslate = false,
   coarsePointer = false,
   source,
   target,
@@ -405,7 +420,14 @@ export function resolveCardHandoffMotion({
   const translateY = rectCenterY(source) - rectCenterY(target);
   const translatedTarget = offsetRect(target, translateX, translateY);
 
-  if (isRectWithinViewport(translatedTarget, viewport)) {
+  if (
+    allowOffscreenTranslate
+    || isRectWithinViewport(translatedTarget, viewport)
+    || (
+      allowPartialTranslate
+      && isRectMeaningfullyVisible(translatedTarget, viewport)
+    )
+  ) {
     return {
       distance: Math.hypot(translateX, translateY),
       mode: CARD_HANDOFF_MODES.TRANSLATE,
@@ -418,6 +440,11 @@ export function resolveCardHandoffMotion({
     mode: CARD_HANDOFF_MODES.TARGET,
     value: CARD_HANDOFF_IDENTITY_TRANSFORM
   };
+}
+
+export function readCardOpacity(value, fallback = 1) {
+  const opacity = Number.parseFloat(value);
+  return Number.isFinite(opacity) ? opacity : fallback;
 }
 
 export function getOpenDuration(distance) {
@@ -462,6 +489,32 @@ export function isRectWithinViewport(rect, viewport) {
     && rect.left + rect.width <= viewport.right
     && rect.top + rect.height <= viewport.bottom
   );
+}
+
+export function isRectMeaningfullyVisible(rect, viewport, minimumRatio = 0.25) {
+  if (
+    !isValidRect(rect)
+    || !isValidViewportRect(viewport)
+    || !Number.isFinite(minimumRatio)
+    || minimumRatio <= 0
+    || minimumRatio > 1
+  ) {
+    return false;
+  }
+
+  const visibleWidth = Math.max(
+    0,
+    Math.min(rect.left + rect.width, viewport.right)
+      - Math.max(rect.left, viewport.left)
+  );
+  const visibleHeight = Math.max(
+    0,
+    Math.min(rect.top + rect.height, viewport.bottom)
+      - Math.max(rect.top, viewport.top)
+  );
+  const visibleRatio = (visibleWidth * visibleHeight) / (rect.width * rect.height);
+
+  return visibleRatio >= minimumRatio;
 }
 
 export function prefersCoarsePointer() {

@@ -5,6 +5,7 @@ import {
   buildLocalizedCardUrl,
   buildProfileLoginHref,
   buildReadmeCardSnippet,
+  buildSameOriginCardPreviewUrl,
   resolveShareLocale,
   resolveShareTheme
 } from "../cardShare.js";
@@ -61,6 +62,33 @@ test("preserves legacy queryless dark URLs and rejects unsafe schemes", () => {
   );
   assert.equal(buildLocalizedCardUrl("javascript:alert(1)", "en", "dark"), null);
   assert.equal(buildLocalizedCardUrl("data:image/png;base64,abc", "en"), null);
+});
+
+test("rebases a canonical public card route to the active local origin", () => {
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "http://192.168.12.7:5177/u/postmelee/card.png?theme=dark",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    "/u/postmelee/card.png?theme=dark"
+  );
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "https://profiles.example.test/not-a-card.png",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    null
+  );
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "https://profiles.example.test/u/someone-else/card.png",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    null
+  );
 });
 
 test("builds GitHub login links that always return to the owner profile", () => {
