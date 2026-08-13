@@ -82,11 +82,22 @@
   --card-preview-divider: #242424;
   --card-preview-text: #ffffff;
   --card-preview-muted: #aeaeae;
+  --card-preview-light-background: #ffffff;
+  --card-preview-light-placeholder: #eeeeee;
+  --card-preview-light-placeholder-subtle: #e3e3e1;
+  --card-preview-light-divider: #ececec;
+  --card-preview-light-text: #202123;
+  --card-preview-light-muted: #686868;
   --card-preview-glare-bright: rgba(210, 235, 255, 0.14);
   --card-preview-glare-mid: rgba(82, 164, 255, 0.06);
   --card-preview-glare-faint: rgba(41, 106, 190, 0.02);
-  --skeleton-sheen-edge: rgba(255, 255, 255, 0.025);
-  --skeleton-sheen-center: rgba(255, 255, 255, 0.065);
+  --card-skeleton-sheen-edge: rgba(255, 255, 255, 0.025);
+  --card-skeleton-sheen-center: rgba(255, 255, 255, 0.065);
+  --card-skeleton-light-sheen-edge: rgba(17, 17, 17, 0.025);
+  --card-skeleton-light-sheen-center: rgba(17, 17, 17, 0.075);
+  --page-skeleton-base: light-dark(#dededc, #292929);
+  --page-skeleton-sheen-edge: light-dark(rgba(17, 17, 17, 0.025), rgba(255, 255, 255, 0.025));
+  --page-skeleton-sheen-center: light-dark(rgba(17, 17, 17, 0.075), rgba(255, 255, 255, 0.065));
   --avatar-placeholder-start: light-dark(#c7ccd6, #3b4050);
   --avatar-placeholder-end: light-dark(#e4e4e2, #232323);
   --profile-placeholder-background: light-dark(#e0e0de, #252525);
@@ -317,17 +328,189 @@ button {
   }
 }
 
-/* Theme swaps flip every surface at once, so colour transitions are enabled
-   only while a swap is in flight. Leaving them on permanently would slow every
-   hover and interfere with the card motion work. */
-:root[data-theme-animating] *,
-:root[data-theme-animating] *::before,
-:root[data-theme-animating] *::after {
+/* Theme swaps give each property one animation owner. Major containers own
+   their surfaces while semantic descendants own text color. Animating inherited
+   color on both levels retargets the descendant transition every frame and
+   produces a grey hold followed by a second transition. */
+:root[data-theme-animating] :where(
+  body,
+  .app-frame,
+  .profile-shell,
+  .profile-topbar,
+  .profile-topbar-theme-track,
+  .profile-topbar-theme-knob,
+  .account-popover,
+  .account-menu-items,
+  .account-menu-item,
+  .account-status-dot,
+  .home-view,
+  .home-account-identity > img,
+  .home-account-identity > span,
+  .home-quickstart-access,
+  .home-quickstart-status,
+  .home-quickstart-steps li,
+  .home-quickstart,
+  .home-command-row,
+  .card-profile-view,
+  .public-profile-view,
+  .profile-view,
+  .profile-stats,
+  .profile-loading-shimmer,
+  .profile-loading-stats,
+  .profile-loading-stat + .profile-loading-stat::before,
+  .profile-loading-card,
+  .profile-card-section,
+  .card-preview-fallback,
+  .card-style-settings,
+  .card-style-option,
+  .public-profile-owner-banner,
+  .settings-view,
+  .settings-appearance-option,
+  .settings-panel,
+  .settings-note,
+  .settings-token-list,
+  .settings-token-row,
+  .settings-token-reveal,
+  .settings-action-row input,
+  .settings-device-edit-row input,
+  .settings-token-code-row code,
+  .settings-muted-action,
+  .settings-danger-action,
+  .device-view,
+  .device-panel,
+  .device-form input,
+  .device-command-row code,
+  .device-copy-action,
+  .activity-empty,
+  .primary-command,
+  .secondary-command,
+  .icon-command,
+  .site-footer
+) {
   transition:
     background-color 240ms ease,
-    border-color 240ms ease,
-    color 240ms ease,
-    fill 240ms ease !important;
+    border-color 240ms ease !important;
+}
+
+:root[data-theme-animating] :where(
+  .profile-topbar-title,
+  .profile-topbar-github,
+  .profile-topbar-theme-icon,
+  .profile-actions > button,
+  .profile-actions > a,
+  .profile-actions > .account-menu > button,
+  .account-menu-item,
+  .account-avatar-fallback,
+  .account-popover-identity strong,
+  .account-popover-identity span,
+  .account-menu-error,
+  .home-heading h1,
+  .home-heading p,
+  .home-account-identity strong,
+  .home-account-identity small,
+  .home-status,
+  .home-quickstart-heading h2,
+  .home-quickstart-heading p,
+  .home-quickstart-access p,
+  .home-quickstart-status,
+  .home-command-label,
+  .home-command-row code,
+  .home-command-copy,
+  .home-copy-status,
+  .home-step-number,
+  .home-quickstart-steps h3,
+  .home-quickstart-steps p,
+  .card-profile-heading h2,
+  .card-profile-message h1,
+  .card-profile-message > p,
+  .card-profile-empty-description,
+  .card-profile-empty-privacy,
+  .visibility-status,
+  .card-style-settings-heading h3,
+  .card-style-settings-heading p,
+  .card-style-settings-heading a,
+  .card-style-option-group legend,
+  .card-style-option strong,
+  .card-style-option small,
+  .card-style-settings-status,
+  .public-profile-heading h1,
+  .public-profile-heading p,
+  .public-profile-state h1,
+  .public-profile-state p,
+  .public-profile-owner-banner-copy strong,
+  .public-profile-owner-banner-copy span,
+  .settings-heading h1,
+  .settings-appearance-title,
+  .settings-appearance-description,
+  .settings-appearance-copy strong,
+  .settings-appearance-copy small,
+  .settings-state-heading h2,
+  .settings-state-heading p,
+  .settings-panel-heading h2,
+  .settings-token-count,
+  .settings-account-copy strong,
+  .settings-account-copy span,
+  .settings-note,
+  .settings-detail-row dt,
+  .settings-detail-row dd,
+  .settings-token-form label,
+  .settings-token-reveal strong,
+  .settings-token-info strong,
+  .settings-token-info span,
+  .settings-list-state,
+  .settings-limit-note,
+  .settings-error,
+  .settings-action-row input,
+  .settings-device-edit-row input,
+  .settings-token-code-row code,
+  .settings-muted-action,
+  .settings-danger-action,
+  .device-header h1,
+  .device-header p,
+  .device-form input,
+  .device-command-row code,
+  .device-copy-action,
+  .device-form label,
+  .device-security-note,
+  .device-status,
+  .device-copy-status,
+  .device-success-links a,
+  .device-help-link,
+  .profile-heading h1,
+  .profile-heading h2,
+  .profile-heading p,
+  .profile-stage h2,
+  .profile-stage p,
+  .plan-pill,
+  .profile-stat dd,
+  .profile-stat dt,
+  .token-activity h2,
+  .activity-panel h3,
+  .token-tabs button,
+  .exact-token-toggle,
+  .month-labels,
+  .activity-row,
+  .plugin-row,
+  .activity-row dd,
+  .plugin-runs,
+  .activity-empty,
+  .primary-command,
+  .secondary-command,
+  .icon-command,
+  .site-footer-about p,
+  .site-footer-about .site-footer-brand,
+  .site-footer-privacy,
+  .site-footer-links a,
+  .site-footer-copyright
+) {
+  transition: color 240ms ease !important;
+}
+
+/* Heatmap cells keep their quicker 100ms feedback outside theme swaps. During
+   a theme swap they share the page timeline so their contrast does not settle
+   before the surrounding surface and text. */
+:root[data-theme-animating] .token-cell {
+  transition: background-color 240ms ease !important;
 }
 
 .profile-topbar-leading {
@@ -670,6 +853,17 @@ button {
   position: relative;
 }
 
+.home-card-media[data-card-theme="light"] {
+  --card-preview-background: var(--card-preview-light-background);
+  --card-preview-placeholder: var(--card-preview-light-placeholder);
+  --card-preview-placeholder-subtle: var(--card-preview-light-placeholder-subtle);
+  --card-preview-divider: var(--card-preview-light-divider);
+  --card-preview-text: var(--card-preview-light-text);
+  --card-preview-muted: var(--card-preview-light-muted);
+  --card-skeleton-sheen-edge: var(--card-skeleton-light-sheen-edge);
+  --card-skeleton-sheen-center: var(--card-skeleton-light-sheen-center);
+}
+
 .home-card-skeleton {
   background: var(--card-preview-background);
   border-radius: inherit;
@@ -710,13 +904,12 @@ button {
 }
 
 .home-card-skeleton::after {
-  animation: home-card-skeleton-progress 1.6s linear infinite;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--skeleton-sheen-edge) 38%,
-    var(--skeleton-sheen-center) 50%,
-    var(--skeleton-sheen-edge) 62%,
+    var(--card-skeleton-sheen-edge) 38%,
+    var(--card-skeleton-sheen-center) 50%,
+    var(--card-skeleton-sheen-edge) 62%,
     transparent 100%
   );
   content: "";
@@ -724,6 +917,10 @@ button {
   position: absolute;
   transform: translateX(-100%);
   z-index: 1;
+}
+
+.home-card-skeleton[data-active="true"]::after {
+  animation: home-card-skeleton-progress 1.6s linear infinite;
 }
 
 .home-card-skeleton-header {
@@ -946,10 +1143,22 @@ button {
   border-radius: inherit;
 }
 
+.home-card-tilt[data-tilt-enabled="false"]::part(container),
+.home-card-tilt[data-tilt-enabled="false"]::part(tilt) {
+  touch-action: auto;
+}
+
 .home-card-beam {
   border-radius: inherit;
   filter: drop-shadow(0 16px 28px var(--card-filter-shadow));
   width: 100%;
+}
+
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam::before,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam::after,
+.home-card-tilt[data-share-transition-active="true"] .home-card-beam [data-beam-bloom] {
+  animation-play-state: paused !important;
 }
 
 @keyframes home-card-skeleton-progress {
@@ -1020,6 +1229,7 @@ button {
 }
 
 .home-account-identity strong {
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1061,6 +1271,7 @@ button {
 }
 
 .home-quickstart-heading h2 {
+  color: var(--text-primary);
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1178,6 +1389,7 @@ button {
 }
 
 .home-quickstart-steps h3 {
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
@@ -1489,7 +1701,7 @@ button {
 }
 
 .profile-loading-shimmer {
-  background: var(--card-preview-placeholder-subtle);
+  background: var(--page-skeleton-base);
   display: block;
   overflow: hidden;
   position: relative;
@@ -1501,9 +1713,9 @@ button {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--skeleton-sheen-edge) 38%,
-    var(--skeleton-sheen-center) 50%,
-    var(--skeleton-sheen-edge) 62%,
+    var(--page-skeleton-sheen-edge) 38%,
+    var(--page-skeleton-sheen-center) 50%,
+    var(--page-skeleton-sheen-edge) 62%,
     transparent 100%
   );
   content: "";
@@ -2999,6 +3211,7 @@ button {
 }
 
 .device-header h1 {
+  color: var(--text-primary);
   font-size: 28px;
   font-weight: 500;
   line-height: 1.15;
@@ -3297,6 +3510,7 @@ button {
 .profile-heading h1,
 .profile-heading h2,
 .profile-stage h2 {
+  color: var(--text-primary);
   font-size: 28px;
   font-weight: 500;
   line-height: 1.15;
@@ -3747,7 +3961,8 @@ button {
     animation: none;
   }
 
-  .home-card-skeleton::after {
+  .home-card-skeleton::after,
+  .home-card-skeleton[data-active="true"]::after {
     animation: none;
     opacity: 0;
     transform: none;

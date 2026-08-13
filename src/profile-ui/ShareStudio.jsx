@@ -13,7 +13,8 @@ import { BrandLogo } from "./BrandLogo.jsx";
 import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
   buildLocalizedCardUrl,
-  buildReadmeCardSnippet
+  buildReadmeCardSnippet,
+  buildSameOriginCardPreviewUrl
 } from "./cardShare.js";
 import {
   buildPublicProfileShareUrl,
@@ -59,6 +60,14 @@ export function ShareStudio({
     [cardLocale, cardTheme, locale, publicCardUrl]
   );
   const markdown = useMemo(() => buildReadmeCardSnippet(imageUrl), [imageUrl]);
+  const previewImageUrl = useMemo(
+    () => buildSameOriginCardPreviewUrl(
+      imageUrl,
+      locationOrigin,
+      publicOwnerHandle
+    ),
+    [imageUrl, locationOrigin, publicOwnerHandle]
+  );
   const publicProfileUrl = useMemo(
     () => buildPublicProfileShareUrl(locationOrigin, publicOwnerHandle),
     [locationOrigin, publicOwnerHandle]
@@ -76,24 +85,16 @@ export function ShareStudio({
   const cardImage = useCardImageReadiness({
     scopeKey: publicOwnerHandle ?? "share-studio",
     sourceKind: "public",
-    src: canRender ? imageUrl : null
+    src: canRender ? previewImageUrl : null
   });
-  const hasSourceRequest = Boolean(
+  const hasWarmSource = Boolean(
     canRender &&
     sourceCardImage?.displaySrc &&
     sourceCardImage?.scopeKey &&
     sourceCardImage?.sourceKind &&
     sourceCardImage?.sourceUrl
   );
-  const sourceImage = useCardImageReadiness({
-    scopeKey: sourceCardImage?.scopeKey ?? "share-source",
-    sourceKind: sourceCardImage?.sourceKind ?? "owner",
-    src: hasSourceRequest ? sourceCardImage.sourceUrl : null
-  });
-  const sourceDisplaySrc = sourceImage.displaySrc ?? (
-    hasSourceRequest ? sourceCardImage.displaySrc : null
-  );
-  const hasWarmSource = Boolean(sourceDisplaySrc);
+  const sourceDisplaySrc = hasWarmSource ? sourceCardImage.displaySrc : null;
 
   const {
     cardRef: motionCardRef,
@@ -103,6 +104,7 @@ export function ShareStudio({
     settleAtTarget
   } = useCardHandoffMotion({
     active: canRender,
+    allowPartiallyVisibleHandoff: true,
     onClose,
     ready: hasWarmSource || (cardImage.ready && !previewFailed),
     restartKey: cardImage.desiredSrc,
@@ -215,7 +217,7 @@ export function ShareStudio({
     : sourceCardImage?.sourceKind ?? "public";
   const previewSourceUrl = showPublicTarget
     ? cardImage.visibleSrc
-    : sourceImage.visibleSrc ?? sourceCardImage?.sourceUrl ?? cardImage.visibleSrc;
+    : sourceCardImage?.sourceUrl ?? cardImage.visibleSrc;
 
   async function copyValue(value, status) {
     try {
@@ -232,7 +234,9 @@ export function ShareStudio({
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
         throw new Error("Image clipboard unavailable");
       }
-      const response = await fetch(imageUrl, { credentials: "same-origin" });
+      const response = await fetch(previewImageUrl ?? imageUrl, {
+        credentials: "same-origin"
+      });
       if (!response.ok) throw new Error("Could not load image");
       const blob = await response.blob();
       const png = blob.type === "image/png"
@@ -305,6 +309,7 @@ export function ShareStudio({
           <CardImageFrame
             alt={copy.previewAlt}
             busy={previewBusy}
+            cardTheme={cardTheme}
             errorLabel={copy.previewUnavailable}
             imageClassName={`share-card-preview share-studio-card${showPublicTarget ? ` is-public-target${hasWarmSource ? " is-warm-handoff-target" : ""}` : hasWarmSource ? " is-handoff-source" : ""}`}
             loadingLabel={copy.previewAlt}

@@ -5,7 +5,9 @@ import {
   CARD_HANDOFF_IDENTITY_TRANSFORM,
   CARD_HANDOFF_MODES,
   buildRectTransform,
+  isRectMeaningfullyVisible,
   isRectWithinViewport,
+  readCardOpacity,
   resolveCardHandoffMotion
 } from "../useCardHandoffMotion.js";
 
@@ -64,6 +66,67 @@ test("settles at the target when target-sized center translation leaves the view
     mode: CARD_HANDOFF_MODES.TARGET,
     value: CARD_HANDOFF_IDENTITY_TRANSFORM
   });
+});
+
+test("allows an explicit target-sized offscreen close handoff", () => {
+  const source = rect(20, 400, 1120, 684);
+  const target = rect(20, 170, 350, 214);
+
+  const motion = resolveCardHandoffMotion({
+    allowOffscreenTranslate: true,
+    coarsePointer: true,
+    source,
+    target,
+    viewport: VIEWPORT
+  });
+
+  assert.equal(motion.mode, CARD_HANDOFF_MODES.TRANSLATE);
+  assert.equal(motion.value, "translate3d(385px, 465px, 0) scale(1)");
+});
+
+test("allows a target-sized handoff from a meaningfully visible clipped source", () => {
+  const source = rect(20, -107, 350, 214);
+  const target = rect(20, 170, 350, 214);
+
+  const motion = resolveCardHandoffMotion({
+    allowPartialTranslate: true,
+    coarsePointer: true,
+    source,
+    target,
+    viewport: VIEWPORT
+  });
+
+  assert.equal(motion.mode, CARD_HANDOFF_MODES.TRANSLATE);
+  assert.equal(motion.value, "translate3d(0px, -277px, 0) scale(1)");
+  assert.equal(isRectMeaningfullyVisible(source, VIEWPORT), true);
+});
+
+test("rejects clipped or oversized sources without meaningful viewport overlap", () => {
+  const target = rect(20, 170, 350, 214);
+
+  for (const source of [
+    rect(20, -180, 350, 214),
+    rect(20, 400, 1120, 684)
+  ]) {
+    assert.deepEqual(resolveCardHandoffMotion({
+      allowPartialTranslate: true,
+      coarsePointer: true,
+      source,
+      target,
+      viewport: VIEWPORT
+    }), {
+      distance: 0,
+      mode: CARD_HANDOFF_MODES.TARGET,
+      value: CARD_HANDOFF_IDENTITY_TRANSFORM
+    });
+  }
+});
+
+test("preserves a fully transparent card opacity during phased handoff", () => {
+  assert.equal(readCardOpacity("0"), 0);
+  assert.equal(readCardOpacity("0.45"), 0.45);
+  assert.equal(readCardOpacity("invalid"), 1);
+  assert.equal(readCardOpacity(undefined, 0.25), 0.25);
 });
 
 test("downgrades an unsafe fine-pointer scale to a safe translation", () => {

@@ -72,6 +72,240 @@ test("card readiness releases reacquired same-source leases", async ({ page }) =
 });
 
 test.describe("theme surfaces", () => {
+  test("Task #96 light Profile Skeleton uses a site-theme palette", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAnonymousAccount(page);
+    await page.route("**/api/profiles/public/postmelee", () => new Promise(() => {}));
+    await page.goto(PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const loadingSkeleton = page.getByTestId("public-profile-loading-skeleton");
+    const pagePlaceholder = loadingSkeleton.locator(".profile-loading-shimmer").first();
+    const cardPlaceholder = loadingSkeleton.locator(".home-card-skeleton");
+    await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
+
+    const palette = await pagePlaceholder.evaluate((element) => {
+      const background = getComputedStyle(element).backgroundColor;
+      const channels = background.match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+      return {
+        background,
+        lightness: channels.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3,
+        sheen: getComputedStyle(element, "::after").backgroundImage
+      };
+    });
+    expect(palette.lightness).toBeGreaterThan(180);
+    expect(palette.sheen).not.toContain("rgba(255, 255, 255");
+
+    await expect(cardPlaceholder).toHaveCSS("background-color", "rgb(24, 24, 24)");
+
+    const loadingSurfaces = loadingSkeleton.locator([
+      ".profile-loading-shimmer",
+      ".profile-loading-stats",
+      ".profile-loading-card"
+    ].join(", "));
+    await expectThemeSurfaceTransition(page, loadingSurfaces, {
+      toggleName: "Switch to dark theme"
+    });
+  });
+
+  test("Task #96 card Skeleton follows the card theme instead of the site theme", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await page.route("**/u/postmelee/card.png*", () => new Promise(() => {}));
+    await page.goto(SITES_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const publicCard = page.locator(
+      ".public-profile-stage .profile-card-section .home-card-media"
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(publicCard).toHaveAttribute("data-card-theme", "light");
+    await expect(publicCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(publicCard.locator(".home-card-skeleton-avatar"))
+      .toHaveCSS("background-color", "rgb(238, 238, 238)");
+  });
+
+  test("Task #96 owner draft switches the card Skeleton palette independently", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", () => new Promise(() => {}));
+    await page.goto(OWNER_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const ownerCard = page.locator(".profile-card-section .home-card-media");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "dark");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(24, 24, 24)");
+
+    await page.getByRole("radio", { name: "Light" }).click();
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "light");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
+  });
+
+  test("Task #96 semantic primary text stays inside one theme transition window", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const homeTargets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3",
+      ".home-account-identity strong"
+    ].join(", "));
+    await expect(homeTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, homeTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    const profileTargets = page.locator([
+      ".profile-heading h1",
+      ".profile-heading h2",
+      ".profile-stage h2"
+    ].join(", "));
+    await expect(profileTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, profileTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 Home dividers and anonymous access share the theme surface transition", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    const surfaceTargets = page.locator([
+      ".home-quickstart-access",
+      ".home-quickstart-steps li"
+    ].join(", "));
+    await expect(surfaceTargets.first()).toBeVisible();
+    await expectThemeSurfaceTransition(page, surfaceTargets, {
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 Home avatar surface shares the theme transition", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const avatar = page.locator(".home-account-identity > img, .home-account-identity > span");
+    await expect(avatar).toBeVisible();
+    await expectThemeSurfaceTransition(page, avatar, {
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 theme text and heatmap keep one stable transition timeline", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto(OWNER_PROFILE_ROUTE);
+
+    const heading = page.locator(".profile-heading h1");
+    const heatmap = page.locator(".token-cell.token-level-4").first();
+    await expect(heading).toBeVisible();
+    await expect(heatmap).toBeVisible();
+
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(23, 23, 23)",
+      heatmap: "rgb(40, 116, 179)",
+      toggleName: "Switch to light theme"
+    });
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(242, 242, 242)",
+      heatmap: "rgb(140, 195, 255)",
+      toggleName: "Switch to dark theme"
+    });
+  });
+
+  test("Task #96 theme swap avoids dense heatmap and inactive Skeleton animation fan-out", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "ready");
+    await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const homeAnimationCount = await page.evaluate(() => (
+      document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    ));
+    expect(homeAnimationCount).toBeLessThan(160);
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    await expect(page.locator(".token-cell").first()).toBeVisible();
+    await expect(page.locator(".profile-card-section .home-card-skeleton"))
+      .toHaveCount(0);
+    await page.getByRole("switch").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const profileAnimationContract = await page.evaluate(() => ({
+      heatmapCellCount: document.querySelectorAll(".token-cell").length,
+      heatmap: Array.from(document.querySelectorAll(".token-cell")).reduce(
+        (sum, element) => sum + element.getAnimations().length,
+        0
+      ),
+      total: document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    }));
+    expect(profileAnimationContract.heatmap)
+      .toBe(profileAnimationContract.heatmapCellCount);
+    expect(profileAnimationContract.total).toBeLessThan(560);
+  });
+
+  test("Task #96 reduced motion changes semantic text without a transition window", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    const targets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3"
+    ].join(", "));
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+    expect(await targets.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, duration: style.transitionDuration };
+    }))).toEqual(Array.from({ length: await targets.count() }, () => ({
+      color: "rgb(23, 23, 23)",
+      duration: "0s"
+    })));
+  });
+
   test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
     const approvedArtworkSelectors = [
       ".avatar-fallback",
@@ -552,7 +786,7 @@ test.describe("Marketing mirror", () => {
       "data-tilt-enabled",
       "false"
     );
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const mobileCard = await page.locator(".home-card-tilt").boundingBox();
     const mobileCta = await page.getByRole("link", {
       name: "Create your card"
@@ -824,7 +1058,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".home-card-media")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-beam")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
 
     releaseAccount();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
@@ -900,7 +1134,7 @@ test.describe("Home and share card flow", () => {
         "data-card-source-url",
         "/assets/codex-card-sample.png"
       );
-      await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
+      await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
       if (failureStatus === 503) {
         await page.screenshot({
           path: testInfo.outputPath("home-card-fallback-desktop.png")
@@ -1013,9 +1247,7 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
     await expect(media).toHaveAttribute("data-card-status", "ready");
     await expect(media).toHaveAttribute("aria-busy", "false");
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0.24s");
+    await expect(skeleton).toHaveCount(0);
     await expect(loadingStatus).toHaveText("");
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
     await expect(page.locator('[data-card-source="true"]'))
@@ -1177,7 +1409,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     const readyQuickstartBox = await page
       .getByRole("heading", { name: "Quickstart" })
@@ -1239,8 +1471,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     expectRectNear(readyCardBox, loadingCardBox, 1);
     await page.screenshot({
@@ -1417,7 +1648,7 @@ test.describe("Home and share card flow", () => {
     const card = page.getByRole("img", { name: "Your Codex usage card" });
     await expect(card).toHaveCSS("opacity", "1");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const cardBox = await card.boundingBox();
     expect(cardBox).not.toBeNull();
     expect(cardBox.x).toBeGreaterThanOrEqual(0);
@@ -1993,7 +2224,14 @@ test.describe("Home and share card flow", () => {
     await expect(shareButton).toBeEnabled();
     await expect(shareButton.locator("svg")).toHaveCount(0);
     const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceBeam = sourceCard.locator(".home-card-beam");
     await expect(sourceCard).toBeVisible();
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    await expect.poll(() => sourceBeam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
     const sourceBox = await sourceCard.boundingBox();
 
     await shareButton.click();
@@ -2003,6 +2241,12 @@ test.describe("Home and share card flow", () => {
     await expect(dialog).toBeVisible();
     await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
     await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "paused")
+    ))).toBe(true);
     await expect(sourceCard).toHaveCSS("opacity", "0");
     await expect.poll(
       () => page
@@ -2118,6 +2362,18 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
     await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
     await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "running")
+    ))).toBe(true);
+    expect(await sourceBeam.evaluate((element) => (
+      element.getAnimations().filter((animation) => (
+        animation.animationName.includes("beam-fade-in")
+        && animation.playState === "running"
+      )).length
+    ))).toBe(0);
 
     await shareButton.click();
     await expect(dialog).toBeVisible();
@@ -2195,8 +2451,7 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-motion-mode", "scale");
     await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
     await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     expect(publicPreviewFetches).toBe(1);
     const targetPresentation = await motionCard.evaluate((element) => {
@@ -2234,6 +2489,26 @@ test.describe("Home and share card flow", () => {
     await expect(motionImage).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => motionImage.getAttribute("src")).not.toBe(sourceBlobUrl);
     expect(publicPreviewFetches).toBe(1);
+
+    const handoffPhase = page.waitForFunction(() => (
+      document.querySelector('[data-testid="share-studio-backdrop"]')
+        ?.classList.contains("is-handoff") ?? false
+    ));
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
+    await handoffPhase;
+    expect(await sourceCard.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        opacity: style.opacity,
+        transitionDuration: style.transitionDuration,
+        transitionProperty: style.transitionProperty
+      };
+    })).toEqual({
+      opacity: "1",
+      transitionDuration: "0s",
+      transitionProperty: "none"
+    });
   });
 
   test("Share Studio restores the source when closed before the public target is ready", async ({ page }) => {
@@ -2579,6 +2854,156 @@ test.describe("Home and share card flow", () => {
     } finally {
       await context.close();
     }
+  });
+
+  test("Task #96 mobile Share Studio moves from a partially visible source", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const source = await sourceCard.evaluate((element) => {
+        const initial = element.getBoundingClientRect();
+        document.scrollingElement.scrollBy(
+          0,
+          initial.top + (initial.height / 2)
+        );
+        const clipped = element.getBoundingClientRect();
+        const viewportTop = globalThis.visualViewport?.offsetTop ?? 0;
+        const viewportHeight = globalThis.visualViewport?.height
+          ?? globalThis.innerHeight;
+        const visibleHeight = Math.max(
+          0,
+          Math.min(clipped.bottom, viewportTop + viewportHeight)
+            - Math.max(clipped.top, viewportTop)
+        );
+        return {
+          height: clipped.height,
+          left: clipped.left,
+          top: clipped.top,
+          visibleRatio: visibleHeight / clipped.height,
+          width: clipped.width
+        };
+      });
+      expect(source.visibleRatio).toBeGreaterThanOrEqual(0.45);
+      expect(source.visibleRatio).toBeLessThanOrEqual(0.55);
+
+      await page.getByRole("button", { name: "Share", exact: true })
+        .evaluate((button) => button.click());
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+      const opening = await motionCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const firstTransform = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        return {
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          startLeft: bounds.left + matrix.e,
+          startTop: bounds.top + matrix.f
+        };
+      });
+      expect(opening).toMatchObject({ scaleX: 1, scaleY: 1 });
+      expect(opening.startLeft).toBeCloseTo(source.left, 0);
+      expect(opening.startTop).toBeCloseTo(source.top, 0);
+
+      await page.getByRole("button", { name: "Close Share Studio" }).tap();
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+      await expect(sourceCard).toHaveCSS("opacity", "1");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #96 Share handoff resumes one paused BorderBeam without a new fade", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceBeam = sourceCard.locator(".home-card-beam");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    await expect.poll(() => sourceBeam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
+
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog).toBeVisible();
+    await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "paused")
+    ))).toBe(true);
+
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "running")
+    ))).toBe(true);
+    expect(await sourceBeam.evaluate((element) => (
+      element.getAnimations().filter((animation) => (
+        animation.animationName.includes("beam-fade-in")
+        && animation.playState === "running"
+      )).length
+    ))).toBe(0);
+  });
+
+  test("Task #96 Share Studio rebases a local canonical card URL without crashing", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => {
+      const profile = ownerProfile("public");
+      profile.publicCardUrl = "http://192.168.12.7:5177/u/postmelee/card.png";
+      profile.selectedPublicCardUrl = (
+        "http://192.168.12.7:5177/u/postmelee/card.png?theme=dark"
+      );
+      return fulfillJson(route, { data: profile, ok: true });
+    });
+    await mockCardImages(page);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Codex usage card preview" }))
+      .toBeVisible();
+    expect(pageErrors).toEqual([]);
   });
 
   test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
@@ -3435,6 +3860,8 @@ test.describe("Settings appearance control", () => {
     await light.check();
     await expect(light).toBeChecked();
     await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
+    await expect(page.locator("html"))
       .toHaveAttribute("data-theme-preference", "light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
@@ -3442,6 +3869,8 @@ test.describe("Settings appearance control", () => {
 
     await page.reload();
     await expect(page.getByRole("radio", { name: /Light/ })).toBeChecked();
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
 
     const storageState = await page.context().storageState();
     const restoredContext = await browser.newContext({
@@ -3460,6 +3889,8 @@ test.describe("Settings appearance control", () => {
     const system = page.getByRole("radio", { name: /System/ });
     await system.check();
     await expect(system).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
       .toBeNull();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -3481,13 +3912,20 @@ test.describe("Settings appearance control", () => {
     await page.keyboard.press("ArrowRight");
     await expect(light).toBeFocused();
     await expect(light).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator('.settings-appearance-option:has(input[value="light"])'))
       .toHaveCSS("outline-style", "solid");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
+
     await page.keyboard.press("ArrowRight");
     await expect(dark).toBeFocused();
     await expect(dark).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
@@ -3617,6 +4055,10 @@ test.describe("Settings appearance control", () => {
     await page.goto("/profile");
 
     const media = page.locator(".profile-card-section .home-card-media");
+    const sourceCard = page.locator(
+      '.profile-card-section [data-card-source="true"]'
+    );
+    const sourceBeam = sourceCard.locator(".home-card-beam");
     const preview = media.locator("img");
     const skeleton = media.locator(".home-card-skeleton");
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3626,6 +4068,12 @@ test.describe("Settings appearance control", () => {
     );
     const initialBlobUrl = await preview.getAttribute("src");
     expect(initialBlobUrl).toMatch(/^blob:/);
+    const initialCardNode = await sourceCard.elementHandle();
+    const initialBeamNode = await sourceBeam.elementHandle();
+
+    await page.locator('input[name="card-theme"][value="light"]')
+      .scrollIntoViewIfNeeded();
+    const initialScrollY = await page.evaluate(() => window.scrollY);
 
     await page.locator('input[name="card-theme"][value="light"]').check();
     await page.locator('input[name="card-locale"][value="ko"]').check();
@@ -3638,6 +4086,18 @@ test.describe("Settings appearance control", () => {
     await expect(preview).toHaveAttribute("src", initialBlobUrl);
     await expect(skeleton).toHaveAttribute("data-active", "true");
     await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "false");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
 
     releaseDraftCards();
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3647,7 +4107,19 @@ test.describe("Settings appearance control", () => {
     );
     await expect(preview).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => preview.getAttribute("src")).not.toBe(initialBlobUrl);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCount(0);
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
     expect(previewRequests.some(
       (url) => url.includes("locale=ko&theme=light")
     )).toBe(true);
@@ -3776,6 +4248,83 @@ test.describe("Public profile", () => {
       ).flatMap((keyframe) => keyframe.transform ? [keyframe.transform] : [])
     ));
     expect(transforms).toEqual([]);
+  });
+
+  test("Task #96 public intro closes into its offscreen card without opacity replay", async ({ page }) => {
+    let cardRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("/u/postmelee/card.png")) cardRequests += 1;
+    });
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(PROFILE_ROUTE);
+
+    const intro = page.getByTestId("public-card-intro-backdrop");
+    const sourceCard = page.locator(
+      ".public-profile-view .profile-card-preview-stage .home-card-tilt"
+    );
+    await expect(intro).toHaveClass(/\bis-open\b/);
+    await expect(sourceCard).toHaveCSS("opacity", "0");
+    const requestsBeforeClose = cardRequests;
+
+    await page.evaluate(() => {
+      globalThis.__publicIntroCloseSamples = [];
+
+      function sampleCloseMotion() {
+        const backdrop = document.querySelector(
+          "[data-testid='public-card-intro-backdrop']"
+        );
+        const card = document.querySelector("[data-testid='public-card-intro-card']");
+        if (!card) return;
+
+        const style = getComputedStyle(card);
+        const matrix = new DOMMatrixReadOnly(style.transform);
+        globalThis.__publicIntroCloseSamples.push({
+          mode: card.dataset.motionMode,
+          opacity: Number.parseFloat(style.opacity),
+          phase: backdrop?.className ?? "detached",
+          scaleX: matrix.a,
+          scaleY: matrix.d,
+          translateX: matrix.e,
+          translateY: matrix.f
+        });
+        requestAnimationFrame(sampleCloseMotion);
+      }
+
+      requestAnimationFrame(sampleCloseMotion);
+    });
+
+    await page.locator(".public-card-intro-close").click();
+    await expect(intro).toHaveCount(0);
+    await expect(sourceCard).toHaveCSS("opacity", "1");
+
+    const samples = await page.evaluate(
+      () => globalThis.__publicIntroCloseSamples ?? []
+    );
+    const closeSamples = samples.filter(({ phase }) => (
+      phase.includes("is-closing") || phase.includes("is-handoff")
+    ));
+    expect(closeSamples.length).toBeGreaterThan(3);
+    expect(closeSamples.some(({ mode }) => mode === "translate")).toBe(true);
+    expect(closeSamples.some(({ translateX, translateY }) => (
+      Math.hypot(translateX, translateY) > 40
+    ))).toBe(true);
+    const closingDistances = closeSamples
+      .filter(({ phase }) => phase.includes("is-closing"))
+      .map(({ translateX, translateY }) => Math.hypot(translateX, translateY));
+    const finalClosingDistance = Math.max(...closingDistances);
+    const firstVisibleMovement = closingDistances.find((distance) => distance > 1);
+    expect(firstVisibleMovement / finalClosingDistance).toBeLessThan(0.25);
+    expect(closeSamples.every(({ scaleX, scaleY }) => (
+      Math.abs(scaleX - 1) < 0.02 && Math.abs(scaleY - 1) < 0.02
+    ))).toBe(true);
+    for (let index = 1; index < closeSamples.length; index += 1) {
+      expect(closeSamples[index].opacity - closeSamples[index - 1].opacity)
+        .toBeLessThan(0.2);
+    }
+    expect(cardRequests).toBe(requestsBeforeClose);
   });
 
   test("public profile renders the API-backed GitHub identity and selected public card", async ({ page }, testInfo) => {
@@ -4383,6 +4932,140 @@ async function getClippedHomeElements(page) {
       ? [`${element.tagName.toLowerCase()}.${element.className}`]
       : [];
   }));
+}
+
+async function expectSemanticThemeTransition(page, targets, {
+  finalColor,
+  toggleName
+}) {
+  const initialColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const transitionContract = await targets.evaluateAll((elements) => (
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration,
+        property: style.transitionProperty
+      };
+    })
+  ));
+  expect(transitionContract.every(({ duration, property }) => (
+    duration.split(", ").includes("0.24s") && property.includes("color")
+  ))).toBe(true);
+
+  await page.waitForTimeout(120);
+  const midpointColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  expect(midpointColors.every((color, index) => (
+    color !== initialColors[index] && color !== finalColor
+  ))).toBe(true);
+
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+
+  await page.waitForTimeout(80);
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+}
+
+async function expectThemeSurfaceTransition(page, targets, { toggleName }) {
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const contracts = await targets.evaluateAll((elements) => elements.map((element) => {
+    const style = getComputedStyle(element);
+    return {
+      duration: style.transitionDuration.split(", "),
+      property: style.transitionProperty.split(", ")
+    };
+  }));
+  expect(contracts.length).toBeGreaterThan(0);
+  expect(contracts.every(({ duration, property }) => (
+    duration.includes("0.24s")
+    && property.includes("background-color")
+    && property.includes("border-color")
+  )), JSON.stringify(contracts, null, 2)).toBe(true);
+
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+}
+
+async function readThemeColors(page, heading, heatmap) {
+  return page.evaluate(({ headingElement, heatmapElement }) => {
+    const readTransition = (element, property) => {
+      const animation = element.getAnimations().find((candidate) => (
+        candidate.effect?.getKeyframes().some((frame) => property in frame)
+      ));
+      const frames = animation?.effect?.getKeyframes() ?? [];
+      return {
+        currentTime: Number(animation?.currentTime ?? 0),
+        duration: Number(animation?.effect?.getTiming().duration ?? 0),
+        startColor: frames[0]?.[property] ?? ""
+      };
+    };
+
+    return {
+      heading: getComputedStyle(headingElement).color,
+      headingAnimation: readTransition(headingElement, "color"),
+      heatmap: getComputedStyle(heatmapElement).backgroundColor,
+      heatmapAnimation: readTransition(heatmapElement, "backgroundColor")
+    };
+  }, {
+    headingElement: await heading.elementHandle(),
+    heatmapElement: await heatmap.elementHandle()
+  });
+}
+
+async function expectStableThemeTimeline(page, heading, heatmap, {
+  heading: finalHeading,
+  heatmap: finalHeatmap,
+  toggleName
+}) {
+  const initial = await readThemeColors(page, heading, heatmap);
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const samples = [];
+  for (const delay of [40, 80, 80]) {
+    await page.waitForTimeout(delay);
+    samples.push(await readThemeColors(page, heading, heatmap));
+  }
+
+  const activeHeadingSamples = samples.filter(({ headingAnimation }) => (
+    headingAnimation.duration > 0
+  ));
+  const activeHeatmapSamples = samples.filter(({ heatmapAnimation }) => (
+    heatmapAnimation.duration > 0
+  ));
+  expect(activeHeadingSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeadingSamples.every(({ headingAnimation }) => (
+    headingAnimation.duration === 240
+    && headingAnimation.startColor === initial.heading
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+  expect(activeHeadingSamples.map(({ headingAnimation }) => headingAnimation.currentTime))
+    .toEqual([...activeHeadingSamples]
+      .map(({ headingAnimation }) => headingAnimation.currentTime)
+      .sort((left, right) => left - right));
+  expect(activeHeatmapSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeatmapSamples.every(({ heatmapAnimation }) => (
+    heatmapAnimation.duration === 240
+    && heatmapAnimation.startColor === initial.heatmap
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+
+  await expect.poll(async () => readThemeColors(page, heading, heatmap), {
+    timeout: 360
+  }).toMatchObject({
+    heading: finalHeading,
+    heatmap: finalHeatmap
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
 }
 
 async function getMarketingMetrics(page) {

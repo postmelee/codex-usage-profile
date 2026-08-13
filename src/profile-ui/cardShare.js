@@ -37,6 +37,47 @@ export function buildLocalizedCardUrl(value, locale = "en", theme) {
   return isAbsolute ? url.toString() : `${url.pathname}${url.search}`;
 }
 
+export function buildSameOriginCardPreviewUrl(
+  value,
+  locationOrigin,
+  expectedHandle
+) {
+  if (
+    typeof value !== "string" || value.trim() === "" ||
+    typeof locationOrigin !== "string" || locationOrigin.trim() === ""
+  ) {
+    return null;
+  }
+
+  let origin;
+  let url;
+  try {
+    origin = new URL(locationOrigin);
+    url = new URL(value, origin);
+  } catch {
+    return null;
+  }
+
+  if (
+    (origin.protocol !== "http:" && origin.protocol !== "https:") ||
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password ||
+    url.hash
+  ) {
+    return null;
+  }
+
+  if (
+    url.origin !== origin.origin &&
+    !isExpectedPublicCardPath(url.pathname, expectedHandle)
+  ) {
+    return null;
+  }
+
+  return `${url.pathname}${url.search}`;
+}
+
 export function buildReadmeCardSnippet(cardUrl) {
   if (!cardUrl) return null;
   return `![Codex usage profile](${cardUrl})`;
@@ -49,4 +90,20 @@ export function buildProfileLoginHref(client) {
 
   const params = new URLSearchParams({ redirect_to: OWNER_PROFILE_HREF });
   return `/api/auth/github/login?${params.toString()}`;
+}
+
+function isExpectedPublicCardPath(pathname, expectedHandle) {
+  if (typeof expectedHandle !== "string" || expectedHandle.trim() === "") {
+    return false;
+  }
+
+  const match = pathname.match(/^\/u\/([^/]+)\/card\.png$/);
+  if (!match) return false;
+
+  try {
+    return decodeURIComponent(match[1]).toLowerCase()
+      === expectedHandle.trim().toLowerCase();
+  } catch {
+    return false;
+  }
 }

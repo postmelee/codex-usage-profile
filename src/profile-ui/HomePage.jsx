@@ -347,6 +347,9 @@ export function HomePage({
         cardStatus={cardLoading
           ? HOME_CARD_TRANSITION_STATUSES.LOADING
           : cardTransition.status}
+        cardTheme={visibleCardSource?.kind === HOME_CARD_SOURCE_KINDS.OWNER
+          ? cardTheme
+          : "dark"}
         cardTransitionSuspended={shareOpen}
         config={HOME_MARKETING_CONFIG}
         heroAction={isAuthenticated ? (
