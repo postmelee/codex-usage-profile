@@ -406,6 +406,7 @@ button {
   .account-menu-error,
   .home-heading h1,
   .home-heading p,
+  .home-last-updated,
   .home-account-identity strong,
   .home-account-identity small,
   .home-status,
@@ -1174,6 +1175,29 @@ button {
   justify-content: center;
   margin-top: 20px;
   min-height: 44px;
+  min-width: 0;
+}
+
+.home-authenticated-action {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.home-last-updated {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.home-account-content {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: center;
   min-width: 0;
 }
 
@@ -4252,6 +4276,16 @@ button {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
+  }
+
+  .home-authenticated-action,
+  .home-account-content {
+    width: 100%;
+  }
+
+  .home-account-content {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .marketing-app-action {
