@@ -720,6 +720,13 @@ test.describe("Stage 4 locale contract", () => {
     await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
       .toBeVisible();
     await expect(page.locator('dl[aria-label="사용량 요약"]')).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "최근 업데이트 ·"
+    );
     await expect(page.getByRole("heading", { level: 2, name: "공유된 Codex 카드" }))
       .toBeVisible();
     await expect(page.getByText("Profile stats", { exact: true })).toHaveCount(0);
@@ -1010,6 +1017,7 @@ test.describe("Home and share card flow", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const lastUpdated = page.locator(".home-last-updated");
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
     await expect(lastUpdated).toHaveCount(0);
 
     releaseProfile();
@@ -1070,6 +1078,7 @@ test.describe("Home and share card flow", () => {
 
     await expect(page.getByRole("button", { name: "Submit usage first" }))
       .toBeDisabled();
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
     await expect(page.locator(".home-last-updated")).toHaveCount(0);
 
     outcome = "error";

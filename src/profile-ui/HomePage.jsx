@@ -463,10 +463,12 @@ function AuthenticatedHome({
 
   return (
     <div className="home-authenticated-action">
-      <LastUpdatedTime
-        className="home-last-updated"
-        uploadedAt={uploadedAt}
-      />
+      <div className="home-last-updated-slot">
+        <LastUpdatedTime
+          className="home-last-updated"
+          uploadedAt={uploadedAt}
+        />
+      </div>
       <div className="home-account-content">
         <div className="home-account-identity">
           {avatar.url ? (

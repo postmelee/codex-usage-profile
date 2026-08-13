@@ -1188,10 +1188,16 @@ button {
 
 .home-last-updated {
   color: var(--text-tertiary);
+  display: block;
   font-size: 11px;
   line-height: 16px;
   overflow-wrap: anywhere;
   text-align: center;
+}
+
+.home-last-updated-slot {
+  line-height: 16px;
+  min-height: 16px;
 }
 
 .home-account-content {
