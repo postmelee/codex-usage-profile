@@ -16,6 +16,8 @@
   `Applications` 위치에 설치된 `ChatGPT.app`/`Codex.app`
 - `account/usage/read`를 지원하는 ChatGPT 기반 Codex 로그인
 - 웹사이트에서 GitHub로 연결할 수 있는 계정
+- 선택적 terminal star 안내를 사용하려면 로컬 `gh` CLI와 authenticated
+  GitHub account
 
 API key-only와 Bedrock 인증은 이 account usage method를 제공하지 않는다. CLI는 OpenAI 또는 Codex token을 입력받지 않고 설치된 Codex 프로세스에 인증을 위임한다.
 
@@ -39,6 +41,52 @@ npx codex-usage-profile@latest status
 CLI는 production Sites origin을 기본값으로 사용하고 첫 로그인에서 credential과 함께 저장한다. `--server`는 local development 또는 명시적으로 검토한 대체 deployment에만 사용한다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
 
 raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
+
+## 선택적 GitHub star 안내
+
+새 device `login` 또는 human-readable `submit`이 내부적으로 성공하면 CLI는
+기존 성공 결과를 출력하기 전에 local `gh`의 active account가
+`postmelee/codex-usage-profile`을 star할지 별도 안내 블록으로 묻는다.
+
+```text
+Help us grow! 🌱
+A GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).
+Would you like to star it on GitHub as @octocat? (Y/n)
+✓ Starred! Thank you for your support, @octocat. ⭐
+```
+
+Enter, `y`, `yes`는 동의이며 Enter 기본값은 **Yes**다. `n`, `no`는 star하지
+않고 원래 login 또는 submit 결과를 계속 표시한다. 다른 입력은 `y` 또는
+`n`을 다시 묻는다. 동의하면 브라우저를 열지 않고 다음 고정 작업과 같은
+local `gh api` 요청을 실행한다.
+
+안내 블록 앞뒤에는 빈 줄을 둔다. color를 지원하는 TTY에서는 제목을 cyan,
+설명을 흐린 회색, 성공 문구를 green으로 표시한다. `NO_COLOR`가 설정됐으면
+CLI가 추가하는 color SGR 없이 같은 문구를 표시하되 interactive readline의
+cursor control은 사용할 수 있다. `TERM=dumb`이면 readline terminal mode도
+비활성화해 color와 cursor control escape 없이 같은 문구와 간격을 표시한다.
+
+```bash
+gh api --silent --method PUT \
+  /user/starred/postmelee/codex-usage-profile
+```
+
+prompt의 `@octocat`은 Codex Usage Profile owner가 아니라 local `gh`가 선택한
+active GitHub account다. CLI는 제품의 GitHub OAuth token이나 service submit
+credential을 이 작업에 사용하거나 `gh` credential을 읽어 저장하지 않는다.
+이미 star한 account이면 질문을 생략한다.
+
+다음 경우에는 prompt와 star 요청을 모두 생략한다.
+
+- 유효한 credential 때문에 `Already signed in`만 출력하는 `login`
+- 실패한 login 또는 submit, `status`, `logout`, help와 version
+- `submit --json`, stdin/stdout 중 하나라도 TTY가 아닌 pipe·redirection
+- `CI` 환경변수가 활성화된 unattended execution
+- `gh` 미설치·미인증, active account 조회 실패, 권한·network·timeout 오류
+
+credential이 없어서 submit 중 auto-login한 경우에는 login 경계가 아니라
+submit 성공 경계에서 한 번만 묻는다. `gh` 상태 확인이나 star 요청이 실패해도
+raw stderr를 출력하지 않고 원래 login/submit 결과와 exit status를 보존한다.
 
 ## Codex 실행 파일 탐색
 
@@ -78,6 +126,10 @@ npx --yes codex-usage-profile@0.1.1 submit --json
 
 여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
 
+`submit --json`, non-TTY와 활성화된 `CI` 환경에서는 선택적 GitHub star
+prompt가 실행되지 않으므로 stdout은 추가 문구 없는 단일 JSON document로
+유지된다.
+
 ## 로컬과 tarball 검증
 
 source checkout에서는 workspace bin을 직접 실행할 수 있다.
@@ -106,7 +158,7 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
 3. 사용자가 웹에서 GitHub 로그인 후 code를 승인한다.
 4. CLI가 server가 지정한 interval과 expiry를 지키며 `POST /api/auth/device/poll`을 호출한다.
 
-지원되는 interactive terminal에서는 verification URL 자체가 cyan OSC 8 hyperlink로 표시되어 클릭할 수 있다. `Open` label과 뒤따르는 출력은 terminal 기본색을 유지한다. 파이프 출력, `submit --json`, `TERM=dumb` 또는 hyperlink 지원 신호가 없는 terminal에는 ANSI control sequence 없이 같은 plain URL을 출력한다. 브라우저 자동 열기가 실패해도 plain URL과 user code는 항상 남는다.
+지원되는 interactive terminal에서는 verification URL 자체가 cyan OSC 8 hyperlink로 표시되어 클릭할 수 있다. `Open` label과 뒤따르는 출력은 terminal 기본색을 유지한다. 파이프 출력, `submit --json`, `NO_COLOR`, `TERM=dumb` 또는 hyperlink 지원 신호가 없는 terminal에는 ANSI control sequence 없이 같은 plain URL을 출력한다. 브라우저 자동 열기가 실패해도 plain URL과 user code는 항상 남는다.
 5. 승인된 poll 응답에서 raw service token을 한 번만 받고 로컬 credential file에 저장한다.
 6. `submit`에서 시작한 경우 즉시 analyzer와 usage submit을 이어서 실행한다.
 
@@ -208,17 +260,41 @@ macOS와 Linux에서는 directory `0700`, file `0600`을 사용한다. 저장은
 
 token 또는 machine을 더 이상 신뢰하지 않으면 웹 Settings의 API Tokens에서 즉시 **Revoke**한다. revoked token의 다음 submit은 거부된다.
 
+account별 active CLI/API token 한도는 3개다. 반복 first-run test처럼 local
+`logout` 뒤 새 device login을 여러 번 수행하면 server token은 폐기되지 않아
+한도에 도달할 수 있다. browser 승인은 완료됐지만 token exchange가 한도로
+거부되면 CLI는 다음처럼 조치 가능한 message를 표시한다.
+
+```text
+Active token limit reached. Revoke an API token in Settings, then try again.
+```
+
+웹 Settings의 **API Tokens**에서 이전 `Device login` token을 하나 이상
+**Revoke**한 뒤 새 code로 다시 실행한다. 이 message는 device-login poll의 HTTP
+409 conflict에만 적용하며 Account Usage submit conflict 안내는 변경하지 않는다.
+
 ## 제출 결과와 README
 
 성공한 `submit`은 accepted 또는 unchanged 상태, capture time, Profile URL, stable card URL과 README Markdown을 반환한다. raw token, owner numeric id, usage value 전체와 opaque private revision은 출력하지 않는다.
 
 ```text
-Usage submitted successfully.
+✓ Usage submitted successfully.
 Captured: 2026-07-11T00:00:00.000Z
-Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
-Card: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
-README: ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
+
+Links
+  Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
+  Card:    https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
+  README:  ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
 ```
+
+성공 표시는 결과 시작점을 나타내고 capture metadata 뒤의 빈 줄과 들여쓴
+`Links` block은 복사 가능한 산출물을 구분한다. 지원되는 interactive terminal에서
+`Links` 제목은 bright black으로 낮춰 표시하고, `Profile`과 `Card`의 URL만 device
+login의 `Open` URL과 같은 cyan OSC 8 hyperlink로 표시한다. `README` 값은 GitHub
+README에 그대로 복사할 Markdown 산출물이므로 ANSI·OSC 8을 넣지 않은 exact
+plain text를 유지한다. `submit --json`은 기존 JSON schema를 유지한다. pipe·redirection,
+`NO_COLOR`, `TERM=dumb`, hyperlink 미지원 terminal에서는 같은 줄바꿈·들여쓰기
+구조를 유지하되 적용할 수 없는 색상과 hyperlink 없이 평문으로 출력한다.
 
 같은 document의 network ambiguity retry는 server idempotency를 이용해 한 번만 수행한다. 두 요청이 모두 실패하면 결과가 불명임을 표시하며 같은 document를 다시 제출해도 안전하다.
 
@@ -247,5 +323,7 @@ CLI는 raw upstream stderr, RPC message, local path와 service error body를 그
 - submit token은 한 GitHub owner의 usage update에만 사용한다.
 - usage document의 identity/device/wrapper/unknown field는 거부된다.
 - public card visibility는 CLI가 아니라 웹 profile 설정에서만 변경한다.
+- 선택적 repository star는 local `gh` active account가 GitHub API에 직접
+  수행하며 제품 OAuth 또는 submit credential과 분리된다.
 - production Sites는 TLS, D1 shared rate limiter, durable D1/R2,
   backup/restore, operator deletion과 manual retention 정책을 사용한다.

@@ -204,6 +204,16 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 - Profile UI Node 112/112, Chromium·WebKit Task #96 각 13/13, production Sites full-stack build와
   artifact verify, `git diff --check`가 통과했다. 작업지시자가 로컬 동작을 확인했다.
 
+### PR #97 merge 후 결합 검증 (2026-08-13)
+
+- PR #97의 Home 최종 target 단일 reveal을 포함한 `devel@a5d28c0`을 PR #98 branch에 병합했다.
+- 공유 파일 중 `HomePage.jsx`와 E2E는 자동 병합됐고 오늘할일 문서만 충돌해 #95·#96 완료 기록을
+  모두 보존했다.
+- 결합 상태에서 Profile UI Node 117/117, Chromium·WebKit Task #95·#96 각 16/16이 통과했다.
+- production Sites full-stack build와 artifact verifier가 통과해 client 8, worker 2, migration 5,
+  `ok: true`를 확인했다.
+- PR #98 새 CI까지 통과하면 작업지시자가 직접 merge하는 경계를 유지한다.
+
 ## 잔여 위험과 후속 작업
 
 ### 잔여 위험

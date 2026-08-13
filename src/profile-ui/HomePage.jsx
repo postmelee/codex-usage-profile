@@ -27,10 +27,15 @@ import {
   beginHomeCardTransition,
   createHomeCardSource,
   createHomeCardTransition,
+  isHomeCardTransitionReadyForTarget,
   rejectHomeCardTransition,
   resetHomeCardTransition,
   resolveHomeCardTransition
 } from "./homeCardTransition.js";
+import {
+  HOME_CARD_TARGET_STATUSES,
+  resolveHomeCardTarget
+} from "./homeCardTarget.js";
 
 const HOME_MARKETING_CONFIG = createMarketingConfig();
 
@@ -73,8 +78,15 @@ export function HomePage({
   const shareSourceCardRef = useRef(null);
   const shareSourceRectRef = useRef(null);
   const cardTransition = cardState.transition;
-  const visibleCardDisplaySrc = cardState.visibleResource?.displaySrc ?? null;
+  const loadedCardDisplaySrc = cardState.visibleResource?.displaySrc ?? null;
   const isAuthenticated = status === "authenticated" && Boolean(owner);
+  const cardAuthStatus = status === "loading"
+    ? "loading"
+    : isAuthenticated
+      ? "authenticated"
+      : status === "unavailable"
+        ? "unavailable"
+        : "anonymous";
   const ownerKey = owner?.id ?? owner?.handle ?? null;
   const loginHref = buildAccountLoginHref(client, location);
 
@@ -116,38 +128,33 @@ export function HomePage({
       ...(previewRevision > 0 ? { revision: previewRevision } : {})
     }) ?? null
     : null;
-  const desiredCardSource = useMemo(() => {
-    if (!isAuthenticated) return operatorCardSource;
-    if (
-      profileState.status === "ready" &&
-      hasUsage &&
-      ownerPreviewUrl
-    ) {
-      return createHomeCardSource({
-        kind: HOME_CARD_SOURCE_KINDS.OWNER,
-        src: ownerPreviewUrl
-      });
-    }
-    if (
-      profileState.status === "ready" ||
-      profileState.status === "error"
-    ) {
-      return sampleCardSource;
-    }
-    return operatorCardSource;
-  }, [
+  const cardTarget = useMemo(() => resolveHomeCardTarget({
+    authStatus: cardAuthStatus,
     hasUsage,
-    isAuthenticated,
+    operatorSource: operatorCardSource,
+    ownerPreviewSrc: ownerPreviewUrl,
+    profileStatus: profileState.status,
+    sampleSource: sampleCardSource
+  }), [
+    hasUsage,
     operatorCardSource,
     ownerPreviewUrl,
     profileState.status,
-    sampleCardSource
+    sampleCardSource,
+    cardAuthStatus
   ]);
+  const desiredCardSource = cardTarget.source;
 
   useEffect(() => {
+    if (
+      cardTarget.status !== HOME_CARD_TARGET_STATUSES.SELECTED ||
+      !desiredCardSource
+    ) {
+      return;
+    }
+
     setCardState((current) => {
-      const currentTarget = current.transition.pending ?? current.transition.visible;
-      if (areHomeCardSourcesEqual(currentTarget, desiredCardSource)) {
+      if (areHomeCardSourcesEqual(current.transition.target, desiredCardSource)) {
         return current;
       }
 
@@ -159,7 +166,11 @@ export function HomePage({
         visibleResource: isAuthenticated ? current.visibleResource : null
       };
     });
-  }, [desiredCardSource, isAuthenticated]);
+  }, [
+    cardTarget.status,
+    desiredCardSource,
+    isAuthenticated
+  ]);
 
   useEffect(() => {
     const pending = cardTransition.pending;
@@ -216,20 +227,20 @@ export function HomePage({
   )
     ? null
     : cardTransition.visible;
+  const cardTargetReady = (
+    cardTarget.status === HOME_CARD_TARGET_STATUSES.SELECTED &&
+    isHomeCardTransitionReadyForTarget(cardTransition, desiredCardSource)
+  );
+  const visibleCardDisplaySrc = loadedCardDisplaySrc;
 
   useEffect(() => {
     const resource = cardState.visibleResource;
     return () => resource?.release();
   }, [cardState.visibleResource]);
-  const profileIsResolving = isAuthenticated && (
-    profileState.status === "idle" ||
-    profileState.status === "loading"
-  );
   const cardLoading = (
-    status === "loading" ||
-    profileIsResolving ||
-    cardTransition.status === HOME_CARD_TRANSITION_STATUSES.LOADING ||
-    !visibleCardSource
+    !cardTargetReady ||
+    !visibleCardSource ||
+    !visibleCardDisplaySrc
   );
   const cardReady = (
     !cardLoading &&

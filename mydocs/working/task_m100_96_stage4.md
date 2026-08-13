@@ -289,6 +289,22 @@ API를 쓰면서도 화면별 전환 동작이 달랐음을 확인했다.
 - 저장소 전체 Node suite는 변경 범위 밖 장시간 실행 구간에서 중단했으며, 변경 범위 Node·양 브라우저
   Task #96·production artifact 검증으로 보완했다.
 
+### PR #97 결합 검증 — Home 단일 reveal과 Task #96 연속성 (2026-08-13)
+
+PR #97 merge 뒤 `devel@a5d28c0`을 PR #98 branch에 병합했다. 두 task가 함께 수정한
+`HomePage.jsx`와 `tests/profile-ui.spec.js`는 자동 병합됐고, 오늘할일 문서만 충돌해 #95·#96 완료 행을
+모두 보존했다. 결합 상태에서 #95의 최종 owner target 단일 reveal과 #96의 theme·Skeleton·Share
+handoff를 같은 브라우저 실행으로 검증했다.
+
+검증 결과:
+
+- Profile UI Node 117/117 통과
+- Chromium Task #95·#96 16/16 통과
+- WebKit Task #95·#96 16/16 통과
+- production Sites full-stack build 통과
+- artifact verifier: client 8, worker 2, migration 5, `ok: true`
+- `git diff --check` 통과
+
 ## 배포 감사
 
 - PR 게시 당시에는 Sites hosting/deploy 명령을 실행하지 않았다.
