@@ -378,37 +378,19 @@ function MarketingAppAction({ config }) {
 }
 
 function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
-  const [ready, setReady] = useState(
-    () => Boolean(globalThis.customElements?.get("hover-tilt"))
-  );
-
   useEffect(() => {
-    let isCurrent = true;
+    if (
+      !enabled ||
+      globalThis.customElements?.get("hover-tilt")
+    ) {
+      return;
+    }
 
-    if (!enabled || ready) return () => { isCurrent = false; };
-
-    import("hover-tilt/web-component").then(() => {
-      if (isCurrent) setReady(true);
-    }).catch(() => {
-      if (isCurrent) setReady(false);
-    });
-
-    return () => { isCurrent = false; };
-  }, [enabled, ready]);
-
-  if (!enabled || !ready) {
-    return (
-      <div
-        className="home-card-tilt"
-        data-card-source="true"
-        data-share-transition-active={suspended ? "true" : undefined}
-        data-tilt-enabled="false"
-        ref={elementRef}
-      >
-        {children}
-      </div>
-    );
-  }
+    // The unresolved custom element is intentionally already in the DOM.
+    // Registration upgrades that same node in place so card readiness never
+    // remounts the source used by scroll anchoring and Share handoff motion.
+    import("hover-tilt/web-component").catch(() => {});
+  }, [enabled]);
 
   return (
     <hover-tilt
@@ -416,13 +398,13 @@ function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
       className="home-card-tilt"
       data-card-source="true"
       data-share-transition-active={suspended ? "true" : undefined}
-      data-tilt-enabled="true"
+      data-tilt-enabled={enabled ? "true" : "false"}
       exit-delay="120"
       glare-hue="210"
-      glare-intensity="0.15"
-      scale-factor="1.018"
-      tilt-factor="0.45"
-      tilt-factor-y="0.35"
+      glare-intensity={enabled ? "0.15" : "0"}
+      scale-factor={enabled ? "1.018" : "1"}
+      tilt-factor={enabled ? "0.45" : "0"}
+      tilt-factor-y={enabled ? "0.35" : "0"}
       ref={elementRef}
     >
       {children}

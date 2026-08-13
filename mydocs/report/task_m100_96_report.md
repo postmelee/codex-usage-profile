@@ -18,7 +18,7 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | 경로 | 변경 요약 | 영향 범위 |
 |---|---|---|
 | `src/styles.css` | primary text direct token, page/card Skeleton token과 light card variant, semantic transition scope와 Share 중 beam pause 추가 | dark/light 전환, Profile loading, 공용 card preview |
-| `src/profile-marketing/MarketingLanding.jsx` | card theme context, Skeleton 240ms 퇴장 후 unmount, Share와 BorderBeam active 수명 분리 | Home·Profile·intro 공용 card frame |
+| `src/profile-marketing/MarketingLanding.jsx` | card theme context, Skeleton 240ms 퇴장 후 unmount, Share와 BorderBeam active 수명 분리, readiness 중 안정적인 tilt host 유지 | Home·Profile·intro 공용 card frame |
 | `src/profile-ui/HomePage.jsx` | owner는 saved theme, operator/sample은 canonical dark 전달 | Home card Skeleton |
 | `src/profile-ui/CardProfilePage.jsx` | owner draft theme를 card frame에 전달 | Profile card 설정 변경 중 preview |
 | `src/profile-ui/PublicProfilePage.jsx` | public profile theme를 card와 intro에 전달 | 공개 Profile·공유 링크 |
@@ -26,6 +26,8 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 | `src/profile-ui/useCardHandoffMotion.js` | 공개 intro의 동일 크기 offscreen close 이동, zero-opacity 보존, source 즉시 복원 | card modal 닫기·source handoff |
 | `src/profile-ui/ShareStudio.jsx` | share frame에 card theme를 전달하고 이미 디코딩된 source resource 재사용 | 공유 modal warm/cold preview |
 | `src/profile-ui/ProfileLoadingSkeleton.jsx` | 응답 전 내부 card theme를 canonical dark로 명시 | owner/public Profile loading |
+| `src/profile-ui/ThemeProvider.jsx` | 모든 preference 변경이 같은 theme transition window를 열도록 전환 진입점 단일화 | header toggle·Settings 화면 모드 |
+| `src/profile-ui/ThemeToggle.jsx` | toggle 전용 transition helper를 제거하고 provider 계약 사용 | header 화면 모드 toggle |
 | `src/profile-ui/__tests__/themeSurfaceContract.test.js` | semantic text·page/card token·공용 callsite·bounded surface·BorderBeam 수명 계약 7건 | source regression |
 | `src/profile-ui/__tests__/useCardHandoffMotion.test.js` | offscreen translate opt-in과 zero-opacity 보존 계약 | motion geometry·flicker regression |
 | `tests/profile-ui.spec.js` | transition history, reduced motion, site/card 교차 palette, Home·loading surface와 intro close E2E | Chromium·WebKit regression |
@@ -188,6 +190,19 @@ GitHub Issue: [#96](https://github.com/postmelee/codex-usage-profile/issues/96)
 - Profile UI Node 111/111, 데스크톱·모바일 Share Studio Chromium 13/13, production Sites full-stack
   build·artifact verify와 `git diff --check`가 통과했다. 작업지시자가 동일 LAN 모바일에서 반영을
   확인했다.
+
+### 로컬 보정 검증 10 — card root와 theme preference 전환 단일화 (2026-08-13)
+
+- card readiness가 바뀔 때 `div`와 `hover-tilt`를 교체하던 conditional root가 card subtree를
+  remount해 Profile scroll jump, Share source ref 상실, BorderBeam 재시작을 함께 만들었음을 배포본과
+  local commit 비교로 확인했다.
+- 하나의 `hover-tilt` host를 계속 유지하고, 비활성 속성만 중립값으로 바꿔 custom element가 같은
+  node를 in-place upgrade하도록 보정했다. delayed render 전·중·후 card와 BorderBeam node identity,
+  `scrollY`를 함께 검증한다.
+- theme transition ownership을 `ThemeToggle`에서 `ThemeProvider.setPreference()`로 이동해 Settings의
+  System·Light·Dark 선택도 header와 같은 240ms transition 및 reduced-motion 의미를 사용한다.
+- Profile UI Node 112/112, Chromium·WebKit Task #96 각 13/13, production Sites full-stack build와
+  artifact verify, `git diff --check`가 통과했다. 작업지시자가 로컬 동작을 확인했다.
 
 ## 잔여 위험과 후속 작업
 

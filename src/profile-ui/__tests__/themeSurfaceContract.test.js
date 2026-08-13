@@ -161,6 +161,21 @@ test("Task #96 Share handoff pauses the existing BorderBeam without restarting i
   );
 });
 
+test("Task #96 card readiness preserves one Share source host", async () => {
+  const marketing = await readFile(SOURCE_PATHS.marketing, "utf8");
+
+  assert.match(
+    marketing,
+    /<hover-tilt[\s\S]*?data-tilt-enabled=\{enabled \? "true" : "false"\}/
+  );
+  assert.doesNotMatch(
+    marketing,
+    /if \(!enabled \|\| !ready\)[\s\S]*?<div[\s\S]*?home-card-tilt/
+  );
+  assert.match(marketing, /tilt-factor=\{enabled \? "0\.45" : "0"\}/);
+  assert.match(marketing, /scale-factor=\{enabled \? "1\.018" : "1"\}/);
+});
+
 function findRule(stylesheet, selector) {
   let cursor = 0;
   const bodies = [];

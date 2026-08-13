@@ -1143,6 +1143,11 @@ button {
   border-radius: inherit;
 }
 
+.home-card-tilt[data-tilt-enabled="false"]::part(container),
+.home-card-tilt[data-tilt-enabled="false"]::part(tilt) {
+  touch-action: auto;
+}
+
 .home-card-beam {
   border-radius: inherit;
   filter: drop-shadow(0 16px 28px var(--card-filter-shadow));

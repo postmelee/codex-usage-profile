@@ -261,6 +261,34 @@ BorderBeam 위상 보정 뒤에도 남은 미세한 반짝임을 다시 frame �
 - `git diff --check` 통과
 - 작업지시자가 동일 LAN 모바일에서 반영을 확인했다.
 
+### 로컬 보정 검증 10 — card host·theme transition 진입점 연속성 (2026-08-13)
+
+로컬 Profile에서 card 모양을 바꾸면 scroll이 튀고 Share source·BorderBeam node가 교체되는 회귀를
+배포본과 비교해 추적했다. `MarketingCardTilt`가 card readiness 동안 일반 `div`를 렌더한 뒤
+`hover-tilt`로 root tag를 바꾸면서 React subtree 전체를 remount한 것이 직접 원인이었다. 같은 점검에서
+헤더 toggle만 transition window를 열고 Settings의 화면 모드 radio는 즉시 theme를 바꿔, 같은 preference
+API를 쓰면서도 화면별 전환 동작이 달랐음을 확인했다.
+
+- unresolved 상태부터 하나의 `hover-tilt` host를 유지하고 custom element registration은 같은 node를
+  in-place upgrade하도록 변경했다.
+- tilt 비활성 상태에서는 transform·glare 값을 중립값으로 두고 touch scroll ownership을 page에 돌려준다.
+- theme transition window를 `ThemeProvider.setPreference()`로 이동해 header와 Settings가 같은 240ms
+  timeline 및 reduced-motion 계약을 사용한다.
+- delayed card render 전·중·후 동일 card·BorderBeam node와 `scrollY`가 유지되는지 브라우저 회귀로
+  고정했다.
+
+검증 결과:
+
+- Profile UI Node 112/112 통과
+- Chromium Task #96 13/13 통과
+- WebKit Task #96 13/13 통과
+- Chromium delayed owner draft, Settings mouse·keyboard, Share BorderBeam 집중 회귀 통과
+- WebKit delayed owner draft, Settings direct selection, Share 집중 회귀 통과
+- production Sites full-stack build·artifact verify 통과
+- `git diff --check` 통과
+- 저장소 전체 Node suite는 변경 범위 밖 장시간 실행 구간에서 중단했으며, 변경 범위 Node·양 브라우저
+  Task #96·production artifact 검증으로 보완했다.
+
 ## 배포 감사
 
 - PR 게시 당시에는 Sites hosting/deploy 명령을 실행하지 않았다.

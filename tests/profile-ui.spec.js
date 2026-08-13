@@ -786,7 +786,7 @@ test.describe("Marketing mirror", () => {
       "data-tilt-enabled",
       "false"
     );
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const mobileCard = await page.locator(".home-card-tilt").boundingBox();
     const mobileCta = await page.getByRole("link", {
       name: "Create your card"
@@ -1058,7 +1058,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".home-card-media")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-beam")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
 
     releaseAccount();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
@@ -1545,7 +1545,7 @@ test.describe("Home and share card flow", () => {
     const card = page.getByRole("img", { name: "Your Codex usage card" });
     await expect(card).toHaveCSS("opacity", "1");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const cardBox = await card.boundingBox();
     expect(cardBox).not.toBeNull();
     expect(cardBox.x).toBeGreaterThanOrEqual(0);
@@ -3757,6 +3757,8 @@ test.describe("Settings appearance control", () => {
     await light.check();
     await expect(light).toBeChecked();
     await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
+    await expect(page.locator("html"))
       .toHaveAttribute("data-theme-preference", "light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
@@ -3764,6 +3766,8 @@ test.describe("Settings appearance control", () => {
 
     await page.reload();
     await expect(page.getByRole("radio", { name: /Light/ })).toBeChecked();
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
 
     const storageState = await page.context().storageState();
     const restoredContext = await browser.newContext({
@@ -3782,6 +3786,8 @@ test.describe("Settings appearance control", () => {
     const system = page.getByRole("radio", { name: /System/ });
     await system.check();
     await expect(system).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
       .toBeNull();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -3803,13 +3809,20 @@ test.describe("Settings appearance control", () => {
     await page.keyboard.press("ArrowRight");
     await expect(light).toBeFocused();
     await expect(light).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator('.settings-appearance-option:has(input[value="light"])'))
       .toHaveCSS("outline-style", "solid");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
+
     await page.keyboard.press("ArrowRight");
     await expect(dark).toBeFocused();
     await expect(dark).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
@@ -3939,6 +3952,10 @@ test.describe("Settings appearance control", () => {
     await page.goto("/profile");
 
     const media = page.locator(".profile-card-section .home-card-media");
+    const sourceCard = page.locator(
+      '.profile-card-section [data-card-source="true"]'
+    );
+    const sourceBeam = sourceCard.locator(".home-card-beam");
     const preview = media.locator("img");
     const skeleton = media.locator(".home-card-skeleton");
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3948,6 +3965,12 @@ test.describe("Settings appearance control", () => {
     );
     const initialBlobUrl = await preview.getAttribute("src");
     expect(initialBlobUrl).toMatch(/^blob:/);
+    const initialCardNode = await sourceCard.elementHandle();
+    const initialBeamNode = await sourceBeam.elementHandle();
+
+    await page.locator('input[name="card-theme"][value="light"]')
+      .scrollIntoViewIfNeeded();
+    const initialScrollY = await page.evaluate(() => window.scrollY);
 
     await page.locator('input[name="card-theme"][value="light"]').check();
     await page.locator('input[name="card-locale"][value="ko"]').check();
@@ -3960,6 +3983,18 @@ test.describe("Settings appearance control", () => {
     await expect(preview).toHaveAttribute("src", initialBlobUrl);
     await expect(skeleton).toHaveAttribute("data-active", "true");
     await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "false");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
 
     releaseDraftCards();
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3970,6 +4005,18 @@ test.describe("Settings appearance control", () => {
     await expect(preview).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => preview.getAttribute("src")).not.toBe(initialBlobUrl);
     await expect(skeleton).toHaveCount(0);
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
     expect(previewRequests.some(
       (url) => url.includes("locale=ko&theme=light")
     )).toBe(true);
