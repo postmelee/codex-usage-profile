@@ -4477,12 +4477,6 @@ button {
   }
 }
 
-@media (max-width: 360px) {
-  .share-studio-primary-actions {
-    grid-template-columns: repeat(2, 60px);
-  }
-}
-
 .public-card-intro-backdrop {
   align-items: center;
   backdrop-filter: blur(18px);

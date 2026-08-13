@@ -86,23 +86,44 @@ export function buildPublicProfileShareUrl(origin, handle) {
   return url.toString();
 }
 
+export function isMobileShareEnvironment(navigatorLike) {
+  if (!navigatorLike || typeof navigatorLike !== "object") return false;
+
+  const userAgentDataMobile = navigatorLike.userAgentData?.mobile;
+  if (typeof userAgentDataMobile === "boolean") {
+    return userAgentDataMobile;
+  }
+
+  const userAgent = typeof navigatorLike.userAgent === "string"
+    ? navigatorLike.userAgent
+    : "";
+  if (/\b(?:Android|iPad|iPhone|iPod)\b/i.test(userAgent)) {
+    return true;
+  }
+
+  return navigatorLike.platform === "MacIntel"
+    && Number(navigatorLike.maxTouchPoints) > 1;
+}
+
 export function buildShareTargets(options = {}) {
   const profileUrl = normalizeHttpUrl(options.profileUrl)?.toString() ?? null;
   if (!profileUrl) return [];
 
   const copy = getShareStudioCopy(options.locale);
-  return [
+  const targets = [
     createTarget({
-      baseUrl: "https://x.com/intent/post",
+      baseUrl: "https://x.com/intent/tweet",
       id: "x",
       label: copy.x,
       accessibleLabel: copy.shareX,
       params: {
-        text: copy.socialText,
-        url: profileUrl
+        text: `${copy.socialText}\n${profileUrl}`
       }
     }),
     createTarget({
+      // The Threads iOS app shows the raw query verbatim, so form-encoded
+      // spaces reach the composer as literal plus signs. X and Reddit decode
+      // "+" as a space, so only Threads needs the percent-escaped form.
       baseUrl: "https://www.threads.net/intent/post",
       id: "threads",
       label: copy.threads,
@@ -110,7 +131,8 @@ export function buildShareTargets(options = {}) {
       params: {
         text: copy.socialText,
         url: profileUrl
-      }
+      },
+      serializeSpacesAsPercent20: true
     }),
     createTarget({
       baseUrl: "https://www.linkedin.com/feed/",
@@ -144,12 +166,26 @@ export function buildShareTargets(options = {}) {
       }
     })
   ];
+
+  return options.mobile === true
+    ? targets.filter(({ id }) => id !== "linkedin" && id !== "facebook")
+    : targets;
 }
 
-function createTarget({ accessibleLabel, baseUrl, id, label, params }) {
+function createTarget({
+  accessibleLabel,
+  baseUrl,
+  id,
+  label,
+  params,
+  serializeSpacesAsPercent20 = false
+}) {
   const url = new URL(baseUrl);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
+  }
+  if (serializeSpacesAsPercent20) {
+    url.search = url.search.replaceAll("+", "%20");
   }
 
   return Object.freeze({

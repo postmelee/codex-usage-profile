@@ -20,7 +20,8 @@ import {
   buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
-  getShareStudioCopy
+  getShareStudioCopy,
+  isMobileShareEnvironment
 } from "./shareStudio.js";
 import { useCardImageReadiness } from "./cardImageReadiness.js";
 import {
@@ -50,6 +51,7 @@ export function ShareStudio({
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [toast, setToast] = useState(null);
+  const mobileShareEnvironment = isMobileShareEnvironment(globalThis.navigator);
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
   const imageUrl = useMemo(
     () => buildLocalizedCardUrl(
@@ -73,8 +75,12 @@ export function ShareStudio({
     [locationOrigin, publicOwnerHandle]
   );
   const shareTargets = useMemo(
-    () => buildShareTargets({ locale, profileUrl: publicProfileUrl }),
-    [locale, publicProfileUrl]
+    () => buildShareTargets({
+      locale,
+      mobile: mobileShareEnvironment,
+      profileUrl: publicProfileUrl
+    }),
+    [locale, mobileShareEnvironment, publicProfileUrl]
   );
   const canRender = Boolean(
     open
