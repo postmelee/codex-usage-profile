@@ -5,7 +5,8 @@ import {
   buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
-  getShareStudioCopy
+  getShareStudioCopy,
+  isMobileShareEnvironment
 } from "../shareStudio.js";
 
 test("resolves Korean and English Share Studio copy", () => {
@@ -69,6 +70,88 @@ test("builds the canonical Sites public profile URL", () => {
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", ""), null);
 });
 
+test("detects mobile share environments without viewport heuristics", () => {
+  const cases = [
+    {
+      expected: true,
+      label: "UA-CH mobile",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        userAgentData: { mobile: true }
+      }
+    },
+    {
+      expected: false,
+      label: "UA-CH desktop remains authoritative over a mobile-looking UA",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+        userAgentData: { mobile: false }
+      }
+    },
+    {
+      expected: true,
+      label: "iPhone UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPod UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPod touch; CPU iPhone OS 17_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPad UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "Android UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPadOS desktop-class UA fallback",
+      navigatorLike: {
+        maxTouchPoints: 5,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"
+      }
+    },
+    {
+      expected: false,
+      label: "Mac desktop",
+      navigatorLike: {
+        maxTouchPoints: 0,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)"
+      }
+    },
+    {
+      expected: false,
+      label: "touch-capable Windows desktop",
+      navigatorLike: {
+        maxTouchPoints: 10,
+        platform: "Win32",
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+      }
+    },
+    { expected: false, label: "partial navigator", navigatorLike: {} },
+    { expected: false, label: "missing navigator", navigatorLike: null }
+  ];
+
+  for (const { expected, label, navigatorLike } of cases) {
+    assert.equal(isMobileShareEnvironment(navigatorLike), expected, label);
+  }
+});
+
 test("builds allowlisted external share composition URLs", () => {
   const profileUrl = "https://profiles.example.test/u/postmelee";
   const targets = buildShareTargets({ locale: "ko-KR", profileUrl });
@@ -84,7 +167,7 @@ test("builds allowlisted external share composition URLs", () => {
   const [x, threads, linkedIn, facebook, reddit] = targets
     .map((target) => new URL(target.href));
   assert.equal(x.origin, "https://x.com");
-  assert.equal(x.pathname, "/intent/post");
+  assert.equal(x.pathname, "/intent/tweet");
   assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
   assert.equal(x.searchParams.get("url"), profileUrl);
   assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
@@ -121,6 +204,48 @@ test("builds allowlisted external share composition URLs", () => {
   );
   assert.equal(reddit.searchParams.get("url"), profileUrl);
   assert.deepEqual([...reddit.searchParams.keys()].sort(), ["title", "url"]);
+});
+
+test("limits mobile share targets without changing narrow desktop defaults", () => {
+  const profileUrl = "https://profiles.example.test/u/postmelee";
+
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", mobile: true, profileUrl })
+      .map(({ id }) => id),
+    ["x", "threads", "reddit"]
+  );
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", mobile: false, profileUrl })
+      .map(({ id }) => id),
+    ["x", "threads", "linkedin", "facebook", "reddit"]
+  );
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", profileUrl }).map(({ id }) => id),
+    ["x", "threads", "linkedin", "facebook", "reddit"]
+  );
+});
+
+test("serializes Threads spaces as percent escapes and preserves literal plus signs", () => {
+  for (const locale of ["en-US", "ko-KR"]) {
+    const profileUrl = "https://profiles.example.test/u/activity+plus";
+    const threads = buildShareTargets({ locale, profileUrl })
+      .find(({ id }) => id === "threads");
+    const copy = getShareStudioCopy(locale);
+    const url = new URL(threads.href);
+
+    assert.ok(
+      threads.href.includes(`text=${encodeURIComponent(copy.socialText)}`),
+      `${locale} text uses %20 serialization`
+    );
+    assert.doesNotMatch(
+      threads.href,
+      /[?&]text=[^&]*\+/,
+      `${locale} text does not contain form-encoded spaces`
+    );
+    assert.match(threads.href, /url=[^&]*activity%2Bplus/);
+    assert.equal(url.searchParams.get("text"), copy.socialText);
+    assert.equal(url.searchParams.get("url"), profileUrl);
+  }
 });
 
 test("rejects non-http and missing public profile targets", () => {
