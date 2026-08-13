@@ -12,8 +12,6 @@ import { createProfilePublicationService } from "../profile-media/publication-se
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
-  PROFILE_MEDIA_DEFAULT_LOCALE,
-  PROFILE_MEDIA_DEFAULT_THEME,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaStableKey,
   normalizeProfileMediaTheme
@@ -120,6 +118,7 @@ export function createProfileBackendHttpHandler(options = {}) {
     async (ensureOptions) => publicationService?.ensurePublishedCardVariants?.({
       ownerId: ensureOptions.owner.id,
       owner: ensureOptions.owner,
+      usageRecord: ensureOptions.usageRecord,
       cardLocale: ensureOptions.cardLocale,
       cardStyle: ensureOptions.cardStyle
     })
@@ -596,14 +595,21 @@ export function createProfileBackendHttpHandler(options = {}) {
       const publicCardMatch = url.pathname.match(/^\/u\/([^/]+)\/card\.png$/);
       if (publicCardMatch && ["GET", "HEAD"].includes(request.method.toUpperCase())) {
         const method = request.method.toUpperCase();
-        const card = await readPublishedMediaCard({
+        const cardOptions = {
           mediaStore,
           handle: decodePublicCardHandle(publicCardMatch[1]),
-          locale: url.searchParams.get("locale"),
-          theme: readPublicCardTheme(url.searchParams.get("theme")),
           ifNoneMatch: request.headers.get("if-none-match"),
           includeBody: method === "GET"
-        });
+        };
+        if (url.searchParams.has("locale")) {
+          cardOptions.locale = url.searchParams.get("locale");
+        }
+        if (url.searchParams.has("theme")) {
+          cardOptions.theme = readPublicCardTheme(
+            url.searchParams.get("theme")
+          );
+        }
+        const card = await readPublishedMediaCard(cardOptions);
         return cardPngResponse(card, {
           cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
           contentType: PROFILE_MEDIA_CONTENT_TYPE,
@@ -1337,13 +1343,14 @@ async function readPublishedMediaCard(options) {
 
   let card;
   try {
-    card = await options.mediaStore.getPublishedCard({
+    const getOptions = {
       handle: options.handle,
-      locale: options.locale,
-      theme: options.theme,
       ifNoneMatch: options.ifNoneMatch,
       includeBody: options.includeBody
-    });
+    };
+    if (Object.hasOwn(options, "locale")) getOptions.locale = options.locale;
+    if (Object.hasOwn(options, "theme")) getOptions.theme = options.theme;
+    card = await options.mediaStore.getPublishedCard(getOptions);
   } catch (error) {
     if ([
       PROFILE_MEDIA_STORE_ERROR_CODES.CONFLICT,
@@ -1375,9 +1382,7 @@ async function readPublishedSocialCard(options) {
   try {
     authority = await options.mediaStore.getPublishedCard({
       handle: options.handle,
-      includeBody: false,
-      locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-      theme: PROFILE_MEDIA_DEFAULT_THEME
+      includeBody: false
     });
     social = authority
       ? await options.mediaStore.getSocialCard({
@@ -1426,7 +1431,6 @@ async function readPublishedSocialCard(options) {
 }
 
 function readPublicCardTheme(value) {
-  if (value === null) return "dark";
   try {
     return normalizeProfileMediaTheme(value, { fallback: false });
   } catch {

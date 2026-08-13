@@ -9,8 +9,7 @@ import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
 import {
   normalizeCardLocale,
-  normalizeCardStyle,
-  serializeCardStyle
+  normalizeCardStyle
 } from "./presentation.js";
 import {
   DEFAULT_CARD_THEME,
@@ -103,13 +102,7 @@ export function createProfileCardServiceCore(options = {}) {
       const updatedAt = nextOwnerRevisionTimestamp(current.updatedAt, now());
 
       let mediaPreparation = null;
-      const presentationChanged = serializeCardStyle(current.cardStyle) !==
-        serializeCardStyle(cardStyle);
-      const localeChanged = resolveCardLocale(current.cardLocale) !== cardLocale;
-      if (
-        current.visibility === PROFILE_VISIBILITY.PUBLIC &&
-        (presentationChanged || localeChanged)
-      ) {
+      if (current.visibility === PROFILE_VISIBILITY.PUBLIC) {
         mediaPreparation = await ensureCardStyleMedia({
           owner: current,
           usageRecord,

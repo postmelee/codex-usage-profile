@@ -983,6 +983,17 @@ test("updates versioned owner card settings and validates the exact payload", as
   assert.equal(ensureCalls.length, 2);
   assert.equal(ensureCalls[1].cardLocale, "en");
 
+  const exact = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "en" },
+    { cookie }
+  );
+  assert.equal(exact.status, 200);
+  assert.equal(ensureCalls.length, 3);
+  assert.equal(ensureCalls[2].cardLocale, "en");
+
   assert.equal(injected.status, 400);
   assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
   assert.equal(unknown.status, 400);
@@ -1176,11 +1187,51 @@ test("saves a public card preference only after v4 theme variants converge", asy
     locale: "ko",
     theme: "light"
   });
+  const canonical = await mediaStore.getPublishedCard({ handle: "postmelee" });
+  const canonicalResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png"
+  );
+  const cacheBusterResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?v=1"
+  );
+  const themeOnlyResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?theme=light"
+  );
+  const localeOnlyResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?locale=ko"
+  );
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.data.cardStyle, light);
   assert.equal(published.contractVersion, 4);
   assert.deepEqual(published.body, Buffer.from("card:light:ko"));
+  assert.equal(canonical.canonicalLocale, "ko");
+  assert.equal(canonical.canonicalTheme, "light");
+  assert.deepEqual(canonical.body, Buffer.from("card:light:ko"));
+  assert.deepEqual(
+    Buffer.from(await canonicalResponse.arrayBuffer()),
+    Buffer.from("card:light:ko")
+  );
+  assert.deepEqual(
+    Buffer.from(await cacheBusterResponse.arrayBuffer()),
+    Buffer.from("card:light:ko")
+  );
+  assert.deepEqual(
+    Buffer.from(await themeOnlyResponse.arrayBuffer()),
+    Buffer.from("card:light:en")
+  );
+  assert.deepEqual(
+    Buffer.from(await localeOnlyResponse.arrayBuffer()),
+    Buffer.from("card:dark:ko")
+  );
 });
 
 test("returns a generic 503 when profile publication is unavailable", async () => {
@@ -1397,9 +1448,7 @@ test("revalidates a public social card through the store without a response body
   assert.deepEqual(mediaCalls, [
     ["getPublishedCard", {
       handle: "postmelee",
-      includeBody: false,
-      locale: "en",
-      theme: "dark"
+      includeBody: false
     }],
     ["getSocialCard", {
       handle: "postmelee",
