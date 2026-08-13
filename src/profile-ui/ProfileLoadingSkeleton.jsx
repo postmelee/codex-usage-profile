@@ -38,6 +38,11 @@ export function ProfileLoadingSkeleton({
           data-skeleton-part="handle"
           style={{ "--profile-skeleton-delay": "-240ms" }}
         />
+        <span
+          className="profile-loading-updated public-profile-loading-updated profile-loading-shimmer"
+          data-skeleton-part="updated"
+          style={{ "--profile-skeleton-delay": "-320ms" }}
+        />
       </div>
 
       <div

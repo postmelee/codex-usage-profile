@@ -5,9 +5,47 @@ import {
   formatCompactNumber,
   formatDuration,
   formatInteger,
+  formatLastUpdatedAt,
   formatReasoningEffort,
   formatStatValue
 } from "../formatters.js";
+
+const UPLOADED_AT = "2026-08-12T20:20:00.000Z";
+
+test("formats the latest usage upload in the selected locale and timezone", () => {
+  assert.deepEqual(
+    formatLastUpdatedAt(UPLOADED_AT, "en", { timeZone: "Asia/Seoul" }),
+    {
+      dateTime: UPLOADED_AT,
+      label: "Last updated · Aug 13, 5:20 AM"
+    }
+  );
+  assert.deepEqual(
+    formatLastUpdatedAt(UPLOADED_AT, "ko-KR", { timeZone: "Asia/Seoul" }),
+    {
+      dateTime: UPLOADED_AT,
+      label: "최근 업데이트 · 8월 13일 오전 5:20"
+    }
+  );
+  assert.deepEqual(
+    formatLastUpdatedAt(UPLOADED_AT, "en", { timeZone: "UTC" }),
+    {
+      dateTime: UPLOADED_AT,
+      label: "Last updated · Aug 12, 8:20 PM"
+    }
+  );
+});
+
+test("omits invalid latest usage upload timestamps and timezones", () => {
+  for (const value of [null, undefined, "", "   ", "not-a-date"]) {
+    assert.equal(formatLastUpdatedAt(value, "en"), null);
+  }
+
+  assert.equal(
+    formatLastUpdatedAt(UPLOADED_AT, "en", { timeZone: "Invalid/Timezone" }),
+    null
+  );
+});
 
 test("formats Profile values with the selected locale", () => {
   assert.equal(formatCompactNumber(250_000_000, "en"), "250M");

@@ -720,6 +720,13 @@ test.describe("Stage 4 locale contract", () => {
     await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
       .toBeVisible();
     await expect(page.locator('dl[aria-label="사용량 요약"]')).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "최근 업데이트 ·"
+    );
     await expect(page.getByRole("heading", { level: 2, name: "공유된 Codex 카드" }))
       .toBeVisible();
     await expect(page.getByText("Profile stats", { exact: true })).toHaveCount(0);
@@ -983,6 +990,125 @@ test.describe("Home and share card flow", () => {
     ]) {
       expect(homeMarkup).not.toContain(internalValue);
     }
+  });
+
+  test("Task #99 Home reveals the latest upload only after owner usage is ready", async ({ page }) => {
+    let releaseProfile;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("private"),
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const lastUpdated = page.locator(".home-last-updated");
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
+    await expect(lastUpdated).toHaveCount(0);
+
+    releaseProfile();
+    await expect(lastUpdated).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(lastUpdated).toContainText("Last updated ·");
+    const tertiaryColor = await lastUpdated.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-tertiary)";
+      document.body.append(probe);
+      const result = {
+        actual: getComputedStyle(element).color,
+        expected: getComputedStyle(probe).color
+      };
+      probe.remove();
+      return result;
+    });
+    expect(tertiaryColor.actual).toBe(tertiaryColor.expected);
+
+    await page.locator(".profile-topbar-theme").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const transition = await lastUpdated.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration.split(", "),
+        property: style.transitionProperty.split(", ")
+      };
+    });
+    expect(transition.duration).toContain("0.24s");
+    expect(transition.property).toContain("color");
+  });
+
+  test("Task #99 Home omits the latest upload for empty and error outcomes", async ({ page }) => {
+    let outcome = "empty";
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", (route) => {
+      if (outcome === "error") {
+        return fulfillJson(route, {
+          error: { code: "unavailable", message: "Profile unavailable" },
+          ok: false
+        }, 503);
+      }
+      return fulfillJson(route, {
+        data: { ...ownerProfile("private"), usage: null },
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+    await page.goto("/");
+
+    await expect(page.getByRole("button", { name: "Submit usage first" }))
+      .toBeDisabled();
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
+    await expect(page.locator(".home-last-updated")).toHaveCount(0);
+
+    outcome = "error";
+    await page.reload();
+    await expect(page.getByText("Card unavailable", { exact: true }))
+      .toBeVisible();
+    await expect(page.locator(".home-last-updated")).toHaveCount(0);
+  });
+
+  test("Task #99 Home keeps the latest upload between the card and identity on mobile", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const card = await page.locator(".home-card-tilt").boundingBox();
+    const lastUpdated = page.locator(".home-last-updated");
+    const updateBox = await lastUpdated.boundingBox();
+    const identity = await page.locator(".home-account-identity").boundingBox();
+
+    expect(card).not.toBeNull();
+    expect(updateBox).not.toBeNull();
+    expect(identity).not.toBeNull();
+    expect(card.y + card.height).toBeLessThanOrEqual(updateBox.y);
+    expect(updateBox.y + updateBox.height).toBeLessThanOrEqual(identity.y);
+    await expect(lastUpdated).toHaveCSS("animation-name", "none");
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
   });
 
   test("Task #92 mobile anonymous header keeps Sign in fully visible", async ({
@@ -3739,7 +3865,7 @@ test.describe("Profile and Settings canvases", () => {
     expect(unavailableTopOffset).toBe(48);
   });
 
-  test("owner Profile loading geometry matches ready content and reveals together in place", async ({ page }) => {
+  test("Task #99 Profile owner loading geometry matches the ready update slot", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     let releaseProfile;
     const profileGate = new Promise((resolve) => {
@@ -3757,9 +3883,15 @@ test.describe("Profile and Settings canvases", () => {
     await page.goto("/profile", { waitUntil: "domcontentloaded" });
 
     const loadingGeometry = await readProfileGeometry(page, "loading");
+    await expect(page.locator(".profile-loading-updated"))
+      .toHaveAttribute("data-skeleton-part", "updated");
     releaseProfile();
     await expect(page.locator(".card-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
 
     const revealMotion = await page.evaluate(() => [
       ".profile-header",
@@ -4563,7 +4695,7 @@ test.describe("Public profile", () => {
     )).toBe(false);
   });
 
-  test("public profile moves from a neutral loading state to ready", async ({ page }) => {
+  test("Task #99 Profile public loading state matches the ready update slot", async ({ page }) => {
     await mockAnonymousAccount(page);
     let releaseResponse;
     const responseGate = new Promise((resolve) => {
@@ -4594,6 +4726,8 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(loadingSkeleton.locator("[data-skeleton-part=activity-row]"))
       .toHaveCount(7);
+    await expect(loadingSkeleton.locator("[data-skeleton-part=updated]"))
+      .toBeVisible();
     await expect(loadingSkeleton.locator(".home-card-media"))
       .toHaveAttribute("data-card-status", "loading");
     await expect(loadingSkeleton.locator(".home-card-skeleton"))
@@ -4626,6 +4760,29 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(page.locator(".public-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+  });
+
+  test("Task #99 Profile private owner preview uses the shared update slot", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profiles/public/postmelee", (route) => fulfillJson(route, {
+      error: { code: "not_found", message: "Public profile not found" },
+      ok: false
+    }, 404));
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator(".public-profile-owner-banner")).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "Last updated ·"
+    );
   });
 
   test("profile loading Skeleton stops decorative motion for reduced motion", async ({ page }) => {
@@ -5355,7 +5512,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-loading-handle",
         name: ".profile-loading-name",
         option: ".profile-loading-activity-option",
-        stats: ".profile-loading-stats"
+        stats: ".profile-loading-stats",
+        updated: ".profile-loading-updated"
       }
     : {
         activity: ".token-activity",
@@ -5367,7 +5525,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-heading p",
         name: ".profile-heading h1",
         option: ".token-activity-options",
-        stats: ".profile-stats"
+        stats: ".profile-stats",
+        updated: ".profile-last-updated-slot"
       };
 
   return page.evaluate((geometrySelectors) => Object.fromEntries(

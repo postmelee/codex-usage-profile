@@ -406,6 +406,7 @@ button {
   .account-menu-error,
   .home-heading h1,
   .home-heading p,
+  .home-last-updated,
   .home-account-identity strong,
   .home-account-identity small,
   .home-status,
@@ -479,6 +480,7 @@ button {
   .profile-heading h1,
   .profile-heading h2,
   .profile-heading p,
+  .profile-last-updated,
   .profile-stage h2,
   .profile-stage p,
   .plan-pill,
@@ -1177,6 +1179,35 @@ button {
   min-width: 0;
 }
 
+.home-authenticated-action {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.home-last-updated {
+  color: var(--text-tertiary);
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.home-last-updated-slot {
+  line-height: 16px;
+  min-height: 16px;
+}
+
+.home-account-content {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  min-width: 0;
+}
+
 .home-account-actions {
   align-items: center;
   display: grid;
@@ -1739,7 +1770,8 @@ button {
 }
 
 .profile-loading-name,
-.profile-loading-handle {
+.profile-loading-handle,
+.profile-loading-updated {
   border-radius: 999px;
 }
 
@@ -1753,6 +1785,12 @@ button {
   height: 22px;
   margin-top: 8px;
   width: min(24%, 150px);
+}
+
+.profile-loading-updated {
+  height: 16px;
+  margin-top: 6px;
+  width: min(30%, 180px);
 }
 
 .profile-loading-stats {
@@ -3525,6 +3563,20 @@ button {
   margin: 8px 0 0;
 }
 
+.profile-last-updated-slot {
+  line-height: 16px;
+  margin-top: 6px;
+  min-height: 16px;
+}
+
+.profile-last-updated {
+  color: var(--text-tertiary);
+  display: inline-block;
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
 .plan-pill {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -4252,6 +4304,16 @@ button {
     align-items: stretch;
     flex-direction: column;
     width: 100%;
+  }
+
+  .home-authenticated-action,
+  .home-account-content {
+    width: 100%;
+  }
+
+  .home-account-content {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .marketing-app-action {

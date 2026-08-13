@@ -7,6 +7,7 @@ import {
 } from "../profile-marketing/marketing-config.js";
 import { ProfileShell } from "./ProfileShell.jsx";
 import { HomeQuickstart } from "./HomeQuickstart.jsx";
+import { LastUpdatedTime } from "./LastUpdatedTime.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 import { ShareStudio } from "./ShareStudio.jsx";
 import {
@@ -363,6 +364,7 @@ export function HomePage({
             ownerCardReady={ownerCardReady}
             owner={owner}
             profileState={profileState}
+            uploadedAt={profile?.usage?.uploadedAt}
           />
         ) : (
           <AnonymousHome
@@ -451,7 +453,8 @@ function AuthenticatedHome({
   onShare,
   ownerCardReady,
   owner,
-  profileState
+  profileState,
+  uploadedAt
 }) {
   const { locale, t } = useLocale();
   const avatar = getAccountAvatar(owner, locale);
@@ -459,39 +462,47 @@ function AuthenticatedHome({
   const login = getAccountLogin(owner);
 
   return (
-    <>
-      <div className="home-account-identity">
-        {avatar.url ? (
-          <img alt={avatar.alt} height="40" src={avatar.url} width="40" />
-        ) : (
-          <span aria-hidden="true">{avatar.initial}</span>
-        )}
-        <div>
-          <strong>{displayName}</strong>
-          {login ? <small>@{login}</small> : null}
+    <div className="home-authenticated-action">
+      <div className="home-last-updated-slot">
+        <LastUpdatedTime
+          className="home-last-updated"
+          uploadedAt={uploadedAt}
+        />
+      </div>
+      <div className="home-account-content">
+        <div className="home-account-identity">
+          {avatar.url ? (
+            <img alt={avatar.alt} height="40" src={avatar.url} width="40" />
+          ) : (
+            <span aria-hidden="true">{avatar.initial}</span>
+          )}
+          <div>
+            <strong>{displayName}</strong>
+            {login ? <small>@{login}</small> : null}
+          </div>
+        </div>
+        <div className="home-account-actions">
+          <HomeCardAction
+            cardReady={cardReady}
+            hasUsage={hasUsage}
+            isPublic={isPublic}
+            mutationStatus={mutationState.status}
+            onPublish={onPublish}
+            onShare={onShare}
+            ownerCardReady={ownerCardReady}
+            profileStatus={profileState.status}
+          />
+          {mutationState.error ? (
+            <p className="home-status is-error" role="status">{t(mutationState.error)}</p>
+          ) : null}
+          {profileState.status === "error" ? (
+            <p className="home-status is-error" role="status">
+              {t("home.cardUnavailable")}
+            </p>
+          ) : null}
         </div>
       </div>
-      <div className="home-account-actions">
-        <HomeCardAction
-          cardReady={cardReady}
-          hasUsage={hasUsage}
-          isPublic={isPublic}
-          mutationStatus={mutationState.status}
-          onPublish={onPublish}
-          onShare={onShare}
-          ownerCardReady={ownerCardReady}
-          profileStatus={profileState.status}
-        />
-        {mutationState.error ? (
-          <p className="home-status is-error" role="status">{t(mutationState.error)}</p>
-        ) : null}
-        {profileState.status === "error" ? (
-          <p className="home-status is-error" role="status">
-            {t("home.cardUnavailable")}
-          </p>
-        ) : null}
-      </div>
-    </>
+    </div>
   );
 }
 
