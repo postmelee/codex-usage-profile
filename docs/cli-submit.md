@@ -284,21 +284,22 @@ Captured: 2026-07-11T00:00:00.000Z
 Links
   Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
   Card:    https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
-  README:  ![Codex usage profile](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png)
+  README:  <a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
 
 성공 표시는 결과 시작점을 나타내고 capture metadata 뒤의 빈 줄과 들여쓴
 `Links` block은 복사 가능한 산출물을 구분한다. 지원되는 interactive terminal에서
 `Links` 제목은 bright black으로 낮춰 표시하고, `Profile`과 `Card`의 URL만 device
 login의 `Open` URL과 같은 cyan OSC 8 hyperlink로 표시한다. `README` 값은 GitHub
-README에 그대로 복사할 Markdown 산출물이므로 ANSI·OSC 8을 넣지 않은 exact
-plain text를 유지한다. `submit --json`은 기존 JSON schema를 유지한다. pipe·redirection,
+README에 그대로 복사할 HTML 임베드이며 기본 `width="50%"`, query 없는 card `src`,
+`/api/share/{handle}` 클릭 대상을 포함한다. ANSI·OSC 8을 넣지 않은 exact plain text를
+유지한다. `submit --json`은 기존 JSON schema를 유지한다. pipe·redirection,
 `NO_COLOR`, `TERM=dumb`, hyperlink 미지원 terminal에서는 같은 줄바꿈·들여쓰기
 구조를 유지하되 적용할 수 없는 색상과 hyperlink 없이 평문으로 출력한다.
 
 같은 document의 network ambiguity retry는 server idempotency를 이용해 한 번만 수행한다. 두 요청이 모두 실패하면 결과가 불명임을 표시하며 같은 document를 다시 제출해도 안전하다.
 
-카드를 public으로 전환한 뒤 README Markdown을 GitHub에 넣는다. 이후 `submit`은 같은 URL의 ETag를 바꾸므로 README를 수정할 필요가 없다. GitHub image proxy 때문에 실제 표시 갱신은 지연될 수 있다. 자세한 내용은 [README 카드와 cache](readme-card.md)를 참고한다.
+카드를 public으로 전환한 뒤 README Markdown을 GitHub에 넣는다. 표시 크기는 복사 결과의 `width`만 조절한다. 이후 `submit`은 같은 URL의 ETag를 바꾸므로 README를 수정할 필요가 없다. GitHub image proxy 때문에 실제 표시 갱신은 지연될 수 있지만 카드 클릭 대상은 서비스 공유 페이지로 유지된다. 자세한 내용은 [README 카드와 cache](readme-card.md)를 참고한다.
 
 ## 오류와 문제 해결
 

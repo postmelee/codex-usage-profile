@@ -22,10 +22,12 @@ export {
   getProfileMediaThemeRepresentations,
   matchesProfileMediaIfNoneMatch,
   normalizeProfileMediaLocale,
+  normalizeProfileMediaCanonicalSelection,
   normalizeProfileMediaTheme,
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
   normalizeProfileMediaSocialRecord,
+  resolveProfileMediaSelection,
   supportsProfileMediaSocialCard
 } from "./media-store-contract.js";
 

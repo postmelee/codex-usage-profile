@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createProfileMediaRevisionKey,
+  createProfileMediaStableKey,
   createR2BindingProfileMediaMaintenance,
   createR2BindingProfileMediaStore
 } from "../index.js";
@@ -29,6 +30,8 @@ test("R2 owner manifest counts and protects every v4 theme object", async () => 
   const revisions = createThemeRepresentations("theme-manifest");
   await putThemeRepresentations(store, revisions);
   await store.publishRevision(themePublicationInput(revisions, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light",
     expectedStorageEtag: null
   }));
 
@@ -43,11 +46,22 @@ test("R2 owner manifest counts and protects every v4 theme object", async () => 
   assert.equal(ownerPlan.manifest.revisions.length, 4);
   assert.equal(ownerPlan.manifest.stableObjectKeys.length, 2);
   assert.equal(ownerPlan.manifest.stable.publication.contractVersion, 4);
+  assert.equal(ownerPlan.manifest.stable.publication.canonicalLocale, "ko");
+  assert.equal(ownerPlan.manifest.stable.publication.canonicalTheme, "light");
   assert.equal(
     ownerPlan.manifest.stable.publication.representations.light.ko.theme,
     "light"
   );
   assert.deepEqual(retention.candidates, []);
+
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  bucket.objects.get(stableKey).customMetadata["canonical-locale"] = "en";
+  bucket.objects.get(stableKey).customMetadata["canonical-theme"] = "dark";
+  const changedPlan = await maintenance.planOwnerDeletion(OWNER_SCOPE);
+  assert.notEqual(
+    changedPlan.summary.contentDigest,
+    ownerPlan.summary.contentDigest
+  );
 });
 
 test("R2 owner deletion requires a tombstone and exact revision manifest", async () => {
@@ -234,6 +248,60 @@ test("R2 repair requires exact application and storage revisions", async () => {
   });
   assert.equal(repaired.publication.publicationId, "publication_repaired");
   assert.equal(repaired.publication.representations.en.etag, revisions.en.etag);
+});
+
+test("R2 maintenance preserves canonical selection across tombstone and repair", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("repair-canonical");
+  await putThemeRepresentations(store, revisions);
+  const published = await store.publishRevision(themePublicationInput(revisions, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light",
+    expectedStorageEtag: null,
+    publicationId: "publication_canonical"
+  }));
+  const maintenance = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store
+  });
+  const tombstoned = await maintenance.tombstoneOwnerPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: published.storageEtag,
+    tombstoneId: "maintenance_canonical",
+    unpublishedAt: NOW
+  });
+
+  assert.equal(tombstoned.previousPublication.canonicalLocale, "ko");
+  assert.equal(tombstoned.previousPublication.canonicalTheme, "light");
+
+  await assert.rejects(
+    () => maintenance.repairPublication({
+      ...OWNER_SCOPE,
+      apply: true,
+      expectedStorageEtag: tombstoned.stable.storageEtag,
+      publication: themePublicationInput(revisions, {
+        publicationId: "publication_missing_canonical_pair"
+      })
+    }),
+    /requires canonicalLocale and canonicalTheme/
+  );
+
+  const repaired = await maintenance.repairPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: tombstoned.stable.storageEtag,
+    publication: themePublicationInput(revisions, {
+      canonicalLocale: "ko",
+      canonicalTheme: "light",
+      publicationId: "publication_canonical_repaired"
+    })
+  });
+  assert.equal(repaired.publication.canonicalLocale, "ko");
+  assert.equal(repaired.publication.canonicalTheme, "light");
+  assert.equal(repaired.stable.publication.canonicalLocale, "ko");
+  assert.equal(repaired.stable.publication.canonicalTheme, "light");
 });
 
 function ageRevisions(bucket, representations, days) {

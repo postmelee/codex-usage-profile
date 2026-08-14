@@ -21,6 +21,7 @@ import {
 import { createProfileCardServiceCore } from "../../profile-card/service-core.js";
 import {
   createPresentationDigest,
+  normalizeCardLocale,
   normalizeCardStyle
 } from "../../profile-card/presentation.js";
 import {
@@ -523,6 +524,8 @@ export function createProfileSitesMaintenanceService(options = {}) {
       apply: true,
       expectedStorageEtag,
       publication: {
+        canonicalLocale: normalizeCardLocale(owner.cardLocale),
+        canonicalTheme: cardStyle.theme,
         contractVersion: PROFILE_MEDIA_STORE_CONTRACT_VERSION,
         format: PROFILE_MEDIA_FORMAT,
         handle: scope.handle,

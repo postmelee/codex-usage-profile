@@ -198,6 +198,27 @@ test("light R2 HEAD to GET race retries against the dark authority", async () =>
   assert.deepEqual(read.body, next.light.en.body);
 });
 
+test("R2 stable read rejects canonical authority drift with the same storage ETag", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createThemeRepresentations("canonical-drift");
+  await putThemeRepresentations(store, revisions);
+  await store.publishRevision(themePublicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  bucket.beforeNext("get", () => {
+    bucket.objects.get(stableKey).customMetadata["canonical-theme"] = "light";
+  });
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE }),
+    (error) =>
+      error.code === "unavailable" &&
+      error.message === "stable media changed repeatedly during read"
+  );
+});
+
 function cloneStoredObject(object) {
   return {
     ...object,

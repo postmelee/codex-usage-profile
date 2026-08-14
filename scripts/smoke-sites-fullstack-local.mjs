@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   access,
   readFile
@@ -385,6 +386,205 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(publicProfile.response.status, 200);
     assert.equal(publicProfile.body.data.owner.handle, "local-owner");
 
+    const canonicalCardPath = "/u/local-owner/card.png";
+    const canonicalBeforeSettings = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ));
+    const canonicalBeforeSettingsPng = new Uint8Array(
+      await canonicalBeforeSettings.arrayBuffer()
+    );
+    const canonicalBeforeSettingsEtag =
+      canonicalBeforeSettings.headers.get("etag");
+    const canonicalBeforeSettingsDigest = digestBytes(
+      canonicalBeforeSettingsPng
+    );
+    assert.equal(canonicalBeforeSettings.status, 200);
+    assert.equal(
+      canonicalBeforeSettings.headers.get("content-type"),
+      "image/png"
+    );
+    assert.equal(
+      canonicalBeforeSettings.headers.get("cache-control"),
+      "public, no-cache, must-revalidate"
+    );
+    assert.match(canonicalBeforeSettingsEtag, /^"[A-Za-z0-9_-]{43}"$/);
+    assert.deepEqual(readPngDimensions(canonicalBeforeSettingsPng), {
+      height: 918,
+      width: 1497
+    });
+
+    const lightKoreanStyle = {
+      schemaVersion: 1,
+      theme: "light",
+      effect: { preset: "none", version: 1 }
+    };
+    const settingsUpdated = await requestJson(
+      origin,
+      "PATCH",
+      "/api/profile/card-settings",
+      { cardStyle: lightKoreanStyle, cardLocale: "ko" },
+      sessionHeaders(origin, sessionCookie)
+    );
+    assert.equal(settingsUpdated.response.status, 200);
+    assert.equal(
+      settingsUpdated.body.data.publicCardUrl,
+      new URL(canonicalCardPath, origin).toString()
+    );
+    assert.equal(
+      settingsUpdated.body.data.selectedPublicCardUrl,
+      new URL(`${canonicalCardPath}?theme=light&locale=ko`, origin).toString()
+    );
+
+    const canonicalAfterSettings = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ));
+    const canonicalAfterSettingsPng = new Uint8Array(
+      await canonicalAfterSettings.arrayBuffer()
+    );
+    const canonicalAfterSettingsEtag =
+      canonicalAfterSettings.headers.get("etag");
+    const canonicalAfterSettingsDigest = digestBytes(
+      canonicalAfterSettingsPng
+    );
+    assert.equal(canonicalAfterSettings.status, 200);
+    assert.notEqual(canonicalAfterSettingsEtag, canonicalBeforeSettingsEtag);
+    assert.notEqual(
+      canonicalAfterSettingsDigest,
+      canonicalBeforeSettingsDigest
+    );
+
+    const staleSettingsRevalidation = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ), {
+      headers: { "if-none-match": canonicalBeforeSettingsEtag }
+    });
+    assert.equal(staleSettingsRevalidation.status, 200);
+    assert.equal(
+      staleSettingsRevalidation.headers.get("etag"),
+      canonicalAfterSettingsEtag
+    );
+    assert.equal(
+      digestBytes(new Uint8Array(
+        await staleSettingsRevalidation.arrayBuffer()
+      )),
+      canonicalAfterSettingsDigest
+    );
+
+    const explicitAfterSettings = await fetch(new URL(
+      `${canonicalCardPath}?theme=light&locale=ko`,
+      origin
+    ));
+    assert.equal(explicitAfterSettings.status, 200);
+    assert.equal(
+      explicitAfterSettings.headers.get("etag"),
+      canonicalAfterSettingsEtag
+    );
+    assert.equal(
+      digestBytes(new Uint8Array(await explicitAfterSettings.arrayBuffer())),
+      canonicalAfterSettingsDigest
+    );
+
+    const versionedCanonical = await fetch(new URL(
+      `${canonicalCardPath}?v=local-smoke`,
+      origin
+    ));
+    assert.equal(versionedCanonical.status, 200);
+    assert.equal(
+      versionedCanonical.headers.get("etag"),
+      canonicalAfterSettingsEtag
+    );
+    assert.equal(
+      digestBytes(new Uint8Array(await versionedCanonical.arrayBuffer())),
+      canonicalAfterSettingsDigest
+    );
+
+    const settingsNotModified = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ), {
+      headers: { "if-none-match": canonicalAfterSettingsEtag }
+    });
+    assert.equal(settingsNotModified.status, 304);
+    assert.equal((await settingsNotModified.arrayBuffer()).byteLength, 0);
+
+    const updatedUsageDocument = createUsageDocument({
+      capturedAt: new Date(
+        Date.parse(usageDocument.capturedAt) + 1_000
+      ).toISOString(),
+      lifetimeTokens: usageDocument.summary.lifetimeTokens + 1_000_000_000,
+      peakDailyTokens: usageDocument.summary.peakDailyTokens + 100_000_000
+    });
+    const updatedSubmission = await submitAccountUsage({
+      client: serviceClient,
+      deviceId: credential.deviceId,
+      deviceName: "Local smoke CLI",
+      readAccountUsage: async () => updatedUsageDocument,
+      token: credential.token
+    });
+    assert.equal(updatedSubmission.profile.handle, "local-owner");
+    assert.equal(updatedSubmission.profile.visibility, "public");
+    assert.equal(updatedSubmission.submission.status, "accepted");
+    assert.equal(updatedSubmission.submission.idempotent, false);
+
+    const canonicalAfterUsage = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ));
+    const canonicalAfterUsagePng = new Uint8Array(
+      await canonicalAfterUsage.arrayBuffer()
+    );
+    const canonicalAfterUsageEtag = canonicalAfterUsage.headers.get("etag");
+    const canonicalAfterUsageDigest = digestBytes(canonicalAfterUsagePng);
+    assert.equal(canonicalAfterUsage.status, 200);
+    assert.equal(
+      canonicalAfterUsage.headers.get("cache-control"),
+      "public, no-cache, must-revalidate"
+    );
+    assert.notEqual(canonicalAfterUsageEtag, canonicalAfterSettingsEtag);
+    assert.notEqual(canonicalAfterUsageDigest, canonicalAfterSettingsDigest);
+
+    const staleUsageRevalidation = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ), {
+      headers: { "if-none-match": canonicalAfterSettingsEtag }
+    });
+    assert.equal(staleUsageRevalidation.status, 200);
+    assert.equal(
+      staleUsageRevalidation.headers.get("etag"),
+      canonicalAfterUsageEtag
+    );
+    assert.equal(
+      digestBytes(new Uint8Array(await staleUsageRevalidation.arrayBuffer())),
+      canonicalAfterUsageDigest
+    );
+
+    const explicitAfterUsage = await fetch(new URL(
+      `${canonicalCardPath}?theme=light&locale=ko`,
+      origin
+    ));
+    assert.equal(explicitAfterUsage.status, 200);
+    assert.equal(
+      explicitAfterUsage.headers.get("etag"),
+      canonicalAfterUsageEtag
+    );
+    assert.equal(
+      digestBytes(new Uint8Array(await explicitAfterUsage.arrayBuffer())),
+      canonicalAfterUsageDigest
+    );
+
+    const usageNotModified = await fetch(new URL(
+      canonicalCardPath,
+      origin
+    ), {
+      headers: { "if-none-match": canonicalAfterUsageEtag }
+    });
+    assert.equal(usageNotModified.status, 304);
+    assert.equal((await usageNotModified.arrayBuffer()).byteLength, 0);
+
     const publicDocument = await fetch(new URL(
       "/api/share/local-owner",
       origin
@@ -672,10 +872,11 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(maintenanceBaselineHidden.response.status, 404);
 
     return Object.freeze({
+      canonicalUpdatesVerified: 2,
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 50,
+      routesVerified: 62,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {
@@ -764,14 +965,16 @@ function createMemoryCredentialStore() {
   };
 }
 
-function createUsageDocument() {
-  const capturedAt = new Date().toISOString();
+function createUsageDocument(options = {}) {
+  const capturedAt = options.capturedAt ?? new Date().toISOString();
+  const lifetimeTokens = options.lifetimeTokens ?? 14_350_000_000;
+  const peakDailyTokens = options.peakDailyTokens ?? 700_000_000;
   return {
     contractVersion: 1,
     capturedAt,
     summary: {
-      lifetimeTokens: 14_350_000_000,
-      peakDailyTokens: 700_000_000,
+      lifetimeTokens,
+      peakDailyTokens,
       longestRunningTurnSec: 6_780,
       currentStreakDays: 7,
       longestStreakDays: 49
@@ -779,10 +982,14 @@ function createUsageDocument() {
     dailyUsageBuckets: [
       {
         startDate: capturedAt.slice(0, 10),
-        tokens: 700_000_000
+        tokens: peakDailyTokens
       }
     ]
   };
+}
+
+function digestBytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 async function requestJson(origin, method, pathname, body, headers = {}) {

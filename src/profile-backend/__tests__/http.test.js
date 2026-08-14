@@ -983,10 +983,63 @@ test("updates versioned owner card settings and validates the exact payload", as
   assert.equal(ensureCalls.length, 2);
   assert.equal(ensureCalls[1].cardLocale, "en");
 
+  const exact = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    { cardStyle: light, cardLocale: "en" },
+    { cookie }
+  );
+  assert.equal(exact.status, 200);
+  assert.equal(ensureCalls.length, 3);
+  assert.equal(ensureCalls[2].cardLocale, "en");
+
   assert.equal(injected.status, 400);
   assert.equal(injected.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
   assert.equal(unknown.status, 400);
   assert.equal(unknown.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
+});
+
+test("returns a generic retryable 503 when card-settings media prepare fails", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  const mediaStore = wrapMediaStore(baseMediaStore, {
+    async putRevision() {
+      throw createProfileMediaStoreError(
+        PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+        "write media revision failed at secret-provider-endpoint"
+      );
+    }
+  });
+  const fixture = createFixture({ mediaStore });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  fixture.saveLatestUsage({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    {
+      cardLocale: "ko",
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    },
+    { cookie }
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("retry-after"), "5");
+  assert.deepEqual(response.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(JSON.stringify(response.body).includes("secret-provider"), false);
 });
 
 test("hides non-public, missing, malformed, and mismatched public profiles", async () => {
@@ -1176,11 +1229,51 @@ test("saves a public card preference only after v4 theme variants converge", asy
     locale: "ko",
     theme: "light"
   });
+  const canonical = await mediaStore.getPublishedCard({ handle: "postmelee" });
+  const canonicalResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png"
+  );
+  const cacheBusterResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?v=1"
+  );
+  const themeOnlyResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?theme=light"
+  );
+  const localeOnlyResponse = await requestResponse(
+    fixture.handler,
+    "GET",
+    "/u/postmelee/card.png?locale=ko"
+  );
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.data.cardStyle, light);
   assert.equal(published.contractVersion, 4);
   assert.deepEqual(published.body, Buffer.from("card:light:ko"));
+  assert.equal(canonical.canonicalLocale, "ko");
+  assert.equal(canonical.canonicalTheme, "light");
+  assert.deepEqual(canonical.body, Buffer.from("card:light:ko"));
+  assert.deepEqual(
+    Buffer.from(await canonicalResponse.arrayBuffer()),
+    Buffer.from("card:light:ko")
+  );
+  assert.deepEqual(
+    Buffer.from(await cacheBusterResponse.arrayBuffer()),
+    Buffer.from("card:light:ko")
+  );
+  assert.deepEqual(
+    Buffer.from(await themeOnlyResponse.arrayBuffer()),
+    Buffer.from("card:light:en")
+  );
+  assert.deepEqual(
+    Buffer.from(await localeOnlyResponse.arrayBuffer()),
+    Buffer.from("card:dark:ko")
+  );
 });
 
 test("returns a generic 503 when profile publication is unavailable", async () => {
@@ -1352,7 +1445,10 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
 
 test("revalidates a public social card through the store without a response body", async () => {
   const baseMediaStore = createMemoryProfileMediaStore();
-  const publication = await publishThemeMediaFixture(baseMediaStore);
+  const publication = await publishThemeMediaFixture(baseMediaStore, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  });
   const socialBody = Buffer.from("social-media");
   const socialRevision = createProfileMediaRevisionDigest(socialBody);
   await baseMediaStore.putSocialCard({
@@ -1395,12 +1491,7 @@ test("revalidates a public social card through the store without a response body
   assert.equal(notModified.status, 304);
   assert.equal((await notModified.arrayBuffer()).byteLength, 0);
   assert.deepEqual(mediaCalls, [
-    ["getPublishedCard", {
-      handle: "postmelee",
-      includeBody: false,
-      locale: "en",
-      theme: "dark"
-    }],
+    ["inspectStableCard", { handle: "postmelee" }],
     ["getSocialCard", {
       handle: "postmelee",
       ifNoneMatch: etag,
@@ -1657,7 +1748,9 @@ test("submits Account Usage Contract v1 and returns metadata-only status", async
   );
   assert.equal(
     submitted.body.data.profile.readmeMarkdown,
-    `![Codex usage profile](${BASE_URL}/u/postmelee/card.png)`
+    `<a href="${BASE_URL}/api/share/postmelee">`
+      + `<img width="50%" src="${BASE_URL}/u/postmelee/card.png" `
+      + 'alt="Codex usage profile" /></a>'
   );
   assert.equal(submitted.body.data.device.deviceKey, "macbook-pro");
   assert.equal(submitted.body.data.device.displayName, "Office Mac");
@@ -2268,6 +2361,10 @@ async function publishThemeMediaFixture(mediaStore, options = {}) {
     }
   }
   return mediaStore.publishRevision({
+    ...(options.canonicalLocale && options.canonicalTheme ? {
+      canonicalLocale: options.canonicalLocale,
+      canonicalTheme: options.canonicalTheme
+    } : {}),
     contractVersion: 4,
     handle,
     ownerId,

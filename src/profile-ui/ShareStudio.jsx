@@ -12,7 +12,6 @@ import { CardImageFrame } from "../profile-marketing/MarketingLanding.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
 import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
-  buildLocalizedCardUrl,
   buildReadmeCardSnippet,
   buildSameOriginCardPreviewUrl
 } from "./cardShare.js";
@@ -21,7 +20,8 @@ import {
   buildShareTargets,
   formatShareStudioPlatformMessage,
   getShareStudioCopy,
-  isMobileShareEnvironment
+  isMobileShareEnvironment,
+  resolveShareStudioCardUrls
 } from "./shareStudio.js";
 import { useCardImageReadiness } from "./cardImageReadiness.js";
 import {
@@ -41,6 +41,7 @@ export function ShareStudio({
   open,
   publicCardUrl,
   publicOwnerHandle,
+  selectedPublicCardUrl,
   sourceCardImage,
   sourceCardRef,
   sourceRect
@@ -53,26 +54,37 @@ export function ShareStudio({
   const [toast, setToast] = useState(null);
   const mobileShareEnvironment = isMobileShareEnvironment(globalThis.navigator);
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
-  const imageUrl = useMemo(
-    () => buildLocalizedCardUrl(
+  const { copyImageUrl, selectedImageUrl } = useMemo(
+    () => resolveShareStudioCardUrls({
+      cardLocale,
+      cardTheme,
+      locale,
       publicCardUrl,
-      cardLocale ?? locale,
-      cardTheme
-    ),
-    [cardLocale, cardTheme, locale, publicCardUrl]
+      selectedPublicCardUrl
+    }),
+    [
+      cardLocale,
+      cardTheme,
+      locale,
+      publicCardUrl,
+      selectedPublicCardUrl
+    ]
   );
-  const markdown = useMemo(() => buildReadmeCardSnippet(imageUrl), [imageUrl]);
   const previewImageUrl = useMemo(
     () => buildSameOriginCardPreviewUrl(
-      imageUrl,
+      selectedImageUrl,
       locationOrigin,
       publicOwnerHandle
     ),
-    [imageUrl, locationOrigin, publicOwnerHandle]
+    [locationOrigin, publicOwnerHandle, selectedImageUrl]
   );
   const publicProfileUrl = useMemo(
     () => buildPublicProfileShareUrl(locationOrigin, publicOwnerHandle),
     [locationOrigin, publicOwnerHandle]
+  );
+  const markdown = useMemo(
+    () => buildReadmeCardSnippet(copyImageUrl, publicProfileUrl),
+    [copyImageUrl, publicProfileUrl]
   );
   const shareTargets = useMemo(
     () => buildShareTargets({
@@ -84,8 +96,8 @@ export function ShareStudio({
   );
   const canRender = Boolean(
     open
-    && imageUrl
-    && markdown
+    && copyImageUrl
+    && selectedImageUrl
     && typeof document !== "undefined"
   );
   const cardImage = useCardImageReadiness({
@@ -240,7 +252,7 @@ export function ShareStudio({
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
         throw new Error("Image clipboard unavailable");
       }
-      const response = await fetch(previewImageUrl ?? imageUrl, {
+      const response = await fetch(previewImageUrl ?? selectedImageUrl, {
         credentials: "same-origin"
       });
       if (!response.ok) throw new Error("Could not load image");
@@ -341,7 +353,7 @@ export function ShareStudio({
             aria-label={copy.saveAriaLabel}
             className="share-studio-primary-action"
             download="codex-usage-profile.png"
-            href={imageUrl}
+            href={selectedImageUrl}
             onClick={() => showToast(copy.imageSaved)}
             style={{ "--share-action-index": shareTargets.length }}
           >
@@ -365,29 +377,31 @@ export function ShareStudio({
               value={publicProfileUrl}
             />
           ) : null}
-          <ShareValue
-            label={copy.readme}
-            onCopy={() => copyValue(markdown, {
-              error: copy.readmeCopyFailed,
-              success: copy.readmeCopied
-            })}
-            copyLabel={copy.copyReadme}
-            value={markdown}
-          />
+          {markdown ? (
+            <ShareValue
+              label={copy.readme}
+              onCopy={() => copyValue(markdown, {
+                error: copy.readmeCopyFailed,
+                success: copy.readmeCopied
+              })}
+              copyLabel={copy.copyReadme}
+              value={markdown}
+            />
+          ) : null}
           <ShareValue
             label={copy.imageUrl}
-            onCopy={() => copyValue(imageUrl, {
+            onCopy={() => copyValue(copyImageUrl, {
               error: copy.imageUrlCopyFailed,
               success: copy.imageUrlCopied
             })}
             copyLabel={copy.copyImageUrl}
-            value={imageUrl}
+            value={copyImageUrl}
           />
           <ShareValue
             copyLabel={copy.copyImage}
             label={copy.copyImage}
             onCopy={copyImage}
-            value={imageUrl}
+            value={selectedImageUrl}
           />
           {onMakePrivate ? (
             <button

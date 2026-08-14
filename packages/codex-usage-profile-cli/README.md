@@ -66,8 +66,10 @@ revoke the corresponding server token.
 
 After a successful human-readable submit, supported interactive terminals
 render the `Profile` and `Card` URLs as clickable cyan OSC 8 hyperlinks. The
-`README` value remains exact plain Markdown so it can be copied without terminal
-control sequences. The result separates capture metadata from a compact,
+`README` value remains exact plain HTML-for-Markdown so it can be copied without
+terminal control sequences. Its default `width="50%"` is adjustable, the image
+uses the stable queryless card URL, and clicking it opens the public share page.
+The result separates capture metadata from a compact,
 indented `Links` block:
 
 ```text
@@ -77,7 +79,7 @@ Captured: 2026-07-11T00:00:00.000Z
 Links
   Profile: https://example.com/?view=profile
   Card:    https://example.com/u/octocat/card.png
-  README:  ![Codex usage profile](https://example.com/u/octocat/card.png)
+  README:  <a href="https://example.com/api/share/octocat"><img width="50%" src="https://example.com/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
 
 On a color-capable TTY, the `Links` heading is dim gray. JSON, piped output,

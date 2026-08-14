@@ -9,6 +9,11 @@ import {
 import { DEFAULT_SERVICE_ORIGIN } from "../src/config.js";
 import { ServiceClientError } from "../src/service-client.js";
 
+const README_EMBED = '<a href="https://profiles.example.test/api/share/postmelee">'
+  + '<img width="50%" '
+  + 'src="https://profiles.example.test/u/postmelee/card.png" '
+  + 'alt="Codex usage profile" /></a>';
+
 test("prints help and version without loading credentials", async () => {
   const help = createIo();
   const version = createIo();
@@ -397,7 +402,7 @@ test("waits for the star prompt before printing a human submit result", async ()
   assert.match(stdout.value, /  Profile: \u001B\[36m\u001B\]8;;https:/);
   assert.equal(
     stdout.value.split("\n").find((line) => line.startsWith("  README:")),
-    "  README:  ![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+    `  README:  ${README_EMBED}`
   );
   assert.equal(io.stderr.value, "");
 });
@@ -722,7 +727,7 @@ function createSubmitResponse() {
       visibility: "public",
       profileUrl: "https://profiles.example.test/profile",
       imageUrl: "https://profiles.example.test/u/postmelee/card.png",
-      readmeMarkdown: "![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+      readmeMarkdown: README_EMBED
     }
   };
 }
