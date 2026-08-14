@@ -13,6 +13,7 @@ import { createProfilePublicationService } from "../profile-media/publication-se
 import {
   PROFILE_MEDIA_CACHE_CONTROL,
   PROFILE_MEDIA_CONTENT_TYPE,
+  PROFILE_MEDIA_STABLE_STATE_KINDS,
   PROFILE_MEDIA_STORE_ERROR_CODES,
   createProfileMediaStableKey,
   normalizeProfileMediaTheme
@@ -1377,7 +1378,7 @@ async function readPublishedSocialCard(options) {
   if (
     !options.mediaStore ||
     typeof options.mediaStore.getSocialCard !== "function" ||
-    typeof options.mediaStore.getPublishedCard !== "function"
+    typeof options.mediaStore.inspectStableCard !== "function"
   ) {
     throw publicCardNotFoundError();
   }
@@ -1385,10 +1386,12 @@ async function readPublishedSocialCard(options) {
   let authority;
   let social;
   try {
-    authority = await options.mediaStore.getPublishedCard({
-      handle: options.handle,
-      includeBody: false
+    const stable = await options.mediaStore.inspectStableCard({
+      handle: options.handle
     });
+    authority = stable.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION
+      ? stable.publication
+      : null;
     social = authority
       ? await options.mediaStore.getSocialCard({
         handle: options.handle,

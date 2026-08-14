@@ -3,7 +3,7 @@
 - 수행계획서: [`task_m100_100.md`](task_m100_100.md)
 - GitHub Issue: [#100](https://github.com/postmelee/codex-usage-profile/issues/100)
 - 마일스톤: M100 — v1.0 MVP
-- 상태: Stage 6·최종 검증·최종 보고서 완료, PR 게시 준비
+- 상태: PR #105 Stage 7 구현·전체 검증 완료, push 준비
 
 ## 단계 개요
 
@@ -15,6 +15,7 @@
 | 4 | Share Studio 고정 README URL 전환 | canonical copy와 explicit preview/download 분리 | UI unit·settings E2E |
 | 5 | 통합 검증과 문서·#84 handoff | 공개 문서, 전체 build/smoke, 비배포 handoff | unit/E2E/build/verify/smoke |
 | 6 | README 임베드 크기·클릭 대상 보정 | 50% HTML image, 공유 페이지 anchor, 재배포 smoke | unit/E2E/build/GitHub render/production smoke |
+| 7 | PR #105 오류 경계·authority 정합성 보정 | generic 503, authority-only read, publication/social 수렴, UI degrade, repair pair | targeted failure·concurrency·adapter·UI·maintenance + full regression |
 
 ## 구현 불변식
 
@@ -82,7 +83,7 @@
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
-| 수행·구현 계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_100*.md` | OK | 내부 승인 경계 |
+| 수행·구현 계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_100*.md` | OK | 내부 승인 경계와 Stage 1~7 범위 |
 | 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_100_stage{N}.md` | OK | 단계별 증거와 함께 커밋 |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_100_report.md` | OK | 전체 검증·handoff 기록 |
 | 프로젝트 소개 | 저장소 루트 | `README.md` | OK | 복사 예시를 queryless canonical URL로 통일 |
@@ -411,18 +412,95 @@ git status --short
 Task #100 Stage 6: README 임베드 크기와 공유 링크 보정
 ```
 
+## Stage 7 — PR #105 오류 경계·authority 정합성 보정
+
+### 산출물
+
+신규:
+
+- `mydocs/orders/20260815.md`
+- `mydocs/working/task_m100_100_stage7.md`
+
+수정:
+
+- `mydocs/plans/task_m100_100_impl.md`
+- `src/profile-media/publication-service.js`
+- `src/profile-card/service-core.js`
+- `src/profile-media/s3/store.js`
+- `src/profile-backend/http.js`
+- `src/profile-runtime/public-profile-resolver.js`
+- `src/profile-runtime/sites/maintenance.js`
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-backend/__tests__/http.test.js`
+- `src/profile-media/__tests__/s3-store.test.js`
+- `src/profile-media/__tests__/publication-service.test.js`
+- `src/profile-media/__tests__/social-card-publication.test.js`
+- `src/profile-runtime/__tests__/public-profile-resolver.test.js`
+- `src/profile-runtime/sites/__tests__/maintenance.test.js`
+- `src/profile-ui/__tests__/cardStyleSettings.test.js`
+- 필요 시 review failure를 더 직접 고정하는 동일 영역 테스트·운영 문서
+
+### 변경 내용
+
+- `ensurePublishedCardVariants`의 prepare 단계에서 발생한 plain media store 오류를 기존 publication
+  경로와 같은 generic `503 media_unavailable`, `Retry-After: 5`로 정규화하고 내부 storage 메시지를
+  숨긴다. `PATCH /api/profile/card-settings`에 store failure를 주입하는 HTTP 회귀를 추가한다.
+- S3 unpublish와 social coherence 확인은 canonical representation body가 아니라 dark stable
+  publication authority의 owner/publication/storage ETag만 읽는다. canonical light object가 없거나
+  drift여도 private 전환과 coherent social 제공은 authority 기준으로 진행한다.
+- publication CAS가 성공한 뒤 owner/usage가 supersede해도 이미 commit된 publication id가 authority인
+  동안 준비된 social object를 같은 publication id로 수렴시킨다. authority가 더 최신 publication으로
+  바뀌었으면 이전 요청은 쓰지 않는다. publication/social 사이의 공개 read는 계속 mismatch 404로
+  fail-close한다.
+- media commit 반환값이 `superseded`이면 설정 API가 성공 200으로 숨기지 않고 generic
+  `media_unavailable` 재시도 신호를 반환한다. publication commit 직후 usage/owner revision이 바뀌는
+  경합에서 canonical/social pair가 일치하고 호출자가 실패를 관측하는 회귀를 둔다.
+- Share Studio 전체 dialog의 렌더 조건에서 README snippet을 분리한다. 공유 URL 또는 snippet을 만들 수
+  없어도 preview, Save image, Copy image URL, Copy image는 유지하고 README 행만 숨긴다.
+- Sites repair service가 저장된 owner `cardLocale`과 `cardStyle.theme`을 v4 repair publication의
+  `canonicalLocale`, `canonicalTheme`으로 전달한다. low-level v4 repair는 canonical pair 누락을
+  거절해 운영 입력이 조용히 dark/en으로 바뀌지 않게 한다.
+- queryless canonical light read는 light stable 불일치 시 dark로 degrade하지 않고 기존 404
+  fail-close 계약을 유지한다. exact same settings ensure도 post-CAS media 실패 복구 경로이므로
+  유지하며, 두 의도를 테스트·주석으로 명확히 한다.
+
+### 검증
+
+```bash
+node --test src/profile-backend/__tests__/http.test.js
+node --test src/profile-media/__tests__/publication-service.test.js src/profile-media/__tests__/social-card-publication.test.js src/profile-media/__tests__/s3-store.test.js src/profile-media/__tests__/s3-failure.test.js
+node --test src/profile-runtime/__tests__/public-profile-resolver.test.js src/profile-runtime/sites/__tests__/maintenance.test.js src/profile-media/__tests__/r2-binding-maintenance.test.js
+node --test src/profile-ui/__tests__/cardStyleSettings.test.js src/profile-ui/__tests__/shareStudio.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Share Studio|card appearance" --workers=1
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+npm run smoke:sites-fullstack:local
+git diff --check
+git status --short
+```
+
+### 커밋
+
+```text
+Task #100 Stage 7: PR 리뷰 오류 경계와 publication 정합성 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다. 실패한 검증은 완료로 처리하지 않는다.
 - Stage 1·2는 memory/R2/S3 behavior matrix, Stage 3은 transaction/concurrency, Stage 4는 사용자 복사
-  동작, Stage 5는 전체 artifact와 운영 계약, Stage 6은 README HTML 생성 계약과 production 복사 결과를
-  각각 독립 Gate로 삼는다.
+  동작, Stage 5는 전체 artifact와 운영 계약, Stage 6은 README HTML 생성 계약과 production 복사 결과,
+  Stage 7은 review failure·supersession·authority-only read와 repair pair를 각각 독립 Gate로 삼는다.
 - failure/concurrency test는 owner CAS 이전 authority 미변경, 최신 owner/usage supersession, exact retry
   수렴, social mismatch fail-close를 반드시 포함한다.
 - 계획된 파일 밖 변경 또는 공개 문서 위치 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자
   승인을 받는다.
-- Stage 6에서 승인된 기존 Sites project 재배포와 읽기·복사 smoke만 수행한다. 원격 storage migration과
-  cleanup 실행은 이 task 범위에 포함하지 않는다.
+- Stage 6에서 승인된 기존 Sites project 재배포와 읽기·복사 smoke만 수행한다. Stage 7은 production
+  재배포·원격 storage mutation 없이 코드·local full-stack·artifact 회귀만 검증한다. 원격 storage
+  migration과 cleanup 실행은 이 task 범위에 포함하지 않는다.
 
 ## 커밋
 
@@ -438,6 +516,9 @@ Task #100 Stage 6: README 임베드 크기와 공유 링크 보정
 - Stage 5는 Stage 4의 copy/preview 분리 검증과 단계 보고서 승인 후 진행한다.
 - Stage 6은 Stage 5 production Gate에서 확인한 stable URL·Camo 동작을 전제로 README 임베드 표현만
   보정하며, 기존 publication과 cache 계약은 변경하지 않는다.
+- Stage 7은 PR #105 owner review의 1·2·3·5·6·7·9·11·12번을 일곱 동작 묶음으로 보정한다. 4번의
+  canonical light fail-close와 8번의 exact settings repair는 승인된 불변식으로 유지하고, 10·13·14번은
+  이번 Stage의 correctness 범위 밖 후속 정리로 남긴다.
 
 ## 위험과 대응
 
@@ -455,12 +536,16 @@ Task #100 Stage 6: README 임베드 크기와 공유 링크 보정
   보존되는지를 GitHub renderer와 실제 README에서 확인한다.
 - **social card와 canonical card 불일치**: 동일 publication id로 publish하고 reader mismatch fail-close와
   post-CAS failure retry를 검증한다.
+- **publication commit 직후 supersession**: 이미 authority가 된 publication의 social을 같은 id로
+  수렴시킨 뒤 호출자에는 재시도 가능한 generic 실패를 반환하고, 더 최신 authority는 덮지 않는다.
+- **repair의 canonical pair 유실**: v4 repair 입력에 pair를 강제하고 저장된 owner 설정에서 두 값을
+  구성하는 회귀로 dark/en silent reset을 막는다.
 - **Task #84 진행 중 worktree 충돌**: `.worktrees/task84`를 수정하지 않고 #100 merge 뒤 재정렬할 검증
   항목만 handoff한다.
 
 ## 승인 요청 사항
 
-- 여섯 Stage의 분할, 산출물 경로, 검증 명령과 커밋 메시지를 승인한다.
+- 일곱 Stage의 분할, 산출물 경로, 검증 명령과 커밋 메시지를 승인한다.
 - `v4`를 유지하면서 `canonicalTheme`, `canonicalLocale`을 additive publication field로 추가하고,
   legacy pair 전체 부재만 dark/en으로 읽는 계약을 승인한다.
 - `publicCardUrl`은 canonical queryless, `selectedPublicCardUrl`은 explicit selected variant로 유지하는
@@ -472,3 +557,6 @@ Task #100 Stage 6: README 임베드 크기와 공유 링크 보정
 - README와 기존 docs 세 문서를 Stage 5에서 수정하고 실제 배포는 하지 않는 범위를 승인한다.
 - Stage 6에서 README 복사 결과를 50% HTML image와 `/api/share/{handle}` anchor로 바꾸고 API/CLI를
   통일하며, 검증된 source를 기존 Sites project에 재배포해 production smoke하는 범위를 승인한다.
+- Stage 7에서 PR #105 review의 일곱 correctness 묶음을 보정하고 전체 회귀 뒤 기존
+  `publish/task100`에 push하며, 검증 결과와 의도적으로 유지한 4·8번 판단을 review comment로 게시하는
+  범위를 승인한다.

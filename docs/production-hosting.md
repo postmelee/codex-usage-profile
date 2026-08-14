@@ -170,10 +170,13 @@ Public Account Usage submit은 usage commit 뒤 현재 visibility/latest usage�
 CAS 전에는 stable authority를 바꾸지 않는다. CAS 성공 뒤 committed owner와
 latest usage version이 준비 snapshot과 같을 때만 card/social authority를 같은
 publication id로 조건부 commit한다. 더 최신 owner/usage가 앞선 prepare는
-`superseded`이며, DB 성공 뒤 media 실패는 같은 설정 PATCH의 exact retry가
-canonical card와 social publication을 수렴시킨다.
+`superseded`이며 generic `503 media_unavailable`, `Retry-After: 5`로 재시도를
+요청한다. authority CAS 뒤 supersede된 요청은 해당 authority가 여전히 current일
+때 같은 publication id의 social object까지 수렴시킨 뒤 실패를 반환한다. DB 성공
+뒤 media 실패는 같은 설정 PATCH의 exact retry가 canonical card와 social
+publication을 수렴시킨다.
 
-fallback S3 adapter도 public HTTP contract는 같지만 stable object를 물리 삭제할 수 있다. provider 내부 보상 방식이 달라도 public/private, application ETag와 404/503 의미는 같아야 한다.
+fallback S3 adapter도 public HTTP contract는 같지만 stable object를 물리 삭제할 수 있다. unpublish는 canonical light body가 아니라 dark stable authority의 storage ETag를 읽으므로 light stable drift가 private 전환을 막지 않는다. provider 내부 보상 방식이 달라도 public/private, application ETag와 404/503 의미는 같아야 한다.
 
 ## Hosted Renderer Contract
 

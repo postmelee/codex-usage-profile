@@ -297,7 +297,7 @@ export function createS3ProfileMediaStore(options = {}) {
 
     async unpublishCard(unpublishOptions = {}) {
       const handle = normalizeHandle(unpublishOptions.handle);
-      const previous = await store.getPublishedCard({ handle });
+      const previous = await headPublication(handle);
       assertExpectedStorageEtag(previous, unpublishOptions);
       if (!previous) return null;
       await send(new DeleteObjectCommand({

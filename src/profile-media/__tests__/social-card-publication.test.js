@@ -263,6 +263,47 @@ test("an exact settings retry repairs a post-CAS authority failure", async () =>
   assert.equal(social.publicationId, repaired.publicationId);
 });
 
+test("a post-publication supersession keeps social coherent and asks for retry", async () => {
+  const { cardService, mediaStore, service, store } = createFixture();
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const publishRevision = mediaStore.publishRevision.bind(mediaStore);
+  let advanceUsageAfterCommit = true;
+  mediaStore.publishRevision = async (options) => {
+    const published = await publishRevision(options);
+    if (advanceUsageAfterCommit && options.canonicalTheme === "light") {
+      advanceUsageAfterCommit = false;
+      const usage = await store.getLatestUsageByOwnerId(OWNER.id);
+      store.saveLatestUsage({
+        ...usage,
+        uploadedAt: "2026-07-22T04:00:00.000Z"
+      });
+    }
+    return published;
+  };
+  const settings = {
+    ownerId: OWNER.id,
+    cardLocale: "en",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "light",
+      effect: { preset: "none", version: 1 }
+    }
+  };
+
+  await assert.rejects(
+    () => cardService.updateCardSettings(settings),
+    (error) => error.code === "media_unavailable" && error.status === 503
+  );
+  const publication = await mediaStore.getPublishedCard({ handle: OWNER.handle });
+  const social = await mediaStore.getSocialCard({ handle: OWNER.handle });
+
+  assert.equal(publication.canonicalLocale, "en");
+  assert.equal(publication.canonicalTheme, "light");
+  assert.equal(social.publicationId, publication.publicationId);
+  assert.equal(Buffer.from(social.body).toString(), "social:light:en");
+  await cardService.updateCardSettings(settings);
+});
+
 test("unpublishing removes the social object", async () => {
   const { mediaStore, service } = createFixture();
 

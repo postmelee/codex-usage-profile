@@ -276,6 +276,18 @@ test("R2 maintenance preserves canonical selection across tombstone and repair",
   assert.equal(tombstoned.previousPublication.canonicalLocale, "ko");
   assert.equal(tombstoned.previousPublication.canonicalTheme, "light");
 
+  await assert.rejects(
+    () => maintenance.repairPublication({
+      ...OWNER_SCOPE,
+      apply: true,
+      expectedStorageEtag: tombstoned.stable.storageEtag,
+      publication: themePublicationInput(revisions, {
+        publicationId: "publication_missing_canonical_pair"
+      })
+    }),
+    /requires canonicalLocale and canonicalTheme/
+  );
+
   const repaired = await maintenance.repairPublication({
     ...OWNER_SCOPE,
     apply: true,

@@ -258,6 +258,43 @@ test("S3 adapter serves canonical queryless selection and validates its metadata
   );
 });
 
+test("S3 unpublish uses authority even when canonical light media is missing", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createThemeIdentity();
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(identity.representations[theme].en);
+    await store.putRevision(identity.representations[theme].ko);
+  }
+  const published = await store.publishRevision(themePublicationInput(identity, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  }));
+  client.objects.delete(createProfileMediaStableKey({
+    handle: identity.handle,
+    theme: "light"
+  }));
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND
+  );
+  const removed = await store.unpublishCard({
+    handle: identity.handle,
+    expectedStorageEtag: published.storageEtag
+  });
+
+  assert.equal(removed.publicationId, published.publicationId);
+  assert.equal(
+    (await store.inspectStableCard({ handle: identity.handle })).kind,
+    "missing"
+  );
+});
+
 const integrationConfig = resolveTestProfileMediaStoreOptions(process.env);
 test("S3 adapter satisfies contract against configured endpoint", {
   skip: integrationConfig.enabled ? false : integrationConfig.reason

@@ -179,7 +179,10 @@ CAS 성공 뒤 committed owner `updatedAt`, latest usage `uploadedAt`과 준비 
 같을 때만 storage ETag 조건부로 stable과 social authority를 같은 publication id에
 commit한다. 더 최신 설정·사용량이 앞섰으면 이전 요청은 `superseded`로 끝난다.
 DB 설정은 저장됐지만 media commit이 실패하면 같은 설정을 다시 저장해 authority를
-복구할 수 있다.
+복구할 수 있다. prepare storage 오류와 post-commit `superseded`는 내부 provider
+메시지를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 응답한다. authority가 이미
+새 publication으로 교체된 뒤 supersede되면 같은 publication id의 social object를
+먼저 수렴시키고 재시도를 요청한다.
 
 ## 자동 갱신 방식
 

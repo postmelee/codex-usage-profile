@@ -1000,6 +1000,48 @@ test("updates versioned owner card settings and validates the exact payload", as
   assert.equal(unknown.body.error.code, PROFILE_BACKEND_ERROR_CODES.VALIDATION_FAILED);
 });
 
+test("returns a generic retryable 503 when card-settings media prepare fails", async () => {
+  const baseMediaStore = createMemoryProfileMediaStore();
+  const mediaStore = wrapMediaStore(baseMediaStore, {
+    async putRevision() {
+      throw createProfileMediaStoreError(
+        PROFILE_MEDIA_STORE_ERROR_CODES.UNAVAILABLE,
+        "write media revision failed at secret-provider-endpoint"
+      );
+    }
+  });
+  const fixture = createFixture({ mediaStore });
+  fixture.saveOwner({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  fixture.saveLatestUsage({ visibility: PROFILE_VISIBILITY.PUBLIC });
+  const cookie = fixture.saveSession();
+
+  const response = await requestJson(
+    fixture.handler,
+    "PATCH",
+    "/api/profile/card-settings",
+    {
+      cardLocale: "ko",
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    },
+    { cookie }
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("retry-after"), "5");
+  assert.deepEqual(response.body, {
+    ok: false,
+    error: {
+      code: PROFILE_BACKEND_ERROR_CODES.MEDIA_UNAVAILABLE,
+      message: "Profile media is temporarily unavailable"
+    }
+  });
+  assert.equal(JSON.stringify(response.body).includes("secret-provider"), false);
+});
+
 test("hides non-public, missing, malformed, and mismatched public profiles", async () => {
   const privateFixture = createFixture();
   privateFixture.saveOwner();
@@ -1403,7 +1445,10 @@ test("serves public GET and HEAD cards with ETag revalidation", async () => {
 
 test("revalidates a public social card through the store without a response body", async () => {
   const baseMediaStore = createMemoryProfileMediaStore();
-  const publication = await publishThemeMediaFixture(baseMediaStore);
+  const publication = await publishThemeMediaFixture(baseMediaStore, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  });
   const socialBody = Buffer.from("social-media");
   const socialRevision = createProfileMediaRevisionDigest(socialBody);
   await baseMediaStore.putSocialCard({
@@ -1446,10 +1491,7 @@ test("revalidates a public social card through the store without a response body
   assert.equal(notModified.status, 304);
   assert.equal((await notModified.arrayBuffer()).byteLength, 0);
   assert.deepEqual(mediaCalls, [
-    ["getPublishedCard", {
-      handle: "postmelee",
-      includeBody: false
-    }],
+    ["inspectStableCard", { handle: "postmelee" }],
     ["getSocialCard", {
       handle: "postmelee",
       ifNoneMatch: etag,
@@ -2319,6 +2361,10 @@ async function publishThemeMediaFixture(mediaStore, options = {}) {
     }
   }
   return mediaStore.publishRevision({
+    ...(options.canonicalLocale && options.canonicalTheme ? {
+      canonicalLocale: options.canonicalLocale,
+      canonicalTheme: options.canonicalTheme
+    } : {}),
     contractVersion: 4,
     handle,
     ownerId,

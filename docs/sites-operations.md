@@ -211,7 +211,9 @@ contract/schema version, digest와 count만 남긴다.
   theme·locale별 revision plan, D1 owner-dependent plan이 일치할 때만 apply한다.
 - partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
-  조건으로 수행한다.
+  조건으로 수행한다. v4 repair publication은 D1 owner에 저장된 canonical
+  `cardLocale`·`cardStyle.theme` pair를 반드시 포함하며 pair 없는 입력은
+  dark/en으로 추측하지 않고 mutation 전에 거절한다.
 
 operator CLI는 `npm run sites:profile-maintenance -- <command>`를 사용하며
 mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두

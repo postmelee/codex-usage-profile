@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { normalizeVisibility } from "../profile-backend/accounts.js";
 import {
   PROFILE_BACKEND_ERROR_CODES,
-  ProfileBackendError
+  ProfileBackendError,
+  createProfileMediaUnavailableError
 } from "../profile-backend/errors.js";
 import { PROFILE_VISIBILITY } from "../profile-backend/store-values.js";
 import { normalizeAccountUsageReadResult } from "./account-usage.js";
@@ -103,6 +104,8 @@ export function createProfileCardServiceCore(options = {}) {
 
       let mediaPreparation = null;
       if (current.visibility === PROFILE_VISIBILITY.PUBLIC) {
+        // Exact retries intentionally prepare media even when settings match.
+        // A prior request may have committed D1 before its authority write failed.
         mediaPreparation = await ensureCardStyleMedia({
           owner: current,
           usageRecord,
@@ -127,7 +130,15 @@ export function createProfileCardServiceCore(options = {}) {
         throw error;
       }
       if (typeof mediaPreparation?.commit === "function") {
-        await mediaPreparation.commit({ owner: result.owner });
+        const mediaStatus = await mediaPreparation.commit({ owner: result.owner });
+        if (mediaStatus === "superseded") {
+          throw createProfileMediaUnavailableError({
+            details: {
+              operation: "commit_card_settings_media",
+              reason: "superseded"
+            }
+          });
+        }
       }
       return {
         owner: result.owner,

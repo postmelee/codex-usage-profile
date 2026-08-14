@@ -1,4 +1,7 @@
 import { normalizeCardLocale } from "../profile-card/presentation.js";
+import {
+  PROFILE_MEDIA_STABLE_STATE_KINDS
+} from "../profile-media/media-store-contract.js";
 
 export function createStorePublicProfileResolver(store, options = {}) {
   if (
@@ -11,7 +14,7 @@ export function createStorePublicProfileResolver(store, options = {}) {
   if (
     mediaStore &&
     (
-      typeof mediaStore.getPublishedCard !== "function" ||
+      typeof mediaStore.inspectStableCard !== "function" ||
       typeof mediaStore.getSocialCard !== "function"
     )
   ) {
@@ -40,11 +43,11 @@ export function createStorePublicProfileResolver(store, options = {}) {
 
 async function hasCoherentSocialImage(mediaStore, handle) {
   try {
-    const authority = await mediaStore.getPublishedCard({
-      handle,
-      includeBody: false
+    const stable = await mediaStore.inspectStableCard({
+      handle
     });
-    if (!authority) return false;
+    if (stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) return false;
+    const authority = stable.publication;
 
     const social = await mediaStore.getSocialCard({
       handle,

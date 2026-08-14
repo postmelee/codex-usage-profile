@@ -185,6 +185,14 @@ export function createProfilePublicationService(options = {}) {
   }
 
   async function ensurePublishedCardVariants(ensureOptions = {}) {
+    try {
+      return await preparePublishedCardVariants(ensureOptions);
+    } catch (error) {
+      throw await normalizePublicationFailure(error, null);
+    }
+  }
+
+  async function preparePublishedCardVariants(ensureOptions = {}) {
     const ownerId = requireOwnerId(
       ensureOptions.ownerId ?? ensureOptions.owner?.id
     );
@@ -288,7 +296,12 @@ export function createProfilePublicationService(options = {}) {
         committedOwner
       )
       : "not_needed";
-    if (socialStatus === "superseded") return socialStatus;
+    if (
+      publicationStatus === "committed_superseded" ||
+      socialStatus === "superseded"
+    ) {
+      return "superseded";
+    }
     if (
       publicationStatus === "idempotent" &&
       ["idempotent", "not_needed"].includes(socialStatus)
@@ -341,7 +354,7 @@ export function createProfilePublicationService(options = {}) {
             return await isPreparedMediaRevisionCurrent(
               preparation,
               committedOwner
-            ) ? "succeeded" : "superseded";
+            ) ? "succeeded" : "committed_superseded";
           }
         } catch {
           // The generic media-unavailable response below is the safe fallback.
@@ -353,7 +366,7 @@ export function createProfilePublicationService(options = {}) {
 
       return await isPreparedMediaRevisionCurrent(preparation, committedOwner)
         ? "succeeded"
-        : "superseded";
+        : "committed_superseded";
     }
 
     throw createProfileMediaUnavailableError({
@@ -473,7 +486,7 @@ export function createProfilePublicationService(options = {}) {
 
     let expectedStorageEtag = preparation.expectedStorageEtag;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (!await isPreparedSocialRevisionCurrent(preparation, committedOwner)) {
+      if (!await isPreparedSocialAuthorityCurrent(preparation)) {
         return "superseded";
       }
 
@@ -488,7 +501,7 @@ export function createProfilePublicationService(options = {}) {
           details: { operation: "commit_social_media" }
         });
       }
-      if (!await isPreparedSocialRevisionCurrent(preparation, committedOwner)) {
+      if (!await isPreparedSocialAuthorityCurrent(preparation)) {
         return "superseded";
       }
       if (socialRecordMatches(current, preparation.input)) {
@@ -509,10 +522,9 @@ export function createProfilePublicationService(options = {}) {
             includeBody: false
           });
           if (socialRecordMatches(written, preparation.input)) {
-            return await isPreparedSocialRevisionCurrent(
-              preparation,
-              committedOwner
-            ) ? "succeeded" : "superseded";
+            return await isPreparedSocialAuthorityCurrent(preparation)
+              ? "succeeded"
+              : "superseded";
           }
         } catch {
           // The generic media-unavailable response below is the safe fallback.
@@ -522,7 +534,7 @@ export function createProfilePublicationService(options = {}) {
         });
       }
 
-      return await isPreparedSocialRevisionCurrent(preparation, committedOwner)
+      return await isPreparedSocialAuthorityCurrent(preparation)
         ? "succeeded"
         : "superseded";
     }
@@ -532,13 +544,20 @@ export function createProfilePublicationService(options = {}) {
     });
   }
 
-  async function isPreparedSocialRevisionCurrent(preparation, committedOwner) {
-    const [owner, usageRecord] = await Promise.all([
-      requireOwner(store, committedOwner.id),
-      store.getLatestUsageByOwnerId(committedOwner.id)
-    ]);
-    return owner.updatedAt === committedOwner.updatedAt &&
-      (usageRecord?.uploadedAt ?? null) === preparation.usageUploadedAt;
+  async function isPreparedSocialAuthorityCurrent(preparation) {
+    let stable;
+    try {
+      stable = await mediaStore.inspectStableCard({
+        handle: preparation.input.handle
+      });
+    } catch {
+      throw createProfileMediaUnavailableError({
+        details: { operation: "inspect_social_authority" }
+      });
+    }
+    return stable.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION &&
+      stable.publication.ownerId === preparation.input.ownerId &&
+      stable.publication.publicationId === preparation.input.publicationId;
   }
 
   async function removeSocialCard(handle) {

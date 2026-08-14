@@ -97,7 +97,6 @@ export function ShareStudio({
   const canRender = Boolean(
     open
     && copyImageUrl
-    && markdown
     && selectedImageUrl
     && typeof document !== "undefined"
   );
@@ -378,15 +377,17 @@ export function ShareStudio({
               value={publicProfileUrl}
             />
           ) : null}
-          <ShareValue
-            label={copy.readme}
-            onCopy={() => copyValue(markdown, {
-              error: copy.readmeCopyFailed,
-              success: copy.readmeCopied
-            })}
-            copyLabel={copy.copyReadme}
-            value={markdown}
-          />
+          {markdown ? (
+            <ShareValue
+              label={copy.readme}
+              onCopy={() => copyValue(markdown, {
+                error: copy.readmeCopyFailed,
+                success: copy.readmeCopied
+              })}
+              copyLabel={copy.copyReadme}
+              value={markdown}
+            />
+          ) : null}
           <ShareValue
             label={copy.imageUrl}
             onCopy={() => copyValue(copyImageUrl, {

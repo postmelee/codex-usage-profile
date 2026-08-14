@@ -68,4 +68,11 @@ test("share studio separates canonical copy from the saved card asset", async ()
   );
   assert.match(source, /href=\{selectedImageUrl\}/u);
   assert.match(source, /fetch\(previewImageUrl \?\? selectedImageUrl/u);
+  const renderGate = /const canRender = Boolean\(([\s\S]*?)\n  \);/u.exec(source);
+  assert.notEqual(renderGate, null);
+  assert.doesNotMatch(renderGate[1], /markdown/u);
+  assert.match(
+    source,
+    /\{markdown \? \([\s\S]*label=\{copy\.readme\}[\s\S]*\) : null\}/u
+  );
 });
