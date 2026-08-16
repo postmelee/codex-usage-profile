@@ -603,6 +603,77 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       publicDocumentHtml,
       /<meta property="og:image" content="[^"]+\/u\/local-owner\/social\.png\?v=\d+" \/>/
     );
+    const socialRevisionMatch = publicDocumentHtml.match(
+      /\/u\/local-owner\/social\.png\?v=(\d+)/
+    );
+    assert.ok(socialRevisionMatch);
+    const currentShareRevision = Number(socialRevisionMatch[1]);
+    assert.ok(Number.isSafeInteger(currentShareRevision));
+    const revisionSharePath =
+      `/api/share/local-owner/r/${currentShareRevision}`;
+    const revisionDocument = await fetch(new URL(revisionSharePath, origin));
+    const revisionDocumentHtml = await revisionDocument.text();
+    assert.equal(revisionDocument.status, 200);
+    assert.match(
+      revisionDocumentHtml,
+      new RegExp(
+        `<link rel="canonical" href="[^"]+${revisionSharePath}" \\/>`
+      )
+    );
+    assert.match(
+      revisionDocumentHtml,
+      new RegExp(
+        `<meta property="og:url" content="[^"]+${revisionSharePath}" \\/>`
+      )
+    );
+    assert.match(
+      revisionDocumentHtml,
+      new RegExp(
+        `/u/local-owner/social\\.png\\?v=${currentShareRevision}`
+      )
+    );
+
+    const revisionDocumentHead = await fetch(
+      new URL(revisionSharePath, origin),
+      { method: "HEAD" }
+    );
+    assert.equal(revisionDocumentHead.status, 200);
+    assert.equal((await revisionDocumentHead.arrayBuffer()).byteLength, 0);
+
+    const staleShareRevision = currentShareRevision - 1;
+    const staleDocument = await fetch(new URL(
+      `/api/share/local-owner/r/${staleShareRevision}`,
+      origin
+    ));
+    const staleDocumentHtml = await staleDocument.text();
+    assert.equal(staleDocument.status, 200);
+    assert.match(staleDocumentHtml, new RegExp(revisionSharePath));
+    assert.doesNotMatch(
+      staleDocumentHtml,
+      new RegExp(`/api/share/local-owner/r/${staleShareRevision}`)
+    );
+
+    const invalidRevisionDocument = await fetch(new URL(
+      "/api/share/local-owner/r/001",
+      origin
+    ));
+    assert.equal(invalidRevisionDocument.status, 404);
+
+    const missingRevisionDocument = await fetch(new URL(
+      `/api/share/missing-owner/r/${currentShareRevision}`,
+      origin
+    ));
+    const missingRevisionDocumentHtml = await missingRevisionDocument.text();
+    assert.equal(missingRevisionDocument.status, 200);
+    assert.match(
+      missingRevisionDocumentHtml,
+      /<link rel="canonical" href="[^"]+\/" \/>/
+    );
+    assert.match(
+      missingRevisionDocumentHtml,
+      /\/assets\/codex-social-sample\.png/
+    );
+    assert.doesNotMatch(missingRevisionDocumentHtml, /missing-owner/);
 
     const publicSocial = await fetch(new URL(
       "/u/local-owner/social.png",
@@ -876,7 +947,7 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       coldRenderMs: roundMilliseconds(coldRenderMs),
       publicPngBytes: publicPng.byteLength,
       publishRenderMs: roundMilliseconds(publishRenderMs),
-      routesVerified: 62,
+      routesVerified: 67,
       warmRenderMs: roundMilliseconds(warmRenderMs)
     });
   } finally {

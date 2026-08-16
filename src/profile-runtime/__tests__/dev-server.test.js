@@ -27,6 +27,15 @@ import {
   parseRuntimeEnvFile,
   writeWebResponseToNodeResponse
 } from "../dev-server.js";
+import {
+  createPublicProfileDocumentHandler
+} from "../public-profile-document.js";
+
+const SHARE_INDEX_HTML = [
+  "<!doctype html>",
+  "<html><head><title>Codex Usage Profile</title></head>",
+  '<body><div id="root"></div></body></html>'
+].join("");
 
 test("parses and loads local runtime env files without overriding existing values", () => {
   const directory = mkdtempSync(join(tmpdir(), "cup-env-"));
@@ -105,6 +114,16 @@ test("writes fetch Response objects to Node responses", async () => {
 
 test("routes API requests through the runtime node handler and delegates frontend requests", async () => {
   const calls = [];
+  const shareRevision = 1783990860001;
+  const publicDocumentHandler = createPublicProfileDocumentHandler({
+    loadIndexHtml: async () => SHARE_INDEX_HTML,
+    publicBaseUrl: "https://profiles.example.test",
+    resolveProfile: async (handle) => ({
+      cardLocale: "en",
+      handle,
+      imageRevisionAt: new Date(shareRevision).toISOString()
+    })
+  });
   const handler = createProfileRuntimeNodeHandler({
     apiHandler: async (request) => {
       const pathname = new URL(request.url).pathname;
@@ -113,6 +132,9 @@ test("routes API requests through the runtime node handler and delegates fronten
         return new Response("png", {
           headers: { "content-type": "image/png", etag: '"card-etag"' }
         });
+      }
+      if (pathname.startsWith("/api/share/")) {
+        return new Response("api share fallback", { status: 404 });
       }
       return new Response(JSON.stringify({
         body: await request.json(),
@@ -124,6 +146,12 @@ test("routes API requests through the runtime node handler and delegates fronten
         }
       });
     },
+    documentHandler: async (request) => {
+      const pathname = new URL(request.url).pathname;
+      const response = await publicDocumentHandler(request);
+      if (response) calls.push(["document", request.method, pathname]);
+      return response;
+    },
     frontendMiddleware: (request, response) => {
       calls.push(["frontend", request.method, request.url]);
       response.statusCode = 200;
@@ -133,6 +161,10 @@ test("routes API requests through the runtime node handler and delegates fronten
   });
   const apiResponse = createNodeResponseRecorder();
   const cardResponse = createNodeResponseRecorder();
+  const fixedShareResponse = createNodeResponseRecorder();
+  const revisionShareGetResponse = createNodeResponseRecorder();
+  const revisionShareResponse = createNodeResponseRecorder();
+  const invalidShareResponse = createNodeResponseRecorder();
   const frontendResponse = createNodeResponseRecorder();
 
   await handler(createReadableRequest({
@@ -150,11 +182,31 @@ test("routes API requests through the runtime node handler and delegates fronten
     url: "/u/meleeisdeveloping/card.png"
   }), cardResponse);
   await handler(createReadableRequest({
+    headers: { host: "127.0.0.1:5173" },
+    method: "GET",
+    url: "/api/share/meleeisdeveloping"
+  }), fixedShareResponse);
+  await handler(createReadableRequest({
+    headers: { host: "127.0.0.1:5173" },
+    method: "GET",
+    url: `/api/share/meleeisdeveloping/r/${shareRevision}`
+  }), revisionShareGetResponse);
+  await handler(createReadableRequest({
+    headers: { host: "127.0.0.1:5173" },
+    method: "HEAD",
+    url: `/api/share/meleeisdeveloping/r/${shareRevision}`
+  }), revisionShareResponse);
+  await handler(createReadableRequest({
+    headers: { host: "127.0.0.1:5173" },
+    method: "GET",
+    url: "/api/share/meleeisdeveloping/r/001"
+  }), invalidShareResponse);
+  await handler(createReadableRequest({
     headers: {
       host: "127.0.0.1:5173"
     },
     method: "GET",
-    url: "/u/meleeisdeveloping"
+    url: "/settings"
   }), frontendResponse);
 
   assert.equal(apiResponse.statusCode, 201);
@@ -165,12 +217,45 @@ test("routes API requests through the runtime node handler and delegates fronten
   assert.equal(cardResponse.statusCode, 200);
   assert.equal(cardResponse.headers["content-type"], "image/png");
   assert.equal(cardResponse.headers.etag, '"card-etag"');
+  assert.equal(fixedShareResponse.statusCode, 200);
+  assert.ok(fixedShareResponse.body.includes(
+    "https://profiles.example.test/api/share/meleeisdeveloping"
+  ));
+  assert.equal(revisionShareGetResponse.statusCode, 200);
+  assert.ok(revisionShareGetResponse.body.includes(
+    `rel="canonical" ` +
+    `href="https://profiles.example.test/api/share/` +
+    `meleeisdeveloping/r/${shareRevision}"`
+  ));
+  assert.ok(revisionShareGetResponse.body.includes(
+    `property="og:url" ` +
+    `content="https://profiles.example.test/api/share/` +
+    `meleeisdeveloping/r/${shareRevision}"`
+  ));
+  assert.ok(revisionShareGetResponse.body.includes(
+    `/u/meleeisdeveloping/social.png?v=${shareRevision}`
+  ));
+  assert.equal(revisionShareResponse.statusCode, 200);
+  assert.equal(revisionShareResponse.body, "");
+  assert.equal(invalidShareResponse.statusCode, 404);
   assert.equal(frontendResponse.statusCode, 200);
   assert.equal(frontendResponse.body, "<html>app</html>");
   assert.deepEqual(calls, [
     ["api", "POST", "/api/cli/login/start"],
     ["api", "HEAD", "/u/meleeisdeveloping/card.png"],
-    ["frontend", "GET", "/u/meleeisdeveloping"]
+    ["document", "GET", "/api/share/meleeisdeveloping"],
+    [
+      "document",
+      "GET",
+      `/api/share/meleeisdeveloping/r/${shareRevision}`
+    ],
+    [
+      "document",
+      "HEAD",
+      `/api/share/meleeisdeveloping/r/${shareRevision}`
+    ],
+    ["api", "GET", "/api/share/meleeisdeveloping/r/001"],
+    ["frontend", "GET", "/settings"]
   ]);
 });
 

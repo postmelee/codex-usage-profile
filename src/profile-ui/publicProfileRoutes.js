@@ -1,18 +1,23 @@
 import { isAccountUsageReadResult } from "../profile-card/account-usage.js";
+import {
+  normalizePublicShareHandle,
+  parsePublicSharePath
+} from "../profile-shared/public-share-url.js";
 
 export function resolvePublicProfileRoute(location) {
   const pathname = normalizePathname(location?.pathname);
   const rootHandle = pathname === "/"
     ? new URLSearchParams(location?.search ?? "").get("profile")
     : null;
-  const match = pathname.match(/^\/(?:u|api\/share)\/([^/]+)$/);
+  const profileMatch = pathname.match(/^\/u\/([^/]+)$/);
+  const sharePath = parsePublicSharePath(pathname);
 
-  if (rootHandle === null && !match) {
+  if (rootHandle === null && !profileMatch && !sharePath) {
     return createState("unavailable", null, null);
   }
 
   const handle = rootHandle === null
-    ? decodeHandle(match[1])
+    ? sharePath?.handle ?? decodeHandle(profileMatch[1])
     : normalizeHandle(rootHandle);
   if (!handle) {
     return createState("unavailable", null, null);
@@ -67,8 +72,11 @@ function decodeHandle(value) {
 }
 
 function normalizeHandle(value) {
-  const handle = typeof value === "string" ? value.trim() : "";
-  return handle || null;
+  try {
+    return normalizePublicShareHandle(value);
+  } catch {
+    return null;
+  }
 }
 
 function isPublicProfile(profile) {

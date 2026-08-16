@@ -249,11 +249,16 @@ test("Sites Worker applies operational stops before backend execution", async ()
   assert.equal(maintenance.status, 503);
   assert.equal(maintenance.headers.get("retry-after"), "720");
 
-  const ownerOnly = await worker.fetch(
-    new Request("https://profile.example/u/private-owner/card.png"),
-    { ...environment, PROFILE_SERVICE_MODE: "owner-only" }
-  );
-  assert.equal(ownerOnly.status, 404);
+  for (const pathname of [
+    "/u/private-owner/card.png",
+    "/api/share/private-owner/r/1783990860001"
+  ]) {
+    const ownerOnly = await worker.fetch(
+      new Request(`https://profile.example${pathname}`),
+      { ...environment, PROFILE_SERVICE_MODE: "owner-only" }
+    );
+    assert.equal(ownerOnly.status, 404, pathname);
+  }
 
   const quota = await worker.fetch(
     new Request("https://profile.example/api/account-usage/submit", {
