@@ -3,6 +3,10 @@ import {
   buildLocalizedCardUrl,
   resolveShareLocale
 } from "./cardShare.js";
+import {
+  buildPublicShareUrl,
+  resolvePublicShareRevision
+} from "../profile-shared/public-share-url.js";
 import { formatMessage } from "./i18n.js";
 
 const SHARE_MESSAGE_IDS = Object.freeze({
@@ -93,19 +97,32 @@ export function resolveShareStudioCardUrls(options = {}) {
   return Object.freeze({ copyImageUrl, selectedImageUrl });
 }
 
-export function buildPublicProfileShareUrl(origin, handle) {
-  const normalizedHandle = normalizeHandle(handle);
-  if (!normalizedHandle) return null;
+export function buildPublicProfileShareUrl(origin, handle, options = {}) {
+  let revision;
+  try {
+    revision = resolvePublicShareRevision(
+      options?.ownerUpdatedAt,
+      options?.usageUploadedAt
+    );
+  } catch {
+    // Legacy profiles and malformed timestamps keep the fixed share route.
+    revision = undefined;
+  }
 
-  const url = normalizeHttpUrl(origin);
-  if (!url) return null;
+  try {
+    // ChatGPT Sites dispatches the API prefix to the Worker, while the root
+    // query is served as a static asset before dynamic metadata can run.
+    return buildPublicShareUrl(origin, handle, revision);
+  } catch {
+    return null;
+  }
+}
 
-  // ChatGPT Sites dispatches the API prefix to the Worker, while the root
-  // query is served as a static asset before dynamic metadata can run.
-  url.pathname = `/api/share/${encodeURIComponent(normalizedHandle)}`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+export function resolveShareStudioProfileUrls(origin, handle, options = {}) {
+  return Object.freeze({
+    readmeProfileUrl: buildPublicProfileShareUrl(origin, handle),
+    shareProfileUrl: buildPublicProfileShareUrl(origin, handle, options)
+  });
 }
 
 export function isMobileShareEnvironment(navigatorLike) {
@@ -216,21 +233,6 @@ function createTarget({
     id,
     label
   });
-}
-
-function normalizeHandle(value) {
-  if (typeof value !== "string") return null;
-
-  const handle = value.trim();
-  if (
-    handle === ""
-    || handle.length > 100
-    || /[\u0000-\u001f\u007f/?#]/.test(handle)
-  ) {
-    return null;
-  }
-
-  return handle;
 }
 
 function normalizeHttpUrl(value) {

@@ -16,12 +16,12 @@ import {
   buildSameOriginCardPreviewUrl
 } from "./cardShare.js";
 import {
-  buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
   getShareStudioCopy,
   isMobileShareEnvironment,
-  resolveShareStudioCardUrls
+  resolveShareStudioCardUrls,
+  resolveShareStudioProfileUrls
 } from "./shareStudio.js";
 import { useCardImageReadiness } from "./cardImageReadiness.js";
 import {
@@ -39,12 +39,14 @@ export function ShareStudio({
   onClose,
   onMakePrivate,
   open,
+  ownerUpdatedAt,
   publicCardUrl,
   publicOwnerHandle,
   selectedPublicCardUrl,
   sourceCardImage,
   sourceCardRef,
-  sourceRect
+  sourceRect,
+  usageUploadedAt
 }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -78,21 +80,29 @@ export function ShareStudio({
     ),
     [locationOrigin, publicOwnerHandle, selectedImageUrl]
   );
-  const publicProfileUrl = useMemo(
-    () => buildPublicProfileShareUrl(locationOrigin, publicOwnerHandle),
-    [locationOrigin, publicOwnerHandle]
+  const { readmeProfileUrl, shareProfileUrl } = useMemo(
+    () => resolveShareStudioProfileUrls(locationOrigin, publicOwnerHandle, {
+      ownerUpdatedAt,
+      usageUploadedAt
+    }),
+    [
+      locationOrigin,
+      ownerUpdatedAt,
+      publicOwnerHandle,
+      usageUploadedAt
+    ]
   );
   const markdown = useMemo(
-    () => buildReadmeCardSnippet(copyImageUrl, publicProfileUrl),
-    [copyImageUrl, publicProfileUrl]
+    () => buildReadmeCardSnippet(copyImageUrl, readmeProfileUrl),
+    [copyImageUrl, readmeProfileUrl]
   );
   const shareTargets = useMemo(
     () => buildShareTargets({
       locale,
       mobile: mobileShareEnvironment,
-      profileUrl: publicProfileUrl
+      profileUrl: shareProfileUrl
     }),
-    [locale, mobileShareEnvironment, publicProfileUrl]
+    [locale, mobileShareEnvironment, shareProfileUrl]
   );
   const canRender = Boolean(
     open
@@ -365,16 +375,16 @@ export function ShareStudio({
         </div>
 
         <div className="share-studio-secondary">
-          {publicProfileUrl ? (
+          {shareProfileUrl ? (
             <ShareValue
               copyLabel={copy.copyShareLink}
               label={copy.shareLink}
-              onCopy={() => copyValue(publicProfileUrl, {
+              onCopy={() => copyValue(shareProfileUrl, {
                 error: copy.shareLinkCopyFailed,
                 success: copy.shareLinkCopied
               })}
               primary
-              value={publicProfileUrl}
+              value={shareProfileUrl}
             />
           ) : null}
           {markdown ? (

@@ -1,6 +1,6 @@
 # GitHub README 카드
 
-Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 카드를 클릭하면 `/api/share/{handle}` 공개 공유 페이지로 이동한다.
+Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 이미지 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 README Markdown의 클릭 대상도 고정 `/api/share/{handle}`를 유지하므로 새 submit이나 설정 저장 뒤 Markdown을 교체할 필요가 없다.
 
 > [!IMPORTANT]
 > 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로와 카드 loading·resource reuse·공유 handoff·profile Skeleton을 보정한 saved version 23, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
@@ -27,25 +27,35 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 검증됐다. 일반 사용자에게는 #84 Gate C와 영구 public 전환 뒤 활성화한다.
 
 1. `/?view=profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
-2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. README Markdown은 공유 페이지를 클릭 대상으로 감싼 기본 폭 50%의 HTML 임베드이고, 그 이미지 `src`와 이미지 URL은 query 없는 고정 URL이다. 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
-3. SNS에는 `https://{origin}/api/share/{handle}` 공유 링크를 붙여넣는다. X, Threads, 카카오톡 등은 이 문서의 링크 미리보기에 카드 이미지와 설명을 표시한다.
+2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. 유효한 profile timestamp가 있으면 **공유 링크**만 최신 `/api/share/{handle}/r/{revision}`을 사용한다. README Markdown은 fixed `/api/share/{handle}` 클릭 대상과 query 없는 `/u/{handle}/card.png` 이미지 URL을 항상 유지한다. 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
+3. SNS에는 Share Studio가 복사한 `https://{origin}/api/share/{handle}/r/{revision}` 공유 링크를 붙여넣는다. X, Threads, LinkedIn, Facebook, Reddit은 모두 같은 revision URL을 받는다. timestamp가 없거나 유효하지 않은 legacy profile만 기존 `/api/share/{handle}`로 안전하게 폴백한다.
 4. 데스크톱 Share Studio는 X, Threads, LinkedIn, Facebook, Reddit과 저장을 primary action으로 제공한다. 모바일 실행 환경에서는 X, Threads, Reddit과 저장 네 action을 한 줄로 제공하며, viewport가 좁은 데스크톱은 여섯 action을 유지한다.
 5. SNS 버튼은 해당 서비스의 작성 화면을 공유 링크와 함께 연다. X와 Threads에는 현지화된 문구와 링크를 전달하지만 provider API나 OAuth로 자동 게시하지 않으며, 서비스가 미리 입력된 내용을 반영하는지는 보장하지 않는다. Facebook과 LinkedIn은 모바일 앱에서 작성 화면과 내용 자동 입력을 안정적으로 열 수 없어 모바일 primary action에서 제외한다. 필요하면 **공유 링크**를 복사해 원하는 앱에 직접 붙여넣는다.
 6. README에는 **README Markdown**을 사용한다. 표시 크기는 복사 결과의 `width`만 바꾸고, 이미지를 직접 첨부할 때만 Share Studio의 **이미지 복사** 안내를 따른다.
 
 #84 공개 전환 뒤 private으로 전환하면 README card와 social image는 같은 존재
-비노출 `404`를 반환한다. `/api/share/{handle}` HTML은 비공개와 미존재를
+비노출 `404`를 반환한다. fixed와 revision share HTML은 모두 비공개와 미존재를
 구분하지 않는 기본 메타데이터와 unavailable 화면으로 닫힌다.
 
 ## 검증된 릴리스 후보의 공유 링크와 링크 미리보기
 
 #84 Gate C에서 영구 public으로 전환하면 `https://{origin}/api/share/{handle}`은
-카드 소유자의 canonical 공개 프로필 화면이자 SNS 링크 미리보기 대상이 된다.
+README Markdown의 고정 클릭 대상이자 기존 공개 프로필 화면으로 계속 동작한다.
+Share Studio의 **공유 링크**와 다섯 SNS 버튼이 사용하는
+`https://{origin}/api/share/{handle}/r/{revision}`은 같은 화면을 표시하면서 SNS가
+새 문서 cache identity로 인식할 수 있게 한다.
 Sites가 `/api/` prefix를 Worker에 전달하고 서버가 이 문서의 `<head>`에 handle별
 Open Graph와 Twitter Card 메타데이터를 주입한다. 이 계약은 Task #83의 제한
 public smoke에서 검증됐다. root query는 정적 asset으로 처리되고 extension 없는
 `/u/{handle}`은 public front door에서 `/`로 redirect되므로 공유 링크로 배포하지
 않는다.
+
+revision은 owner `updatedAt`과 usage `uploadedAt` 중 최신 시각의 epoch milliseconds다.
+현재 revision과 일치하는 요청은 요청 URL을 `canonical`·`og:url`로 사용하고 이미지
+URL에도 같은 token을 넣는다. 과거 revision 요청은 snapshot이 아니며 `200` 현재
+문서를 반환하면서 최신 revision canonical·이미지로 수렴한다. 별도 카드 history나
+최근 revision 보존 DB는 만들지 않는다. 형식이 잘못된 revision은 공개 문서 route로
+취급하지 않는다.
 
 | 항목 | 값 |
 |---|---|
@@ -55,7 +65,7 @@ public smoke에서 검증됐다. root query는 정적 asset으로 처리되고 e
 | 이미지 크기 | 2400x1260 (1.91:1 미리보기 규격의 2배 해상도) |
 | `twitter:card` | `summary_large_image` |
 
-소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. D1 공개 projection 뒤 README authority와 social object의 owner/publication id가 일치할 때만 개인화 URL을 선언한다. 기존 publication에 social object가 없거나 metadata가 불일치하거나 media read가 실패하면 실제 계정을 변경하거나 R2에 즉석 쓰기하지 않고 저장소에 포함된 2400x1260 sample을 선언한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 같은 개인화 URL의 이미지가 갱신된다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
+소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. D1 공개 projection 뒤 README authority와 social object의 owner/publication id가 일치할 때만 개인화 URL을 선언한다. 기존 publication에 social object가 없거나 metadata가 불일치하거나 media read가 실패하면 실제 계정을 변경하거나 R2에 즉석 쓰기하지 않고 저장소에 포함된 2400x1260 sample을 선언한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 social object가 갱신되고 Share Studio의 다음 공유 URL revision도 바뀐다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
 
 README용 `/u/{handle}/card.png`는 legacy version 7부터 사용하는 1497x918
 원본이며 릴리스 후보에서도 URL이나 응답 계약이 달라지지 않는다. query 없는
@@ -64,7 +74,7 @@ Markdown을 교체할 필요가 없다.
 
 비공개 handle과 존재하지 않는 handle은 구분 없이 사이트 기본 메타데이터와 packaged sample로 폴백한다. legacy public profile은 handle별 title/canonical을 유지하되 sample image를 사용한다. fallback은 실제 사용자 handle의 media object에 의존하지 않으므로 응답으로 private/missing handle 존재 여부를 알 수 없다.
 
-플랫폼은 미리보기를 자체 서버에 캐시하므로 카드를 갱신해도 기존 미리보기가 한동안 남을 수 있다. 카카오는 [OG 캐시 관리 도구](https://developers.kakao.com/tool)로 초기화할 수 있다.
+플랫폼은 미리보기를 자체 서버에 캐시하므로 기존 fixed URL이나 이미 게시된 revision의 미리보기는 한동안 남을 수 있다. 새 revision URL은 X·LinkedIn을 포함한 새 작성 화면의 cache identity를 분리하지만 최초 이미지 처리 시간을 즉시 완료하도록 보장하지 않는다. 카카오는 [OG 캐시 관리 도구](https://developers.kakao.com/tool)로 초기화할 수 있다.
 
 소셜 공유 action은 provider API나 OAuth를 호출해 이미지를 자동 업로드 또는 게시하지 않는다. 브라우저 Clipboard API와 각 서비스의 작성 화면만 사용하며, 작성 창에는 공개 공유 링크만 전달한다. private preview URL이나 credential은 외부 provider query에 넣지 않는다.
 
@@ -121,7 +131,8 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 | Surface | URL | 상태 | 역할 |
 |---|---|---|---|
 | legacy 공개 화면 | `/?profile={handle}` | version 7 public baseline | 공개 카드와 사용량 요약을 표시하지만 initial HTML은 정적이므로 SNS 공유 URL로 승격하지 않는다. |
-| canonical 공유 | `/api/share/{handle}` | 검증된 후보·#84 공개 대기 | Worker가 initial HTML에 handle별 OG/Twitter metadata를 주입한다. owner-only·public smoke를 통과했다. |
+| fixed 공유 | `/api/share/{handle}` | README·하위 호환 | README Markdown의 고정 클릭 대상과 기존 링크를 유지하며 self canonical 현재 문서를 제공한다. |
+| revision 공유 | `/api/share/{handle}/r/{revision}` | 공유 링크·SNS 대상 | **공유 링크 복사**와 다섯 SNS 버튼에만 사용한다. 최신 revision은 self canonical, stale revision은 `200` 현재 metadata로 수렴한다. |
 | 공개 JSON | `/api/profiles/public/{handle}` | 검증된 후보·#84 공개 대기 | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
 | README PNG | `/u/{handle}/card.png` | 검증된 후보·#84 공개 대기 | README에 삽입하는 1497x918 stable image endpoint다. |
 | social PNG | `/u/{handle}/social.png` | 검증된 후보·#84 공개 대기 | 정합한 publication의 2400x1260 링크 미리보기 이미지다. object가 없는 legacy publication 자체는 계속 404이고 HTML metadata만 packaged sample로 닫힌다. |
@@ -132,13 +143,13 @@ profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 �
 
 ## URL, 테마와 언어
 
-README 복사는 다음 두 stable URL을 한 HTML 임베드로 조합한다.
+README 복사는 fixed 공유 페이지와 stable 이미지 URL을 한 HTML 임베드로 조합한다.
 
 ```html
 <a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
 ```
 
-`href`는 클릭할 때 여는 공개 공유 페이지이고 `src`는 다음 query 없는 canonical 이미지 URL이다.
+`href`와 `src`는 모두 query 없는 고정 URL이다. submit이나 카드 설정 저장으로 공유 revision이 바뀌어도 README Markdown 결과는 완전히 동일하다.
 
 ```text
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
@@ -198,7 +209,7 @@ ETag: "..."
 - 공개 설정 저장 뒤 media commit이 실패해도 같은 theme·locale PATCH를 다시 보내면 저장된 owner/latest usage 기준으로 canonical card와 social object를 수렴시킨다.
 - 브라우저나 이미지 프록시는 기존 URL을 다시 요청할 때 `If-None-Match`로 검증한다.
 - 콘텐츠가 같으면 `304 Not Modified`, 달라지면 새 PNG와 ETag를 받는다.
-- URL에 timestamp나 무작위 query를 붙일 필요가 없다.
+- README 이미지 URL에는 timestamp나 무작위 query를 붙일 필요가 없다. SNS 공유 문서는 query 대신 Share Studio가 계산한 revision path를 사용한다.
 
 서버의 `no-cache`는 저장 금지가 아니라 사용 전 재검증을 의미한다. 따라서 동일 URL을 유지하면서 최신 이미지를 제공할 수 있다.
 
@@ -208,7 +219,7 @@ public card GET/HEAD는 R2 stable authority와 immutable revision만 읽는다. 
 
 ## GitHub Camo
 
-GitHub는 README의 외부 이미지 `src`를 Camo proxy URL로 바꾸므로 원본 endpoint가 갱신된 뒤에도 README 반영이 지연될 수 있다. 바깥 `<a href=".../api/share/{handle}">`와 이미지의 `width`는 유지되므로 카드를 클릭하면 Camo 원본 화면이 아니라 서비스 공유 페이지로 이동한다.
+GitHub는 README의 외부 이미지 `src`를 Camo proxy URL로 바꾸므로 원본 endpoint가 갱신된 뒤에도 README 반영이 지연될 수 있다. 바깥 fixed `<a href>`와 이미지의 `width`는 유지되므로 카드를 클릭하면 Camo 원본 화면이 아니라 서비스 공유 페이지로 이동한다.
 
 1. 먼저 원본 카드 URL을 브라우저에서 열어 최신 이미지와 `Cache-Control`을 확인한다.
 2. README를 다시 불러오고 잠시 기다린다.

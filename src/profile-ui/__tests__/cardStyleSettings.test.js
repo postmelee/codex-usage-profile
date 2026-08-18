@@ -54,7 +54,7 @@ test("home owner card and share studio use the saved card selection", async () =
   assert.doesNotMatch(source, /useTheme/u);
 });
 
-test("share studio separates canonical copy from the saved card asset", async () => {
+test("share studio separates fixed README, revision share, and saved card URLs", async () => {
   const source = await readFile(join(SOURCE_ROOT, "ShareStudio.jsx"), "utf8");
 
   assert.match(source, /getShareStudioCopy\(locale\)/u);
@@ -64,8 +64,10 @@ test("share studio separates canonical copy from the saved card asset", async ()
   );
   assert.match(
     source,
-    /buildReadmeCardSnippet\(copyImageUrl, publicProfileUrl\)/u
+    /resolveShareStudioProfileUrls\(locationOrigin, publicOwnerHandle/u
   );
+  assert.match(source, /buildReadmeCardSnippet\(copyImageUrl, readmeProfileUrl\)/u);
+  assert.match(source, /profileUrl: shareProfileUrl/u);
   assert.match(source, /href=\{selectedImageUrl\}/u);
   assert.match(source, /fetch\(previewImageUrl \?\? selectedImageUrl/u);
   const renderGate = /const canRender = Boolean\(([\s\S]*?)\n  \);/u.exec(source);
