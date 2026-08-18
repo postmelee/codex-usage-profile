@@ -16,7 +16,7 @@ import {
 
 test("normalizes one npm 11 array or npm 12 object candidate", () => {
   const candidate = {
-    id: "codex-usage-profile@0.1.1"
+    id: "codex-usage-profile@0.1.2"
   };
 
   assert.equal(normalizeNpmPackResult([candidate]), candidate);
@@ -34,7 +34,7 @@ test("normalizes one npm 11 array or npm 12 object candidate", () => {
     },
     candidate,
     null,
-    "codex-usage-profile@0.1.1"
+    "codex-usage-profile@0.1.2"
   ]) {
     assert.throws(
       () => normalizeNpmPackResult(invalid),
@@ -46,7 +46,7 @@ test("normalizes one npm 11 array or npm 12 object candidate", () => {
 test("npm release verifier accepts the exact local package candidate", async () => {
   const result = await verifyNpmRelease();
 
-  assert.equal(result.packageId, "codex-usage-profile@0.1.1");
+  assert.equal(result.packageId, "codex-usage-profile@0.1.2");
   assert.equal(result.entryCount, EXPECTED_NPM_PACKAGE_FILES.length);
   assert.match(result.shasum, /^[a-f0-9]{40}$/);
   assert.match(result.integrity, /^sha512-[A-Za-z0-9+/]+=*$/);

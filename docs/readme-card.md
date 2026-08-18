@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 이미지 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 README Markdown의 클릭 대상도 고정 `/api/share/{handle}`를 유지하므로 새 submit이나 설정 저장 뒤 Markdown을 교체할 필요가 없다.
 
 > [!IMPORTANT]
-> Task #84 Gate C는 saved version 24를 public으로 전환했고, Task #101은 현재 공개 validation version 33에서 fixed README와 revision share 계약을 검증했다. README Markdown은 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 유지한다. **공유 링크 복사**와 X·LinkedIn·Threads·Facebook·Reddit만 `/api/share/{handle}/r/{revision}`을 사용한다. 새 canonical production hostname과 현재 stage5의 테스트 전환은 별도 migration Issue 전에는 실행하지 않는다.
+> Task #84 Gate C는 saved version 24를 public으로 전환했고, Task #101은 공개 validation version 33에서 fixed README와 revision share 계약을 검증했다. Task #108은 canonical production hostname을 `codex-usage-profile.meleeisdeveloping.chatgpt.site`로 고정하고 stage5를 explicit test target으로 분리한다. README Markdown은 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 유지한다. **공유 링크 복사**와 X·LinkedIn·Threads·Facebook·Reddit만 `/api/share/{handle}/r/{revision}`을 사용한다.
 
 ## #84 공개 전환 뒤 사용자 흐름
 
@@ -14,7 +14,7 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 5. **Share**에서 stable image URL 또는 README Markdown을 복사해 GitHub profile이나 repository README에 삽입한다.
 
 ```html
-<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
+<a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
 
 표시 크기를 바꾸려면 복사한 코드에서 `width="50%"`만 `40%`, `300px`처럼 조절한다. 이미지 `src`와 클릭 대상 `href`는 그대로 둔다.
@@ -154,13 +154,13 @@ canonical과 같은 revision URL을 만들 수 있다.
 README 복사는 fixed 공유 페이지와 stable 이미지 URL을 한 HTML 임베드로 조합한다.
 
 ```html
-<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
+<a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
 ```
 
 `href`와 `src`는 모두 query 없는 고정 URL이다. submit이나 카드 설정 저장으로 공유 revision이 바뀌어도 README Markdown 결과는 완전히 동일하다.
 
 ```text
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png
 ```
 
 publication authority는 `canonicalTheme`과 `canonicalLocale`을 함께 저장한다.
@@ -173,11 +173,11 @@ URL은 그대로이고 응답 이미지와 ETag만 새 설정을 반영한다.
 누락한 축은 기존 기본값 dark/en을 사용한다.
 
 ```text
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark&locale=ko
-https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light&locale=ko
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?locale=ko
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=dark&locale=ko
+https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light&locale=ko
 ```
 
 public validation이 지원하는 테마는 `dark`, `light`, 언어는 `en`, `ko`다. `v` 같은 다른

@@ -5,10 +5,13 @@ import {
   DEFAULT_SERVICE_ORIGIN
 } from "../../../packages/codex-usage-profile-cli/src/config.js";
 import {
-  DEVICE_APPROVAL_PRODUCTION_ORIGIN
+  DEVICE_APPROVAL_PRODUCTION_ORIGIN,
+  buildDeviceSubmitCommand
 } from "../deviceApproval.js";
 
 const EXPECTED_PRODUCTION_ORIGIN =
+  "https://codex-usage-profile.meleeisdeveloping.chatgpt.site";
+const STAGE5_ORIGIN =
   "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
 
 test("CLI and device approval use the same canonical production origin", () => {
@@ -23,4 +26,15 @@ test("CLI and device approval use the same canonical production origin", () => {
   assert.equal(url.password, "");
   assert.equal(url.search, "");
   assert.equal(url.hash, "");
+});
+
+test("production uses the default command and stage5 stays an explicit override", () => {
+  assert.equal(
+    buildDeviceSubmitCommand(EXPECTED_PRODUCTION_ORIGIN),
+    "npx codex-usage-profile@latest submit"
+  );
+  assert.equal(
+    buildDeviceSubmitCommand(STAGE5_ORIGIN),
+    `npx codex-usage-profile@latest submit --server ${STAGE5_ORIGIN}`
+  );
 });

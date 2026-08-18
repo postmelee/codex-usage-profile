@@ -21,7 +21,7 @@ export const DEVICE_APPROVAL_INTENT = Object.freeze({
 export const DEVICE_APPROVAL_SUBMIT_COMMAND =
   "npx codex-usage-profile@latest submit";
 export const DEVICE_APPROVAL_PRODUCTION_ORIGIN =
-  "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
+  "https://codex-usage-profile.meleeisdeveloping.chatgpt.site";
 
 export function normalizeDeviceApprovalResult(result) {
   if (!result || typeof result !== "object" || Array.isArray(result)) {

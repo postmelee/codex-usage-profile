@@ -14,8 +14,9 @@ migration 결과에 따른 **MVP production PASS**다. 현재 공개된
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 검증된
 GitHub OAuth app, D1/R2, Worker renderer와 운영 guardrail을 보존하는 validation
 origin이다. 새 `codex-usage-profile` hostname을 canonical production으로 승격하고
-현재 `stage5`를 테스트 전용으로 전환하는 작업은 별도 migration Issue의
-project·storage·OAuth·CLI origin·rollback 승인 뒤에만 수행한다.
+현재 `stage5`를 테스트 전용으로 전환하는 Task #108은 Gate A1에서 별도 owner-only
+production project를 생성했다. 이 project는 아직 version·deployment·environment·D1/R2가
+없다. storage attach, OAuth, private/public deploy와 stage5 전환은 이후 Gate에서 분리한다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
@@ -31,6 +32,20 @@ project·storage·OAuth·CLI origin·rollback 승인 뒤에만 수행한다.
 | environment | revision 89, maintenance disabled, service normal, operator secret absent |
 | live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5]` |
 | rollback candidate | version 32 / source `6cf2bab664e5a1f0b1e6051cc35887721c307e99` |
+
+### Task #108 dual-Site target
+
+| 역할 | origin | manifest·resource 상태 |
+|---|---|---|
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; owner-only version 0, undeployed, D1/R2/environment 없음 |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; 현재 public version 33 continuity |
+
+두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
+D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
+policy는 공유하지 않는다. production artifact는 canonical manifest로 만들고 stage5 artifact는
+repository 밖 임시 packaging root에서 role-specific manifest를 materialize한다. connector가
+physical D1/R2 provider ID를 노출하지 않으므로 ID 동일·상이 여부를 추정하지 않고, first private
+deploy에서 서로 다른 Site project/manifest, empty baseline과 교차 state 부재로 분리를 검증한다.
 
 Task #83 version 17은 Task #74의 owner `card_style`·`card_locale` additive
 migration과 media contract v4, Task #78의 `/api/share/{handle}` Open Graph document,
@@ -217,7 +232,7 @@ native `@napi-rs/canvas` renderer와 Node runtime은 Cloud Run fallback에서 �
 
 ## Runtime Configuration
 
-실제 값은 Sites runtime environment 또는 fallback Secret Manager에 저장하며 저장소와 build artifact에 포함하지 않는다. `.openai/hosting.json`에는 opaque `project_id`와 logical D1/R2 binding 이름만 기록한다.
+실제 값은 Sites runtime environment 또는 fallback Secret Manager에 저장하며 저장소와 build artifact에 포함하지 않는다. `.openai/hosting.json`에는 canonical production의 opaque `project_id`와 logical D1/R2 binding 이름만 기록한다. `.openai/hosting-targets.json`은 두 target의 nonsecret project/origin/binding만 기록하고 credential은 포함하지 않는다.
 
 ### Sites canonical 값
 
@@ -445,8 +460,8 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- public npm `codex-usage-profile@0.1.1` provenance/integrity와 production 기본
-  origin 소비자 검증 유지
+- public npm `codex-usage-profile@0.1.1` provenance/integrity는 Task #108 Gate C까지 유지하고,
+  canonical production 기본 origin을 가진 `0.1.2` candidate는 private/public Site smoke 뒤에만 게시
 - Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
   완료 상태 유지
 - 월별 90일 retention dry-run과 owner 요청 기반 account deletion

@@ -77,7 +77,7 @@ export async function verifySitesProductionArtifact(options = {}) {
 
   const hostingPath = resolve(outputDirectory, ".openai/hosting.json");
   const hosting = JSON.parse(await readFile(hostingPath, "utf8"));
-  assertExactProductionBindings(hosting);
+  assertExactProductionBindings(hosting, options.expectedProjectId);
 
   const clientDirectory = resolve(outputDirectory, "client");
   const clientFiles = await listSitesArtifactFiles(clientDirectory);
@@ -139,7 +139,7 @@ export async function verifySitesProductionArtifact(options = {}) {
   });
 }
 
-function assertExactProductionBindings(hosting) {
+function assertExactProductionBindings(hosting, expectedProjectId) {
   if (
     typeof hosting.project_id !== "string" ||
     hosting.project_id.trim() === "" ||
@@ -150,6 +150,12 @@ function assertExactProductionBindings(hosting) {
     throw new Error(
       "Production Sites artifact requires project_id, DB, and PROFILE_MEDIA"
     );
+  }
+  if (
+    expectedProjectId !== undefined &&
+    hosting.project_id !== expectedProjectId
+  ) {
+    throw new Error("Production Sites artifact targets an unexpected project_id");
   }
 }
 

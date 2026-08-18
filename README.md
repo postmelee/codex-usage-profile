@@ -1,18 +1,18 @@
 # Codex Usage Profile
 
-[![Website](https://img.shields.io/badge/Website-Open-0969da)](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site)
+[![Website](https://img.shields.io/badge/Website-Open-0969da)](https://codex-usage-profile.meleeisdeveloping.chatgpt.site)
 [![npm package](https://img.shields.io/npm/v/codex-usage-profile)](https://www.npmjs.com/package/codex-usage-profile)
 [![CI](https://img.shields.io/github/actions/workflow/status/postmelee/codex-usage-profile/publish-npm.yml?branch=devel&label=CI)](https://github.com/postmelee/codex-usage-profile/actions/workflows/publish-npm.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Turn Codex account usage into a private-by-default profile and a stable GitHub README card.
 
-Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The public MVP is available at [codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site), and the CLI uses that origin by default.
+Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The canonical production origin is [codex-usage-profile.meleeisdeveloping.chatgpt.site](https://codex-usage-profile.meleeisdeveloping.chatgpt.site), and the `0.1.2` CLI candidate uses that origin by default.
 
 > [!IMPORTANT]
 > The current production service supports private preview, publish/unpublish, the stable README card, and the metadata-enhanced `/api/share/{handle}` page.
 
-<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/postmelee"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/postmelee/card.png" alt="Codex usage profile" /></a>
+<a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/postmelee"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/postmelee/card.png" alt="Codex usage profile" /></a>
 
 ## Support
 
@@ -22,7 +22,7 @@ Maintained with support from **OpenAI’s [Codex for Open Source](https://develo
 
 ## Quick start
 
-1. Open the [Codex Usage Profile website](https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site) and sign in with GitHub.
+1. Open the [Codex Usage Profile website](https://codex-usage-profile.meleeisdeveloping.chatgpt.site) and sign in with GitHub.
 2. Submit your Codex usage from the machine where Codex is signed in:
 
    ```bash
@@ -56,7 +56,7 @@ the same URL. Your README Markdown does not need to change.
 Use the README embed after replacing `{handle}` with your published profile handle:
 
 ```html
-<a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
+<a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/{handle}"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/{handle}/card.png" alt="Codex usage profile" /></a>
 ```
 
 Change only the `width` value when you want a different displayed size. Clicking
@@ -93,12 +93,12 @@ npx codex-usage-profile@latest logout
 
 The CLI first looks for `codex` on `PATH`. On macOS it also checks the standard system and user Applications folders for `ChatGPT.app` and `Codex.app`.
 
-For repeatable automation, pin the published version instead of using `@latest`. The current public version is `0.1.1`:
+For repeatable automation, pin the published version instead of using `@latest`. The production migration candidate is `0.1.2`; it remains unpublished until the production cutover gate succeeds:
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.1 submit --json
+npx --yes codex-usage-profile@0.1.2 submit --json
 ```
 
 Only use a pre-issued service token on a trusted machine. See [CLI login and usage submit](docs/cli-submit.md) for credential locations, transmitted fields, error mapping, and package validation.

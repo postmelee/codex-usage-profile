@@ -3,12 +3,12 @@
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
 The public release line starts at `codex-usage-profile@0.1.0`. This package is
-the immutable `0.1.1` patch, prepared for provenance publishing and production
+the immutable `0.1.2` patch, prepared for provenance publishing and production
 validation through the existing staged-release gate.
 
 > The production MVP service runs at
-> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`, which is
-> also the CLI default. For reproducible automation, pin `0.1.1`; for an
+> `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`, which is
+> also the CLI default. For reproducible automation, pin `0.1.2`; for an
 > interactive first run, review the version npm displays before accepting
 > `@latest`.
 
@@ -137,9 +137,9 @@ Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROF
 On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-issued service token and pin the CLI to an exact version. `--yes` intentionally skips npm's installation confirmation and should not be combined with `@latest` in unattended execution.
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.1 submit --json
+npx --yes codex-usage-profile@0.1.2 submit --json
 ```
 
 JSON, CI, and non-TTY execution never run the optional star prompt, so stdout

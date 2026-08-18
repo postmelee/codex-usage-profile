@@ -2,12 +2,12 @@
 
 `codex-usage-profile` CLI는 로컬 Codex account usage를 읽어 GitHub 계정에 연결된 Codex Usage Profile로 제출한다. GitHub identity는 웹 로그인으로만 결정하며 CLI usage document에는 이름, 사용자명, 아바타 또는 account id가 없다.
 
-> production service URL은
-> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`로
-> 확정됐고 CLI 기본값에도 반영돼 있다. public npm release는
-> `codex-usage-profile@0.1.1`이며 provenance와 production end-to-end
-> smoke가 검증됐다. 이 immutable patch는 macOS app bundle 자동 탐색을
-> 제공한다. 자동화에서는 registry에서 검증한 exact version을 고정한다.
+> canonical production service URL은
+> `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`이며 repository의
+> CLI `0.1.2` candidate 기본값에도 반영돼 있다. 이 version은 production
+> private/public cutover와 provenance Gate가 끝날 때까지 npm에 게시하지 않는다.
+> 기존 `0.1.1`과 stage5 credential은 새 origin에 전송되지 않으므로 migration 뒤
+> production에서 다시 login한다. 자동화에서는 registry에서 검증한 exact version을 고정한다.
 
 ## 요구사항
 
@@ -119,9 +119,9 @@ file이 아니면 analyzer는 안전한 `CODEX_NOT_FOUND`만 반환한다. 검�
 - CLI package를 `@latest`가 아닌 정확한 version으로 고정함
 
 ```bash
-export CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+export CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site
 export CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>'
-npx --yes codex-usage-profile@0.1.1 submit --json
+npx --yes codex-usage-profile@0.1.2 submit --json
 ```
 
 여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
@@ -145,7 +145,7 @@ publish 전 package artifact는 tarball로 검증한다.
 
 ```bash
 npm pack --workspace packages/codex-usage-profile-cli
-npx --package=./codex-usage-profile-0.1.1.tgz \
+npx --package=./codex-usage-profile-0.1.2.tgz \
   codex-usage-profile --help
 ```
 
@@ -282,9 +282,9 @@ Active token limit reached. Revoke an API token in Settings, then try again.
 Captured: 2026-07-11T00:00:00.000Z
 
 Links
-  Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
-  Card:    https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
-  README:  <a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
+  Profile: https://codex-usage-profile.meleeisdeveloping.chatgpt.site/?view=profile
+  Card:    https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/octocat/card.png
+  README:  <a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
 
 성공 표시는 결과 시작점을 나타내고 capture metadata 뒤의 빈 줄과 들여쓴

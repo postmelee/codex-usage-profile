@@ -11,13 +11,28 @@ import {
 
 test("production artifact verifier accepts the exact hosted candidate shape", async () => {
   const outputDirectory = await createProductionArtifact();
-  const result = await verifySitesProductionArtifact({ outputDirectory });
+  const result = await verifySitesProductionArtifact({
+    expectedProjectId: "opaque-sites-project-id",
+    outputDirectory
+  });
 
   assert.equal(result.clientFileCount, 3);
   assert.equal(result.expectedBindingCount, 3);
   assert.equal(result.migrationFileCount, 5);
   assert.equal(result.workerFileCount, 1);
   assert.ok(result.artifactBytes > 0);
+});
+
+test("production artifact verifier rejects a different target project", async () => {
+  const outputDirectory = await createProductionArtifact();
+
+  await assert.rejects(
+    () => verifySitesProductionArtifact({
+      expectedProjectId: "different-sites-project-id",
+      outputDirectory
+    }),
+    /unexpected project_id/
+  );
 });
 
 test("production artifact verifier rejects pre-hosted linkage", async () => {
