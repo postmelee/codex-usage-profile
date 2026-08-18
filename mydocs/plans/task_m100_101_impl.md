@@ -17,7 +17,8 @@ GitHub Issue: [#101](https://github.com/postmelee/codex-usage-profile/issues/101
 ## 문서 위치 확인
 
 수행계획서에서 승인된 기존 공식 문서와 Hyper-Waterfall 산출물 위치를 그대로 사용한다.
-`README.md`는 #84의 production 상태 소유권과 충돌하므로 이번 task에서 수정하지 않는다.
+`README.md`는 새 canonical production migration이 아직 #101 범위 밖이므로 이번 task에서 수정하지
+않는다.
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
@@ -27,7 +28,7 @@ GitHub Issue: [#101](https://github.com/postmelee/codex-usage-profile/issues/101
 | 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_101_stage{1..5}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_101_report.md` | OK | Stage 5 승인 뒤 별도 최종 보고 절차에서 작성한다. |
 | 오늘할일 | `mydocs/orders/` | `mydocs/orders/20260813.md` | OK | 단계 상태만 기존 행에서 갱신한다. |
-| README | 변경 없음 | 변경 없음 | OK | #84가 production 진입·공개 상태를 소유한다. |
+| README | 변경 없음 | 변경 없음 | OK | 새 canonical production origin은 후속 migration Issue에서 다룬다. |
 
 ## 공통 구현 계약
 
@@ -47,6 +48,22 @@ GitHub Issue: [#101](https://github.com/postmelee/codex-usage-profile/issues/101
   유지하고 revision URL로 handle 존재 여부를 노출하지 않는다.
 - 1차 실험에서는 HTML·PNG cache-control과 redirect 정책을 바꾸지 않는다.
 - Stage 3 gate가 X와 LinkedIn 모두에서 통과하기 전에는 Share Studio가 만드는 URL을 바꾸지 않는다.
+
+## Stage 3 validation 기준선
+
+- target: `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`
+- Sites project: `appgprj_6a62f58721788191a7cd82f37320f244`
+- 역할: 작업지시자가 2026-08-18 지정한 폐기 가능한 공개 validation site
+- access baseline: public, access revision 59. #101에서는 변경하지 않는다.
+- environment baseline: environment revision 89. #101에서는 key·secret·값을 변경하지 않는다.
+- rollback baseline: saved version 32, source
+  `6cf2bab664e5a1f0b1e6051cc35887721c307e99`; 필요 시 version 32를 다시 live 배포한다.
+- Stage 2 구현 baseline: `7d5820bdac133272d0ba05b706f0ff41dc00e6a1`. 실제 배포 candidate는
+  이 계획 보정 커밋을 포함한 exact HEAD를 다시 build·artifact 검증한 뒤 배포 승인 gate에서 제시한다.
+- 현재 계정·세션·CLI token·기존 링크는 모두 작업지시자의 테스트 상태로 보존 의무가 없다. 다만
+  #101에서는 A/B 실험을 위한 설정·submit만 수행하고 파괴적 삭제는 하지 않는다.
+- 새 canonical production site, 새 D1·R2·OAuth, origin·CLI·문서 migration은 #101 성공 뒤 신규
+  GitHub Issue에서 다루며 기존 `stage5` 링크 호환은 요구하지 않는다.
 
 ## Stage 1 — revision URL·metadata 계약 고정
 
@@ -195,8 +212,9 @@ Stage 3을 완료 처리하지 않고 구현계획 변경 승인부터 다시 �
   - 배포할 `local/task101` exact commit SHA
   - 기존 saved version·access 변경 여부
   - rollback 대상 version과 명령
-- 승인된 validation target에만 exact task101 artifact를 배포한다. `main`, production access,
-  production saved version과 #84 소유 상태는 변경하지 않는다.
+- 별도 승인 뒤 `stage5`에만 exact task101 artifact를 배포한다. live source와 saved version 변경은
+  승인 범위에 포함하지만 public access와 environment는 유지한다. `main`, 다른 Sites project와
+  #84 파일·브랜치는 변경하지 않는다.
 - 동일 공개 profile에서 revision A와 카드 저장 또는 새 submit으로 생성된 revision B를 준비한다.
   사용자 데이터 mutation과 외부 SNS 게시·작성 창 사용 범위는 배포 승인 시 함께 확인한다.
 - A·B URL별 application 증거를 기록한다.
@@ -244,7 +262,8 @@ Stage 3 보고서에 기록한다. 로그인 cookie, device code, auth header �
 
 - 별도 배포 승인의 target·commit·rollback 경계와 실제 결과가 일치한다.
 - X·LinkedIn gate가 모두 통과했거나, 실패 결과가 기록되고 Stage 4가 중단된다.
-- validation 외 production 상태와 #84 소유 상태가 변하지 않았다.
+- `stage5` saved version 변경은 승인된 candidate와 일치하고 access·environment는 유지됐다.
+- 새 canonical production site, 다른 Sites project, `main`과 #84 파일·브랜치는 변하지 않았다.
 
 ### 커밋
 
@@ -341,8 +360,10 @@ Stage 5 승인 뒤 별도 최종 보고 절차에서 `mydocs/report/task_m100_10
 
 - 전체 Node test, Playwright, production build와 Sites artifact 검증을 실행한다.
 - revision URL·metadata·runtime·SPA·Share Studio·private fallback의 통합 matrix를 최종 점검한다.
-- task101에서 production deploy, access, saved version을 변경하지 않았음을 확인한다.
-- #84에 필요한 release handoff는 최종 보고서와 PR 본문에만 기록하며 #84 파일·브랜치를 수정하지 않는다.
+- task101의 `stage5` live source·saved version 변경이 승인된 candidate와 일치하고 access·environment가
+  유지됐음을 확인한다.
+- 새 canonical production migration 범위와 `stage5`의 향후 테스트 전용 역할은 최종 보고서와 PR
+  본문에만 기록하며, 새 site·DB·OAuth를 만들거나 #84 파일·브랜치를 수정하지 않는다.
 - 검증 실패가 범위를 넓히면 수정하지 않고 구현계획 변경 승인을 요청한다.
 
 ### 검증
@@ -360,7 +381,8 @@ git status --short
 
 - 모든 자동 검증이 통과하고 작업 worktree에 의도하지 않은 파일이 없다.
 - Stage 3 evidence와 Stage 4 공식 문서가 최종 코드 계약과 일치한다.
-- production mutation이나 신규 DB·provider API가 포함되지 않았다.
+- 승인된 `stage5` validation 배포 외 Sites project·access·environment·`main` mutation이 없고 신규
+  DB·provider API가 포함되지 않았다.
 - 최종 보고 절차 진입 전 Stage 5 보고서가 작업지시자에게 승인됐다.
 
 ### 커밋
@@ -403,12 +425,15 @@ Task #101 Stage 5: 전체 회귀 검증과 PR handoff 완료
   private·missing 응답을 대조한다.
 - **invalid revision route 오분류**: parser가 엄격하게 거부하도록 하고 API/static fallback·owner-only
   matrix를 세 runtime에서 검증한다.
-- **#84 및 동시 worktree 충돌**: 각 Stage 시작 전 `origin/devel`, 활성 worktree와 배포 target을 확인하고
-  같은 파일 변경이 들어오면 병합 전에 범위·순서를 다시 승인받는다.
+- **동시 worktree·배포 충돌**: 각 Stage 시작 전 `origin/devel`, 활성 worktree와 `stage5` current saved
+  version을 확인하고 같은 파일·target 변경이 들어오면 범위·rollback을 다시 승인받는다.
 - **외부 플랫폼 검증 중 게시 mutation**: 기본은 작성 창 미리보기까지만 수행하고 실제 게시가 필요하면
   별도 승인을 받는다.
-- **검증 배포가 production에 영향**: validation target과 rollback version을 사전 확인하고 production
-  access·saved version·`main`을 변경하지 않는다.
+- **공개 validation 배포의 영향**: `stage5` live source·saved version은 의도적으로 바뀌므로 exact
+  candidate와 version 32 rollback을 사전 확인한다. access·environment·다른 Sites project·`main`은
+  변경하지 않는다.
+- **테스트 데이터의 파괴적 정리**: 보존 의무가 없더라도 #101 실측과 cache 원인 분리를 위해 삭제하지
+  않는다. 새 canonical production migration Issue에서 명시적 폐기 범위와 순서를 계획한다.
 
 ## 승인 요청 사항
 
@@ -416,11 +441,13 @@ Task #101 Stage 5: 전체 회귀 검증과 PR handoff 완료
 - stale revision을 redirect 없이 `200` current metadata로 수렴시키는 상세 계약
 - invalid revision을 public document route에서 제외하는 경계
 - Stage 2까지 Share Studio fixed URL을 유지해 platform 실험 변수를 분리하는 순서
-- Stage 3 시작 전에 Sites target·exact commit·rollback을 다시 승인받고, 실제 SNS 게시에는 추가 승인을
-  받는 조건
+- Stage 3 시작 전에 `stage5` target·exact commit·current saved version·version 32 rollback을 다시
+  승인받고, access·environment는 유지하며 실제 SNS 게시에는 추가 승인을 받는 조건
 - X와 LinkedIn 중 하나라도 gate를 통과하지 못하면 Stage 4 전체 SNS 전환을 중단하는 조건
 - Stage 4에서 모든 SNS target을 플랫폼별 분기 없이 같은 revision URL로 통일하는 구현
-- 승인된 세 공식 문서만 Stage 3 gate 통과 뒤 수정하고 `README.md`와 #84 production 상태를 유지하는 범위
+- 승인된 세 공식 문서만 Stage 3 gate 통과 뒤 수정하고 `README.md`와 #84 파일·브랜치를 유지하는 범위
+- 새 canonical production site와 origin·CLI·OAuth·데이터 migration은 #101 성공 뒤 신규 Issue로
+  분리하며 기존 `stage5` 링크 보존을 요구하지 않는 조건
 - 각 Stage 종료 후 단계 보고서 승인을 받아야 다음 Stage로 진입하는 순서
 
 승인되면 Stage 1의 공통 revision URL·metadata 계약 구현부터 시작한다.
