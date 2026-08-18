@@ -2,9 +2,9 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-The public release line starts at `codex-usage-profile@0.1.0`. This package is
-the immutable `0.1.2` patch, prepared for provenance publishing and production
-validation through the existing staged-release gate.
+The public release line starts at `codex-usage-profile@0.1.0`. Version `0.1.2`
+uses the canonical production service by default and keeps custom service
+origins available through the explicit `--server` option.
 
 > The production MVP service runs at
 > `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`, which is

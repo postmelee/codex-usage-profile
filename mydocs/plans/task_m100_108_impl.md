@@ -32,6 +32,9 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
   같고, 공유 링크와 X·LinkedIn·Threads·Facebook·Reddit target만 새 revision으로 바뀐다.
 - CLI patch 후보는 `codex-usage-profile@0.1.2`다. production public smoke 전에는 tag와 npm
   publish를 하지 않고, 새 `@latest` end-to-end 확인 전에는 stage5 public 경로를 닫지 않는다.
+- Task 완료 직후 canonical Site 운영과 프로젝트 홍보를 시작하므로 root/package README는
+  `main` release 전에 launch-ready 사용자 표현으로 고정한다. `candidate`·`unpublished` 같은
+  내부 전환 문구는 제거하되, badge·GitHub metadata·전면 copy 개편은 #90에 남긴다.
 - 기존 stage5 test state는 보존 요구가 없지만 자동 삭제하지 않는다. Gate E에서 exact owner
   plan/export/digest/count와 production 비공유를 확인한 대상만 guarded maintenance로 삭제한다.
 - source integration은 일반 최종 PR과 구분한 non-closing checkpoint PR로 수행한다.
@@ -337,19 +340,24 @@ Task #108 Stage 2: canonical production source와 target guard 구현
 
 1. 최신 `origin/devel`과 Stage 2 branch의 merge-base/diff/CI를 확인한다. 충돌이면 임의
    rebase/merge하지 않고 중단한다.
-2. `local/task108:publish/task108`을 push하고 base `devel`의 checkpoint PR을 생성한다.
+2. root/package README의 canonical URL·private default·fixed README/revision share·CLI `0.1.2`
+   표현을 launch-ready로 보정한다. 실제 공개 전에는 홍보를 시작하지 않고 #90의 badge·GitHub
+   metadata·전면 copy 범위는 건드리지 않는다.
+3. README 보정과 구현계획 결정을 `Task #108 [Stage 3.1]` 커밋으로 고정하고 Stage 2 전체
+   검증 중 README·CLI·share 계약에 직접 연결된 focused test와 build/verifier를 재실행한다.
+4. `local/task108:publish/task108`을 push하고 base `devel`의 checkpoint PR을 생성한다.
    Issue를 close하지 않으며 Stage 4~6과 remote Gate가 남았음을 본문에 적는다.
-3. PR check, review, head SHA와 diff를 확인하고 작업지시자에게 merge를 요청한다.
-4. merge 통지 뒤 PR `MERGED`, `origin/devel` source 포함과 remote branch 삭제를 확인한다.
-5. 새 local commit이 없는 branch를 `origin/devel` merge commit까지 `git merge --ff-only`한다.
+5. PR check, review, head SHA와 diff를 확인하고 작업지시자에게 merge를 요청한다.
+6. merge 통지 뒤 PR `MERGED`, `origin/devel` source 포함과 remote branch 삭제를 확인한다.
+7. 새 local commit이 없는 branch를 `origin/devel` merge commit까지 `git merge --ff-only`한다.
    불가능하면 중단하고 복구 승인을 받는다.
-6. integrated `devel` Actions와 clean-worktree 전체 검증을 확인한다.
-7. 중복 release PR이 없을 때 `devel → main` PR을 만든다. tag/npm/Sites deploy가 PR merge에
+8. integrated `devel` Actions와 clean-worktree 전체 검증을 확인한다.
+9. 중복 release PR이 없을 때 `devel → main` PR을 만든다. tag/npm/Sites deploy가 PR merge에
    포함되지 않음을 명시한다.
-8. 작업지시자 review·merge 뒤 `origin/main`이 candidate를 포함하고 tree diff가 빈 출력인지
+10. 작업지시자 review·merge 뒤 `origin/main`이 candidate를 포함하고 tree diff가 빈 출력인지
    확인한다.
-9. tag, Release, npm publish, Sites source push/save/deploy/access/environment mutation은 하지 않는다.
-10. PR·SHA·tree·check 결과를 보고서에 기록하고 Stage 3 커밋 뒤 승인을 요청한다.
+11. tag, Release, npm publish, Sites source push/save/deploy/access/environment mutation은 하지 않는다.
+12. PR·SHA·tree·check 결과를 보고서에 기록하고 Stage 3 커밋 뒤 승인을 요청한다.
 
 ### 검증
 

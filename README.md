@@ -7,10 +7,10 @@
 
 Turn Codex account usage into a private-by-default profile and a stable GitHub README card.
 
-Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The canonical production origin is [codex-usage-profile.meleeisdeveloping.chatgpt.site](https://codex-usage-profile.meleeisdeveloping.chatgpt.site), and the `0.1.2` CLI candidate uses that origin by default.
+Codex Usage Profile connects your GitHub identity to usage reported by the official Codex App Server `account/usage/read` API. The service runs at [codex-usage-profile.meleeisdeveloping.chatgpt.site](https://codex-usage-profile.meleeisdeveloping.chatgpt.site), and the `codex-usage-profile` CLI submits to that origin by default.
 
 > [!IMPORTANT]
-> The current production service supports private preview, publish/unpublish, the stable README card, and the metadata-enhanced `/api/share/{handle}` page.
+> New profiles stay private until you publish them. The production service supports private preview, publish/unpublish, a stable README card, and revision-aware social sharing.
 
 <a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/postmelee"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/postmelee/card.png" alt="Codex usage profile" /></a>
 
@@ -42,7 +42,7 @@ the same URL. Your README Markdown does not need to change.
 - **Private by default:** a new profile is visible only to its authenticated GitHub owner until it is published.
 - **Stable README card:** a 1497x918 PNG designed for GitHub README embedding.
 - **Cache-aware updates:** changed usage produces a new ETag at the same image URL.
-- **Social sharing:** a dedicated profile page is backed by a 2400x1260 social preview image.
+- **Revision-aware social sharing:** Share Studio gives new posts a fresh preview URL for X, LinkedIn, Threads, Facebook, and Reddit without changing your README Markdown.
 - **No separate usage export:** the CLI reads the identity-free account usage document through [`codex-usage-analyzer`](https://github.com/postmelee/codex-usage-analyzer) and submits it directly.
 
 ## Share surfaces
@@ -51,6 +51,7 @@ the same URL. Your README Markdown does not need to change.
 |---|---|---|---|
 | README card | `/u/{handle}/card.png` | Available now | Stable PNG for GitHub profile and project READMEs |
 | Public profile | `/api/share/{handle}` | Available now | Human-readable share page with link-preview metadata |
+| Share link and SNS | `/api/share/{handle}/r/{revision}` | Generated from the latest public profile | Fresh crawler cache identity for copied links and social posts |
 | Social preview | `/u/{handle}/social.png` | Available now | Link preview image for social platforms |
 
 Use the README embed after replacing `{handle}` with your published profile handle:
@@ -93,7 +94,7 @@ npx codex-usage-profile@latest logout
 
 The CLI first looks for `codex` on `PATH`. On macOS it also checks the standard system and user Applications folders for `ChatGPT.app` and `Codex.app`.
 
-For repeatable automation, pin the published version instead of using `@latest`. The production migration candidate is `0.1.2`; it remains unpublished until the production cutover gate succeeds:
+For repeatable automation, pin the production release instead of using `@latest`:
 
 ```bash
 CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
