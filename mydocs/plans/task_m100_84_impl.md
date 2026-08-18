@@ -4,6 +4,24 @@
 GitHub Issue: [#84](https://github.com/postmelee/codex-usage-profile/issues/84)
 마일스톤: M100
 
+## 2026-08-18 Stage 5 재기준화
+
+- Stage 1~4의 release·Gate C 결과는 당시 exact-main version 24, public access revision 57,
+  environment revision 87 기준의 유효한 역사적 증적이다.
+- 이후 병합된 #100·#101은 README canonical pair와 revision share URL 계약을 확정했고,
+  #101 validation은 stage5를 version 33, access revision 59, environment revision 89로
+  이동시켰다. Stage 5는 실행 시 live state를 다시 읽어 이 기록과 대조한다.
+- `local/task84`는 merge commit `a748d8b`로 `origin/devel` `c62e535`을 포함한다. 진행 중인
+  브랜치를 rebase하거나 Stage 1~4 commit을 재작성하지 않는다.
+- Stage 5는 Sites version 저장·배포, access/environment 변경, D1/R2·계정·session 삭제를
+  수행하지 않는 read-only 종료 단계다. drift를 발견해도 #84 기준으로 원복하지 않는다.
+- fixed README Markdown과 `/api/share/{handle}/r/{revision}` 공유 target 계약은 #101을
+  진실 원천으로 보존한다. Stage 4의 fixed `/api/share/{handle}` 플랫폼 실측은 당시 cache
+  기준을 설명하는 역사적 evidence로만 유지한다.
+- 새 `codex-usage-profile.meleeisdeveloping.chatgpt.site` canonical production, 현재 stage5의
+  테스트 전환, project·D1·R2·OAuth·CLI origin과 테스트 데이터 폐기는 별도 migration Issue로
+  넘긴다.
+
 ## 승인된 결정과 구현 해석
 
 - 시작 candidate는 `origin/devel` `242674cca76b167642108fb85f739fbdcf9fd4d4`, 시작 `origin/main`은 `e75609db133ae43e9a36d7cc9994c813bcaa621c`다. Stage 1에서 다시 fetch하며 `devel`이 움직였으면 새 SHA로 재고정하고 검증을 반복한다.
@@ -14,11 +32,14 @@ GitHub Issue: [#84](https://github.com/postmelee/codex-usage-profile/issues/84)
 - release PR은 작업지시자가 직접 review·merge한다. self merge, auto merge, tag, GitHub Release와 npm publish는 하지 않는다.
 - release merge SHA는 candidate와 다를 수 있지만 merge commit tree는 candidate tree와 exact-match여야 한다.
 - production build는 merge된 exact `main` detached clean worktree에서 다시 수행하며 Stage 1 archive나 saved version 23 archive를 재사용하지 않는다.
-- current saved version 23은 Stage 4.6 source `c030339d848f961c54358d9d3523b340bed09670`이다. PR #85 Stage 4.7이 포함된 exact-main owner-only version을 Stage 3에서 새로 만든다.
+- task 시작 당시 saved version 23은 Stage 4.6 source `c030339d848f961c54358d9d3523b340bed09670`이었다. PR #85 Stage 4.7이 포함된 exact-main owner-only version을 Stage 3에서 새로 만든다.
 - Stage 3은 public access를 열지 않는다. exact-main owner-only 배포와 protected smoke 뒤 Gate C 입력을 제시하고 멈춘다.
 - D1 migration은 이미 `[1,2,3,4,5]`여야 한다. Stage 3에서는 read-only readiness만 수행하며 불일치 시 migrate/repair하지 않는다.
 - Stage 4는 명시적 `Gate C 승인` 뒤에만 public access를 연다. stop trigger 발생 시 public 상태에서 분석하지 않고 owner-only로 먼저 닫는다.
-- canonical SNS 공유 링크는 `/api/share/{handle}`이다. `/?profile={handle}`은 공개 profile SPA, `/?view=profile`은 owner SPA, `/u/.../*.png`는 media다.
+- Stage 4 실측 당시 canonical SNS 공유 링크는 `/api/share/{handle}`이었다. Stage 5의 현재 계약은
+  README href·fixed 하위 호환에 이 경로를 유지하고, 공유 링크 복사와 다섯 SNS에는
+  `/api/share/{handle}/r/{revision}`을 사용한다. `/?profile={handle}`은 공개 profile SPA,
+  `/?view=profile`은 owner SPA, `/u/.../*.png`는 media다.
 - X·Threads·카카오톡은 preview/debug까지만 확인하고 SNS 게시물이나 메시지를 발행·전송하지 않는다.
 - #86·#87은 비차단 후속이다. Gate C blocker로 재현되지 않는 한 이번 task에 흡수하지 않는다.
 - 제품 source 변경은 예상하지 않는다. 결함 발견 시 Stage를 중단하고 계획 변경 승인 전에는 코드를 수정하지 않는다.
@@ -31,20 +52,22 @@ GitHub Issue: [#84](https://github.com/postmelee/codex-usage-profile/issues/84)
 | 2 | `devel → main` release PR과 merge provenance | release PR, exact main SHA/tree, Stage 2 보고서 | base/head/SHA, candidate CI, review, tree equality |
 | 3 | exact-main owner-only saved version과 protected smoke | 새 saved version, private deployment, Gate C 입력 | source/readiness/maintenance, OAuth·CLI·profile·media |
 | 4 | Gate C public cutover와 SNS 실측 | public 또는 rollback revision, application/SNS 증적 | privacy·route·media·cache, 세 플랫폼, rollback |
-| 5 | cleanup·운영 문서·최종 보고 | 공식 문서 3개, cleanup, 최종 보고서와 task PR | final state/provenance, 비식별화, diff/check |
+| 5 | read-only drift audit·Gate C 이력 종료·migration handoff | 공식 문서 3개, Stage 5·최종 보고서와 task PR | live state read-only 대조, 전체 회귀, diff/check |
 
 ## 문서 위치 확인
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
-| Sites current state와 rollback | `docs/` | `docs/sites-operations.md` | OK | Stage 5에서 final revision만 갱신 |
-| exact-main production provenance | `docs/` | `docs/production-hosting.md` | OK | source/version/migration/access 사실만 반영 |
-| canonical share/card 상태 | `docs/` | `docs/readme-card.md` | OK | `/api/share/{handle}`과 media 상태 반영 |
+| Sites current state와 rollback | `docs/` | `docs/sites-operations.md` | OK | Stage 4 historical baseline과 Stage 5 read-only live snapshot을 구분 |
+| exact-main production provenance | `docs/` | `docs/production-hosting.md` | OK | version 24 release 이력과 후속 validation drift를 구분 |
+| canonical share/card 상태 | `docs/` | `docs/readme-card.md` | OK | #100 fixed README와 #101 revision 공유 계약을 보존 |
 | README·marketing | 변경하지 않음 | 해당 없음 | OK | placeholder와 GitHub metadata는 후속 작업 |
 | 단계 증적 | `mydocs/working/` | `mydocs/working/task_m100_84_stage{N}.md` | OK | bounded SHA/count/status 기록 |
 | 최종 결과 | `mydocs/report/` | `mydocs/report/task_m100_84_report.md` | OK | release/cutover/rollback handoff |
 
-Stage 5 문서와 보고서는 `publish/task84 → devel` 일반 task PR로 게시한다. 이는 production saved version을 다시 배포하는 두 번째 release가 아니다. README·마케팅과 문서의 다음 `main` 승격은 후속 작업에서 판단한다.
+Stage 5 문서와 보고서는 `publish/task84 → devel` 일반 task PR로 게시한다. 이는 production saved
+version을 다시 배포하거나 stage5 data를 정리하는 두 번째 release가 아니다. 새 canonical
+production migration은 별도 Issue에서 판단한다.
 
 ## 공통 증적·비식별화 규칙
 
@@ -61,7 +84,7 @@ Stage 5 문서와 보고서는 `publish/task84 → devel` 일반 task PR로 게�
 | 2 | release PR 생성, merge는 작업지시자 | 없음 | 없음 | 없음 | Stage 1 승인 후 |
 | 3 | merged main 조회 | exact-main version 생성·private deploy | custom owner-only 유지 | readiness read-only, protected smoke | Stage 2 승인과 별도 owner-only mutation 승인 |
 | 4 | 없음 | Stage 3 version 유지 | Gate C public 또는 owner-only rollback | disposable flow와 cleanup | 명시적 Gate C 승인 |
-| 5 | task-final-report PR | 없음 | final state read-only | cleanup 완료 확인 | Stage 4 승인 후 |
+| 5 | task-final-report PR | read-only 조회만 | 변경 없음 | 삭제·정리 mutation 없음 | 재기준화 계획 승인 후 |
 
 ## Stage 1 — exact candidate 고정과 local release preflight
 
@@ -306,48 +329,68 @@ Stage 3 보고서와 명시적 Gate C 승인 전 Stage 4로 진행하지 않는�
 Task #84 Stage 4: Gate C public 전환과 SNS 실측
 ```
 
-## Stage 5 — cleanup·운영 문서 현행화와 최종 보고
+## Stage 5 — read-only drift audit·Gate C 이력 종료와 migration handoff
 
 ### 실행 순서
 
-1. final version/source/deployment/access/environment, health/readiness와 public 또는 rollback 상태를 확인한다.
-2. disposable CLI credential/token/session을 revoke/logout하고 QA profile/media를 승인된 baseline으로 정리한다.
-3. actual owner는 승인된 final visibility를 유지하며 disposable 대상으로 오인하지 않는다.
-4. D1/R2 count와 stable/revision 상태만 bounded하게 확인하고 backup 없는 destructive cleanup은 하지 않는다.
-5. 임시 exact worktree/archive와 credential material을 제거한다.
-6. `docs/sites-operations.md`에 final version/source/access와 rollback 기준선을 갱신한다.
-7. `docs/production-hosting.md`에 exact-main provenance, readiness와 production 상태를 갱신한다.
-8. `docs/readme-card.md`에 canonical과 media의 public/owner-only 상태를 갱신하되 README CTA는 건드리지 않는다.
-9. Stage 5 보고서와 문서 위치 정합을 검증하고 승인받는다.
-10. `task-final-report`로 최종 보고서, 오늘할일 완료, 최종 commit, `publish/task84` push와 devel PR을 생성한다.
+1. GitHub Issue #84, Stage 1~4 보고서, merged #100·#101 결과와 현재 branch topology를 대조한다.
+2. stage5 project의 saved version/source/deployment/access/environment와 health/readiness를
+   read-only로 조회한다. secret 값, raw owner/usage/session 데이터는 읽거나 기록하지 않는다.
+3. Stage 4 version 24/access 57/environment 87, #101 version 33/access 59/environment 89와
+   live snapshot을 시간 순서로 구분한다. 불일치는 drift로 기록하고 remote state를 변경하지 않는다.
+4. Task #84가 만든 disposable CLI credential/token/session이 Stage 4에서 revoke/logout됐다는
+   증적을 재확인한다. actual owner와 #101 validation data, D1/R2 object를 삭제하지 않는다.
+5. 최신 `origin/devel` 기준 전체 Node·E2E·production build와 Sites artifact verifier를 실행한다.
+6. `docs/sites-operations.md`에는 version 24 Gate C를 역사적 baseline으로 기록하고, 현재 stage5는
+   새 canonical migration 전까지 validation origin이라는 handoff를 필요한 범위에서만 보강한다.
+7. `docs/production-hosting.md`에는 exact-main release provenance와 후속 source drift를 구분하고
+   새 hostname·project·D1/R2·OAuth·CLI origin이 별도 migration 범위임을 기록한다.
+8. `docs/readme-card.md`는 #100 fixed README canonical pair와 #101 revision share target 계약을
+   보존한다. #84 초기 fixed share 문구로 되돌리지 않는다.
+9. `mydocs/orders/20260818.md`와 Stage 5 보고서를 갱신하고 `task-stage-report` 절차로 검증·커밋한 뒤
+   작업지시자 승인을 받는다.
+10. 승인 뒤 `task-final-report`로 최종 보고서, 오늘할일 완료, 최종 commit,
+    `publish/task84` push와 devel PR을 생성한다.
 
 ### 산출물
 
 - 신규: `mydocs/working/task_m100_84_stage5.md`, `mydocs/report/task_m100_84_report.md`
-- 수정: `docs/sites-operations.md`, `docs/production-hosting.md`, `docs/readme-card.md`, `mydocs/orders/20260812.md`
+- 수정: `docs/sites-operations.md`, `docs/production-hosting.md`, `docs/readme-card.md`,
+  `mydocs/orders/20260818.md`
 - 변경하지 않음: `README.md`, 제품 source, migration, test/build scripts
 
 ### 검증
 
 ```bash
+git fetch origin --prune
+git rev-parse HEAD origin/devel origin/main
+gh issue view 84 --json state,title,url
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
 git status --short --branch
 git diff --check
-git diff --name-only {task_start_commit}..HEAD
-rg -n '/api/share/\{handle\}|saved version|owner-only|public' docs/sites-operations.md docs/production-hosting.md docs/readme-card.md
+git diff --name-only origin/devel...HEAD
+rg -n '/api/share/\{handle\}(/r/\{revision\})?|saved version|validation|canonical production' \
+  docs/sites-operations.md docs/production-hosting.md docs/readme-card.md
 ```
 
-검증: final source/version 일치, public 또는 rollback 계약 유지, disposable cleanup, 문서 3개 정합, README/제품 source diff 없음, 민감 정보 부재.
+검증: live state와 Stage 4·#101 이력의 시간축 분리, remote mutation 0건, disposable credential
+정리 증적, #100·#101 URL 계약 보존, 전체 회귀·artifact 통과, README/제품 source diff 없음,
+민감 정보 부재.
 
 ### 커밋
 
 ```text
-Task #84 Stage 5: production 정리와 운영 문서 현행화
+Task #84 Stage 5: Gate C 이력과 migration handoff 정리
 ```
 
 최종 보고:
 
 ```text
-Task #84 Stage 5 + 최종 보고서: main release와 Gate C 결과 정리
+Task #84 Stage 5 + 최종 보고서: release 이력과 후속 migration handoff
 ```
 
 ## 공통 검증
@@ -366,7 +409,7 @@ Task #84 Stage 5 + 최종 보고서: main release와 Gate C 결과 정리
 4. Stage 2 보고 승인 → Stage 3A read-only snapshot
 5. Stage 3A owner-only mutation 승인 → Stage 3B private deploy
 6. Stage 3 보고와 명시적 Gate C 승인 → Stage 4
-7. Stage 4 보고 승인 → Stage 5
+7. Stage 4 보고와 2026-08-18 재기준화 계획 승인 → Stage 5 read-only audit
 8. 최종 보고 승인 → `publish/task84 → devel` PR
 
 승인은 뒤 checkpoint로 전이되지 않는다. owner-only mutation 승인과 Gate C 승인은 서로 대체하지 않는다.
@@ -384,12 +427,21 @@ Task #84 Stage 5 + 최종 보고서: main release와 Gate C 결과 정리
 - **Rollback 오작동**: owner-only를 먼저 복원한 뒤 version을 되돌리고 schema downgrade는 하지 않는다.
 - **Cleanup 오대상**: disposable과 actual owner role을 고정한다.
 - **문서와 main 시차**: Stage 5 문서는 devel task PR이며 두 번째 production release가 아니다.
+- **Stage 4 이후 remote drift**: live stage5가 version 24 기준과 다른 것은 예상된 후속 변경이다.
+  Stage 5는 chronological evidence를 남기고 #84에서 rollback하거나 재배포하지 않는다.
+- **최신 URL 계약 덮어쓰기**: #100 fixed README와 #101 revision share 계약을 Stage 4의 fixed
+  share 실측 문구로 되돌리지 않는다.
+- **migration scope creep**: 새 production hostname, project·D1·R2·OAuth·CLI origin과 data
+  폐기는 별도 Issue 승인 전 변경하지 않는다.
 
 ## 승인 요청 사항
 
 - 5개 Stage의 산출물, 검증, mutation matrix와 commit 메시지를 승인해 주세요.
 - release PR 전용 CI가 없을 수 있음을 수용하고 exact candidate devel-push CI와 clean-worktree 전체 검증을 release gate로 사용하는 방식을 승인해 주세요.
 - Stage 2 merge는 작업지시자가 직접 수행하고 Stage 3 owner-only mutation과 Stage 4 Gate C를 각각 별도 승인하는 경계를 승인해 주세요.
-- Stage 5 문서는 devel task PR에 반영하고 README·마케팅과 다음 main 문서 승격은 후속으로 남기는 경계를 승인해 주세요.
+- Stage 5를 원격 mutation 없는 read-only drift audit과 #84 역사적 종료 정리로 수행하는 경계를
+  승인해 주세요.
+- Stage 5 문서는 devel task PR에 반영하고 #100·#101 계약을 보존하며, 새 canonical production과
+  stage5 테스트 전환은 별도 migration Issue로 남기는 경계를 승인해 주세요.
 
-승인되면 Stage 1 exact candidate 고정과 local release preflight부터 진행한다.
+승인되면 Stage 5 live state read-only snapshot과 종료 문서 현행화부터 진행한다.
