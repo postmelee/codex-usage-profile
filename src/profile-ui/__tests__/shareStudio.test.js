@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildReadmeCardSnippet } from "../cardShare.js";
 import {
   buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
   getShareStudioCopy,
   isMobileShareEnvironment,
-  resolveShareStudioCardUrls
+  resolveShareStudioCardUrls,
+  resolveShareStudioProfileUrls
 } from "../shareStudio.js";
 
 test("resolves Korean and English Share Studio copy", () => {
@@ -91,17 +93,130 @@ test("never promotes a selected asset to the canonical copy URL", () => {
   });
 });
 
-test("builds the canonical Sites public profile URL", () => {
+test("builds the latest revision Sites public profile URL", () => {
+  const ownerUpdatedAt = "2026-07-15T00:02:00.000Z";
+  const usageUploadedAt = "2026-07-15T00:01:00.000Z";
+  const shareRevision = Date.parse(ownerUpdatedAt);
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${shareRevision}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: 0 }
+    ),
+    "https://profiles.example.test/api/share/postmelee/r/0"
+  );
   assert.equal(
     buildPublicProfileShareUrl(
       "https://profiles.example.test/ignored?view=settings",
-      "postmelee"
+      "postmelee",
+      { ownerUpdatedAt, usageUploadedAt }
     ),
-    "https://profiles.example.test/api/share/postmelee"
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(ownerUpdatedAt)}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { usageUploadedAt }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: undefined, usageUploadedAt }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
+  );
+});
+
+test("falls back to the fixed public profile URL for missing or invalid timestamps", () => {
+  const fixedUrl = "https://profiles.example.test/api/share/postmelee";
+  assert.equal(
+    buildPublicProfileShareUrl("https://profiles.example.test", "postmelee"),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      {
+        shareRevision: "001",
+        usageUploadedAt: "2026-07-15T00:01:00.000Z"
+      }
+    ),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: null }
+    ),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      {
+        ownerUpdatedAt: "invalid",
+        usageUploadedAt: "2026-07-15T00:01:00.000Z"
+      }
+    ),
+    fixedUrl
   );
   assert.equal(buildPublicProfileShareUrl("javascript:alert(1)", "postmelee"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", "../owner"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", ""), null);
+});
+
+test("keeps README fixed while submit advances the share link and five targets", () => {
+  const imageUrl = "https://profiles.example.test/u/postmelee/card.png";
+  const before = resolveShareStudioProfileUrls(
+    "https://profiles.example.test",
+    "postmelee",
+    { usageUploadedAt: "2026-07-15T00:01:00.000Z" }
+  );
+  const after = resolveShareStudioProfileUrls(
+    "https://profiles.example.test",
+    "postmelee",
+    { usageUploadedAt: "2026-07-16T00:01:00.000Z" }
+  );
+
+  assert.equal(before.readmeProfileUrl, "https://profiles.example.test/api/share/postmelee");
+  assert.equal(after.readmeProfileUrl, before.readmeProfileUrl);
+  assert.equal(
+    buildReadmeCardSnippet(imageUrl, after.readmeProfileUrl),
+    buildReadmeCardSnippet(imageUrl, before.readmeProfileUrl)
+  );
+  assert.notEqual(after.shareProfileUrl, before.shareProfileUrl);
+
+  const resolveTargetProfileUrls = (profileUrl) => buildShareTargets({ profileUrl })
+    .map(({ href, id }) => {
+      const url = new URL(href);
+      if (id === "x") return url.searchParams.get("text").split("\n").at(-1);
+      if (id === "linkedin") return url.searchParams.get("shareUrl");
+      if (id === "facebook") return url.searchParams.get("u");
+      return url.searchParams.get("url");
+    });
+  assert.deepEqual(
+    resolveTargetProfileUrls(before.shareProfileUrl),
+    Array(5).fill(before.shareProfileUrl)
+  );
+  assert.deepEqual(
+    resolveTargetProfileUrls(after.shareProfileUrl),
+    Array(5).fill(after.shareProfileUrl)
+  );
 });
 
 test("detects mobile share environments without viewport heuristics", () => {

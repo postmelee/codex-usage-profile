@@ -163,8 +163,11 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    bytes를 제공해야 한다. explicit dark/light × en/ko의 GET/HEAD/304 하위 호환,
    `v` query가 canonical 선택을 바꾸지 않는지, publish/unpublish/404도 검증한다.
    card authority와 social object의 owner/publication id가 같은지 확인한 뒤 crawler
-   User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
-   Twitter Card metadata를 확인하고, 정합 publication의
+   User-Agent로 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical·`og:url`·`og:image`와
+   Twitter Card metadata를 확인한다. matching revision은 모든 token이 일치하고,
+   stale revision은 `200` 현재 revision metadata로 수렴하며, invalid revision은
+   public document로 처리되지 않아야 한다. 이어서 정합 publication의
    `/u/{handle}/social.png` GET/HEAD/If-None-Match 304와 2400x1260 응답을
    검증한다. 이어서 legacy social-missing fixture에서 personalized route 404와
    HTML의 `/assets/codex-social-sample.png` 선언, fallback asset GET/HEAD 200을
@@ -181,6 +184,42 @@ expected/applied에 missing 또는 unexpected version이 있으면 기능 smoke,
 policy를 유지하고 environment를 disabled/secret-absent baseline 또는 직전 key
 set으로 되돌린 뒤 operator route `404`와 같은 health를 확인한다. provider
 오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지 않는다.
+
+## 소셜 미리보기 revision smoke
+
+Share Studio 전환이나 public cutover에서는 application 응답과 외부 provider 결과를
+분리해 확인한다. provider 작성 화면의 성공만으로 backend metadata가 맞다고 판단하지
+않고, crawler `200`만으로 provider cache가 갱신됐다고 판단하지 않는다.
+
+1. 같은 public test profile에서 카드 저장 또는 새 submit 전 revision A와 이후 최신
+   revision B를 기록한다. token은 `max(owner.updatedAt, usage.uploadedAt)`의 epoch
+   milliseconds이며 URL은 `/api/share/{handle}/r/{revision}`이다.
+2. B 문서의 status·final URL·`canonical`·`og:url`과 `og:image`,
+   `og:image:secure_url`, `twitter:image` token이 모두 B인지 확인한다. social image의
+   status·content type·ETag도 함께 기록한다.
+3. desktop browser와 X, LinkedIn, Meta/Threads, Reddit crawler User-Agent로 B가
+   같은 metadata를 반환하는지 확인한다. A stale 요청은 redirect 없이 `200` 현재 B
+   metadata로 수렴해야 하며 과거 snapshot으로 해석하지 않는다.
+4. 실제 제품과 같은 target 형식으로 X·LinkedIn·Threads·Facebook·Reddit 새 작성
+   화면을 연다. 링크 복사와 다섯 target을 decode했을 때 모두 같은 B URL이어야 한다.
+   게시·초안 저장은 하지 않는다.
+5. X는 cold image 처리에 시간이 걸릴 수 있으므로 crawler 응답 시각과 composer 최초
+   표시 시각을 따로 기록한다. 즉시 표시를 보장하지 않는다. LinkedIn 작성 화면이
+   stale이면 [Post Inspector](https://www.linkedin.com/post-inspector/)에서 같은 B URL을
+   재수집한 뒤 결과와 시각을 기록한다. 자동 cache purge나 provider OAuth/API 호출은
+   운영 절차에 포함하지 않는다.
+6. fixed `/api/share/{handle}`는 기존 링크 하위 호환으로 계속 확인하되 새 공유의 cache
+   갱신 판정에는 사용하지 않는다. timestamp가 없거나 invalid한 profile의 Share Studio만
+   fixed URL로 fail safe해야 한다.
+
+Task #101 공개 validation에서는 X가 최신 revision을 약 11초 안에 표시했고 LinkedIn은
+새 작성 화면에서 즉시 표시했다. Threads는 약 10초 뒤 표시됐으며 Facebook·Reddit도
+최신 카드를 표시했다. 이 수치는 provider SLA가 아니라 해당 실측의 관찰값이다.
+
+application metadata가 틀리거나 X·LinkedIn 중 하나가 새 revision을 최신 identity로
+인식하지 못하면 공유 URL 전환을 중단하고 직전 application saved version을 다시
+배포한다. application rollback은 이미 게시된 provider cache를 삭제하지 않으므로 기존
+게시물의 소급 갱신이나 cache purge 성공을 rollback 조건으로 두지 않는다.
 
 ## Environment와 OAuth rotation
 
@@ -264,8 +303,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    canonical theme·locale bytes를 확인하고 설정·사용량 변경 뒤 같은 URL 갱신을
    검증한다. explicit dark/light × en/ko `GET|HEAD|304` 호환과
    `selectedPublicCardUrl` 전환도 확인한다. card/social owner·publication id가
-   일치하는지 확인한 뒤 `/api/share/{handle}` HTML의
-   canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
+   일치하는지 확인한 뒤 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical/OG/Twitter metadata와 locale
+   문구, `/u/{handle}/social.png`의
    `GET|HEAD|304`·2400x1260을 확인한다. 기존 public publication처럼 social object가
    없으면 personalized route 404와 HTML의 packaged sample URL·asset 200을 함께
    확인한다. private 및 missing 상태에서 HTML이 같은 기본 metadata/unavailable
@@ -315,6 +355,10 @@ migration version을 이전 saved version의 store가 허용하더라도 exact c
 gate를 통과한 것으로 간주하지 않는다. 긴급 rollback이 필요하면 다음 조건을
 별도 Gate에서 검토하고 작업지시자 승인을 받은 경우에만 known-compatible saved
 version을 선택한다.
+
+share revision application rollback은 새 DB row나 media snapshot을 삭제하지 않는다.
+revision path는 metadata cache identity이므로 이전 saved version 재배포만 수행하고,
+외부 provider cache나 이미 게시된 링크를 파괴적으로 정리하지 않는다.
 
 - 이전 application이 요구하는 migration version이 모두 적용돼 있다.
 - 추가된 migration이 이전 application의 read/write 계약과 backward-compatible

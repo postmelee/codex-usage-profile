@@ -237,12 +237,15 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && (canShare || Boolean(shareSourceImage))}
+        ownerUpdatedAt={profile?.owner?.updatedAt}
         publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
         selectedPublicCardUrl={profile?.selectedPublicCardUrl}
+        shareRevision={profile?.shareRevision}
         sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
+        usageUploadedAt={profile?.usage?.uploadedAt}
       />
     </ProfileShell>
   );

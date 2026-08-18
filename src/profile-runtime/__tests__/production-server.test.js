@@ -27,6 +27,15 @@ import {
   assertStaticAssetRoot,
   createStaticAssetHandler
 } from "../static-assets.js";
+import {
+  createPublicProfileDocumentHandler
+} from "../public-profile-document.js";
+
+const SHARE_INDEX_HTML = [
+  "<!doctype html>",
+  "<html><head><title>Codex Usage Profile</title></head>",
+  '<body><div id="root"></div></body></html>'
+].join("");
 
 test("serves built assets with SPA fallback without shadowing missing assets", async () => {
   const fixture = createStaticFixture();
@@ -92,6 +101,7 @@ test("rejects invalid static roots, paths, and unsupported methods", async () =>
 
 test("routes health, API, public card, and frontend without leaking health details", async () => {
   const calls = [];
+  const shareRevision = 1783990860001;
   const frontendHandler = async (request) => {
     calls.push(["frontend", new URL(request.url).pathname]);
     return new Response("<html>app</html>", {
@@ -111,7 +121,26 @@ test("routes health, API, public card, and frontend without leaking health detai
       headers: { "content-type": "application/json" }
     });
   };
-  const server = await startTestServer({ apiHandler, frontendHandler });
+  const publicDocumentHandler = createPublicProfileDocumentHandler({
+    loadIndexHtml: async () => SHARE_INDEX_HTML,
+    publicBaseUrl: "https://profiles.example.test",
+    resolveProfile: async (handle) => ({
+      cardLocale: "en",
+      handle,
+      imageRevisionAt: new Date(shareRevision).toISOString()
+    })
+  });
+  const documentHandler = async (request) => {
+    const pathname = new URL(request.url).pathname;
+    const response = await publicDocumentHandler(request);
+    if (response) calls.push(["document", request.method, pathname]);
+    return response;
+  };
+  const server = await startTestServer({
+    apiHandler,
+    documentHandler,
+    frontendHandler
+  });
 
   try {
     const health = await fetch(`${server.url}/healthz`);
@@ -119,6 +148,17 @@ test("routes health, API, public card, and frontend without leaking health detai
     const healthPost = await fetch(`${server.url}/healthz`, { method: "POST" });
     const account = await fetch(`${server.url}/api/auth/me`);
     const card = await fetch(`${server.url}/u/postmelee/card.png`);
+    const fixedShare = await fetch(`${server.url}/api/share/postmelee`);
+    const revisionShareGet = await fetch(
+      `${server.url}/api/share/postmelee/r/${shareRevision}`
+    );
+    const revisionShare = await fetch(
+      `${server.url}/api/share/postmelee/r/${shareRevision}`,
+      { method: "HEAD" }
+    );
+    const invalidShare = await fetch(
+      `${server.url}/api/share/postmelee/r/001`
+    );
     const frontend = await fetch(`${server.url}/profile`);
 
     assert.deepEqual(healthBody, { ok: true });
@@ -128,10 +168,34 @@ test("routes health, API, public card, and frontend without leaking health detai
     assert.equal(healthPost.status, 405);
     assert.equal(account.status, 401);
     assert.equal(card.headers.get("content-type"), "image/png");
+    assert.ok((await fixedShare.text()).includes(
+      "https://profiles.example.test/api/share/postmelee"
+    ));
+    const revisionShareHtml = await revisionShareGet.text();
+    assert.ok(revisionShareHtml.includes(
+      `rel="canonical" ` +
+      `href="https://profiles.example.test/api/share/` +
+      `postmelee/r/${shareRevision}"`
+    ));
+    assert.ok(revisionShareHtml.includes(
+      `property="og:url" ` +
+      `content="https://profiles.example.test/api/share/` +
+      `postmelee/r/${shareRevision}"`
+    ));
+    assert.ok(revisionShareHtml.includes(
+      `/u/postmelee/social.png?v=${shareRevision}`
+    ));
+    assert.equal(revisionShare.status, 200);
+    assert.equal(await revisionShare.text(), "");
+    assert.equal(invalidShare.status, 401);
     assert.equal(await frontend.text(), "<html>app</html>");
     assert.deepEqual(calls, [
       ["api", "/api/auth/me"],
       ["api", "/u/postmelee/card.png"],
+      ["document", "GET", "/api/share/postmelee"],
+      ["document", "GET", `/api/share/postmelee/r/${shareRevision}`],
+      ["document", "HEAD", `/api/share/postmelee/r/${shareRevision}`],
+      ["api", "/api/share/postmelee/r/001"],
       ["frontend", "/profile"]
     ]);
   } finally {

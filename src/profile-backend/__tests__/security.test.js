@@ -279,6 +279,11 @@ test("public profile responses exclude owner and usage storage metadata", async 
     "uploadedAt",
     "usage"
   ]);
+  assert.equal(
+    response.body.data.shareRevision,
+    Date.parse("2026-06-11T00:01:00.000Z")
+  );
+  assert.equal(response.body.data.owner.updatedAt, undefined);
   for (const forbidden of [
     "owner_1",
     "hidden-owner-note",

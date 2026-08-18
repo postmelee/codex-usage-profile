@@ -1,3 +1,10 @@
+import {
+  buildPublicShareUrl,
+  normalizePublicShareHandle,
+  parsePublicShareRevision,
+  resolvePublicShareRevision
+} from "../profile-shared/public-share-url.js";
+
 export const PROFILE_OPEN_GRAPH_SITE_NAME = "Codex Usage Profile";
 export const PROFILE_OPEN_GRAPH_LOCALES = Object.freeze(["en", "ko"]);
 export const DEFAULT_PROFILE_OPEN_GRAPH_LOCALE = "en";
@@ -17,7 +24,6 @@ const SERVICE_DESCRIPTIONS = Object.freeze({
   ko: "Codex Usage Profile에서 내 사용량 카드를 만들고 공유하세요."
 });
 
-const UNSUPPORTED_HANDLE_RE = new RegExp("[\\u0000-\\u001f\\u007f/?#]");
 const HEAD_CLOSE_RE = /<\/head\s*>/i;
 const TITLE_RE = /<title\b[^>]*>[\s\S]*?<\/title\s*>/gi;
 const DESCRIPTION_META_RE =
@@ -30,9 +36,12 @@ export function resolveProfileOpenGraphLocale(requested, fallback) {
 }
 
 export function buildProfileOpenGraphDocument(options = {}) {
-  const handle = normalizeHandle(options.handle);
+  const handle = normalizePublicShareHandle(options.handle);
   const origin = normalizeOrigin(options.origin);
   const profile = normalizeProfileSummary(options.profile);
+  const requestedShareRevision = normalizeRequestedShareRevision(
+    options.requestedShareRevision
+  );
   const locale = resolveProfileOpenGraphLocale(
     options.requestedLocale,
     profile?.cardLocale
@@ -59,9 +68,14 @@ export function buildProfileOpenGraphDocument(options = {}) {
     });
   }
 
-  const canonicalUrl = buildPublicProfileUrl(origin, profile.handle);
+  const currentRevision = resolvePublicShareRevision(profile.imageRevisionAt);
+  const canonicalUrl = buildPublicProfileUrl(
+    origin,
+    profile.handle,
+    requestedShareRevision === null ? null : currentRevision
+  );
   const imageUrl = profile.socialImageAvailable
-    ? buildSocialImageUrl(origin, profile.handle, profile.imageRevisionAt)
+    ? buildSocialImageUrl(origin, profile.handle, currentRevision)
     : buildFallbackSocialImageUrl(origin);
   const socialTitle = `${profile.handle}'s Codex card`;
   const imageAlt = profile.socialImageAvailable
@@ -194,16 +208,12 @@ function buildLocaleTags(locale) {
   ];
 }
 
-export function buildPublicProfileUrl(origin, handle) {
-  const normalizedHandle = normalizeHandle(handle);
-  return new URL(
-    `/api/share/${encodeURIComponent(normalizedHandle)}`,
-    normalizeOrigin(origin)
-  ).toString();
+export function buildPublicProfileUrl(origin, handle, revision) {
+  return buildPublicShareUrl(origin, handle, revision);
 }
 
 export function buildSocialImageUrl(origin, handle, revisionAt) {
-  const normalizedHandle = normalizeHandle(handle);
+  const normalizedHandle = normalizePublicShareHandle(handle);
   const url = new URL(
     `/u/${encodeURIComponent(normalizedHandle)}/social.png`,
     normalizeOrigin(origin)
@@ -222,11 +232,7 @@ export function buildFallbackSocialImageUrl(origin) {
 }
 
 export function toRevisionToken(revisionAt) {
-  const time = new Date(revisionAt).getTime();
-  if (!Number.isFinite(time)) {
-    throw new TypeError("revisionAt must be a valid date");
-  }
-  return time;
+  return resolvePublicShareRevision(revisionAt);
 }
 
 function metaTag(attribute, key, content) {
@@ -267,23 +273,19 @@ function normalizeProfileSummary(value) {
     cardLocale: PROFILE_OPEN_GRAPH_LOCALES.includes(value.cardLocale)
       ? value.cardLocale
       : DEFAULT_PROFILE_OPEN_GRAPH_LOCALE,
-    handle: normalizeHandle(value.handle),
+    handle: normalizePublicShareHandle(value.handle),
     imageRevisionAt: value.imageRevisionAt ?? value.uploadedAt,
     socialImageAvailable: value.socialImageAvailable !== false
   });
 }
 
-function normalizeHandle(value) {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError("handle must be a non-empty string");
+function normalizeRequestedShareRevision(value) {
+  if (value === undefined || value === null) return null;
+  const revision = parsePublicShareRevision(value);
+  if (revision === null) {
+    throw new TypeError("requestedShareRevision must be a revision token");
   }
-
-  const handle = value.trim();
-  if (handle.length > 100 || UNSUPPORTED_HANDLE_RE.test(handle)) {
-    throw new TypeError("handle contains unsupported characters");
-  }
-
-  return handle;
+  return revision;
 }
 
 function normalizeOrigin(value) {

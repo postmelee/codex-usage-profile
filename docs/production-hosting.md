@@ -89,7 +89,7 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 [`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
-이 contract v3 projection과 `/api/share/{handle}` document read path는 Task #83
+이 contract v3 projection과 fixed `/api/share/{handle}` document read path는 Task #83
 version 17의 owner-only·public smoke에서 hosted 검증됐다. 반복 요청과 submit
 전후 측정에서는 shared-cache HIT나 stale `Age` 증거를 확인하지 못했지만
 application revision과 media ETag는 즉시 갱신됐고 privacy·publish 계약도
@@ -113,7 +113,16 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
-`/api/share/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. 이어서 R2 dark authority와 social metadata를 body 없이 읽어 owner/publication id와 ETag가 정합할 때만 `/u/{handle}/social.png?v=`를 선언한다. revision query는 owner·usage 두 시각 중 최신 값을 밀리초 정밀도로 사용한다. legacy/missing/mismatch/provider failure는 사용자 mutation이나 on-demand R2 write 없이 `/assets/codex-social-sample.png`로 fail closed한다.
+fixed `/api/share/{handle}`와 revision `/api/share/{handle}/r/{revision}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. 이어서 R2 dark authority와 social metadata를 body 없이 읽어 owner/publication id와 ETag가 정합할 때만 `/u/{handle}/social.png?v=`를 선언한다. revision token은 owner·usage 두 시각 중 최신 값을 epoch milliseconds로 사용한다.
+
+matching revision 문서는 요청 URL을 `canonical`·`og:url`로 사용하고 `og:image`,
+`og:image:secure_url`, `twitter:image`에도 같은 token을 사용한다. stale revision은
+redirect나 과거 snapshot을 제공하지 않고 `200` 현재 문서와 최신 revision metadata로
+수렴한다. fixed route는 기존 self canonical 계약을 유지한다. invalid revision은
+public document route에서 제외한다. private·missing·legacy·media mismatch/provider
+failure는 handle 존재를 노출하지 않는 site-root canonical과
+`/assets/codex-social-sample.png`로 fail closed하며 사용자 mutation이나 on-demand R2
+write를 수행하지 않는다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
@@ -157,6 +166,17 @@ object를 제공한다. `If-None-Match`가 application ETag와 일치하면 obje
 사용하되 social route 자체의 404/503 계약은 바꾸지 않는다. 정합 publication과 legacy
 missing social의 local real-Worker 회귀 검증은 완료됐지만 보정 source의 production
 R2/HTTP smoke는 아직 수행하지 않았다.
+
+Share Studio는 owner `updatedAt`과 usage `uploadedAt` 중 최신 값을 공통 builder로
+계산해 링크 복사와 X·Threads·LinkedIn·Facebook·Reddit에 동일한 revision 문서 URL을
+전달한다. 공개 profile API는 같은 계산값을 epoch millisecond `shareRevision`으로 반환하고 raw
+owner `updatedAt`은 공개하지 않는다. builder는 명시적인 `shareRevision`을 우선하고, 없는 owner
+응답만 기존 두 timestamp 계산으로 하위 호환한다. 유효한 timestamp가 하나도 없거나 명시적인
+revision이 유효하지 않으면 이 share target만 fixed route로 fail safe한다. README Markdown은 revision 계산과 분리해
+항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 사용한다.
+따라서 submit이나 카드 설정 저장은 공유 링크·SNS target revision만 바꾸고 README Markdown
+문자열은 바꾸지 않는다.
+revision은 provider cache identity일 뿐 immutable media key나 DB history key가 아니다.
 
 stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
@@ -286,7 +306,7 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
 3. Task #74·#78 누적 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
-5. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
+5. public stable card는 application ETag 재검증을 사용한다. immutable media revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다. share revision path는 별도 snapshot 보존을 뜻하지 않으며 stale 요청도 현재 metadata로 수렴한다.
 6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
 7. application rollback은 이전 saved version deployment로 수행한다. Task #100의 canonical pair는 v4 authority의 additive metadata이므로 이전 v4 reader는 이를 무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
 8. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
@@ -356,6 +376,11 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
+- Task #101 saved version 33, source
+  `53a7132630dcb6f43459880d79730e10e2b59d6e`의 공개 validation smoke:
+  matching·stale revision canonical/image token 정합, X·LinkedIn 최신 light card,
+  Threads·Facebook·Reddit 회귀와 fixed route 하위 호환. 실제 게시 없이 작성 화면만
+  확인했고 X는 최초 표시까지 약 11초, Threads는 약 10초가 필요했다.
 - Task #83 saved version 17, source
   `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의 owner-only·제한 public Gate B:
   migration readiness `[1,2,3,4,5]`, canonical API share, packaged social fallback,

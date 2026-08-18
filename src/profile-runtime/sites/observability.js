@@ -1,3 +1,5 @@
+import { parsePublicSharePath } from "../../profile-shared/public-share-url.js";
+
 export const PROFILE_SITES_REQUEST_ID_HEADER = "x-request-id";
 export const PROFILE_SITES_AVATAR_EVENT_TYPE = "profile_card_avatar";
 
@@ -146,7 +148,7 @@ export function classifyProfileSitesRoute(request) {
   if (pathname.startsWith("/api/account-usage/")) {
     return PROFILE_SITES_ROUTE_CLASSES.ACCOUNT_USAGE;
   }
-  if (/^\/api\/share\/[^/]+\/?$/.test(pathname)) {
+  if (parsePublicSharePath(pathname)) {
     return PROFILE_SITES_ROUTE_CLASSES.PUBLIC_PROFILE;
   }
   if (

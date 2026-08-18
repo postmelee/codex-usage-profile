@@ -16,6 +16,15 @@ const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
 const E2E_ORIGIN = resolveE2eOrigin(process.env.PROFILE_E2E_ORIGIN).origin;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
+const PROFILE_OWNER_UPDATED_AT = "2026-06-10T00:00:00.000Z";
+const PROFILE_USAGE_UPLOADED_AT = "2026-06-11T00:01:00.000Z";
+const PROFILE_FIXED_SHARE_URL = `${E2E_ORIGIN}/api/share/postmelee`;
+const PROFILE_SHARE_URL = `${E2E_ORIGIN}/api/share/postmelee/r/${
+  Date.parse(PROFILE_USAGE_UPLOADED_AT)
+}`;
+const PROFILE_README_MARKDOWN = `<a href="${PROFILE_FIXED_SHARE_URL}">`
+  + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
+  + 'alt="Codex usage profile" /></a>';
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
   Object.freeze({ startDate: "2026-06-01", tokens: 50_000_000 }),
   Object.freeze({ startDate: "2026-06-04", tokens: 50_000_000 }),
@@ -28,6 +37,7 @@ const AUTH_OWNER = Object.freeze({
   githubLogin: "postmelee",
   handle: "postmelee",
   id: "owner_1",
+  updatedAt: PROFILE_OWNER_UPDATED_AT,
   visibility: "private"
 });
 
@@ -2411,17 +2421,24 @@ test.describe("Home and share card flow", () => {
     await expect(backdrop).toHaveClass(/\bis-open\b/);
 
     const socialTargets = [
-      ["Share on X", "X", "https://x.com", "/intent/tweet"],
-      ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
-      ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
+      ["Share on X", "https://x.com", "/intent/tweet", "text"],
+      ["Share on Threads", "https://www.threads.net", "/intent/post", "url"],
+      ["Share on LinkedIn", "https://www.linkedin.com", "/feed/", "shareUrl"],
+      ["Share on Facebook", "https://www.facebook.com", "/sharer/sharer.php", "u"],
+      ["Share on Reddit", "https://www.reddit.com", "/submit", "url"]
     ];
-    // Social destinations open the composer directly with the share link.
-    for (const [name, , origin, pathname] of socialTargets) {
+    // Every social destination opens its composer with one revision share URL.
+    for (const [name, origin, pathname, shareParam] of socialTargets) {
       const link = page.getByRole("link", { name });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
       expect(href.pathname).toBe(pathname);
       expect(href.search).toContain("postmelee");
+      if (shareParam === "text") {
+        expect(href.searchParams.get(shareParam)).toContain(PROFILE_SHARE_URL);
+      } else {
+        expect(href.searchParams.get(shareParam)).toBe(PROFILE_SHARE_URL);
+      }
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
@@ -2429,11 +2446,11 @@ test.describe("Home and share card flow", () => {
       await page.getByRole("link", { name: "Share on X" }).getAttribute("href")
     );
     expect(xHref.searchParams.get("text")).toBe(
-      `See my Codex usage activity.\n${E2E_ORIGIN}/api/share/postmelee`
+      `See my Codex usage activity.\n${PROFILE_SHARE_URL}`
     );
     expect(xHref.searchParams.get("url")).toBeNull();
     expect(xHref.search).toContain(
-      `%0A${encodeURIComponent(`${E2E_ORIGIN}/api/share/postmelee`)}`
+      `%0A${encodeURIComponent(PROFILE_SHARE_URL)}`
     );
     await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
     await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
@@ -2455,7 +2472,7 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy share link" }).click();
     await expect(page.getByText("Share link copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `${E2E_ORIGIN}/api/share/postmelee`
+      PROFILE_SHARE_URL
     );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
@@ -2467,9 +2484,7 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `<a href="${E2E_ORIGIN}/api/share/postmelee">`
-        + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
-        + 'alt="Codex usage profile" /></a>'
+      PROFILE_README_MARKDOWN
     );
 
     await page.getByRole("button", { name: "Copy image", exact: true }).click();
@@ -2539,6 +2554,69 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Make private" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+  });
+
+  test("Share Studio advances submit share targets while README Markdown stays fixed", async ({
+    context,
+    page
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await mockAuthenticatedAccount(page);
+    let profile = ownerProfile("public");
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: profile,
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const readSocialTargetUrls = async (scope) => Promise.all([
+      ["Share on X", "text"],
+      ["Share on Threads", "url"],
+      ["Share on LinkedIn", "shareUrl"],
+      ["Share on Facebook", "u"],
+      ["Share on Reddit", "url"]
+    ].map(async ([name, parameter]) => {
+      const href = new URL(await scope.getByRole("link", { name }).getAttribute("href"));
+      const target = href.searchParams.get(parameter);
+      return parameter === "text" ? target.split("\n").at(-1) : target;
+    }));
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    let dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", PROFILE_SHARE_URL);
+    expect(await readSocialTargetUrls(dialog)).toEqual(
+      Array(5).fill(PROFILE_SHARE_URL)
+    );
+    await dialog.getByRole("button", { name: "Copy README Markdown" }).click();
+    const readmeBeforeSubmit = await page.evaluate(() => navigator.clipboard.readText());
+    expect(readmeBeforeSubmit).toBe(PROFILE_README_MARKDOWN);
+    await dialog.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+
+    const submittedAt = "2026-06-13T00:04:00.000Z";
+    profile = {
+      ...profile,
+      usage: {
+        ...profile.usage,
+        uploadedAt: submittedAt
+      }
+    };
+    await page.reload();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Share activity" });
+    const submittedShareUrl = `${E2E_ORIGIN}/api/share/postmelee/r/${
+      Date.parse(submittedAt)
+    }`;
+    await expect(dialog.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", submittedShareUrl);
+    expect(await readSocialTargetUrls(dialog)).toEqual(
+      Array(5).fill(submittedShareUrl)
+    );
+    await dialog.getByRole("button", { name: "Copy README Markdown" }).click();
+    const readmeAfterSubmit = await page.evaluate(() => navigator.clipboard.readText());
+    expect(readmeAfterSubmit).toBe(readmeBeforeSubmit);
   });
 
   test("Share Studio hands off the decoded source while the public target loads", async ({ page }) => {
@@ -4233,6 +4311,10 @@ test.describe("Settings appearance control", () => {
         ...profile,
         cardLocale: savedPayload.cardLocale,
         cardStyle: savedPayload.cardStyle,
+        owner: {
+          ...profile.owner,
+          updatedAt: "2026-06-12T00:00:00.000Z"
+        },
         selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
       };
       await fulfillJson(route, { data: profile, ok: true });
@@ -4317,15 +4399,20 @@ test.describe("Settings appearance control", () => {
       .toHaveAttribute("title", `${E2E_ORIGIN}/u/postmelee/card.png`);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
       .not.toHaveAttribute("title", /[?&]locale=/);
+    const savedShareUrl = `${E2E_ORIGIN}/api/share/postmelee/r/${
+      Date.parse(profile.owner.updatedAt)
+    }`;
+    await expect(shareStudio.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", savedShareUrl);
+    await shareStudio.getByRole("button", { name: "Copy share link" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(savedShareUrl);
     await shareStudio.getByRole("button", { name: "Copy image URL" }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       `${E2E_ORIGIN}/u/postmelee/card.png`
     );
     await shareStudio.getByRole("button", { name: "Copy README Markdown" }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `<a href="${E2E_ORIGIN}/api/share/postmelee">`
-        + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
-        + 'alt="Codex usage profile" /></a>'
+      PROFILE_README_MARKDOWN
     );
     await expect(shareStudio.getByRole("link", { name: "Save PNG" }))
       .toHaveAttribute(
@@ -5470,7 +5557,7 @@ function publicProfile() {
     selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
-      uploadedAt: "2026-06-11T00:01:00.000Z",
+      uploadedAt: PROFILE_USAGE_UPLOADED_AT,
       usage: {
         dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
         summary: {
@@ -5514,7 +5601,7 @@ function ownerProfile(visibility) {
     selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
-      uploadedAt: "2026-06-11T00:01:00.000Z",
+      uploadedAt: PROFILE_USAGE_UPLOADED_AT,
       usage: {
         dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
         summary: {

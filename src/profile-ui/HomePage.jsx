@@ -389,12 +389,15 @@ export function HomePage({
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && canShare}
+        ownerUpdatedAt={profile?.owner?.updatedAt}
         publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? owner?.handle}
         selectedPublicCardUrl={profile?.selectedPublicCardUrl}
+        shareRevision={profile?.shareRevision}
         sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
+        usageUploadedAt={profile?.usage?.uploadedAt}
       />
     </ProfileShell>
   );

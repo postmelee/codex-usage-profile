@@ -9,7 +9,7 @@ test("runs browser session, real CLI, D1, R2, renderer and publication in one lo
   const result = await runSitesFullStackLocalSmoke();
 
   assert.equal(result.canonicalUpdatesVerified, 2);
-  assert.equal(result.routesVerified, 62);
+  assert.equal(result.routesVerified, 67);
   assert.ok(result.publicPngBytes > 10_000);
   assert.ok(result.coldRenderMs > 0);
   assert.ok(result.warmRenderMs > 0);
