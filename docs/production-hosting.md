@@ -379,20 +379,27 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
-- Task #84 exact-main saved version 24, source
-  `0c804733e41988467ecd7fbd8e6a152cbfc2fad0`의 Gate C public cutover:
-  public access revision 57, environment revision 87, OAuth·CLI·profile·README
-  card·social media·privacy·non-enumeration과 X·Threads·카카오 preview 검증.
-  이 값은 후속 validation 배포 전의 release 이력이다.
+- Task #84 Stage 5 read-only audit에서 version 33, public access revision 59,
+  environment revision 89와 9개 key 구성을 재확인했다. `/healthz`는 `200`, 닫힌
+  operator route는 `404`, D1 `schema_migrations`는 exact `[1,2,3,4,5]`였으며
+  version·access·environment·D1/R2·계정·session mutation은 수행하지 않았다.
 - Task #101 saved version 33, source
   `53a7132630dcb6f43459880d79730e10e2b59d6e`의 공개 validation smoke:
   matching·stale revision canonical/image token 정합, X·LinkedIn 최신 light card,
   Threads·Facebook·Reddit 회귀와 fixed route 하위 호환. 실제 게시 없이 작성 화면만
   확인했고 X는 최초 표시까지 약 11초, Threads는 약 10초가 필요했다.
-- Task #84 Stage 5 read-only audit에서 version 33, public access revision 59,
-  environment revision 89와 9개 key 구성을 재확인했다. `/healthz`는 `200`, 닫힌
-  operator route는 `404`, D1 `schema_migrations`는 exact `[1,2,3,4,5]`였으며
-  version·access·environment·D1/R2·계정·session mutation은 수행하지 않았다.
+- Task #84 exact-main saved version 24, source
+  `0c804733e41988467ecd7fbd8e6a152cbfc2fad0`의 Gate C public cutover:
+  public access revision 57, environment revision 87, OAuth·CLI·profile·README
+  card·social media·privacy·non-enumeration과 X·Threads·카카오 preview 검증.
+  이 값은 후속 validation 배포 전의 release 이력이다.
+- Task #83 saved version 23, source
+  `c030339d848f961c54358d9d3523b340bed09670`의 owner/public card readiness,
+  decoded resource reuse, avatar, source-image handoff, 구조형 profile Skeleton과
+  transform `none`·delay `0s` 동시 reveal owner-only hosted smoke
+- Task #83 saved version 18, source
+  `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
+  공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
 - Task #83 saved version 17, source
   `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의 owner-only·제한 public Gate B:
   migration readiness `[1,2,3,4,5]`, canonical API share, packaged social fallback,
@@ -401,13 +408,6 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - 같은 Gate B의 반복 요청에서는 shared-cache HIT·stale `Age` 증거가 없었고,
   application revision/ETag가 즉시 갱신돼 cache 변경을 release blocker로 분류하지
   않음; 측정 뒤 disposable state를 정리하고 custom owner-only로 원복
-- Task #83 saved version 18, source
-  `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
-  공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
-- Task #83 saved version 23, source
-  `c030339d848f961c54358d9d3523b340bed09670`의 owner/public card readiness,
-  decoded resource reuse, avatar, source-image handoff, 구조형 profile Skeleton과
-  transform `none`·delay `0s` 동시 reveal owner-only hosted smoke
 - saved version 7, source
   `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0`와 production deployment
   `succeeded`

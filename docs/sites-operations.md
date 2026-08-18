@@ -35,6 +35,8 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | maintenance operator secret | absent |
 | health/operator | `/healthz` `200`, 닫힌 operator route `404` |
 | D1 readiness | migration `[1,2,3,4,5]` exact |
+| 원복 access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
+| validation data | 테스트 계정·validation data 보존; exact owner/session/D1/R2 상태 확인·폐기는 migration Issue의 data disposal Gate |
 
 | 시점 | saved version/source | access | environment | 의미 |
 |---|---|---|---|---|
@@ -329,9 +331,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
+계속하지 않는다. legacy saved version 7 baseline의 공개 화면은
 `/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
-HTML이 정적 asset으로 처리됨을 확인했다. 검증된 릴리스 후보는
+HTML이 정적 asset으로 처리됨을 확인했다. 현재 public validation 경로는
 `/api/share/{handle}`에서 handle별 canonical/OG/Twitter metadata와 같은 SPA 공개
 화면을 제공한다. root query와 extension 없는 `/u/{handle}`은 source 하위
 호환으로만 유지하며 production share link로 안내하지 않는다.
