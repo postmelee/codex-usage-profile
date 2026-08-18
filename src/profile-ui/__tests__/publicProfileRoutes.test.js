@@ -15,6 +15,7 @@ const PUBLIC_PROFILE = Object.freeze({
     handle: "postmelee"
   },
   publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+  shareRevision: SHARE_REVISION,
   usage: {
     capturedAt: "2026-07-14T00:00:00.000Z",
     uploadedAt: "2026-07-14T00:01:00.000Z",
@@ -182,6 +183,8 @@ test("maps missing, private, invalid, and failed responses to one unavailable st
     { ...PUBLIC_PROFILE, publicCardUrl: "javascript:alert(1)" },
     { ...PUBLIC_PROFILE, selectedPublicCardUrl: "not-a-url" },
     { ...PUBLIC_PROFILE, selectedPublicCardUrl: "data:image/png;base64,AAAA" },
+    { ...PUBLIC_PROFILE, shareRevision: "001" },
+    { ...PUBLIC_PROFILE, shareRevision: -1 },
     {
       ...PUBLIC_PROFILE,
       usage: {

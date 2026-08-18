@@ -47,6 +47,14 @@ export function normalizePublicShareHandle(value) {
   return handle;
 }
 
+export function parsePublicShareHandle(value) {
+  try {
+    return normalizePublicShareHandle(value);
+  } catch {
+    return null;
+  }
+}
+
 export function buildPublicSharePath(handle, revision) {
   const encodedHandle = encodeURIComponent(normalizePublicShareHandle(handle));
   if (revision === undefined || revision === null) {
@@ -96,11 +104,7 @@ function decodePublicShareHandle(value) {
     return null;
   }
 
-  try {
-    return normalizePublicShareHandle(handle);
-  } catch {
-    return null;
-  }
+  return parsePublicShareHandle(handle);
 }
 
 function normalizePublicShareOrigin(value) {

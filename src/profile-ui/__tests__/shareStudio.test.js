@@ -96,6 +96,23 @@ test("never promotes a selected asset to the canonical copy URL", () => {
 test("builds the latest revision Sites public profile URL", () => {
   const ownerUpdatedAt = "2026-07-15T00:02:00.000Z";
   const usageUploadedAt = "2026-07-15T00:01:00.000Z";
+  const shareRevision = Date.parse(ownerUpdatedAt);
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${shareRevision}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: 0 }
+    ),
+    "https://profiles.example.test/api/share/postmelee/r/0"
+  );
   assert.equal(
     buildPublicProfileShareUrl(
       "https://profiles.example.test/ignored?view=settings",
@@ -112,12 +129,39 @@ test("builds the latest revision Sites public profile URL", () => {
     ),
     `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
   );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: undefined, usageUploadedAt }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
+  );
 });
 
 test("falls back to the fixed public profile URL for missing or invalid timestamps", () => {
   const fixedUrl = "https://profiles.example.test/api/share/postmelee";
   assert.equal(
     buildPublicProfileShareUrl("https://profiles.example.test", "postmelee"),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      {
+        shareRevision: "001",
+        usageUploadedAt: "2026-07-15T00:01:00.000Z"
+      }
+    ),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: null }
+    ),
     fixedUrl
   );
   assert.equal(

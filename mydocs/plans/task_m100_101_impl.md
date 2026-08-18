@@ -13,6 +13,7 @@ GitHub Issue: [#101](https://github.com/postmelee/codex-usage-profile/issues/101
 | 3 | 승인된 Sites 실험 배포와 플랫폼 gate | exact task101 artifact, `mydocs/working/task_m100_101_stage3.md` | X·LinkedIn A/B 및 Threads·Facebook·Reddit 회귀 실측 |
 | 4 | Share Studio 단일 revision URL 전환과 공식 문서 현행화 | Share Studio data flow·target, 사용자·아키텍처·운영 문서 | builder·UI·E2E와 문서 route 계약 검증 |
 | 5 | 전체 회귀 검증과 비배포 PR handoff | `mydocs/working/task_m100_101_stage5.md` | 전체 Node·Playwright·production build·Sites artifact 검증 |
+| 6 | PR #106 리뷰 계약·절차 보정 | 공통 handle, public `shareRevision`, timestamp 문서, 날짜별 보드 | allowlist·security·Share Studio·전체 회귀 검증 |
 
 ## 문서 위치 확인
 
@@ -25,9 +26,9 @@ GitHub Issue: [#101](https://github.com/postmelee/codex-usage-profile/issues/101
 | 사용자 공유 문서 | `docs/` | `docs/readme-card.md` | OK | Stage 3 gate 통과 뒤 Stage 4에서 관련 절만 수정한다. |
 | 공유 문서 아키텍처 | `docs/` | `docs/production-hosting.md` | OK | revision·canonical·fallback 계약을 기록한다. |
 | 플랫폼 운영 절차 | `docs/` | `docs/sites-operations.md` | OK | crawler·platform smoke와 rollback 경계를 기록한다. |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_101_stage{1..5}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
+| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_101_stage{1..6}.md` | OK | 각 Stage 소스·검증과 같은 단계 커밋에 포함한다. |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_101_report.md` | OK | Stage 5 승인 뒤 별도 최종 보고 절차에서 작성한다. |
-| 오늘할일 | `mydocs/orders/` | `mydocs/orders/20260813.md` | OK | 단계 상태만 기존 행에서 갱신한다. |
+| 오늘할일 | `mydocs/orders/` | `mydocs/orders/20260813.md`, `20260817.md`, `20260818.md` | OK | 실제 작업일별 한 장 원칙에 맞춰 단계 상태를 분리한다. |
 | README | 변경 없음 | 변경 없음 | OK | 새 canonical production origin은 후속 migration Issue에서 다룬다. |
 
 ## 공통 구현 계약
@@ -391,6 +392,101 @@ git status --short
 Task #101 Stage 5: 전체 회귀 검증과 PR handoff 완료
 ```
 
+## Stage 6 — PR #106 리뷰 계약·절차 보정
+
+### 진입 조건
+
+- PR #106 상위 리뷰 댓글의 개선 제안 3건과 절차 지적 1건을 확인했다.
+- 작업지시자가 네 항목 모두 반영하되 공개 API에는 raw `owner.updatedAt` 대신 서버 계산
+  `shareRevision`을 추가하는 범위를 승인했다.
+
+### 산출물
+
+신규:
+
+- `mydocs/orders/20260817.md`
+- `mydocs/orders/20260818.md`
+- `mydocs/working/task_m100_101_stage6.md`
+
+수정:
+
+- `src/profile-shared/public-share-url.js`
+- `src/profile-shared/__tests__/public-share-url.test.js`
+- `src/profile-runtime/public-profile-document.js`
+- `src/profile-runtime/public-profile-resolver.js`
+- `src/profile-backend/http.js`
+- `src/profile-backend/__tests__/http.test.js`
+- `src/profile-backend/__tests__/security.test.js`
+- `src/profile-api/__tests__/client.test.js`
+- `src/profile-ui/shareStudio.js`
+- `src/profile-ui/ShareStudio.jsx`
+- `src/profile-ui/HomePage.jsx`
+- `src/profile-ui/CardProfilePage.jsx`
+- `src/profile-ui/publicProfileRoutes.js`
+- `src/profile-ui/__tests__/shareStudio.test.js`
+- `src/profile-ui/__tests__/publicProfileRoutes.test.js`
+- `docs/readme-card.md`
+- `docs/production-hosting.md`
+- `mydocs/orders/20260813.md`
+- `mydocs/plans/task_m100_101.md`
+- `mydocs/plans/task_m100_101_impl.md`
+- `mydocs/report/task_m100_101_report.md`
+
+### 변경 내용
+
+- 공통 모듈에 null 반환 handle normalizer를 두고 share path와 `/u/{handle}`·root profile query가
+  같은 handle 문법을 사용하게 한다. throw 기반 builder 계약은 유지한다.
+- 공개 profile 응답에 owner·usage timestamp 최댓값으로 계산한 epoch millisecond
+  `shareRevision`을 추가한다. raw `owner.updatedAt`과 storage revision은 계속 제외한다.
+- Share Studio builder는 명시적인 `shareRevision`이 있으면 그것을 authoritative token으로 쓰고,
+  없을 때만 기존 owner·usage timestamp 계산으로 하위 호환한다. invalid explicit token은 fixed route로
+  fail safe한다.
+- public profile route는 `shareRevision`이 canonical safe integer인지 검증하되 기존 응답의 필드
+  부재는 허용한다.
+- 사용자 문서에 revision URL이 최신 공개 profile·usage 갱신 시각을 millisecond 단위로 드러낸다는
+  cache identity 트레이드오프를 명시한다.
+- 2026-08-13에는 Stage 1, 2026-08-17에는 Stage 2, 2026-08-18에는 Stage 3~6·최종 상태를 기록해
+  오늘할일 보드를 실제 작업일별로 분리한다.
+- 최종 보고서와 PR 본문을 6개 Stage 및 리뷰 보정 결과에 맞게 갱신한다.
+- 제품 배포, Sites saved version·access·environment와 외부 SNS 게시물은 변경하지 않는다.
+
+### 검증
+
+```bash
+node --test \
+  src/profile-shared/__tests__/public-share-url.test.js \
+  src/profile-runtime/__tests__/public-profile-document.test.js \
+  src/profile-backend/__tests__/http.test.js \
+  src/profile-backend/__tests__/security.test.js \
+  src/profile-api/__tests__/client.test.js \
+  src/profile-ui/__tests__/shareStudio.test.js \
+  src/profile-ui/__tests__/publicProfileRoutes.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Share Studio advances"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+git diff --check
+git status --short
+```
+
+### 완료 조건
+
+- fixed·revision share path와 `/u/{handle}`·root query가 하나의 handle 문법을 사용한다.
+- 공개 profile의 `shareRevision`과 서버 canonical revision이 같은 입력에서 일치한다.
+- raw `owner.updatedAt`, owner id, storage revision·digest·path는 공개 응답에 포함되지 않는다.
+- explicit `shareRevision`과 legacy timestamp fallback이 queryless revision URL 또는 fixed fallback을
+  결정론적으로 만든다.
+- README Markdown 고정 URL과 submit 뒤 공유 링크·다섯 SNS target 갱신 계약이 유지된다.
+- 날짜별 오늘할일 보드와 최종 보고서가 실제 Stage 이력과 일치한다.
+- 전체 회귀·production artifact 검증이 통과하고 Sites 원격 mutation이 없다.
+
+### 커밋
+
+```text
+Task #101 Stage 6: PR 리뷰 계약과 날짜별 보드 보정
+```
+
 ## 검증 원칙
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행하고 실제 결과·소요 시간·실패 원인을 기록한다.
@@ -410,6 +506,8 @@ Task #101 Stage 5: 전체 회귀 검증과 PR handoff 완료
 - Stage 4는 Stage 3에서 X와 LinkedIn gate가 모두 통과하고 보고서가 승인돼야 진행한다.
 - Stage 5는 Stage 4의 Share Studio·문서 변경과 보고서 승인 후 진행한다.
 - 최종 보고서·publish branch·PR은 Stage 5 승인 후 별도 절차로 진행한다.
+- Stage 6은 PR #106 리뷰 범위를 작업지시자가 승인한 뒤 진행하며, 기존 PR head와 최종 보고서를
+  갱신한다.
 
 ## 위험과 대응
 
@@ -449,5 +547,7 @@ Task #101 Stage 5: 전체 회귀 검증과 PR handoff 완료
 - 새 canonical production site와 origin·CLI·OAuth·데이터 migration은 #101 성공 뒤 신규 Issue로
   분리하며 기존 `stage5` 링크 보존을 요구하지 않는 조건
 - 각 Stage 종료 후 단계 보고서 승인을 받아야 다음 Stage로 진입하는 순서
+- PR #106 리뷰 지적 1~4를 Stage 6에서 모두 반영하되 raw `owner.updatedAt` 대신 계산된
+  `shareRevision`만 공개하는 조건
 
 승인되면 Stage 1의 공통 revision URL·metadata 계약 구현부터 시작한다.

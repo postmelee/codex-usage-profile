@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildPublicSharePath,
   buildPublicShareUrl,
+  parsePublicShareHandle,
   parsePublicSharePath,
   parsePublicShareRevision,
   resolvePublicShareRevision
@@ -13,6 +14,25 @@ const ORIGIN = "https://profiles.example.test";
 const OWNER_UPDATED_AT = "2026-06-11T09:05:00.000Z";
 const USAGE_UPLOADED_AT = "2026-06-12T10:06:00.001Z";
 const REVISION = Date.parse(USAGE_UPLOADED_AT);
+
+test("normalizes public handles without duplicating throwing validation", () => {
+  assert.equal(parsePublicShareHandle("  postmelee  "), "postmelee");
+  assert.equal(parsePublicShareHandle("foo bar"), "foo bar");
+
+  for (const value of [
+    null,
+    undefined,
+    "",
+    " ",
+    "a/b",
+    "a?b",
+    "a#b",
+    `a${String.fromCharCode(0)}b`,
+    "a".repeat(101)
+  ]) {
+    assert.equal(parsePublicShareHandle(value), null);
+  }
+});
 
 test("resolves the latest valid profile timestamp as a revision token", () => {
   assert.equal(

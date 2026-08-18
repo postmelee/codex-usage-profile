@@ -169,8 +169,10 @@ R2/HTTP smoke는 아직 수행하지 않았다.
 
 Share Studio는 owner `updatedAt`과 usage `uploadedAt` 중 최신 값을 공통 builder로
 계산해 링크 복사와 X·Threads·LinkedIn·Facebook·Reddit에 동일한 revision 문서 URL을
-전달한다. 유효한 timestamp가 하나도 없거나 전달된 값 중 하나라도 유효하지 않으면
-이 share target만 fixed route로 fail safe한다. README Markdown은 revision 계산과 분리해
+전달한다. 공개 profile API는 같은 계산값을 epoch millisecond `shareRevision`으로 반환하고 raw
+owner `updatedAt`은 공개하지 않는다. builder는 명시적인 `shareRevision`을 우선하고, 없는 owner
+응답만 기존 두 timestamp 계산으로 하위 호환한다. 유효한 timestamp가 하나도 없거나 명시적인
+revision이 유효하지 않으면 이 share target만 fixed route로 fail safe한다. README Markdown은 revision 계산과 분리해
 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 사용한다.
 따라서 submit이나 카드 설정 저장은 공유 링크·SNS target revision만 바꾸고 README Markdown
 문자열은 바꾸지 않는다.

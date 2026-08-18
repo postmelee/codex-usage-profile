@@ -132,6 +132,7 @@ test("loads a public Account Usage profile from the allowlisted endpoint", async
       handle: "postmelee"
     },
     publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+    shareRevision: Date.parse("2026-07-14T00:01:00.000Z"),
     usage: {
       capturedAt: "2026-07-14T00:00:00.000Z",
       uploadedAt: "2026-07-14T00:01:00.000Z",

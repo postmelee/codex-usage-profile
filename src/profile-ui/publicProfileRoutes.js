@@ -1,7 +1,8 @@
 import { isAccountUsageReadResult } from "../profile-card/account-usage.js";
 import {
-  normalizePublicShareHandle,
-  parsePublicSharePath
+  parsePublicShareHandle,
+  parsePublicSharePath,
+  parsePublicShareRevision
 } from "../profile-shared/public-share-url.js";
 
 export function resolvePublicProfileRoute(location) {
@@ -18,7 +19,7 @@ export function resolvePublicProfileRoute(location) {
 
   const handle = rootHandle === null
     ? sharePath?.handle ?? decodeHandle(profileMatch[1])
-    : normalizeHandle(rootHandle);
+    : parsePublicShareHandle(rootHandle);
   if (!handle) {
     return createState("unavailable", null, null);
   }
@@ -65,15 +66,7 @@ function createState(status, handle, profile) {
 
 function decodeHandle(value) {
   try {
-    return normalizeHandle(decodeURIComponent(value));
-  } catch {
-    return null;
-  }
-}
-
-function normalizeHandle(value) {
-  try {
-    return normalizePublicShareHandle(value);
+    return parsePublicShareHandle(decodeURIComponent(value));
   } catch {
     return null;
   }
@@ -83,6 +76,10 @@ function isPublicProfile(profile) {
   return Boolean(
     profile &&
     profile.visibility === "public" &&
+    (
+      profile.shareRevision === undefined ||
+      parsePublicShareRevision(profile.shareRevision) !== null
+    ) &&
     isShareableCardUrl(profile.publicCardUrl) &&
     (
       profile.selectedPublicCardUrl === undefined ||

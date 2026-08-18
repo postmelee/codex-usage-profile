@@ -241,6 +241,7 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
         selectedPublicCardUrl={profile?.selectedPublicCardUrl}
+        shareRevision={profile?.shareRevision}
         sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}

@@ -51,6 +51,9 @@ public smoke에서 검증됐다. root query는 정적 asset으로 처리되고 e
 않는다.
 
 revision은 owner `updatedAt`과 usage `uploadedAt` 중 최신 시각의 epoch milliseconds다.
+따라서 Share Studio가 복사하거나 SNS 작성 창에 전달하는 revision URL 문자열에는 최신 공개
+profile·usage 갱신 시각이 millisecond 정밀도로 보인다. 이는 crawler cache identity를 분리하기
+위해 수용한 공개 계약이며 credential·owner id나 과거 카드 snapshot을 뜻하지 않는다.
 현재 revision과 일치하는 요청은 요청 URL을 `canonical`·`og:url`로 사용하고 이미지
 URL에도 같은 token을 넣는다. 과거 revision 요청은 snapshot이 아니며 `200` 현재
 문서를 반환하면서 최신 revision canonical·이미지로 수렴한다. 별도 카드 history나
@@ -138,6 +141,11 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 | social PNG | `/u/{handle}/social.png` | 검증된 후보·#84 공개 대기 | 정합한 publication의 2400x1260 링크 미리보기 이미지다. object가 없는 legacy publication 자체는 계속 404이고 HTML metadata만 packaged sample로 닫힌다. |
 
 profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON은 `404`를 반환한다. Publish가 완료되지 않았거나 private 전환으로 stable object가 제거됐거나 locale metadata/revision이 불완전하면 공개 PNG도 owner 존재 여부를 노출하지 않는 동일한 `404`를 반환한다. R2 provider·timeout·bucket 장애는 내부 storage 정보를 포함하지 않는 `503 media_unavailable`과 `Retry-After: 5`를 반환하므로 일시 장애를 미published 결과로 캐시하지 않는다. 공개 HTML은 로그인 여부를 노출하지 않는 unavailable 상태를 표시한다.
+
+공개 JSON은 공개 share 문서와 같은 입력에서 계산한 epoch millisecond `shareRevision`을 제공한다.
+raw owner `updatedAt`, owner id와 storage revision·digest·path는 계속 반환하지 않는다. 향후 공개
+profile 화면에서 Share Studio를 열더라도 이 계산값을 사용하면 카드 설정만 바뀐 경우에도 서버
+canonical과 같은 revision URL을 만들 수 있다.
 
 현재 공개 프로필과 카드는 Account Usage Contract v1이 제공하는 누적/최대 토큰, 최장 작업, 연속 기록과 일별 버킷만 지원한다. favorite model, token breakdown, skill/plugin ranking은 이 계약에 없으므로 현재 제품 화면에 표시하지 않는다.
 

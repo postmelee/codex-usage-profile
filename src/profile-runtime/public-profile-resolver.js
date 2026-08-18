@@ -2,6 +2,7 @@ import { normalizeCardLocale } from "../profile-card/presentation.js";
 import {
   PROFILE_MEDIA_STABLE_STATE_KINDS
 } from "../profile-media/media-store-contract.js";
+import { resolvePublicShareRevision } from "../profile-shared/public-share-url.js";
 
 export function createStorePublicProfileResolver(store, options = {}) {
   if (
@@ -65,11 +66,5 @@ async function hasCoherentSocialImage(mediaStore, handle) {
 }
 
 function latestRevisionAt(...values) {
-  const times = values
-    .filter((value) => value !== undefined && value !== null)
-    .map((value) => new Date(value).getTime());
-  if (times.length === 0 || times.some((time) => !Number.isFinite(time))) {
-    throw new TypeError("public profile summary has an invalid revision date");
-  }
-  return new Date(Math.max(...times)).toISOString();
+  return new Date(resolvePublicShareRevision(...values)).toISOString();
 }

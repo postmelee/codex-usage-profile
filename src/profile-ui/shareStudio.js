@@ -5,6 +5,7 @@ import {
 } from "./cardShare.js";
 import {
   buildPublicShareUrl,
+  parsePublicShareRevision,
   resolvePublicShareRevision
 } from "../profile-shared/public-share-url.js";
 import { formatMessage } from "./i18n.js";
@@ -100,10 +101,20 @@ export function resolveShareStudioCardUrls(options = {}) {
 export function buildPublicProfileShareUrl(origin, handle, options = {}) {
   let revision;
   try {
-    revision = resolvePublicShareRevision(
-      options?.ownerUpdatedAt,
-      options?.usageUploadedAt
-    );
+    if (
+      Object.prototype.hasOwnProperty.call(options, "shareRevision") &&
+      options.shareRevision !== undefined
+    ) {
+      revision = parsePublicShareRevision(options.shareRevision);
+      if (revision === null) {
+        throw new TypeError("shareRevision must be a canonical safe integer token");
+      }
+    } else {
+      revision = resolvePublicShareRevision(
+        options?.ownerUpdatedAt,
+        options?.usageUploadedAt
+      );
+    }
   } catch {
     // Legacy profiles and malformed timestamps keep the fixed share route.
     revision = undefined;

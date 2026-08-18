@@ -29,6 +29,7 @@ import {
 import { createOAuthRuntimeService } from "./oauth-runtime.js";
 import { createSessionService } from "./session.js";
 import { createSnapshotSubmitService } from "./snapshots.js";
+import { resolvePublicShareRevision } from "../profile-shared/public-share-url.js";
 import { PROFILE_VISIBILITY } from "./store-values.js";
 import { createCliTokenService } from "./tokens.js";
 import {
@@ -1112,6 +1113,10 @@ async function serializePublicProfile(profile, request, publicBaseUrl) {
       publicBaseUrl
     ),
     selectedPublicCardUrl: publicCardVariantUrls[cardLocale][cardStyle.theme],
+    shareRevision: resolvePublicShareRevision(
+      profile.owner.updatedAt,
+      profile.usageRecord.uploadedAt
+    ),
     publicCardUrls,
     publicCardVariantUrls
   };

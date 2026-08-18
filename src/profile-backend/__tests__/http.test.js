@@ -875,6 +875,7 @@ test("serves a public Account Usage profile with an explicit response allowlist"
     presentationDigest: "4Pu_ghjqNSMCxM4CfBZvubJIeSIdlJmR_H71FnHYb5U",
     publicCardUrl: `${BASE_URL}/u/postmelee/card.png`,
     selectedPublicCardUrl: `${BASE_URL}/u/postmelee/card.png?theme=dark`,
+    shareRevision: Date.parse("2026-06-11T00:01:00.000Z"),
     publicCardUrls: {
       light: `${BASE_URL}/u/postmelee/card.png?theme=light`,
       dark: `${BASE_URL}/u/postmelee/card.png?theme=dark`
@@ -909,6 +910,30 @@ test("serves a public Account Usage profile with an explicit response allowlist"
   ]) {
     assert.equal(serialized.includes(`\"${internalKey}\"`), false);
   }
+});
+
+test("publishes one derived share revision without exposing owner updatedAt", async () => {
+  const fixture = createFixture();
+  const ownerUpdatedAt = "2026-06-12T00:02:00.123Z";
+  fixture.saveOwner({
+    updatedAt: ownerUpdatedAt,
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+  fixture.saveLatestUsage({
+    uploadedAt: "2026-06-11T00:01:00.000Z",
+    visibility: PROFILE_VISIBILITY.PUBLIC
+  });
+
+  const response = await requestJson(
+    fixture.handler,
+    "GET",
+    "/api/profiles/public/postmelee"
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.shareRevision, Date.parse(ownerUpdatedAt));
+  assert.equal(response.body.data.owner.updatedAt, undefined);
+  assert.equal(JSON.stringify(response.body.data).includes(ownerUpdatedAt), false);
 });
 
 test("updates versioned owner card settings and validates the exact payload", async () => {

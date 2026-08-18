@@ -43,6 +43,7 @@ export function ShareStudio({
   publicCardUrl,
   publicOwnerHandle,
   selectedPublicCardUrl,
+  shareRevision,
   sourceCardImage,
   sourceCardRef,
   sourceRect,
@@ -83,12 +84,14 @@ export function ShareStudio({
   const { readmeProfileUrl, shareProfileUrl } = useMemo(
     () => resolveShareStudioProfileUrls(locationOrigin, publicOwnerHandle, {
       ownerUpdatedAt,
+      shareRevision,
       usageUploadedAt
     }),
     [
       locationOrigin,
       ownerUpdatedAt,
       publicOwnerHandle,
+      shareRevision,
       usageUploadedAt
     ]
   );
