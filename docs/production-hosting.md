@@ -10,37 +10,41 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 - Worker-compatible JS/Wasm renderer가 Sites의 hosted card renderer다.
 
 이 결정은 Task #49의 architecture 적합성 검증과 Task #51의 production
-migration 결과에 따른 **MVP production PASS**다. canonical origin은
-`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이며,
-production GitHub OAuth app, D1/R2, Worker renderer와 운영 guardrail을 같은
-Sites project에서 사용한다. `stage5`가 포함된 기존 slug는 project를 새로
-만들지 않고 검증된 linkage와 rollback history를 보존하기 위해 유지한 opaque
-배포 식별자이며 제품의 test 상태를 뜻하지 않는다.
+migration 결과에 따른 **MVP production PASS**다. 현재 공개된
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 검증된
+GitHub OAuth app, D1/R2, Worker renderer와 운영 guardrail을 보존하는 validation
+origin이다. 새 `codex-usage-profile` hostname을 canonical production으로 승격하고
+현재 `stage5`를 테스트 전용으로 전환하는 작업은 별도 migration Issue의
+project·storage·OAuth·CLI origin·rollback 승인 뒤에만 수행한다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
-### 현재 production 상태
+### 현재 validation 상태와 production release 이력
 
 | 항목 | 값 |
 |---|---|
-| canonical origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
+| live validation origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 23 |
-| deployed source | `c030339d848f961c54358d9d3523b340bed09670` |
-| access | custom owner-only, revision 56; owner 1명, 추가 user/group 0명 |
-| environment | revision 85, maintenance disabled, service normal, operator secret absent |
-| public rollback baseline | saved version 7 / source `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0` |
+| saved version | 33 |
+| deployed source | `53a7132630dcb6f43459880d79730e10e2b59d6e` |
+| access | public revision 59; external visitor 0명 |
+| environment | revision 89, maintenance disabled, service normal, operator secret absent |
+| live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5]` |
+| rollback candidate | version 32 / source `6cf2bab664e5a1f0b1e6051cc35887721c307e99` |
 
 Task #83 version 17은 Task #74의 owner `card_style`·`card_locale` additive
 migration과 media contract v4, Task #78의 `/api/share/{handle}` Open Graph document,
 2400x1260 `social.png`, Share Studio와 structured store contract v3 public summary
 projection을 포함한다. R2 authority/social 정합성이 없으면 packaged sample을
 선언하는 보정 뒤 owner-only와 제한된 public Gate B를 통과했고, 측정 직후 다시
-owner-only로 복원했다. 현재 version 23은 이 공개 계약과 `/?view=profile` 소유자
+owner-only로 복원했다. version 23은 이 공개 계약과 `/?view=profile` 소유자
 경로를 유지하면서 card readiness, decoded resource reuse, avatar 복구, 공유 handoff,
 공개·소유자 profile Skeleton과 transform-free 동시 reveal까지 보정한 exact source다.
-owner-only hosted smoke까지 통과했으며 영구 public 전환과 CTA 활성화는 #84 Gate C에
-남아 있다.
+이후 Task #84는 exact-main version 24/source
+`0c804733e41988467ecd7fbd8e6a152cbfc2fad0`를 public access revision 57,
+environment revision 87로 전환했다. Task #101은 version 33에서 fixed README와
+revision share 계약을 검증했다. version 24와 version 33은 서로 충돌하는
+"현재값"이 아니라 release cutover와 후속 validation의 시간 순서 증적이다.
 
 ## 요청과 신뢰 경계
 
@@ -130,11 +134,10 @@ fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/pos
 
 [`media-store-contract.js`](../src/profile-media/media-store-contract.js)는 R2 adapter가 따라야 할 수명주기를 정의한다.
 
-아래 media contract v4 theme·social 항목은 Task #74·#78 누적 후보 기준이다.
-legacy public baseline version 7은 기존 stable README card 계약만 제공했다.
-version 17 Gate B에서는 아래 `social.png`와 light theme 계약까지 검증했지만,
-현재 access는 owner-only이므로 #84 Gate C 전에는 일반 사용자에게 활성화됐다고
-안내하지 않는다.
+아래 media contract v4 theme·social 항목은 Task #74·#78 누적 후보에서 시작해
+Task #84 public Gate C와 Task #101 revision share validation까지 검증됐다. legacy
+public baseline version 7은 기존 stable README card 계약만 제공했고, version 17
+Gate B에서는 `social.png`와 light theme 계약을 제한 public으로 검증했다.
 
 - contract version: `4` (`3`은 query 없는 dark legacy reader만 지원)
 - dark immutable revision: `cards/v2/owners/{ownerId}/revisions/{locale}/{revision}.png`
@@ -376,11 +379,27 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
+- Task #84 Stage 5 read-only audit에서 version 33, public access revision 59,
+  environment revision 89와 9개 key 구성을 재확인했다. `/healthz`는 `200`, 닫힌
+  operator route는 `404`, D1 `schema_migrations`는 exact `[1,2,3,4,5]`였으며
+  version·access·environment·D1/R2·계정·session mutation은 수행하지 않았다.
 - Task #101 saved version 33, source
   `53a7132630dcb6f43459880d79730e10e2b59d6e`의 공개 validation smoke:
   matching·stale revision canonical/image token 정합, X·LinkedIn 최신 light card,
   Threads·Facebook·Reddit 회귀와 fixed route 하위 호환. 실제 게시 없이 작성 화면만
   확인했고 X는 최초 표시까지 약 11초, Threads는 약 10초가 필요했다.
+- Task #84 exact-main saved version 24, source
+  `0c804733e41988467ecd7fbd8e6a152cbfc2fad0`의 Gate C public cutover:
+  public access revision 57, environment revision 87, OAuth·CLI·profile·README
+  card·social media·privacy·non-enumeration과 X·Threads·카카오 preview 검증.
+  이 값은 후속 validation 배포 전의 release 이력이다.
+- Task #83 saved version 23, source
+  `c030339d848f961c54358d9d3523b340bed09670`의 owner/public card readiness,
+  decoded resource reuse, avatar, source-image handoff, 구조형 profile Skeleton과
+  transform `none`·delay `0s` 동시 reveal owner-only hosted smoke
+- Task #83 saved version 18, source
+  `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
+  공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
 - Task #83 saved version 17, source
   `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의 owner-only·제한 public Gate B:
   migration readiness `[1,2,3,4,5]`, canonical API share, packaged social fallback,
@@ -389,13 +408,6 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - 같은 Gate B의 반복 요청에서는 shared-cache HIT·stale `Age` 증거가 없었고,
   application revision/ETag가 즉시 갱신돼 cache 변경을 release blocker로 분류하지
   않음; 측정 뒤 disposable state를 정리하고 custom owner-only로 원복
-- Task #83 saved version 18, source
-  `e431cc88ba73b02341a170fe5c38117d4552e42a`의 `/?view=profile` 메뉴·OAuth 복귀·
-  공개 CTA 집중 smoke, readiness `[1,2,3,4,5]`와 owner-only safe baseline
-- Task #83 saved version 23, source
-  `c030339d848f961c54358d9d3523b340bed09670`의 owner/public card readiness,
-  decoded resource reuse, avatar, source-image handoff, 구조형 profile Skeleton과
-  transform `none`·delay `0s` 동시 reveal owner-only hosted smoke
 - saved version 7, source
   `745be1d6b00b9b97afe5e36f0bbf691e3def8ff0`와 production deployment
   `succeeded`

@@ -1,43 +1,55 @@
 # Sites 운영 가이드
 
-이 문서는 Codex Usage Profile의 canonical ChatGPT Sites 배포를 owner-only
-후보에서 공개 MVP까지 운영하는 절차다. Sites Worker, D1 `DB`, native R2
-`PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatible R2는
-fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
-범위에서만 수행한다. production origin은
-`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
-검증된 public baseline saved version 7의 HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. Task #83의 최종 Gate B에서는
-saved version 17의 canonical `/api/share/{handle}`, 정합한
-`/u/{handle}/social.png` 또는 packaged `/assets/codex-social-sample.png`, README
-card 변형과 공개·비공개 경계를 검증한 뒤 custom owner-only로 복원했다. 현재는
-owner profile 경로와 card readiness·resource reuse·공유 handoff·profile Skeleton을
-보정한 exact source의 saved version 23, custom owner-only 상태다. 영구 public 전환과
-CTA 활성화는 #84 Gate C에서 수행한다.
+이 문서는 Codex Usage Profile의 ChatGPT Sites 후보를 owner-only에서 공개
+validation까지 운영한 절차와 후속 production migration 경계를 기록한다. Sites
+Worker, D1 `DB`, native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud
+Run/Postgres/S3-compatible R2는 fallback이다. remote 변경은 해당 작업의
+수행계획과 Gate 승인을 각각 받은 범위에서만 수행한다. 현재
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 공개
+validation origin이다. 새 canonical production hostname과 이 origin의 테스트 전환은
+별도 migration Issue 전에는 실행하지 않는다.
+
+Task #84 Gate C는 exact-main saved version 24를 public으로 전환했고, 이후 #101이
+revision share 계약을 검증하며 같은 project를 saved version 33으로 이동시켰다.
+따라서 version 24는 유효한 release·cutover 이력이고 version 33은 현재 live
+validation 기준이다. Stage 5 read-only audit은 후속 상태를 version 24로 되돌리지
+않으며 project·D1·R2·OAuth·CLI origin과 validation data를 변경하지 않는다.
 
 owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
 extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
 두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
 smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
-## 현재 production baseline
+## 현재 validation baseline과 Gate C 이력
 
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 23 / `c030339d848f961c54358d9d3523b340bed09670` |
-| access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
-| environment | revision 85 |
+| live origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
+| 역할 | public validation; 새 canonical production migration 전까지 유지 |
+| saved version/source | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` |
+| access | public revision 59, external visitor 0명 |
+| environment | revision 89, key 9개 |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
-| disposable QA state | owner/session/token/D1/R2/local credential 없음 |
+| health/operator | `/healthz` `200`, 닫힌 operator route `404` |
+| D1 readiness | migration `[1,2,3,4,5]` exact |
+| 원복 access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
+| validation data | 테스트 계정·validation data 보존; exact owner/session/D1/R2 상태 확인·폐기는 migration Issue의 data disposal Gate |
 
-원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
-user, workspace group과 tenant group은 0개로 둔다. 현재 application의 직전
-rollback target은 Gate B를 통과한 version 17이며, legacy public 동작 비교 기준은
-version 7이다. 현재 UX 후보의 직전 비교 대상은 version 22다. data/schema rollback은
-별도 digest/count 승인 없이 수행하지 않는다.
+| 시점 | saved version/source | access | environment | 의미 |
+|---|---|---|---|---|
+| Task #84 Gate C | 24 / `0c804733e41988467ecd7fbd8e6a152cbfc2fad0` | public revision 57 | revision 87 | exact-main production 공개 전환의 역사적 기준 |
+| Task #101 validation | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` | public revision 59 | revision 89 | revision share provider 검증 기준 |
+| Task #84 Stage 5 | version 33 유지 | revision 59 유지 | revision 89 유지 | read-only 종료 audit, remote mutation 0건 |
+
+현재 application rollback 후보는 version 32/source
+`6cf2bab664e5a1f0b1e6051cc35887721c307e99`이며, 실제 재배포·access 변경과
+data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
+owner-only nonproduction 문구는 역사적 metadata이며 live access 판정에는 사용하지
+않는다. 새 migration은 hostname만 바꾸는 작업으로 축소하지 않고 project linkage,
+D1/R2 보존·폐기, OAuth callback, CLI 기본 origin과 rollback을 함께 승인받는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
@@ -319,9 +331,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
+계속하지 않는다. legacy saved version 7 baseline의 공개 화면은
 `/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
-HTML이 정적 asset으로 처리됨을 확인했다. 검증된 릴리스 후보는
+HTML이 정적 asset으로 처리됨을 확인했다. 현재 public validation 경로는
 `/api/share/{handle}`에서 handle별 canonical/OG/Twitter metadata와 같은 SPA 공개
 화면을 제공한다. root query와 extension 없는 `/u/{handle}`은 source 하위
 호환으로만 유지하며 production share link로 안내하지 않는다.

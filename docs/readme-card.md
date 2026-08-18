@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 이미지 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 README Markdown의 클릭 대상도 고정 `/api/share/{handle}`를 유지하므로 새 submit이나 설정 저장 뒤 Markdown을 교체할 필요가 없다.
 
 > [!IMPORTANT]
-> 검증된 legacy public baseline은 saved version 7의 private preview, publish/unpublish, stable README card와 `/?profile={handle}` 공개 화면이다. Task #83 saved version 17은 canonical `/api/share/{handle}`, social preview fallback, 카드 theme 선택과 Share Studio의 owner-only·제한 public smoke를 통과했고 즉시 owner-only로 복원했다. 현재 Site는 소유자 프로필 경로와 카드 loading·resource reuse·공유 handoff·profile Skeleton을 보정한 saved version 23, custom owner-only 상태다. root query는 정적 `index.html`, extension 없는 `/u/{handle}`은 `/` redirect로 확인됐으므로 공유 링크로 사용하지 않는다. 영구 public 전환과 production CTA 활성화는 #84 Gate C 뒤에만 수행한다.
+> Task #84 Gate C는 saved version 24를 public으로 전환했고, Task #101은 현재 공개 validation version 33에서 fixed README와 revision share 계약을 검증했다. README Markdown은 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 유지한다. **공유 링크 복사**와 X·LinkedIn·Threads·Facebook·Reddit만 `/api/share/{handle}/r/{revision}`을 사용한다. 새 canonical production hostname과 현재 stage5의 테스트 전환은 별도 migration Issue 전에는 실행하지 않는다.
 
 ## #84 공개 전환 뒤 사용자 흐름
 
@@ -21,10 +21,10 @@ Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 �
 
 Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한다. 이미 README에 삽입된 이미지는 다음 재요청부터 표시되지 않는다.
 
-### 검증된 릴리스 후보의 공유 흐름
+### 검증된 공개 validation의 공유 흐름
 
-아래 흐름은 Task #74·#78 누적 후보의 owner-only 및 제한 public smoke까지
-검증됐다. 일반 사용자에게는 #84 Gate C와 영구 public 전환 뒤 활성화한다.
+아래 흐름은 Task #84 Gate C와 Task #101 saved version 33 공개 validation에서
+검증됐다.
 
 1. `/?view=profile`의 **Card appearance**에서 공개 카드 기본 테마와 언어를 선택해 저장한다.
 2. 상단 **Share**에서 Share Studio를 연다. 보조 영역은 용도 순서로 **공유 링크**, **README Markdown**, **이미지 URL**을 제공한다. 유효한 profile timestamp가 있으면 **공유 링크**만 최신 `/api/share/{handle}/r/{revision}`을 사용한다. README Markdown은 fixed `/api/share/{handle}` 클릭 대상과 query 없는 `/u/{handle}/card.png` 이미지 URL을 항상 유지한다. 화면 미리보기와 primary action의 **저장**, **이미지 복사**는 현재 저장된 테마·언어의 명시적 변형을 사용한다.
@@ -37,16 +37,16 @@ Private으로 되돌리면 공개 카드 endpoint가 즉시 `404`를 반환한�
 비노출 `404`를 반환한다. fixed와 revision share HTML은 모두 비공개와 미존재를
 구분하지 않는 기본 메타데이터와 unavailable 화면으로 닫힌다.
 
-## 검증된 릴리스 후보의 공유 링크와 링크 미리보기
+## 검증된 공유 링크와 링크 미리보기
 
-#84 Gate C에서 영구 public으로 전환하면 `https://{origin}/api/share/{handle}`은
+#84 Gate C 뒤 `https://{origin}/api/share/{handle}`은
 README Markdown의 고정 클릭 대상이자 기존 공개 프로필 화면으로 계속 동작한다.
 Share Studio의 **공유 링크**와 다섯 SNS 버튼이 사용하는
 `https://{origin}/api/share/{handle}/r/{revision}`은 같은 화면을 표시하면서 SNS가
 새 문서 cache identity로 인식할 수 있게 한다.
 Sites가 `/api/` prefix를 Worker에 전달하고 서버가 이 문서의 `<head>`에 handle별
-Open Graph와 Twitter Card 메타데이터를 주입한다. 이 계약은 Task #83의 제한
-public smoke에서 검증됐다. root query는 정적 asset으로 처리되고 extension 없는
+Open Graph와 Twitter Card 메타데이터를 주입한다. fixed 계약은 Task #83의 제한
+public smoke, revision 계약은 Task #101의 공개 validation에서 검증됐다. root query는 정적 asset으로 처리되고 extension 없는
 `/u/{handle}`은 public front door에서 `/`로 redirect되므로 공유 링크로 배포하지
 않는다.
 
@@ -71,7 +71,7 @@ URL에도 같은 token을 넣는다. 과거 revision 요청은 snapshot이 아�
 소셜 이미지는 handle당 하나만 유지하며 소유자가 저장한 카드 테마와 언어를 그대로 반영한다. D1 공개 projection 뒤 README authority와 social object의 owner/publication id가 일치할 때만 개인화 URL을 선언한다. 기존 publication에 social object가 없거나 metadata가 불일치하거나 media read가 실패하면 실제 계정을 변경하거나 R2에 즉석 쓰기하지 않고 저장소에 포함된 2400x1260 sample을 선언한다. 카드 설정을 저장하거나 사용량을 다시 제출하면 social object가 갱신되고 Share Studio의 다음 공유 URL revision도 바뀐다. `?locale`은 링크 미리보기의 문구에만 영향을 주고 이미지는 바꾸지 않는다.
 
 README용 `/u/{handle}/card.png`는 legacy version 7부터 사용하는 1497x918
-원본이며 릴리스 후보에서도 URL이나 응답 계약이 달라지지 않는다. query 없는
+원본이며 public validation에서도 URL이나 응답 계약이 달라지지 않는다. query 없는
 요청은 publication에 저장된 대표 테마·언어를 따르므로 설정을 바꿔도 README
 Markdown을 교체할 필요가 없다.
 
@@ -129,16 +129,16 @@ body에는 `contractVersion`, `capturedAt`, `summary`, `dailyUsageBuckets`만 �
 
 ## 공개 프로필 경계
 
-공개 HTML과 JSON은 owner/latest Account Usage visibility와 handle 일치 조건을 사용한다. 공개 PNG는 publish 시 생성된 stable media object만 읽고 structured store나 on-demand renderer를 조회하지 않는다. 아래 표의 legacy public baseline과 검증된 후보를 혼용하지 않는다.
+공개 HTML과 JSON은 owner/latest Account Usage visibility와 handle 일치 조건을 사용한다. 공개 PNG는 publish 시 생성된 stable media object만 읽고 structured store나 on-demand renderer를 조회하지 않는다. 아래 표의 legacy public baseline과 현재 public validation surface를 혼용하지 않는다.
 
 | Surface | URL | 상태 | 역할 |
 |---|---|---|---|
 | legacy 공개 화면 | `/?profile={handle}` | version 7 public baseline | 공개 카드와 사용량 요약을 표시하지만 initial HTML은 정적이므로 SNS 공유 URL로 승격하지 않는다. |
 | fixed 공유 | `/api/share/{handle}` | README·하위 호환 | README Markdown의 고정 클릭 대상과 기존 링크를 유지하며 self canonical 현재 문서를 제공한다. |
 | revision 공유 | `/api/share/{handle}/r/{revision}` | 공유 링크·SNS 대상 | **공유 링크 복사**와 다섯 SNS 버튼에만 사용한다. 최신 revision은 self canonical, stale revision은 `200` 현재 metadata로 수렴한다. |
-| 공개 JSON | `/api/profiles/public/{handle}` | 검증된 후보·#84 공개 대기 | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
-| README PNG | `/u/{handle}/card.png` | 검증된 후보·#84 공개 대기 | README에 삽입하는 1497x918 stable image endpoint다. |
-| social PNG | `/u/{handle}/social.png` | 검증된 후보·#84 공개 대기 | 정합한 publication의 2400x1260 링크 미리보기 이미지다. object가 없는 legacy publication 자체는 계속 404이고 HTML metadata만 packaged sample로 닫힌다. |
+| 공개 JSON | `/api/profiles/public/{handle}` | public validation 검증 | 화면에 필요한 GitHub identity와 Account Usage allowlist만 반환한다. |
+| README PNG | `/u/{handle}/card.png` | public validation 검증 | README에 삽입하는 1497x918 stable image endpoint다. |
+| social PNG | `/u/{handle}/social.png` | public validation 검증 | 정합한 publication의 2400x1260 링크 미리보기 이미지다. object가 없는 legacy publication 자체는 계속 404이고 HTML metadata만 packaged sample로 닫힌다. |
 
 profile이 private이거나, owner 또는 usage가 없거나, 요청 handle이 현재 owner handle과 일치하지 않으면 공개 JSON은 `404`를 반환한다. Publish가 완료되지 않았거나 private 전환으로 stable object가 제거됐거나 locale metadata/revision이 불완전하면 공개 PNG도 owner 존재 여부를 노출하지 않는 동일한 `404`를 반환한다. R2 provider·timeout·bucket 장애는 내부 storage 정보를 포함하지 않는 `503 media_unavailable`과 `Retry-After: 5`를 반환하므로 일시 장애를 미published 결과로 캐시하지 않는다. 공개 HTML은 로그인 여부를 노출하지 않는 unavailable 상태를 표시한다.
 
@@ -180,7 +180,7 @@ https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/car
 https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/{handle}/card.png?theme=light&locale=ko
 ```
 
-후보가 지원하는 테마는 `dark`, `light`, 언어는 `en`, `ko`다. `v` 같은 다른
+public validation이 지원하는 테마는 `dark`, `light`, 언어는 `en`, `ko`다. `v` 같은 다른
 query만 있는 요청은 selector가 아니므로 canonical 대표 이미지를 유지한다.
 Share Studio는 explicit URL을 미리보기·저장·PNG 복사에만 사용하고 README
 Markdown과 이미지 URL에는 승격하지 않는다.
