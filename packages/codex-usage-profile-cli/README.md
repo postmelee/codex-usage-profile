@@ -19,6 +19,7 @@ validation through the existing staged-release gate.
   `Codex.app` installation under the system or user `Applications` directory
 - A ChatGPT-backed Codex sign-in that supports `account/usage/read`
 - A Codex Usage Profile service account linked through GitHub
+- Optional: a locally authenticated `gh` CLI for the terminal GitHub star prompt
 
 API-key-only and Bedrock Codex authentication do not provide the account usage method consumed by the analyzer.
 
@@ -41,7 +42,7 @@ service origin and a narrow submit credential are stored locally. Use
 `--server` only for local development or an explicitly reviewed alternative
 deployment.
 
-During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
+During device login, supported interactive terminals render only the verification URL as a clickable cyan OSC 8 hyperlink. Piped output, `submit --json`, `NO_COLOR`, `TERM=dumb`, and terminals without a supported hyperlink signal receive the same plain URL without ANSI control sequences.
 
 After browser approval, `Device approved` means only that device authorization
 is complete. A `submit` flow continues in the same CLI process, and the terminal
@@ -51,6 +52,75 @@ The browser does not redirect, copy to the clipboard, or execute a command
 automatically; those actions remain under the user's control. Older clients
 without an intent receive a generic return-to-terminal message. See the
 detailed CLI guide below for the complete approval flow.
+
+An account can have up to three active CLI/API tokens. If browser approval
+completes after that limit is reached, the CLI reports:
+
+```text
+Active token limit reached. Revoke an API token in Settings, then try again.
+```
+
+Revoke an old `Device login` token under the web Settings **API Tokens** section
+and retry. CLI `logout` removes only the local credential file; it does not
+revoke the corresponding server token.
+
+After a successful human-readable submit, supported interactive terminals
+render the `Profile` and `Card` URLs as clickable cyan OSC 8 hyperlinks. The
+`README` value remains exact plain HTML-for-Markdown so it can be copied without
+terminal control sequences. Its default `width="50%"` is adjustable, the image
+uses the stable queryless card URL, and clicking it opens the public share page.
+The result separates capture metadata from a compact,
+indented `Links` block:
+
+```text
+✓ Usage submitted successfully.
+Captured: 2026-07-11T00:00:00.000Z
+
+Links
+  Profile: https://example.com/?view=profile
+  Card:    https://example.com/u/octocat/card.png
+  README:  <a href="https://example.com/api/share/octocat"><img width="50%" src="https://example.com/u/octocat/card.png" alt="Codex usage profile" /></a>
+```
+
+On a color-capable TTY, the `Links` heading is dim gray. JSON, piped output,
+`NO_COLOR`, `TERM=dumb`, and unsupported terminals keep the same information
+structure without terminal control sequences; Profile and Card remain plain
+URLs where hyperlinks are unavailable.
+
+## Optional GitHub Star Prompt
+
+After a fresh interactive `login` or a successful human-readable `submit`, the
+CLI waits for this prompt block before printing the existing command result:
+
+```text
+Help us grow! 🌱
+A GitHub star helps others discover Codex Usage Profile (postmelee/codex-usage-profile).
+Would you like to star it on GitHub as @octocat? (Y/n)
+✓ Starred! Thank you for your support, @octocat. ⭐
+```
+
+Enter is **Yes**; `y` and `yes` also star, while `n` and `no` continue without
+starring. Consent runs a fixed `gh api --silent --method PUT` request for
+`/user/starred/postmelee/codex-usage-profile` and never opens a browser. The
+displayed account is the active local `gh` account, which may differ from the
+Codex Usage Profile owner. The block is separated from the surrounding login or
+submit output by blank lines. On a color-capable TTY the heading is cyan, the
+explanation is dim gray, and the success message is green. `NO_COLOR` and
+`TERM=dumb` preserve the same wording and spacing without color SGR. The
+`TERM=dumb` prompt also disables readline terminal mode so it emits no cursor
+control escapes; an interactive `NO_COLOR` prompt may still use readline cursor
+control while adding no color.
+
+The prompt is skipped when the repository is already starred, `gh` is missing
+or unavailable, an existing credential makes `login` return `Already signed
+in`, the product command fails, or the command is running with `--json`, in CI,
+or without TTY stdin and stdout. An automatic login inside `submit` offers it
+only once, after submission succeeds. All `gh` failures are optional and
+fail-soft: they do not replace the original command result or exit status.
+
+This integration uses only the local `gh` credential for the fixed GitHub API
+request. It does not use or store the product's GitHub OAuth token or service
+submit credential, and it does not expose raw `gh` errors.
 
 ```bash
 npx codex-usage-profile@latest status
@@ -71,6 +141,9 @@ CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.cha
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
 npx --yes codex-usage-profile@0.1.1 submit --json
 ```
+
+JSON, CI, and non-TTY execution never run the optional star prompt, so stdout
+remains one machine-readable JSON document.
 
 ## What Submit Sends
 

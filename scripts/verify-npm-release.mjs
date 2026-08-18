@@ -54,6 +54,7 @@ export const EXPECTED_NPM_PACKAGE_FILES = Object.freeze([
   "src/credentials.js",
   "src/device-login.js",
   "src/errors.js",
+  "src/github-star.js",
   "src/index.js",
   "src/output.js",
   "src/service-client.js",

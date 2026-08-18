@@ -106,6 +106,7 @@ function PublicProfileStage({
           <MarketingCardPreview
             alt={t("profile.card.alt.public", { name: displayName })}
             busy={cardImage.busy}
+            cardTheme={profile.cardStyle?.theme ?? "dark"}
             cardRef={cardRef}
             errorLabel={t("home.cardUnavailable")}
             sourceKind="public"
@@ -121,6 +122,7 @@ function PublicProfileStage({
         <PublicCardIntro
           cardAlt={t("profile.card.alt.public", { name: displayName })}
           cardImage={cardImage}
+          cardTheme={profile.cardStyle?.theme ?? "dark"}
           cardUrl={resolvedCardUrl}
           createCardHref={authState?.status === "authenticated"
             ? OWNER_PROFILE_HREF
@@ -240,7 +242,14 @@ function PrivateOwnerPreview({ authState, client, onAuthStateChange }) {
   const profile = profileState.profile;
 
   if (profileState.status === "loading") {
-    return <PublicProfileLoadingSkeleton />;
+    return (
+      <ProfileLoadingSkeleton
+        description={t("profile.public.fetching")}
+        loadingLabel={t("profile.public.fetching")}
+        surface="public"
+        title={t("profile.public.loading")}
+      />
+    );
   }
 
   if (!profile?.usage) {

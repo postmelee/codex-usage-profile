@@ -72,6 +72,12 @@ export async function loginWithDeviceCode(options = {}) {
     try {
       result = await client.pollDeviceLogin({ deviceCode, label });
     } catch (error) {
+      if (isActiveTokenLimitConflict(error)) {
+        throw new CliError(
+          "device_login_token_limit",
+          "Active token limit reached. Revoke an API token in Settings, then try again."
+        );
+      }
       if (!isRetryableError(error)) throw error;
       await sleepWithinExpiry(
         error.retryAfterSeconds ? error.retryAfterSeconds * 1000 : intervalMs,
@@ -129,7 +135,12 @@ export function supportsTerminalHyperlinks(options = {}) {
   const stdout = options.stdout;
   const env = options.env ?? process.env;
 
-  if (stdout?.isTTY !== true || env.TERM === "dumb" || env.FORCE_HYPERLINK === "0") {
+  if (
+    stdout?.isTTY !== true ||
+    env.TERM === "dumb" ||
+    env.FORCE_HYPERLINK === "0" ||
+    Object.hasOwn(env, "NO_COLOR")
+  ) {
     return false;
   }
   if (env.FORCE_HYPERLINK === "1") return true;
@@ -200,6 +211,12 @@ function normalizeDate(value, label) {
 
 function isRetryableError(error) {
   return error instanceof ServiceClientError && RETRYABLE_ERROR_CODES.has(error.code);
+}
+
+function isActiveTokenLimitConflict(error) {
+  return error instanceof ServiceClientError &&
+    error.code === "conflict" &&
+    error.status === 409;
 }
 
 async function sleepWithinExpiry(delayMs, expiresAt, now, sleep) {

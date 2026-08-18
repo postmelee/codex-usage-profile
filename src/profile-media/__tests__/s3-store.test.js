@@ -197,6 +197,104 @@ test("S3 adapter serves coherent light variants and fails closed on drift", asyn
   );
 });
 
+test("S3 adapter serves canonical queryless selection and validates its metadata", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createThemeIdentity();
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(identity.representations[theme].en);
+    await store.putRevision(identity.representations[theme].ko);
+  }
+  const published = await store.publishRevision(themePublicationInput(identity, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  }));
+  const stableKey = createProfileMediaStableKey({ handle: identity.handle });
+  const metadata = client.objects.get(stableKey).Metadata;
+
+  assert.equal(metadata["canonical-locale"], "ko");
+  assert.equal(metadata["canonical-theme"], "light");
+  assert.equal(published.locale, "ko");
+  assert.equal(published.theme, "light");
+  assert.equal(published.stableKey, stableKey);
+  assert.deepEqual(published.body, identity.representations.light.ko.body);
+
+  const themeOnly = await store.getPublishedCard({
+    handle: identity.handle,
+    theme: "light"
+  });
+  assert.equal(themeOnly.locale, "en");
+  assert.equal(themeOnly.theme, "light");
+  assert.deepEqual(themeOnly.body, identity.representations.light.en.body);
+
+  const localeOnly = await store.getPublishedCard({
+    handle: identity.handle,
+    locale: "ko"
+  });
+  assert.equal(localeOnly.locale, "ko");
+  assert.equal(localeOnly.theme, "dark");
+  assert.deepEqual(localeOnly.body, identity.representations.dark.ko.body);
+
+  delete metadata["canonical-locale"];
+  delete metadata["canonical-theme"];
+  const legacy = await store.getPublishedCard({ handle: identity.handle });
+  assert.equal(legacy.locale, "en");
+  assert.equal(legacy.theme, "dark");
+
+  metadata["canonical-locale"] = "ko";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.INVALID
+  );
+
+  metadata["canonical-theme"] = "system";
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.INVALID
+  );
+});
+
+test("S3 unpublish uses authority even when canonical light media is missing", async () => {
+  const client = new FakeS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: "cards",
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const identity = createThemeIdentity();
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(identity.representations[theme].en);
+    await store.putRevision(identity.representations[theme].ko);
+  }
+  const published = await store.publishRevision(themePublicationInput(identity, {
+    canonicalLocale: "ko",
+    canonicalTheme: "light"
+  }));
+  client.objects.delete(createProfileMediaStableKey({
+    handle: identity.handle,
+    theme: "light"
+  }));
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: identity.handle }),
+    (error) => error.code === PROFILE_MEDIA_STORE_ERROR_CODES.NOT_FOUND
+  );
+  const removed = await store.unpublishCard({
+    handle: identity.handle,
+    expectedStorageEtag: published.storageEtag
+  });
+
+  assert.equal(removed.publicationId, published.publicationId);
+  assert.equal(
+    (await store.inspectStableCard({ handle: identity.handle })).kind,
+    "missing"
+  );
+});
+
 const integrationConfig = resolveTestProfileMediaStoreOptions(process.env);
 test("S3 adapter satisfies contract against configured endpoint", {
   skip: integrationConfig.enabled ? false : integrationConfig.reason
@@ -345,6 +443,12 @@ function createRevision(ownerId, locale, body, overrides = {}) {
 
 function themePublicationInput(identity, overrides = {}) {
   return {
+    ...(Object.hasOwn(overrides, "canonicalLocale")
+      ? { canonicalLocale: overrides.canonicalLocale }
+      : {}),
+    ...(Object.hasOwn(overrides, "canonicalTheme")
+      ? { canonicalTheme: overrides.canonicalTheme }
+      : {}),
     contractVersion: 4,
     handle: identity.handle,
     ownerId: identity.ownerId,

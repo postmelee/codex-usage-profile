@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCanonicalCardUrl,
   buildLocalizedCardUrl,
   buildProfileLoginHref,
   buildReadmeCardSnippet,
+  buildSameOriginCardPreviewUrl,
   resolveShareLocale,
   resolveShareTheme
 } from "../cardShare.js";
@@ -29,9 +31,33 @@ test("builds localized image URLs and README snippets", () => {
     buildLocalizedCardUrl(korean, "en"),
     "https://profiles.example.test/u/postmelee/card.png"
   );
+});
+
+test("keeps canonical README card URLs absolute and queryless", () => {
+  const canonical = buildCanonicalCardUrl(
+    "https://profiles.example.test/u/postmelee/card.png" +
+    "?theme=light&locale=ko&v=stale#preview"
+  );
   assert.equal(
-    buildReadmeCardSnippet(korean),
-    `![Codex usage profile](${korean})`
+    canonical,
+    "https://profiles.example.test/u/postmelee/card.png"
+  );
+  assert.equal(
+    buildReadmeCardSnippet(
+      canonical,
+      "https://profiles.example.test/api/share/postmelee"
+    ),
+    '<a href="https://profiles.example.test/api/share/postmelee">'
+      + '<img width="50%" '
+      + 'src="https://profiles.example.test/u/postmelee/card.png" '
+      + 'alt="Codex usage profile" /></a>'
+  );
+  assert.equal(buildReadmeCardSnippet(canonical, null), null);
+  assert.equal(buildCanonicalCardUrl("/u/postmelee/card.png"), null);
+  assert.equal(buildCanonicalCardUrl("javascript:alert(1)"), null);
+  assert.equal(
+    buildCanonicalCardUrl("https://user:secret@profiles.example.test/card.png"),
+    null
   );
 });
 
@@ -61,6 +87,33 @@ test("preserves legacy queryless dark URLs and rejects unsafe schemes", () => {
   );
   assert.equal(buildLocalizedCardUrl("javascript:alert(1)", "en", "dark"), null);
   assert.equal(buildLocalizedCardUrl("data:image/png;base64,abc", "en"), null);
+});
+
+test("rebases a canonical public card route to the active local origin", () => {
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "http://192.168.12.7:5177/u/postmelee/card.png?theme=dark",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    "/u/postmelee/card.png?theme=dark"
+  );
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "https://profiles.example.test/not-a-card.png",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    null
+  );
+  assert.equal(
+    buildSameOriginCardPreviewUrl(
+      "https://profiles.example.test/u/someone-else/card.png",
+      "http://127.0.0.1:5177",
+      "postmelee"
+    ),
+    null
+  );
 });
 
 test("builds GitHub login links that always return to the owner profile", () => {

@@ -89,7 +89,7 @@ managed production bucket에 fault-injection seam을 추가하는 것은 개인�
 
 [`store-contract.js`](../src/profile-backend/store-contract.js)는 provider-neutral contract v3와 production adapter의 여섯 named atomic operation을 정의한다. application service는 generic transaction callback이나 provider SQL을 알지 않는다. v3는 공개 프로필 문서가 owner와 latest usage를 한 번에 읽는 `getPublicProfileSummaryByHandle` projection을 필수 read surface로 추가한다.
 
-이 contract v3 projection과 `/api/share/{handle}` document read path는 Task #83
+이 contract v3 projection과 fixed `/api/share/{handle}` document read path는 Task #83
 version 17의 owner-only·public smoke에서 hosted 검증됐다. 반복 요청과 submit
 전후 측정에서는 shared-cache HIT나 stale `Age` 증거를 확인하지 못했지만
 application revision과 media ETag는 즉시 갱신됐고 privacy·publish 계약도
@@ -107,13 +107,22 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 | CLI login 교환 | `cliLoginChallenge.id` | approved challenge마다 token digest를 정확히 하나 발급 |
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
-| 카드 설정 변경 | `owner.id` | media bytes 준비 뒤 canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고, 성공한 owner revision만 stable social object를 storage ETag 조건부 commit |
+| 카드 설정 변경 | `owner.id` | immutable media 준비 뒤 canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고, 성공한 owner revision만 stable card/social authority를 같은 publication id로 storage ETag 조건부 commit |
 
 부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호한다. 읽기와 목록 API는 owner scope를 우회할 수 없다. shared Account Usage rate limit도 D1 row의 atomic window update를 사용하며 raw token을 key나 record로 저장하지 않는다.
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
-`/api/share/{handle}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. 이어서 R2 dark authority와 social metadata를 body 없이 읽어 owner/publication id와 ETag가 정합할 때만 `/u/{handle}/social.png?v=`를 선언한다. revision query는 owner·usage 두 시각 중 최신 값을 밀리초 정밀도로 사용한다. legacy/missing/mismatch/provider failure는 사용자 mutation이나 on-demand R2 write 없이 `/assets/codex-social-sample.png`로 fail closed한다.
+fixed `/api/share/{handle}`와 revision `/api/share/{handle}/r/{revision}` Open Graph 문서의 structured read는 D1에서 `owners`와 `latest_usages`를 JOIN하는 statement 한 번으로 끝난다. projection은 두 record가 모두 public이고 handle이 일치할 때만 `cardLocale`, owner `updatedAt`, usage `uploadedAt`을 반환한다. 이어서 R2 dark authority와 social metadata를 body 없이 읽어 owner/publication id와 ETag가 정합할 때만 `/u/{handle}/social.png?v=`를 선언한다. revision token은 owner·usage 두 시각 중 최신 값을 epoch milliseconds로 사용한다.
+
+matching revision 문서는 요청 URL을 `canonical`·`og:url`로 사용하고 `og:image`,
+`og:image:secure_url`, `twitter:image`에도 같은 token을 사용한다. stale revision은
+redirect나 과거 snapshot을 제공하지 않고 `200` 현재 문서와 최신 revision metadata로
+수렴한다. fixed route는 기존 self canonical 계약을 유지한다. invalid revision은
+public document route에서 제외한다. private·missing·legacy·media mismatch/provider
+failure는 handle 존재를 노출하지 않는 site-root canonical과
+`/assets/codex-social-sample.png`로 fail closed하며 사용자 mutation이나 on-demand R2
+write를 수행하지 않는다.
 
 fallback adapter는 [`src/profile-backend/postgres/`](../src/profile-backend/postgres/)의 벤더 중립 Postgres 구현이다. 같은 named operation contract를 transaction과 `FOR UPDATE`로 구현하고 [`postgres/migrations/`](../src/profile-backend/postgres/migrations/)를 사용한다. memory/file store는 local contract fixture이며 production durable store가 아니다. 기존 `npm run migrate:seed` one-shot Postgres 적재 도구도 fallback과 data export 참고 경로로 유지한다.
 
@@ -132,20 +141,21 @@ version 17 Gate B에서는 아래 `social.png`와 light theme 계약까지 검�
 - light immutable revision: `cards/v2/owners/{ownerId}/revisions/light/{locale}/{revision}.png`
 - dark stable authority: `cards/v2/public/{handle}/card.png`
 - light staged stable: `cards/v2/public/{handle}/themes/light/card.png`
-- theme: `dark`, `light`; query 부재는 dark, 다른 값은 fail-closed다.
-- locale: `en`, `ko`; query 부재는 en이다.
+- canonical selection: v4 authority의 `canonicalTheme`, `canonicalLocale` pair. 둘 다 없는 legacy v4는 dark/en, partial/invalid pair는 fail-closed다.
+- theme: `dark`, `light`; 명시 selector mode에서 부재하면 dark다.
+- locale: `en`, `ko`; 명시 selector mode에서 부재하면 en이다.
 - content type: `image/png`
 - cache policy: `public, no-cache, must-revalidate`
 - social stable object: `cards/v2/public/{handle}/social.png`; 카드 설정 저장은 owner CAS 성공 뒤 storage ETag 조건부 교체
 - social conditional GET: application ETag를 metadata로 먼저 비교하고 일치하면 object body를 읽지 않은 채 304
 - stable state: `publication` 또는 `unpublished` tombstone
-- validation metadata: owner, handle, publication id, presentation digest, format, theme·locale별 immutable key/revision/application ETag, created/published timestamp
+- validation metadata: owner, handle, publication id, presentation digest, format, canonical theme·locale pair, theme·locale별 immutable key/revision/application ETag, created/published timestamp
 
 revision은 최종 PNG bytes의 SHA-256 base64url digest이며 quoted application ETag도 같은 정규화 값을 사용한다. storage ETag는 S3/R2 conditional copy와 body 일관성 검증에만 사용하고 HTTP ETag로 노출하지 않는다.
 
 canonical adapter는 [`src/profile-media/r2-binding/`](../src/profile-media/r2-binding/)의 native `R2Bucket` 구현이다. `putRevision`은 create-only conditional write를 사용한다. Publish는 dark/light × en/ko 네 immutable revision을 검증하고 light stable을 stage한 뒤 dark stable authority를 마지막 CAS commit point로 materialize한다. 같은 revision과 bytes의 재시도는 idempotent이고 다른 bytes/metadata는 conflict다.
 
-`GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. dark는 query 없는 legacy 경로와 `theme=dark`, light는 `theme=light`로 선택한다. light 응답은 dark authority가 가리키는 publication id·revision과 light stable metadata/body가 모두 일치할 때만 제공한다. stable publication/theme/locale revision이 없거나 stable state가 tombstone이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
+`GET|HEAD /u/{handle}/card.png`는 native R2 binding만 조회하며 D1, owner/usage record와 on-demand renderer를 호출하지 않는다. `theme`과 `locale` selector가 모두 없으면 authority의 canonical pair를 사용하고 `v` 같은 다른 query는 이 판정에 영향을 주지 않는다. 한 selector라도 있으면 explicit mode이며 누락 축은 dark/en이다. light 응답은 dark authority가 가리키는 publication id·revision과 light stable metadata/body가 모두 일치할 때만 제공한다. stable publication/theme/locale revision이 없거나 stable state가 tombstone, canonical metadata가 partial/invalid이면 같은 public `404`다. provider·timeout·bucket 장애와 예상 밖 adapter failure는 storage 정보를 숨긴 `503 media_unavailable`, `Retry-After: 5`로 구분한다. private preview는 session 인증 후 on-demand render하며 R2에 저장하지 않고 `private, no-store`를 사용한다.
 
 누적 후보의 `GET|HEAD /u/{handle}/social.png`는 handle당 하나인 2400x1260 stable
 object를 제공한다. `If-None-Match`가 application ETag와 일치하면 object body를
@@ -157,6 +167,17 @@ object를 제공한다. `If-None-Match`가 application ETag와 일치하면 obje
 missing social의 local real-Worker 회귀 검증은 완료됐지만 보정 source의 production
 R2/HTTP smoke는 아직 수행하지 않았다.
 
+Share Studio는 owner `updatedAt`과 usage `uploadedAt` 중 최신 값을 공통 builder로
+계산해 링크 복사와 X·Threads·LinkedIn·Facebook·Reddit에 동일한 revision 문서 URL을
+전달한다. 공개 profile API는 같은 계산값을 epoch millisecond `shareRevision`으로 반환하고 raw
+owner `updatedAt`은 공개하지 않는다. builder는 명시적인 `shareRevision`을 우선하고, 없는 owner
+응답만 기존 두 timestamp 계산으로 하위 호환한다. 유효한 timestamp가 하나도 없거나 명시적인
+revision이 유효하지 않으면 이 share target만 fixed route로 fail safe한다. README Markdown은 revision 계산과 분리해
+항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 사용한다.
+따라서 submit이나 카드 설정 저장은 공유 링크·SNS target revision만 바꾸고 README Markdown
+문자열은 바꾸지 않는다.
+revision은 provider cache identity일 뿐 immutable media key나 DB history key가 아니다.
+
 stable GET은 관찰한 storage ETag를 조건으로 body를 읽어 publication metadata와 bytes가 섞이지 않게 한다. concurrent republish가 HEAD→GET 사이에 완료되면 최신 stable HEAD부터 한 번만 다시 읽고, 두 번째 경합은 `503`으로 반환한다.
 
 Public 전환은 네 revision, light stable stage와 dark authority commit을 완료한 뒤 D1 visibility CAS를 commit한다. Unpublish는 dark authority를 직전 storage ETag 조건의 tombstone으로 바꿔 두 theme를 먼저 닫은 뒤 D1 visibility를 private으로 commit한다. light stable과 immutable revision은 retention 대상으로 남지만 authority가 없으면 public serving되지 않는다.
@@ -165,7 +186,17 @@ D1 CAS가 실패하면 자신이 쓴 stable publication/tombstone의 storage ETa
 
 Public Account Usage submit은 usage commit 뒤 현재 visibility/latest usage를 다시 읽고 stable publication을 refresh한다. media refresh 실패는 usage commit을 되돌리지 않고 `503 media_unavailable`, `Retry-After: 5`를 반환한다. 같은 document의 exact retry는 idempotent usage 결과로 publication을 다시 시도한다.
 
-fallback S3 adapter도 public HTTP contract는 같지만 stable object를 물리 삭제할 수 있다. provider 내부 보상 방식이 달라도 public/private, application ETag와 404/503 의미는 같아야 한다.
+공개 카드 설정 저장은 네 immutable revision과 social bytes만 prepare하고 owner
+CAS 전에는 stable authority를 바꾸지 않는다. CAS 성공 뒤 committed owner와
+latest usage version이 준비 snapshot과 같을 때만 card/social authority를 같은
+publication id로 조건부 commit한다. 더 최신 owner/usage가 앞선 prepare는
+`superseded`이며 generic `503 media_unavailable`, `Retry-After: 5`로 재시도를
+요청한다. authority CAS 뒤 supersede된 요청은 해당 authority가 여전히 current일
+때 같은 publication id의 social object까지 수렴시킨 뒤 실패를 반환한다. DB 성공
+뒤 media 실패는 같은 설정 PATCH의 exact retry가 canonical card와 social
+publication을 수렴시킨다.
+
+fallback S3 adapter도 public HTTP contract는 같지만 stable object를 물리 삭제할 수 있다. unpublish는 canonical light body가 아니라 dark stable authority의 storage ETag를 읽으므로 light stable drift가 private 전환을 막지 않는다. provider 내부 보상 방식이 달라도 public/private, application ETag와 404/503 의미는 같아야 한다.
 
 ## Hosted Renderer Contract
 
@@ -275,9 +306,9 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
 3. Task #74·#78 누적 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
-5. public stable card는 application ETag 재검증을 사용한다. immutable revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다.
+5. public stable card는 application ETag 재검증을 사용한다. immutable media revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다. share revision path는 별도 snapshot 보존을 뜻하지 않으며 stale 요청도 현재 metadata로 수렴한다.
 6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
-7. application rollback은 이전 saved version deployment로 수행한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
+7. application rollback은 이전 saved version deployment로 수행한다. Task #100의 canonical pair는 v4 authority의 additive metadata이므로 이전 v4 reader는 이를 무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
 8. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
 9. fallback 전환 시 기존 Cloud Run artifact를 배포하고 Neon/S3-compatible R2 설정을 연결한다. fallback 때문에 Sites 또는 Cloud Run의 CORS/cookie scope를 확대하지 않는다.
 
@@ -345,6 +376,11 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
+- Task #101 saved version 33, source
+  `53a7132630dcb6f43459880d79730e10e2b59d6e`의 공개 validation smoke:
+  matching·stale revision canonical/image token 정합, X·LinkedIn 최신 light card,
+  Threads·Facebook·Reddit 회귀와 fixed route 하위 호환. 실제 게시 없이 작성 화면만
+  확인했고 X는 최초 표시까지 약 11초, Threads는 약 10초가 필요했다.
 - Task #83 saved version 17, source
   `4541e3be7fc1dce6d7e54bbe01ce279d1ceba05f`의 owner-only·제한 public Gate B:
   migration readiness `[1,2,3,4,5]`, canonical API share, packaged social fallback,

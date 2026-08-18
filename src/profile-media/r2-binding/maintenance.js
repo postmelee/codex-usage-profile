@@ -267,6 +267,17 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
     ) {
       throw new TypeError("repair publication owner scope is invalid");
     }
+    if (
+      publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION &&
+      (
+        !Object.hasOwn(publication, "canonicalLocale") ||
+        !Object.hasOwn(publication, "canonicalTheme")
+      )
+    ) {
+      throw new TypeError(
+        "v4 repair publication requires canonicalLocale and canonicalTheme"
+      );
+    }
     const expectedStorageEtag = requireOptionalStorageEtag(
       repairOptions.expectedStorageEtag
     );
@@ -461,6 +472,10 @@ function sanitizePublication(value) {
     ]))
     : sanitizeRepresentations(value.representations, "dark");
   return {
+    ...(isV4 ? {
+      canonicalLocale: value.canonicalLocale,
+      canonicalTheme: value.canonicalTheme
+    } : {}),
     contractVersion: value.contractVersion,
     format: value.format,
     handle: value.handle,

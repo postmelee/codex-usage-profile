@@ -6,6 +6,7 @@ import {
   resolvePublicProfileRoute
 } from "../publicProfileRoutes.js";
 
+const SHARE_REVISION = 1783990860001;
 const PUBLIC_PROFILE = Object.freeze({
   owner: {
     avatarUrl: "https://avatars.githubusercontent.com/u/12345",
@@ -14,6 +15,7 @@ const PUBLIC_PROFILE = Object.freeze({
     handle: "postmelee"
   },
   publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+  shareRevision: SHARE_REVISION,
   usage: {
     capturedAt: "2026-07-14T00:00:00.000Z",
     uploadedAt: "2026-07-14T00:01:00.000Z",
@@ -65,6 +67,33 @@ test("starts every public profile handle in an API-backed loading state", () => 
     }
   );
   assert.deepEqual(
+    resolvePublicProfileRoute(
+      new URL(
+        `http://localhost/api/share/meleeisdeveloping/r/${SHARE_REVISION}`
+      )
+    ),
+    {
+      handle: "meleeisdeveloping",
+      profile: null,
+      source: "api",
+      status: "loading"
+    }
+  );
+  assert.deepEqual(
+    resolvePublicProfileRoute(
+      new URL(
+        `http://localhost/api/share/someone/r/${SHARE_REVISION}/` +
+        "?locale=ko"
+      )
+    ),
+    {
+      handle: "someone",
+      profile: null,
+      source: "api",
+      status: "loading"
+    }
+  );
+  assert.deepEqual(
     resolvePublicProfileRoute(new URL("http://localhost/u/someone/")),
     {
       handle: "someone",
@@ -81,8 +110,13 @@ test("rejects unsupported and malformed public profile paths", () => {
     "http://localhost/?profile=",
     "http://localhost/u/one/more",
     "http://localhost/u/%ZZ",
+    "http://localhost/u/foo%2Fbar",
     "http://localhost/api/share/one/more",
-    "http://localhost/api/share/%ZZ"
+    "http://localhost/api/share/%ZZ",
+    "http://localhost/api/share/foo%2Fbar",
+    "http://localhost/api/share/postmelee/r/001",
+    "http://localhost/api/share/postmelee/r/invalid",
+    `http://localhost/api/share/postmelee/r/${SHARE_REVISION}/more`
   ]) {
     assert.deepEqual(resolvePublicProfileRoute(new URL(url)), {
       handle: null,
@@ -114,6 +148,25 @@ test("loads a public Account Usage profile", async () => {
   });
 });
 
+test("loads a revision share route by handle without forwarding its revision", async () => {
+  const route = await loadPublicProfileRoute(
+    new URL(
+      `http://localhost/api/share/requested-handle/r/${SHARE_REVISION}`
+    ),
+    {
+      client: {
+        async getPublicProfile(...args) {
+          assert.deepEqual(args, ["requested-handle"]);
+          return PUBLIC_PROFILE;
+        }
+      }
+    }
+  );
+
+  assert.equal(route.status, "ready");
+  assert.equal(route.handle, "postmelee");
+});
+
 test("maps missing, private, invalid, and failed responses to one unavailable state", async () => {
   // The requested handle comes from the URL, so it stays on the unavailable
   // state. The page uses it to recognise an owner viewing their own link.
@@ -130,6 +183,8 @@ test("maps missing, private, invalid, and failed responses to one unavailable st
     { ...PUBLIC_PROFILE, publicCardUrl: "javascript:alert(1)" },
     { ...PUBLIC_PROFILE, selectedPublicCardUrl: "not-a-url" },
     { ...PUBLIC_PROFILE, selectedPublicCardUrl: "data:image/png;base64,AAAA" },
+    { ...PUBLIC_PROFILE, shareRevision: "001" },
+    { ...PUBLIC_PROFILE, shareRevision: -1 },
     {
       ...PUBLIC_PROFILE,
       usage: {

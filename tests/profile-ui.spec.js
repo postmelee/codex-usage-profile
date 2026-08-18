@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 
-import { expect, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
+
+import { resolveE2eOrigin } from "./e2eOrigin.js";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
@@ -11,8 +13,18 @@ const CARD_PNG = readFileSync(new URL(
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = 26 * 7;
+const E2E_ORIGIN = resolveE2eOrigin(process.env.PROFILE_E2E_ORIGIN).origin;
 const SUBMIT_COMMAND = "npx codex-usage-profile@latest submit";
 const THEME_STORAGE_KEY = "codex-usage-profile:appearance";
+const PROFILE_OWNER_UPDATED_AT = "2026-06-10T00:00:00.000Z";
+const PROFILE_USAGE_UPLOADED_AT = "2026-06-11T00:01:00.000Z";
+const PROFILE_FIXED_SHARE_URL = `${E2E_ORIGIN}/api/share/postmelee`;
+const PROFILE_SHARE_URL = `${E2E_ORIGIN}/api/share/postmelee/r/${
+  Date.parse(PROFILE_USAGE_UPLOADED_AT)
+}`;
+const PROFILE_README_MARKDOWN = `<a href="${PROFILE_FIXED_SHARE_URL}">`
+  + `<img width="50%" src="${E2E_ORIGIN}/u/postmelee/card.png" `
+  + 'alt="Codex usage profile" /></a>';
 const PROFILE_DAILY_USAGE_BUCKETS = Object.freeze([
   Object.freeze({ startDate: "2026-06-01", tokens: 50_000_000 }),
   Object.freeze({ startDate: "2026-06-04", tokens: 50_000_000 }),
@@ -25,6 +37,7 @@ const AUTH_OWNER = Object.freeze({
   githubLogin: "postmelee",
   handle: "postmelee",
   id: "owner_1",
+  updatedAt: PROFILE_OWNER_UPDATED_AT,
   visibility: "private"
 });
 
@@ -71,6 +84,240 @@ test("card readiness releases reacquired same-source leases", async ({ page }) =
 });
 
 test.describe("theme surfaces", () => {
+  test("Task #96 light Profile Skeleton uses a site-theme palette", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAnonymousAccount(page);
+    await page.route("**/api/profiles/public/postmelee", () => new Promise(() => {}));
+    await page.goto(PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const loadingSkeleton = page.getByTestId("public-profile-loading-skeleton");
+    const pagePlaceholder = loadingSkeleton.locator(".profile-loading-shimmer").first();
+    const cardPlaceholder = loadingSkeleton.locator(".home-card-skeleton");
+    await expect(loadingSkeleton).toHaveAttribute("aria-busy", "true");
+
+    const palette = await pagePlaceholder.evaluate((element) => {
+      const background = getComputedStyle(element).backgroundColor;
+      const channels = background.match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+      return {
+        background,
+        lightness: channels.slice(0, 3).reduce((sum, value) => sum + value, 0) / 3,
+        sheen: getComputedStyle(element, "::after").backgroundImage
+      };
+    });
+    expect(palette.lightness).toBeGreaterThan(180);
+    expect(palette.sheen).not.toContain("rgba(255, 255, 255");
+
+    await expect(cardPlaceholder).toHaveCSS("background-color", "rgb(24, 24, 24)");
+
+    const loadingSurfaces = loadingSkeleton.locator([
+      ".profile-loading-shimmer",
+      ".profile-loading-stats",
+      ".profile-loading-card"
+    ].join(", "));
+    await expectThemeSurfaceTransition(page, loadingSurfaces, {
+      toggleName: "Switch to dark theme"
+    });
+  });
+
+  test("Task #96 card Skeleton follows the card theme instead of the site theme", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await page.route("**/u/postmelee/card.png*", () => new Promise(() => {}));
+    await page.goto(SITES_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const publicCard = page.locator(
+      ".public-profile-stage .profile-card-section .home-card-media"
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(publicCard).toHaveAttribute("data-card-theme", "light");
+    await expect(publicCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await expect(publicCard.locator(".home-card-skeleton-avatar"))
+      .toHaveCSS("background-color", "rgb(238, 238, 238)");
+  });
+
+  test("Task #96 owner draft switches the card Skeleton palette independently", async ({ page }) => {
+    await useThemePreference(page, "light");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await page.route("**/api/profile/card.png*", () => new Promise(() => {}));
+    await page.goto(OWNER_PROFILE_ROUTE, { waitUntil: "domcontentloaded" });
+
+    const ownerCard = page.locator(".profile-card-section .home-card-media");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "dark");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(24, 24, 24)");
+
+    await page.getByRole("radio", { name: "Light" }).click();
+    await expect(ownerCard).toHaveAttribute("data-card-theme", "light");
+    await expect(ownerCard.locator(".home-card-skeleton"))
+      .toHaveCSS("background-color", "rgb(255, 255, 255)");
+  });
+
+  test("Task #96 semantic primary text stays inside one theme transition window", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const homeTargets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3",
+      ".home-account-identity strong"
+    ].join(", "));
+    await expect(homeTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, homeTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    const profileTargets = page.locator([
+      ".profile-heading h1",
+      ".profile-heading h2",
+      ".profile-stage h2"
+    ].join(", "));
+    await expect(profileTargets.first()).toBeVisible();
+    await expectSemanticThemeTransition(page, profileTargets, {
+      finalColor: "rgb(23, 23, 23)",
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 Home dividers and anonymous access share the theme surface transition", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    const surfaceTargets = page.locator([
+      ".home-quickstart-access",
+      ".home-quickstart-steps li"
+    ].join(", "));
+    await expect(surfaceTargets.first()).toBeVisible();
+    await expectThemeSurfaceTransition(page, surfaceTargets, {
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 Home avatar surface shares the theme transition", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const avatar = page.locator(".home-account-identity > img, .home-account-identity > span");
+    await expect(avatar).toBeVisible();
+    await expectThemeSurfaceTransition(page, avatar, {
+      toggleName: "Switch to light theme"
+    });
+  });
+
+  test("Task #96 theme text and heatmap keep one stable transition timeline", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto(OWNER_PROFILE_ROUTE);
+
+    const heading = page.locator(".profile-heading h1");
+    const heatmap = page.locator(".token-cell.token-level-4").first();
+    await expect(heading).toBeVisible();
+    await expect(heatmap).toBeVisible();
+
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(23, 23, 23)",
+      heatmap: "rgb(40, 116, 179)",
+      toggleName: "Switch to light theme"
+    });
+    await expectStableThemeTimeline(page, heading, heatmap, {
+      heading: "rgb(242, 242, 242)",
+      heatmap: "rgb(140, 195, 255)",
+      toggleName: "Switch to dark theme"
+    });
+  });
+
+  test("Task #96 theme swap avoids dense heatmap and inactive Skeleton animation fan-out", async ({ page }) => {
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "ready");
+    await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const homeAnimationCount = await page.evaluate(() => (
+      document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    ));
+    expect(homeAnimationCount).toBeLessThan(160);
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    await expect(page.locator(".token-cell").first()).toBeVisible();
+    await expect(page.locator(".profile-card-section .home-card-skeleton"))
+      .toHaveCount(0);
+    await page.getByRole("switch").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const profileAnimationContract = await page.evaluate(() => ({
+      heatmapCellCount: document.querySelectorAll(".token-cell").length,
+      heatmap: Array.from(document.querySelectorAll(".token-cell")).reduce(
+        (sum, element) => sum + element.getAnimations().length,
+        0
+      ),
+      total: document.getAnimations().filter((animation) => (
+        animation.playState !== "finished"
+      )).length
+    }));
+    expect(profileAnimationContract.heatmap)
+      .toBe(profileAnimationContract.heatmapCellCount);
+    expect(profileAnimationContract.total).toBeLessThan(560);
+  });
+
+  test("Task #96 reduced motion changes semantic text without a transition window", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    await useThemePreference(page, "dark");
+    await mockAnonymousAccount(page);
+    await page.goto("/");
+
+    const targets = page.locator([
+      ".home-quickstart-heading h2",
+      ".home-quickstart-steps h3"
+    ].join(", "));
+    await page.getByRole("switch", { name: "Switch to light theme" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+    expect(await targets.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, duration: style.transitionDuration };
+    }))).toEqual(Array.from({ length: await targets.count() }, () => ({
+      color: "rgb(23, 23, 23)",
+      duration: "0s"
+    })));
+  });
+
   test("theme surfaces keep raw colors inside tokens and approved artwork", () => {
     const approvedArtworkSelectors = [
       ".avatar-fallback",
@@ -382,14 +629,14 @@ test.describe("Stage 3 locale surfaces", () => {
     await expect(page.locator(".month-labels")).toContainText("6월");
   });
 
-  test("locale share uses the global Korean copy and localized card URL", async ({ page }) => {
+  test("Share Studio locale copy keeps the canonical image URL queryless", async ({ page }) => {
     await useKoreanLocale(page);
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: {
         ...ownerProfile("public"),
         cardLocale: "ko",
-        selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark&locale=ko"
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark&locale=ko`
       },
       ok: true
     }));
@@ -404,7 +651,11 @@ test.describe("Stage 3 locale surfaces", () => {
     await expect(dialog.getByLabel("공유 대상")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "이미지 URL 복사" })).toHaveAttribute(
       "title",
-      /[?&]locale=ko(?:&|$)/
+      `${E2E_ORIGIN}/u/postmelee/card.png`
+    );
+    await expect(dialog.locator(".home-card-media")).toHaveAttribute(
+      "data-card-source-url",
+      "/u/postmelee/card.png?theme=dark&locale=ko"
     );
     await expect(dialog.getByRole("button", { name: "공유 스튜디오 닫기" }))
       .toBeVisible();
@@ -483,6 +734,13 @@ test.describe("Stage 4 locale contract", () => {
     await expect(page.locator('section[aria-label="공개 Codex 프로필"]'))
       .toBeVisible();
     await expect(page.locator('dl[aria-label="사용량 요약"]')).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "최근 업데이트 ·"
+    );
     await expect(page.getByRole("heading", { level: 2, name: "공유된 Codex 카드" }))
       .toBeVisible();
     await expect(page.getByText("Profile stats", { exact: true })).toHaveCount(0);
@@ -512,7 +770,7 @@ test.describe("Marketing mirror", () => {
     })).toBeVisible();
     await expect(page.getByRole("link", { name: "Create your card" })).toHaveAttribute(
       "href",
-      "http://127.0.0.1:5173/"
+      `${E2E_ORIGIN}/`
     );
     const desktopCta = await page.getByRole("link", {
       name: "Create your card"
@@ -551,7 +809,7 @@ test.describe("Marketing mirror", () => {
       "data-tilt-enabled",
       "false"
     );
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const mobileCard = await page.locator(".home-card-tilt").boundingBox();
     const mobileCta = await page.getByRole("link", {
       name: "Create your card"
@@ -667,7 +925,14 @@ test.describe("Home and share card flow", () => {
       (element) => Boolean(element.shadowRoot?.querySelector("[part=container]"))
     )).toBe(true);
     await expect(page.locator(".home-card-beam")).toHaveAttribute("data-beam", /.+/);
-    await expect(page.locator(".home-card-beam")).toHaveCSS("border-radius", "41px");
+    const cardFrame = await page.locator(".home-card-beam").evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        width: bounds.width
+      };
+    });
+    expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
     const tiltBox = await tilt.boundingBox();
     expect(tiltBox).not.toBeNull();
     await page.mouse.move(tiltBox.x + tiltBox.width * 0.82, tiltBox.y + tiltBox.height * 0.2);
@@ -682,8 +947,10 @@ test.describe("Home and share card flow", () => {
       (element) => Number.parseFloat(getComputedStyle(element).opacity)
     )).toBeLessThanOrEqual(0.22);
     await expect.poll(() => tilt.evaluate(
-      (element) => getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
-    )).toBe("41px");
+      (element) => Number.parseFloat(
+        getComputedStyle(element.shadowRoot?.querySelector("[part=tilt]")).borderRadius
+      )
+    )).toBeCloseTo(cardFrame.radius, 1);
     await page.waitForTimeout(450);
     const quickstartBox = await page.getByRole("heading", { name: "Quickstart" }).boundingBox();
     expect(quickstartBox).not.toBeNull();
@@ -739,6 +1006,177 @@ test.describe("Home and share card flow", () => {
     }
   });
 
+  test("Task #99 Home reveals the latest upload only after owner usage is ready", async ({ page }) => {
+    let releaseProfile;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("private"),
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const lastUpdated = page.locator(".home-last-updated");
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
+    await expect(lastUpdated).toHaveCount(0);
+
+    releaseProfile();
+    await expect(lastUpdated).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(lastUpdated).toContainText("Last updated ·");
+    const tertiaryColor = await lastUpdated.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-tertiary)";
+      document.body.append(probe);
+      const result = {
+        actual: getComputedStyle(element).color,
+        expected: getComputedStyle(probe).color
+      };
+      probe.remove();
+      return result;
+    });
+    expect(tertiaryColor.actual).toBe(tertiaryColor.expected);
+
+    await page.locator(".profile-topbar-theme").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+    const transition = await lastUpdated.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration.split(", "),
+        property: style.transitionProperty.split(", ")
+      };
+    });
+    expect(transition.duration).toContain("0.24s");
+    expect(transition.property).toContain("color");
+  });
+
+  test("Task #99 Home omits the latest upload for empty and error outcomes", async ({ page }) => {
+    let outcome = "empty";
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", (route) => {
+      if (outcome === "error") {
+        return fulfillJson(route, {
+          error: { code: "unavailable", message: "Profile unavailable" },
+          ok: false
+        }, 503);
+      }
+      return fulfillJson(route, {
+        data: { ...ownerProfile("private"), usage: null },
+        ok: true
+      });
+    });
+    await mockCardImages(page);
+    await page.goto("/");
+
+    await expect(page.getByRole("button", { name: "Submit usage first" }))
+      .toBeDisabled();
+    await expect(page.locator(".home-last-updated-slot")).toHaveCount(1);
+    await expect(page.locator(".home-last-updated")).toHaveCount(0);
+
+    outcome = "error";
+    await page.reload();
+    await expect(page.getByText("Card unavailable", { exact: true }))
+      .toBeVisible();
+    await expect(page.locator(".home-last-updated")).toHaveCount(0);
+  });
+
+  test("Task #99 Home keeps the latest upload between the card and identity on mobile", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const card = await page.locator(".home-card-tilt").boundingBox();
+    const lastUpdated = page.locator(".home-last-updated");
+    const updateBox = await lastUpdated.boundingBox();
+    const identity = await page.locator(".home-account-identity").boundingBox();
+
+    expect(card).not.toBeNull();
+    expect(updateBox).not.toBeNull();
+    expect(identity).not.toBeNull();
+    expect(card.y + card.height).toBeLessThanOrEqual(updateBox.y);
+    expect(updateBox.y + updateBox.height).toBeLessThanOrEqual(identity.y);
+    await expect(lastUpdated).toHaveCSS("animation-name", "none");
+    expect(await page.evaluate(
+      () => document.body.scrollWidth > document.documentElement.clientWidth
+    )).toBe(false);
+  });
+
+  test("Task #92 mobile anonymous header keeps Sign in fully visible", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAnonymousAccount(page);
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const signIn = page.getByRole("link", { name: "Sign in", exact: true });
+      await expect(signIn).toBeVisible();
+      await expect(page.locator(".profile-topbar-github span")).toBeHidden();
+      const layout = await page.locator(".profile-topbar").evaluate((topbar) => {
+        const bounds = (selector) => {
+          const element = topbar.querySelector(selector);
+          const rect = element?.getBoundingClientRect();
+          return rect ? { left: rect.left, right: rect.right } : null;
+        };
+        const signInText = topbar.querySelector(".account-login-link span");
+        return {
+          actions: bounds(".profile-actions"),
+          leading: bounds(".profile-topbar-leading"),
+          signIn: bounds(".account-login-link"),
+          signInTextFits: signInText
+            ? signInText.scrollWidth <= signInText.clientWidth
+            : false,
+          topbar: {
+            left: topbar.getBoundingClientRect().left,
+            right: topbar.getBoundingClientRect().right
+          }
+        };
+      });
+
+      expect(layout.signInTextFits).toBe(true);
+      expect(layout.actions.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.signIn.right).toBeLessThanOrEqual(layout.topbar.right);
+      expect(layout.leading.right).toBeLessThanOrEqual(layout.actions.left);
+      expect(await page.evaluate(
+        () => document.body.scrollWidth > document.documentElement.clientWidth
+      )).toBe(false);
+      await page.screenshot({ path: testInfo.outputPath("home-mobile-anonymous-header.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
   test("Home keeps loading and unavailable account states neutral", async ({ page }) => {
     let releaseAccount;
     const accountGate = new Promise((resolve) => {
@@ -762,7 +1200,7 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".home-card-media")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-beam")).toHaveCSS("animation-name", "none");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
 
     releaseAccount();
     await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
@@ -838,7 +1276,7 @@ test.describe("Home and share card flow", () => {
         "data-card-source-url",
         "/assets/codex-card-sample.png"
       );
-      await expect(page.locator(".home-card-skeleton")).toHaveCSS("opacity", "0");
+      await expect(page.locator(".home-card-skeleton")).toHaveCount(0);
       if (failureStatus === 503) {
         await page.screenshot({
           path: testInfo.outputPath("home-card-fallback-desktop.png")
@@ -951,9 +1389,7 @@ test.describe("Home and share card flow", () => {
     await expect(media).toHaveAttribute("data-card-source-kind", "owner");
     await expect(media).toHaveAttribute("data-card-status", "ready");
     await expect(media).toHaveAttribute("aria-busy", "false");
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0.24s");
+    await expect(skeleton).toHaveCount(0);
     await expect(loadingStatus).toHaveText("");
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
     await expect(page.locator('[data-card-source="true"]'))
@@ -972,6 +1408,109 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({
       path: testInfo.outputPath("home-card-ready-desktop.png")
     });
+  });
+
+  test("Task #95 authenticated Home reveals only the final owner target", async ({ page }, testInfo) => {
+    await installTask95HomeCardHistoryObserver(page);
+
+    let releaseProfile;
+    let releaseOwnerImage;
+    let operatorRequests = 0;
+    let ownerRequests = 0;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+    const ownerImageGate = new Promise((resolve) => {
+      releaseOwnerImage = resolve;
+    });
+
+    await page.route("**/api/auth/me", (route) => fulfillJson(route, {
+      data: {
+        owner: AUTH_OWNER,
+        session: { id: "session_1", ownerId: AUTH_OWNER.id }
+      },
+      ok: true
+    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: ownerProfile("private"),
+        ok: true
+      });
+    });
+    await page.route("**/u/postmelee/card.png*", (route) => {
+      operatorRequests += 1;
+      return route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+    await page.route("**/api/profile/card.png*", async (route) => {
+      ownerRequests += 1;
+      await ownerImageGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect.poll(() => operatorRequests).toBeGreaterThan(0);
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "loading");
+
+    releaseProfile();
+    await expect.poll(() => ownerRequests).toBeGreaterThan(0);
+    releaseOwnerImage();
+
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("aria-busy", "false");
+
+    const { history, statuses } = await readTask95HomeCardHistory(page);
+    await testInfo.attach("task95-home-card-history.json", {
+      body: Buffer.from(JSON.stringify({ history, statuses }, null, 2)),
+      contentType: "application/json"
+    });
+
+    expectTask95FinalOwnerHistory({ history, statuses });
+  });
+
+  test("Task #95 Profile brand return reveals one final owner card", async ({ page }) => {
+    await installTask95HomeCardHistoryObserver(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto(OWNER_PROFILE_ROUTE);
+    await expect(page.locator(".card-profile-view")).toBeVisible();
+    await page.locator(".profile-topbar-title").click();
+
+    await expect(page).toHaveURL(/\/$/);
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    expectTask95FinalOwnerHistory(await readTask95HomeCardHistory(page));
+  });
+
+  test("Task #95 cold and warm Home reloads remain monotonic", async ({ page }) => {
+    await installTask95HomeCardHistoryObserver(page);
+    await mockAuthenticatedAccount(page);
+    await mockCardImages(page);
+
+    await page.goto("/");
+    await expect(page.locator(".home-card-media"))
+      .toHaveAttribute("data-card-status", "ready");
+
+    for (let reload = 0; reload < 2; reload += 1) {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const media = page.locator(".home-card-media");
+      await expect(media).toHaveAttribute("data-card-source-kind", "owner");
+      await expect(media).toHaveAttribute("data-card-status", "ready");
+      expectTask95FinalOwnerHistory(await readTask95HomeCardHistory(page));
+    }
   });
 
   test("Home card transition keeps a stable skeleton box on mobile", async ({ page }, testInfo) => {
@@ -1012,7 +1551,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     const readyQuickstartBox = await page
       .getByRole("heading", { name: "Quickstart" })
@@ -1074,8 +1613,7 @@ test.describe("Home and share card flow", () => {
 
     releaseAccount();
     await expect(media).toHaveAttribute("data-card-status", "ready");
-    await expect(skeleton).toHaveCSS("opacity", "0");
-    await expect(skeleton).toHaveCSS("transition-duration", "0s");
+    await expect(skeleton).toHaveCount(0);
     const readyCardBox = await media.boundingBox();
     expectRectNear(readyCardBox, loadingCardBox, 1);
     await page.screenshot({
@@ -1252,7 +1790,7 @@ test.describe("Home and share card flow", () => {
     const card = page.getByRole("img", { name: "Your Codex usage card" });
     await expect(card).toHaveCSS("opacity", "1");
     await expect(page.locator(".home-card-tilt")).toHaveAttribute("data-tilt-enabled", "false");
-    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(0);
+    await expect(page.locator("hover-tilt.home-card-tilt")).toHaveCount(1);
     const cardBox = await card.boundingBox();
     expect(cardBox).not.toBeNull();
     expect(cardBox.x).toBeGreaterThanOrEqual(0);
@@ -1305,6 +1843,65 @@ test.describe("Home and share card flow", () => {
       "/?view=settings"
     );
     await page.screenshot({ path: testInfo.outputPath("home-mobile.png") });
+  });
+
+  test("Task #92 mobile account menu preserves touch activation after null blur", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      let logoutRequests = 0;
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await mockSettingsData(page);
+      await mockCardImages(page);
+      await page.route("**/api/auth/logout", (route) => {
+        logoutRequests += 1;
+        return fulfillJson(route, {
+          data: { session: null },
+          ok: true
+        });
+      });
+      await page.goto("/");
+
+      const diagnostics = [];
+      for (const destination of [
+        { href: OWNER_PROFILE_ROUTE, label: "Profile" },
+        { href: "/?view=settings", label: "Settings" }
+      ]) {
+        await page.getByRole("button", {
+          name: "Account menu for postmelee"
+        }).tap();
+        const item = page.getByRole("menuitem", { name: destination.label });
+        await expect(item).toBeVisible();
+        diagnostics.push(await preserveMenuTouchActivation(page, item));
+        await item.tap();
+        await expect(page).toHaveURL(`${E2E_ORIGIN}${destination.href}`);
+        await page.goto("/");
+      }
+
+      await page.getByRole("button", {
+        name: "Account menu for postmelee"
+      }).tap();
+      const logoutItem = page.getByRole("menuitem", { name: "Log out" });
+      diagnostics.push(await preserveMenuTouchActivation(page, logoutItem));
+      await logoutItem.tap();
+      await expect(page.getByRole("link", { name: "Sign in", exact: true }))
+        .toBeVisible();
+      expect(logoutRequests).toBe(1);
+
+      await testInfo.attach("task-92-mobile-account-menu.json", {
+        body: Buffer.from(JSON.stringify(diagnostics, null, 2)),
+        contentType: "application/json"
+      });
+    } finally {
+      await context.close();
+    }
   });
 
   test("account menu exposes Profile and supports keyboard focus", async ({ page }) => {
@@ -1585,7 +2182,7 @@ test.describe("Home and share card flow", () => {
     await page.keyboard.press("Enter");
 
     const command =
-      "npx codex-usage-profile@latest submit --server http://127.0.0.1:5173";
+      `npx codex-usage-profile@latest submit --server ${E2E_ORIGIN}`;
     await expect(page.getByText(command, { exact: true })).toBeVisible();
     await expect(page.locator(".device-success")).toHaveCSS("animation-name", "none");
     await expect(page.getByText(command, { exact: true })).not.toContainText("ABCD-1234");
@@ -1769,6 +2366,14 @@ test.describe("Home and share card flow", () => {
     await expect(shareButton).toBeEnabled();
     await expect(shareButton.locator("svg")).toHaveCount(0);
     const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceBeam = sourceCard.locator(".home-card-beam");
+    await expect(sourceCard).toBeVisible();
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    await expect.poll(() => sourceBeam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
     const sourceBox = await sourceCard.boundingBox();
 
     await shareButton.click();
@@ -1778,6 +2383,12 @@ test.describe("Home and share card flow", () => {
     await expect(dialog).toBeVisible();
     await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
     await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "paused")
+    ))).toBe(true);
     await expect(sourceCard).toHaveCSS("opacity", "0");
     await expect.poll(
       () => page
@@ -1810,20 +2421,37 @@ test.describe("Home and share card flow", () => {
     await expect(backdrop).toHaveClass(/\bis-open\b/);
 
     const socialTargets = [
-      ["Share on X", "X", "https://x.com", "/intent/post"],
-      ["Share on LinkedIn", "LinkedIn", "https://www.linkedin.com", "/feed/"],
-      ["Share on Reddit", "Reddit", "https://www.reddit.com", "/submit"]
+      ["Share on X", "https://x.com", "/intent/tweet", "text"],
+      ["Share on Threads", "https://www.threads.net", "/intent/post", "url"],
+      ["Share on LinkedIn", "https://www.linkedin.com", "/feed/", "shareUrl"],
+      ["Share on Facebook", "https://www.facebook.com", "/sharer/sharer.php", "u"],
+      ["Share on Reddit", "https://www.reddit.com", "/submit", "url"]
     ];
-    // Social destinations open the composer directly with the share link.
-    for (const [name, , origin, pathname] of socialTargets) {
+    // Every social destination opens its composer with one revision share URL.
+    for (const [name, origin, pathname, shareParam] of socialTargets) {
       const link = page.getByRole("link", { name });
       const href = new URL(await link.getAttribute("href"));
       expect(href.origin).toBe(origin);
       expect(href.pathname).toBe(pathname);
       expect(href.search).toContain("postmelee");
+      if (shareParam === "text") {
+        expect(href.searchParams.get(shareParam)).toContain(PROFILE_SHARE_URL);
+      } else {
+        expect(href.searchParams.get(shareParam)).toBe(PROFILE_SHARE_URL);
+      }
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+    const xHref = new URL(
+      await page.getByRole("link", { name: "Share on X" }).getAttribute("href")
+    );
+    expect(xHref.searchParams.get("text")).toBe(
+      `See my Codex usage activity.\n${PROFILE_SHARE_URL}`
+    );
+    expect(xHref.searchParams.get("url")).toBeNull();
+    expect(xHref.search).toContain(
+      `%0A${encodeURIComponent(PROFILE_SHARE_URL)}`
+    );
     await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
     await expect(page.locator('[data-brand-logo="x"]')).toHaveAttribute(
       "viewBox",
@@ -1844,21 +2472,29 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Copy share link" }).click();
     await expect(page.getByText("Share link copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/api/share/postmelee"
+      PROFILE_SHARE_URL
     );
 
     await page.getByRole("button", { name: "Copy Image URL" }).click();
     await expect(page.getByText("Image URL copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+      `${E2E_ORIGIN}/u/postmelee/card.png`
     );
 
     await page.getByRole("button", { name: "Copy README Markdown" }).click();
     await expect(page.getByText("README Markdown copied")).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      "![Codex usage profile](http://127.0.0.1:5173/u/postmelee/card.png?theme=dark)"
+      PROFILE_README_MARKDOWN
     );
 
+    await page.getByRole("button", { name: "Copy image", exact: true }).click();
+    await expect(page.getByText("Copied image", { exact: true })).toBeVisible();
+    expect(publicPreviewFetches).toBe(2);
+
+    await expect(page.getByRole("link", { name: "Save PNG" })).toHaveAttribute(
+      "href",
+      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+    );
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "Save PNG" }).click();
     const download = await downloadPromise;
@@ -1893,12 +2529,24 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator(".app-frame")).not.toHaveAttribute("inert", "");
     await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
     await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "running")
+    ))).toBe(true);
+    expect(await sourceBeam.evaluate((element) => (
+      element.getAnimations().filter((animation) => (
+        animation.animationName.includes("beam-fade-in")
+        && animation.playState === "running"
+      )).length
+    ))).toBe(0);
 
     await shareButton.click();
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
-    expect(publicPreviewFetches).toBe(1);
+    expect(publicPreviewFetches).toBe(2);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
 
@@ -1906,6 +2554,69 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Make private" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
+  });
+
+  test("Share Studio advances submit share targets while README Markdown stays fixed", async ({
+    context,
+    page
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await mockAuthenticatedAccount(page);
+    let profile = ownerProfile("public");
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: profile,
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const readSocialTargetUrls = async (scope) => Promise.all([
+      ["Share on X", "text"],
+      ["Share on Threads", "url"],
+      ["Share on LinkedIn", "shareUrl"],
+      ["Share on Facebook", "u"],
+      ["Share on Reddit", "url"]
+    ].map(async ([name, parameter]) => {
+      const href = new URL(await scope.getByRole("link", { name }).getAttribute("href"));
+      const target = href.searchParams.get(parameter);
+      return parameter === "text" ? target.split("\n").at(-1) : target;
+    }));
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    let dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", PROFILE_SHARE_URL);
+    expect(await readSocialTargetUrls(dialog)).toEqual(
+      Array(5).fill(PROFILE_SHARE_URL)
+    );
+    await dialog.getByRole("button", { name: "Copy README Markdown" }).click();
+    const readmeBeforeSubmit = await page.evaluate(() => navigator.clipboard.readText());
+    expect(readmeBeforeSubmit).toBe(PROFILE_README_MARKDOWN);
+    await dialog.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+
+    const submittedAt = "2026-06-13T00:04:00.000Z";
+    profile = {
+      ...profile,
+      usage: {
+        ...profile.usage,
+        uploadedAt: submittedAt
+      }
+    };
+    await page.reload();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Share activity" });
+    const submittedShareUrl = `${E2E_ORIGIN}/api/share/postmelee/r/${
+      Date.parse(submittedAt)
+    }`;
+    await expect(dialog.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", submittedShareUrl);
+    expect(await readSocialTargetUrls(dialog)).toEqual(
+      Array(5).fill(submittedShareUrl)
+    );
+    await dialog.getByRole("button", { name: "Copy README Markdown" }).click();
+    const readmeAfterSubmit = await page.evaluate(() => navigator.clipboard.readText());
+    expect(readmeAfterSubmit).toBe(readmeBeforeSubmit);
   });
 
   test("Share Studio hands off the decoded source while the public target loads", async ({ page }) => {
@@ -1947,6 +2658,14 @@ test.describe("Home and share card flow", () => {
     const sourceImage = sourceCard.getByRole("img", { name: "Your Codex usage card" });
     await expect(sourceImage).toHaveAttribute("src", /^blob:/);
     const sourceBlobUrl = await sourceImage.getAttribute("src");
+    const sourcePresentation = await sourceCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        width: bounds.width
+      };
+    });
 
     await page.getByRole("button", { name: "Share", exact: true }).click();
     const backdrop = page.getByTestId("share-studio-backdrop");
@@ -1959,12 +2678,36 @@ test.describe("Home and share card flow", () => {
     await expect(motionCard).toHaveAttribute("data-share-preview-source", "source");
     await expect(motionCard).toHaveAttribute("data-share-target-status", "loading");
     await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+    await expect(motionCard).toHaveAttribute("data-motion-mode", "scale");
     await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
     await expect(motionImage).toHaveClass(/\bis-handoff-source\b/);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
-    await expect(skeleton).toHaveCSS("opacity", "0");
+    await expect(skeleton).toHaveCount(0);
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     expect(publicPreviewFetches).toBe(1);
+    const targetPresentation = await motionCard.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const firstTransform = element.getAnimations().flatMap(
+        (animation) => animation.effect?.getKeyframes?.() ?? []
+      ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+      const matrix = new DOMMatrixReadOnly(firstTransform);
+      const image = element.querySelector(".share-card-preview");
+      return {
+        borderRadius: getComputedStyle(element).borderTopLeftRadius,
+        height: bounds.height,
+        imageFilter: image ? getComputedStyle(image).filter : null,
+        scaleX: Math.round(matrix.a * 1000) / 1000,
+        scaleY: Math.round(matrix.d * 1000) / 1000,
+        width: bounds.width
+      };
+    });
+    expect(targetPresentation).toMatchObject({
+      borderRadius: sourcePresentation.borderRadius,
+      imageFilter: "none",
+      scaleX: 1,
+      scaleY: 1
+    });
+    expect(targetPresentation.width).toBeCloseTo(sourcePresentation.width, 0);
+    expect(targetPresentation.height).toBeCloseTo(sourcePresentation.height, 0);
 
     releasePublicCard();
     await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
@@ -1976,6 +2719,26 @@ test.describe("Home and share card flow", () => {
     await expect(motionImage).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => motionImage.getAttribute("src")).not.toBe(sourceBlobUrl);
     expect(publicPreviewFetches).toBe(1);
+
+    const handoffPhase = page.waitForFunction(() => (
+      document.querySelector('[data-testid="share-studio-backdrop"]')
+        ?.classList.contains("is-handoff") ?? false
+    ));
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(motionImage).toHaveAttribute("src", sourceBlobUrl);
+    await handoffPhase;
+    expect(await sourceCard.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        opacity: style.opacity,
+        transitionDuration: style.transitionDuration,
+        transitionProperty: style.transitionProperty
+      };
+    })).toEqual({
+      opacity: "1",
+      transitionDuration: "0s",
+      transitionProperty: "none"
+    });
   });
 
   test("Share Studio restores the source when closed before the public target is ready", async ({ page }) => {
@@ -2104,7 +2867,376 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("home-no-usage.png") });
   });
 
-  test("Share card dialog fits a mobile viewport without document overflow", async ({ page }, testInfo) => {
+  test("Task #92 mobile Share Studio rejects an unsafe source scale", async ({
+    browser
+  }, testInfo) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const syntheticSource = await sourceCard.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const synthetic = {
+          bottom: rect.top + (rect.height * 3.2),
+          height: rect.height * 3.2,
+          left: rect.left,
+          right: rect.left + (rect.width * 3.2),
+          top: rect.top,
+          width: rect.width * 3.2,
+          x: rect.x,
+          y: rect.y
+        };
+        element.getBoundingClientRect = () => ({
+          ...synthetic,
+          toJSON: () => synthetic
+        });
+        return synthetic;
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+      const diagnostic = await motionCard.evaluate((element, sourceRect) => {
+        const dynamicViewportProbe = document.createElement("div");
+        dynamicViewportProbe.style.cssText = [
+          "height:1px",
+          "pointer-events:none",
+          "position:fixed",
+          "visibility:hidden",
+          "width:100dvw"
+        ].join(";");
+        document.body.append(dynamicViewportProbe);
+        const keyframes = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        );
+        const firstTransform = keyframes.find(
+          (keyframe) => keyframe.transform && keyframe.transform !== "none"
+        )?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const target = element.getBoundingClientRect();
+        const viewport = {
+          height: globalThis.visualViewport?.height ?? globalThis.innerHeight,
+          width: globalThis.visualViewport?.width ?? globalThis.innerWidth
+        };
+        const start = {
+          bottom: target.top + matrix.f + (target.height * matrix.d),
+          left: target.left + matrix.e,
+          right: target.left + matrix.e + (target.width * matrix.a),
+          top: target.top + matrix.f
+        };
+        const result = {
+          firstTransform,
+          layoutViewport: {
+            clientWidth: document.documentElement.clientWidth,
+            dynamicWidth: dynamicViewportProbe.getBoundingClientRect().width,
+            innerWidth: globalThis.innerWidth,
+            screenWidth: globalThis.screen.width
+          },
+          motionMode: element.dataset.motionMode,
+          motionOrigin: element.dataset.motionOrigin,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          sourceRect,
+          start,
+          target: {
+            height: target.height,
+            left: target.left,
+            top: target.top,
+            width: target.width
+          },
+          viewport,
+          withinViewport: (
+            start.left >= 0 &&
+            start.top >= 0 &&
+            start.right <= viewport.width &&
+            start.bottom <= viewport.height
+          )
+        };
+        dynamicViewportProbe.remove();
+        return result;
+      }, syntheticSource);
+      await testInfo.attach("task-92-mobile-card-handoff.json", {
+        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        contentType: "application/json"
+      });
+
+      expect(diagnostic).toMatchObject({
+        motionMode: "target",
+        motionOrigin: "target",
+        scaleX: 1,
+        scaleY: 1,
+        withinViewport: true
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #92 mobile Share Studio preserves the source card geometry", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const source = await sourceCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const media = element.querySelector(".home-card-media");
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          left: bounds.left,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
+          top: bounds.top,
+          width: bounds.width
+        };
+      });
+
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+      await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+
+      const target = await motionCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const firstTransform = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        const image = element.querySelector(".share-card-preview");
+        const media = element.querySelector(".home-card-media");
+        return {
+          borderRadius: getComputedStyle(element).borderTopLeftRadius,
+          height: bounds.height,
+          imageFilter: image ? getComputedStyle(image).filter : null,
+          mediaRadius: media
+            ? Number.parseFloat(getComputedStyle(media).borderTopLeftRadius)
+            : null,
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          startLeft: bounds.left + matrix.e,
+          startTop: bounds.top + matrix.f,
+          width: bounds.width
+        };
+      });
+
+      expect(target).toMatchObject({
+        borderRadius: source.borderRadius,
+        imageFilter: "none",
+        scaleX: 1,
+        scaleY: 1
+      });
+      expect(target.width).toBeCloseTo(source.width, 0);
+      expect(target.height).toBeCloseTo(source.height, 0);
+      expect(source.mediaRadius).toBeCloseTo(source.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(target.width * 32 / 499, 1);
+      expect(target.mediaRadius).toBeCloseTo(source.mediaRadius, 1);
+      expect(target.startLeft).toBeCloseTo(source.left, 0);
+      expect(target.startTop).toBeCloseTo(source.top, 0);
+
+      await page.getByRole("button", { name: "Close Share Studio" }).tap();
+      const closing = await motionCard.evaluate((element) => {
+        const transforms = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).map((keyframe) => keyframe.transform).filter(Boolean);
+        const matrix = new DOMMatrixReadOnly(transforms.at(-1) ?? "none");
+        return {
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000
+        };
+      });
+      expect(closing).toEqual({ scaleX: 1, scaleY: 1 });
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+      await expect(sourceCard).toHaveCSS("opacity", "1");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #96 mobile Share Studio moves from a partially visible source", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+
+      const sourceCard = page.locator('[data-card-source="true"]');
+      await expect(sourceCard).toBeVisible();
+      const source = await sourceCard.evaluate((element) => {
+        const initial = element.getBoundingClientRect();
+        document.scrollingElement.scrollBy(
+          0,
+          initial.top + (initial.height / 2)
+        );
+        const clipped = element.getBoundingClientRect();
+        const viewportTop = globalThis.visualViewport?.offsetTop ?? 0;
+        const viewportHeight = globalThis.visualViewport?.height
+          ?? globalThis.innerHeight;
+        const visibleHeight = Math.max(
+          0,
+          Math.min(clipped.bottom, viewportTop + viewportHeight)
+            - Math.max(clipped.top, viewportTop)
+        );
+        return {
+          height: clipped.height,
+          left: clipped.left,
+          top: clipped.top,
+          visibleRatio: visibleHeight / clipped.height,
+          width: clipped.width
+        };
+      });
+      expect(source.visibleRatio).toBeGreaterThanOrEqual(0.45);
+      expect(source.visibleRatio).toBeLessThanOrEqual(0.55);
+
+      await page.getByRole("button", { name: "Share", exact: true })
+        .evaluate((button) => button.click());
+      const motionCard = page.getByTestId("share-studio-card-motion");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(motionCard).toHaveAttribute("data-motion-origin", "source");
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+      await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
+
+      const opening = await motionCard.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const firstTransform = element.getAnimations().flatMap(
+          (animation) => animation.effect?.getKeyframes?.() ?? []
+        ).find((keyframe) => keyframe.transform)?.transform ?? "none";
+        const matrix = new DOMMatrixReadOnly(firstTransform);
+        return {
+          scaleX: Math.round(matrix.a * 1000) / 1000,
+          scaleY: Math.round(matrix.d * 1000) / 1000,
+          startLeft: bounds.left + matrix.e,
+          startTop: bounds.top + matrix.f
+        };
+      });
+      expect(opening).toMatchObject({ scaleX: 1, scaleY: 1 });
+      expect(opening.startLeft).toBeCloseTo(source.left, 0);
+      expect(opening.startTop).toBeCloseTo(source.top, 0);
+
+      await page.getByRole("button", { name: "Close Share Studio" }).tap();
+      await expect(motionCard).toHaveAttribute("data-motion-mode", "translate");
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeHidden();
+      await expect(sourceCard).toHaveCSS("opacity", "1");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("Task #96 Share handoff resumes one paused BorderBeam without a new fade", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+
+    const sourceCard = page.locator('[data-card-source="true"]');
+    const sourceBeam = sourceCard.locator(".home-card-beam");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    await expect.poll(() => sourceBeam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
+
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog).toBeVisible();
+    await expect(sourceCard).toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "paused")
+    ))).toBe(true);
+
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(sourceCard).not.toHaveAttribute("data-share-transition-active", "true");
+    await expect(sourceBeam).toHaveAttribute("data-active", "");
+    expect(await sourceBeam.evaluate((element) => (
+      getComputedStyle(element).animationPlayState
+        .split(",")
+        .every((state) => state.trim() === "running")
+    ))).toBe(true);
+    expect(await sourceBeam.evaluate((element) => (
+      element.getAnimations().filter((animation) => (
+        animation.animationName.includes("beam-fade-in")
+        && animation.playState === "running"
+      )).length
+    ))).toBe(0);
+  });
+
+  test("Task #96 Share Studio rebases a local canonical card URL without crashing", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => {
+      const profile = ownerProfile("public");
+      profile.publicCardUrl = "http://192.168.12.7:5177/u/postmelee/card.png";
+      profile.selectedPublicCardUrl = (
+        "http://192.168.12.7:5177/u/postmelee/card.png?theme=dark"
+      );
+      return fulfillJson(route, { data: profile, ok: true });
+    });
+    await mockCardImages(page);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Codex usage card preview" }))
+      .toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("Share card dialog keeps all destinations at 320 and 390 desktop widths", async ({ page }, testInfo) => {
     await mockAuthenticatedAccount(page);
     await page.route("**/api/profile", (route) => fulfillJson(route, {
       data: ownerProfile("public"),
@@ -2112,63 +3244,189 @@ test.describe("Home and share card flow", () => {
     }));
     await mockCardImages(page);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    await page.getByRole("button", { name: "Share", exact: true }).click();
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await page.getByRole("button", { name: "Share", exact: true }).click();
 
-    await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
-    await expect(page.getByRole("img", { name: "Codex usage card preview" })).toHaveCSS(
-      "aspect-ratio",
-      "499 / 306"
-    );
-    await expect(page.getByTestId("share-studio-backdrop")).toHaveClass(/\bis-open\b/);
-    await expect(page.locator(".share-studio-primary-action").first()).toHaveCSS(
-      "opacity",
-      "1"
-    );
-    const mobileTargets = await page.locator(".share-studio-primary-action")
-      .evaluateAll((elements) => elements.map((element) => {
-        const bounds = element.getBoundingClientRect();
-        return {
-          bottom: bounds.bottom,
-          height: bounds.height,
-          left: bounds.left,
-          right: bounds.right
-        };
-      }));
-    expect(mobileTargets).toHaveLength(6);
-    for (const target of mobileTargets) {
-      expect(target.height).toBeGreaterThanOrEqual(44);
-      expect(target.left).toBeGreaterThanOrEqual(0);
-      expect(target.right).toBeLessThanOrEqual(390);
+      await expect(page.getByRole("dialog", { name: "Share activity" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Make private" })).toBeVisible();
+      await expect(page.getByRole("img", { name: "Codex usage card preview" }))
+        .toHaveCSS("aspect-ratio", "499 / 306");
+      await expect(page.getByTestId("share-studio-backdrop"))
+        .toHaveClass(/\bis-open\b/);
+      await expect(page.locator(".share-studio-primary-action").first())
+        .toHaveCSS("opacity", "1");
+      await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+        .toBeVisible();
+      await expect(page.getByRole("link", { name: "Share on Facebook" }))
+        .toBeVisible();
+
+      const compactLayout = await page.locator(".share-studio-primary-action")
+        .evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          const rowTops = [];
+          for (const target of targets) {
+            const existing = rowTops.find((top) => Math.abs(top - target.top) <= 1);
+            if (existing === undefined) rowTops.push(target.top);
+          }
+          const actions = document.querySelector(".share-studio-primary-actions")
+            .getBoundingClientRect();
+          const card = document.querySelector(".share-studio-card-motion")
+            .getBoundingClientRect();
+          return {
+            actionCenter: actions.left + (actions.width / 2),
+            actionWidth: actions.width,
+            cardCenter: card.left + (card.width / 2),
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            rowCounts: rowTops.map((top) => targets.filter(
+              (target) => Math.abs(top - target.top) <= 1
+            ).length),
+            targets
+          };
+        });
+      expect(compactLayout.targets).toHaveLength(6);
+      expect(compactLayout.rowCounts).toEqual([4, 2]);
+      expect(compactLayout.horizontalOverflow).toBe(false);
+      for (const target of compactLayout.targets) {
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expect(target.left).toBeGreaterThanOrEqual(0);
+        expect(target.right).toBeLessThanOrEqual(width);
+      }
+      expect(compactLayout.actionWidth).toBeLessThanOrEqual(280);
+      expect(
+        Math.abs(compactLayout.actionCenter - compactLayout.cardCenter)
+      ).toBeLessThanOrEqual(1);
+
+      const secondaryTargetHeights = await page
+        .locator(".share-studio-secondary-action, .share-studio-privacy-action")
+        .evaluateAll((elements) => elements.map(
+          (element) => element.getBoundingClientRect().height
+        ));
+      expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
+      await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+      await page.screenshot({
+        path: testInfo.outputPath(`share-narrow-desktop-${width}.png`)
+      });
     }
-    const compactActionLayout = await page.evaluate(() => {
-      const actions = document.querySelector(".share-studio-primary-actions")
-        .getBoundingClientRect();
-      const card = document.querySelector(".share-studio-card-motion")
-        .getBoundingClientRect();
-      return {
-        actionCenter: actions.left + (actions.width / 2),
-        actionWidth: actions.width,
-        cardCenter: card.left + (card.width / 2)
-      };
-    });
-    expect(compactActionLayout.actionWidth).toBeLessThanOrEqual(280);
-    expect(
-      Math.abs(compactActionLayout.actionCenter - compactActionLayout.cardCenter)
-    ).toBeLessThanOrEqual(1);
-    const secondaryTargetHeights = await page
-      .locator(".share-studio-secondary-action, .share-studio-privacy-action")
-      .evaluateAll((elements) => elements.map(
-        (element) => element.getBoundingClientRect().height
-      ));
-    expect(secondaryTargetHeights.every((height) => height >= 44)).toBe(true);
-    await expect(page.locator(".share-studio-instructions")).toHaveCount(0);
+  });
 
-    await page.screenshot({
-      path: testInfo.outputPath("share-mobile-with-instructions.png")
-    });
+  test("Task #102 mobile Share Studio keeps four actions on one row", async ({
+    browser
+  }, testInfo) => {
+    const scenarios = [
+      {
+        device: devices["iPhone 13"],
+        label: "iphone-390",
+        viewport: { height: 844, width: 390 }
+      },
+      {
+        device: devices["Pixel 5"],
+        label: "android-320",
+        viewport: { height: 800, width: 320 }
+      }
+    ];
+
+    for (const { device, label, viewport } of scenarios) {
+      const context = await browser.newContext({
+        ...device,
+        baseURL: E2E_ORIGIN,
+        viewport
+      });
+      const page = await context.newPage();
+
+      try {
+        await page.emulateMedia({ colorScheme: "dark" });
+        await mockAuthenticatedAccount(page);
+        await page.route("**/api/profile", (route) => fulfillJson(route, {
+          data: ownerProfile("public"),
+          ok: true
+        }));
+        await mockCardImages(page);
+        await page.goto("/");
+        await page.evaluate(() => {
+          globalThis.__shareActionCounts = [];
+          globalThis.__shareActionObserver = new MutationObserver(() => {
+            const count = document.querySelectorAll(
+              ".share-studio-primary-action"
+            ).length;
+            if (count > 0) globalThis.__shareActionCounts.push(count);
+          });
+          globalThis.__shareActionObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+        });
+
+        await page.getByRole("button", { name: "Share", exact: true }).tap();
+        const dialog = page.getByRole("dialog", { name: "Share activity" });
+        const actions = page.locator(".share-studio-primary-action");
+        await expect(dialog).toBeVisible();
+        await expect(actions).toHaveCount(4);
+        await expect(page.getByRole("link", { name: "Share on X" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Threads" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Save PNG" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
+          .toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Share on Facebook" }))
+          .toHaveCount(0);
+        await expect(actions.last()).toHaveCSS("opacity", "1");
+
+        const layout = await actions.evaluateAll((elements) => {
+          const targets = elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return {
+              height: bounds.height,
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top
+            };
+          });
+          return {
+            horizontalOverflow:
+              document.body.scrollWidth > document.documentElement.clientWidth
+              || document.documentElement.scrollWidth
+                > document.documentElement.clientWidth,
+            targets,
+            viewportWidth: document.documentElement.clientWidth
+          };
+        });
+        expect(layout.targets).toHaveLength(4);
+        expect(
+          Math.max(...layout.targets.map(({ top }) => top))
+            - Math.min(...layout.targets.map(({ top }) => top))
+        ).toBeLessThanOrEqual(1);
+        for (const target of layout.targets) {
+          expect(target.height).toBeGreaterThanOrEqual(44);
+          expect(target.left).toBeGreaterThanOrEqual(0);
+          expect(target.right).toBeLessThanOrEqual(layout.viewportWidth);
+        }
+        expect(layout.horizontalOverflow).toBe(false);
+
+        const observedCounts = await page.evaluate(() => {
+          globalThis.__shareActionObserver.disconnect();
+          return [...new Set(globalThis.__shareActionCounts)];
+        });
+        expect(observedCounts).toEqual([4]);
+        await page.screenshot({
+          path: testInfo.outputPath(`share-${label}.png`)
+        });
+      } finally {
+        await context.close();
+      }
+    }
   });
 
   test("Share Studio settles after resize and fits a short desktop", async ({ page }, testInfo) => {
@@ -2699,7 +3957,7 @@ test.describe("Profile and Settings canvases", () => {
     expect(unavailableTopOffset).toBe(48);
   });
 
-  test("owner Profile loading geometry matches ready content and reveals together in place", async ({ page }) => {
+  test("Task #99 Profile owner loading geometry matches the ready update slot", async ({ page }) => {
     await mockAuthenticatedAccount(page);
     let releaseProfile;
     const profileGate = new Promise((resolve) => {
@@ -2717,9 +3975,15 @@ test.describe("Profile and Settings canvases", () => {
     await page.goto("/profile", { waitUntil: "domcontentloaded" });
 
     const loadingGeometry = await readProfileGeometry(page, "loading");
+    await expect(page.locator(".profile-loading-updated"))
+      .toHaveAttribute("data-skeleton-part", "updated");
     releaseProfile();
     await expect(page.locator(".card-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
 
     const revealMotion = await page.evaluate(() => [
       ".profile-header",
@@ -2882,6 +4146,19 @@ test.describe("Profile and Settings canvases", () => {
       expect(await page.evaluate(
         () => document.body.scrollWidth > document.documentElement.clientWidth
       )).toBe(false);
+
+      if (path === "/profile") {
+        const cardFrame = await page.locator(
+          ".profile-card-section .home-card-media"
+        ).evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            radius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+            width: bounds.width
+          };
+        });
+        expect(cardFrame.radius).toBeCloseTo(cardFrame.width * 32 / 499, 1);
+      }
     }
   });
 });
@@ -2945,6 +4222,8 @@ test.describe("Settings appearance control", () => {
     await light.check();
     await expect(light).toBeChecked();
     await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
+    await expect(page.locator("html"))
       .toHaveAttribute("data-theme-preference", "light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
@@ -2952,6 +4231,8 @@ test.describe("Settings appearance control", () => {
 
     await page.reload();
     await expect(page.getByRole("radio", { name: /Light/ })).toBeChecked();
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
 
     const storageState = await page.context().storageState();
     const restoredContext = await browser.newContext({
@@ -2961,7 +4242,7 @@ test.describe("Settings appearance control", () => {
     const restoredPage = await restoredContext.newPage();
     await mockAuthenticatedAccount(restoredPage);
     await mockSettingsData(restoredPage);
-    await restoredPage.goto("http://127.0.0.1:5173/settings");
+    await restoredPage.goto(`${E2E_ORIGIN}/settings`);
     await expect(restoredPage.getByRole("radio", { name: /Light/ }))
       .toBeChecked();
     await expect(restoredPage.locator("html")).toHaveAttribute("data-theme", "light");
@@ -2970,6 +4251,8 @@ test.describe("Settings appearance control", () => {
     const system = page.getByRole("radio", { name: /System/ });
     await system.check();
     await expect(system).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY))
       .toBeNull();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -2991,17 +4274,25 @@ test.describe("Settings appearance control", () => {
     await page.keyboard.press("ArrowRight");
     await expect(light).toBeFocused();
     await expect(light).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator('.settings-appearance-option:has(input[value="light"])'))
       .toHaveCSS("outline-style", "solid");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
+    await expect(page.locator("html"))
+      .not.toHaveAttribute("data-theme-animating", "");
+
     await page.keyboard.press("ArrowRight");
     await expect(dark).toBeFocused();
     await expect(dark).toBeChecked();
+    await expect(page.locator("html"))
+      .toHaveAttribute("data-theme-animating", "");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
-  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ page }) => {
+  test("card appearance saves owner theme and language and exposes the selected theme URL", async ({ context, page }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.addInitScript((storageKey) => {
       if (localStorage.getItem(storageKey) === null) {
         localStorage.setItem(storageKey, "light");
@@ -3020,7 +4311,11 @@ test.describe("Settings appearance control", () => {
         ...profile,
         cardLocale: savedPayload.cardLocale,
         cardStyle: savedPayload.cardStyle,
-        selectedPublicCardUrl: `http://127.0.0.1:5173/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
+        owner: {
+          ...profile.owner,
+          updatedAt: "2026-06-12T00:00:00.000Z"
+        },
+        selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=${savedPayload.cardLocale}&theme=${savedPayload.cardStyle.theme}`
       };
       await fulfillJson(route, { data: profile, ok: true });
     });
@@ -3091,17 +4386,39 @@ test.describe("Settings appearance control", () => {
     });
     const shareStudio = page.getByRole("dialog", { name: "Share activity" });
     await expect(shareStudio).toBeVisible();
+    await expect(shareStudio.getByTestId("share-studio-card-motion"))
+      .toHaveAttribute("data-share-preview-source", "public");
     await expect(shareStudio.locator(".home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark"
+        "/u/postmelee/card.png?theme=dark"
       );
     await expect(shareStudio.getByRole("img", { name: "Codex usage card preview" }))
       .toHaveAttribute("src", /^blob:/);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
-      .toHaveAttribute("title", /[?&]theme=dark(?:&|$)/);
+      .toHaveAttribute("title", `${E2E_ORIGIN}/u/postmelee/card.png`);
     await expect(shareStudio.getByRole("button", { name: "Copy image URL" }))
       .not.toHaveAttribute("title", /[?&]locale=/);
+    const savedShareUrl = `${E2E_ORIGIN}/api/share/postmelee/r/${
+      Date.parse(profile.owner.updatedAt)
+    }`;
+    await expect(shareStudio.getByRole("button", { name: "Copy share link" }))
+      .toHaveAttribute("title", savedShareUrl);
+    await shareStudio.getByRole("button", { name: "Copy share link" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(savedShareUrl);
+    await shareStudio.getByRole("button", { name: "Copy image URL" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `${E2E_ORIGIN}/u/postmelee/card.png`
+    );
+    await shareStudio.getByRole("button", { name: "Copy README Markdown" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      PROFILE_README_MARKDOWN
+    );
+    await expect(shareStudio.getByRole("link", { name: "Save PNG" }))
+      .toHaveAttribute(
+        "href",
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
+      );
   });
 
   test("card appearance keeps the last decoded preview until the latest draft is ready", async ({ page }) => {
@@ -3127,6 +4444,10 @@ test.describe("Settings appearance control", () => {
     await page.goto("/profile");
 
     const media = page.locator(".profile-card-section .home-card-media");
+    const sourceCard = page.locator(
+      '.profile-card-section [data-card-source="true"]'
+    );
+    const sourceBeam = sourceCard.locator(".home-card-beam");
     const preview = media.locator("img");
     const skeleton = media.locator(".home-card-skeleton");
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3136,6 +4457,12 @@ test.describe("Settings appearance control", () => {
     );
     const initialBlobUrl = await preview.getAttribute("src");
     expect(initialBlobUrl).toMatch(/^blob:/);
+    const initialCardNode = await sourceCard.elementHandle();
+    const initialBeamNode = await sourceBeam.elementHandle();
+
+    await page.locator('input[name="card-theme"][value="light"]')
+      .scrollIntoViewIfNeeded();
+    const initialScrollY = await page.evaluate(() => window.scrollY);
 
     await page.locator('input[name="card-theme"][value="light"]').check();
     await page.locator('input[name="card-locale"][value="ko"]').check();
@@ -3148,6 +4475,18 @@ test.describe("Settings appearance control", () => {
     await expect(preview).toHaveAttribute("src", initialBlobUrl);
     await expect(skeleton).toHaveAttribute("data-active", "true");
     await expect(skeleton).toHaveCSS("opacity", "1");
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "false");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
 
     releaseDraftCards();
     await expect(media).toHaveAttribute("data-card-status", "ready");
@@ -3157,7 +4496,19 @@ test.describe("Settings appearance control", () => {
     );
     await expect(preview).toHaveAttribute("src", /^blob:/);
     await expect.poll(() => preview.getAttribute("src")).not.toBe(initialBlobUrl);
-    await expect(skeleton).toHaveAttribute("data-active", "false");
+    await expect(skeleton).toHaveCount(0);
+    await expect(sourceCard).toHaveAttribute("data-tilt-enabled", "true");
+    expect(await sourceCard.evaluate(
+      (element, original) => element === original,
+      initialCardNode
+    )).toBe(true);
+    expect(await sourceBeam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(Math.abs(
+      await page.evaluate(() => window.scrollY) - initialScrollY
+    )).toBeLessThanOrEqual(1);
     expect(previewRequests.some(
       (url) => url.includes("locale=ko&theme=light")
     )).toBe(true);
@@ -3288,6 +4639,83 @@ test.describe("Public profile", () => {
     expect(transforms).toEqual([]);
   });
 
+  test("Task #96 public intro closes into its offscreen card without opacity replay", async ({ page }) => {
+    let cardRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("/u/postmelee/card.png")) cardRequests += 1;
+    });
+    await mockAnonymousAccount(page);
+    await mockPublicProfile(page);
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(PROFILE_ROUTE);
+
+    const intro = page.getByTestId("public-card-intro-backdrop");
+    const sourceCard = page.locator(
+      ".public-profile-view .profile-card-preview-stage .home-card-tilt"
+    );
+    await expect(intro).toHaveClass(/\bis-open\b/);
+    await expect(sourceCard).toHaveCSS("opacity", "0");
+    const requestsBeforeClose = cardRequests;
+
+    await page.evaluate(() => {
+      globalThis.__publicIntroCloseSamples = [];
+
+      function sampleCloseMotion() {
+        const backdrop = document.querySelector(
+          "[data-testid='public-card-intro-backdrop']"
+        );
+        const card = document.querySelector("[data-testid='public-card-intro-card']");
+        if (!card) return;
+
+        const style = getComputedStyle(card);
+        const matrix = new DOMMatrixReadOnly(style.transform);
+        globalThis.__publicIntroCloseSamples.push({
+          mode: card.dataset.motionMode,
+          opacity: Number.parseFloat(style.opacity),
+          phase: backdrop?.className ?? "detached",
+          scaleX: matrix.a,
+          scaleY: matrix.d,
+          translateX: matrix.e,
+          translateY: matrix.f
+        });
+        requestAnimationFrame(sampleCloseMotion);
+      }
+
+      requestAnimationFrame(sampleCloseMotion);
+    });
+
+    await page.locator(".public-card-intro-close").click();
+    await expect(intro).toHaveCount(0);
+    await expect(sourceCard).toHaveCSS("opacity", "1");
+
+    const samples = await page.evaluate(
+      () => globalThis.__publicIntroCloseSamples ?? []
+    );
+    const closeSamples = samples.filter(({ phase }) => (
+      phase.includes("is-closing") || phase.includes("is-handoff")
+    ));
+    expect(closeSamples.length).toBeGreaterThan(3);
+    expect(closeSamples.some(({ mode }) => mode === "translate")).toBe(true);
+    expect(closeSamples.some(({ translateX, translateY }) => (
+      Math.hypot(translateX, translateY) > 40
+    ))).toBe(true);
+    const closingDistances = closeSamples
+      .filter(({ phase }) => phase.includes("is-closing"))
+      .map(({ translateX, translateY }) => Math.hypot(translateX, translateY));
+    const finalClosingDistance = Math.max(...closingDistances);
+    const firstVisibleMovement = closingDistances.find((distance) => distance > 1);
+    expect(firstVisibleMovement / finalClosingDistance).toBeLessThan(0.25);
+    expect(closeSamples.every(({ scaleX, scaleY }) => (
+      Math.abs(scaleX - 1) < 0.02 && Math.abs(scaleY - 1) < 0.02
+    ))).toBe(true);
+    for (let index = 1; index < closeSamples.length; index += 1) {
+      expect(closeSamples[index].opacity - closeSamples[index - 1].opacity)
+        .toBeLessThan(0.2);
+    }
+    expect(cardRequests).toBe(requestsBeforeClose);
+  });
+
   test("public profile renders the API-backed GitHub identity and selected public card", async ({ page }, testInfo) => {
     await mockAnonymousAccount(page);
     await mockPublicProfile(page);
@@ -3312,7 +4740,7 @@ test.describe("Public profile", () => {
     await expect(page.locator(".profile-card-section .home-card-media"))
       .toHaveAttribute(
         "data-card-source-url",
-        "http://127.0.0.1:5173/u/postmelee/card.png?theme=light&locale=ko"
+        `${E2E_ORIGIN}/u/postmelee/card.png?theme=light&locale=ko`
       );
     await expect(card).toHaveAttribute("src", /^blob:/);
     await expect(card).toHaveCSS("aspect-ratio", "499 / 306");
@@ -3384,7 +4812,7 @@ test.describe("Public profile", () => {
     )).toBe(false);
   });
 
-  test("public profile moves from a neutral loading state to ready", async ({ page }) => {
+  test("Task #99 Profile public loading state matches the ready update slot", async ({ page }) => {
     await mockAnonymousAccount(page);
     let releaseResponse;
     const responseGate = new Promise((resolve) => {
@@ -3415,6 +4843,8 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(loadingSkeleton.locator("[data-skeleton-part=activity-row]"))
       .toHaveCount(7);
+    await expect(loadingSkeleton.locator("[data-skeleton-part=updated]"))
+      .toBeVisible();
     await expect(loadingSkeleton.locator(".home-card-media"))
       .toHaveAttribute("data-card-status", "loading");
     await expect(loadingSkeleton.locator(".home-card-skeleton"))
@@ -3447,6 +4877,29 @@ test.describe("Public profile", () => {
       .toBeVisible();
     await expect(page.locator(".public-profile-stage.profile-content-reveal"))
       .toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+  });
+
+  test("Task #99 Profile private owner preview uses the shared update slot", async ({ page }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profiles/public/postmelee", (route) => fulfillJson(route, {
+      error: { code: "not_found", message: "Public profile not found" },
+      ok: false
+    }, 404));
+    await mockCardImages(page);
+    await page.goto(PROFILE_ROUTE);
+
+    await expect(page.locator(".public-profile-owner-banner")).toBeVisible();
+    await expect(page.locator(".profile-last-updated")).toHaveAttribute(
+      "datetime",
+      "2026-06-11T00:01:00.000Z"
+    );
+    await expect(page.locator(".profile-last-updated")).toContainText(
+      "Last updated ·"
+    );
   });
 
   test("profile loading Skeleton stops decorative motion for reduced motion", async ({ page }) => {
@@ -3544,6 +4997,68 @@ async function dismissCardIntro(page) {
   await expect(intro).toHaveCount(0);
 }
 
+async function installTask95HomeCardHistoryObserver(page) {
+  await page.addInitScript(() => {
+    globalThis.__task95HomeCardHistory = [];
+    let lastSnapshot = null;
+
+    const record = () => {
+      const media = document.querySelector(".home-card-media");
+      if (!media) return;
+
+      const snapshot = {
+        busy: media.getAttribute("aria-busy"),
+        kind: media.getAttribute("data-card-source-kind"),
+        status: media.getAttribute("data-card-status")
+      };
+      const serialized = JSON.stringify(snapshot);
+      if (serialized === lastSnapshot) return;
+
+      lastSnapshot = serialized;
+      globalThis.__task95HomeCardHistory.push(snapshot);
+    };
+
+    new MutationObserver(record).observe(document, {
+      attributeFilter: [
+        "aria-busy",
+        "data-card-source-kind",
+        "data-card-status"
+      ],
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+    requestAnimationFrame(record);
+  });
+}
+
+async function readTask95HomeCardHistory(page) {
+  const history = await page.evaluate(
+    () => globalThis.__task95HomeCardHistory
+  );
+  const statuses = history
+    .map((entry) => entry.status)
+    .filter(Boolean)
+    .filter((status, index, values) => (
+      index === 0 || status !== values[index - 1]
+    ));
+  return { history, statuses };
+}
+
+function expectTask95FinalOwnerHistory({ history, statuses }) {
+  expect(statuses).toEqual(["loading", "ready"]);
+  expect(history).not.toContainEqual({
+    busy: "false",
+    kind: "operator",
+    status: "ready"
+  });
+  expect(history.at(-1)).toEqual({
+    busy: "false",
+    kind: "owner",
+    status: "ready"
+  });
+}
+
 async function mockAnonymousAccount(page) {
   await page.route("**/api/auth/me", (route) => fulfillJson(route, {
     error: { code: "unauthorized", message: "Session cookie is required" },
@@ -3574,6 +5089,27 @@ async function mockSettingsData(page) {
     data: { devices: [] },
     ok: true
   }));
+}
+
+async function preserveMenuTouchActivation(page, item) {
+  await item.evaluate((element) => {
+    element.blur();
+    element.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "touch"
+    }));
+  });
+  await page.waitForTimeout(20);
+
+  const diagnostic = await page.evaluate(() => ({
+    activeElement: document.activeElement?.tagName ?? null,
+    menuCount: document.querySelectorAll("#account-menu-popover").length,
+    url: globalThis.location.href
+  }));
+  expect(diagnostic).toMatchObject({ menuCount: 1 });
+  return diagnostic;
 }
 
 async function useThemePreference(page, preference) {
@@ -3812,6 +5348,140 @@ async function getClippedHomeElements(page) {
   }));
 }
 
+async function expectSemanticThemeTransition(page, targets, {
+  finalColor,
+  toggleName
+}) {
+  const initialColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const transitionContract = await targets.evaluateAll((elements) => (
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration,
+        property: style.transitionProperty
+      };
+    })
+  ));
+  expect(transitionContract.every(({ duration, property }) => (
+    duration.split(", ").includes("0.24s") && property.includes("color")
+  ))).toBe(true);
+
+  await page.waitForTimeout(120);
+  const midpointColors = await targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ));
+  expect(midpointColors.every((color, index) => (
+    color !== initialColors[index] && color !== finalColor
+  ))).toBe(true);
+
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+
+  await page.waitForTimeout(80);
+  await expect.poll(async () => targets.evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).color)
+  ))).toEqual(Array.from({ length: await targets.count() }, () => finalColor));
+}
+
+async function expectThemeSurfaceTransition(page, targets, { toggleName }) {
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const contracts = await targets.evaluateAll((elements) => elements.map((element) => {
+    const style = getComputedStyle(element);
+    return {
+      duration: style.transitionDuration.split(", "),
+      property: style.transitionProperty.split(", ")
+    };
+  }));
+  expect(contracts.length).toBeGreaterThan(0);
+  expect(contracts.every(({ duration, property }) => (
+    duration.includes("0.24s")
+    && property.includes("background-color")
+    && property.includes("border-color")
+  )), JSON.stringify(contracts, null, 2)).toBe(true);
+
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+}
+
+async function readThemeColors(page, heading, heatmap) {
+  return page.evaluate(({ headingElement, heatmapElement }) => {
+    const readTransition = (element, property) => {
+      const animation = element.getAnimations().find((candidate) => (
+        candidate.effect?.getKeyframes().some((frame) => property in frame)
+      ));
+      const frames = animation?.effect?.getKeyframes() ?? [];
+      return {
+        currentTime: Number(animation?.currentTime ?? 0),
+        duration: Number(animation?.effect?.getTiming().duration ?? 0),
+        startColor: frames[0]?.[property] ?? ""
+      };
+    };
+
+    return {
+      heading: getComputedStyle(headingElement).color,
+      headingAnimation: readTransition(headingElement, "color"),
+      heatmap: getComputedStyle(heatmapElement).backgroundColor,
+      heatmapAnimation: readTransition(heatmapElement, "backgroundColor")
+    };
+  }, {
+    headingElement: await heading.elementHandle(),
+    heatmapElement: await heatmap.elementHandle()
+  });
+}
+
+async function expectStableThemeTimeline(page, heading, heatmap, {
+  heading: finalHeading,
+  heatmap: finalHeatmap,
+  toggleName
+}) {
+  const initial = await readThemeColors(page, heading, heatmap);
+  await page.getByRole("switch", { name: toggleName }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme-animating", "");
+
+  const samples = [];
+  for (const delay of [40, 80, 80]) {
+    await page.waitForTimeout(delay);
+    samples.push(await readThemeColors(page, heading, heatmap));
+  }
+
+  const activeHeadingSamples = samples.filter(({ headingAnimation }) => (
+    headingAnimation.duration > 0
+  ));
+  const activeHeatmapSamples = samples.filter(({ heatmapAnimation }) => (
+    heatmapAnimation.duration > 0
+  ));
+  expect(activeHeadingSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeadingSamples.every(({ headingAnimation }) => (
+    headingAnimation.duration === 240
+    && headingAnimation.startColor === initial.heading
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+  expect(activeHeadingSamples.map(({ headingAnimation }) => headingAnimation.currentTime))
+    .toEqual([...activeHeadingSamples]
+      .map(({ headingAnimation }) => headingAnimation.currentTime)
+      .sort((left, right) => left - right));
+  expect(activeHeatmapSamples.length).toBeGreaterThanOrEqual(2);
+  expect(activeHeatmapSamples.every(({ heatmapAnimation }) => (
+    heatmapAnimation.duration === 240
+    && heatmapAnimation.startColor === initial.heatmap
+  )), JSON.stringify({ initial, samples }, null, 2)).toBe(true);
+
+  await expect.poll(async () => readThemeColors(page, heading, heatmap), {
+    timeout: 360
+  }).toMatchObject({
+    heading: finalHeading,
+    heatmap: finalHeatmap
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme-animating", "");
+}
+
 async function getMarketingMetrics(page) {
   return page.evaluate(() => {
     const card = document.querySelector(".home-card-tilt");
@@ -3883,11 +5553,11 @@ function publicProfile() {
       githubLogin: "postmelee",
       handle: "postmelee"
     },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
-      uploadedAt: "2026-06-11T00:01:00.000Z",
+      uploadedAt: PROFILE_USAGE_UPLOADED_AT,
       usage: {
         dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
         summary: {
@@ -3913,25 +5583,25 @@ function ownerProfile(visibility) {
     cardLocale: "en",
     cardStyle,
     owner: { ...AUTH_OWNER, visibility },
-    publicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png",
+    publicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png`,
     publicCardUrls: {
-      dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-      light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+      dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+      light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
     },
     publicCardVariantUrls: {
       en: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?theme=light`
       },
       ko: {
-        dark: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=dark",
-        light: "http://127.0.0.1:5173/u/postmelee/card.png?locale=ko&theme=light"
+        dark: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=dark`,
+        light: `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`
       }
     },
-    selectedPublicCardUrl: "http://127.0.0.1:5173/u/postmelee/card.png?theme=dark",
+    selectedPublicCardUrl: `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`,
     usage: {
       capturedAt: "2026-06-11T00:00:00.000Z",
-      uploadedAt: "2026-06-11T00:01:00.000Z",
+      uploadedAt: PROFILE_USAGE_UPLOADED_AT,
       usage: {
         dailyUsageBuckets: PROFILE_DAILY_USAGE_BUCKETS,
         summary: {
@@ -3959,7 +5629,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-loading-handle",
         name: ".profile-loading-name",
         option: ".profile-loading-activity-option",
-        stats: ".profile-loading-stats"
+        stats: ".profile-loading-stats",
+        updated: ".profile-loading-updated"
       }
     : {
         activity: ".token-activity",
@@ -3971,7 +5642,8 @@ async function readProfileGeometry(page, state) {
         handle: ".profile-heading p",
         name: ".profile-heading h1",
         option: ".token-activity-options",
-        stats: ".profile-stats"
+        stats: ".profile-stats",
+        updated: ".profile-last-updated-slot"
       };
 
   return page.evaluate((geometrySelectors) => Object.fromEntries(

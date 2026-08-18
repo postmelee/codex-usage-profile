@@ -9,6 +9,11 @@ import {
 import { DEFAULT_SERVICE_ORIGIN } from "../src/config.js";
 import { ServiceClientError } from "../src/service-client.js";
 
+const README_EMBED = '<a href="https://profiles.example.test/api/share/postmelee">'
+  + '<img width="50%" '
+  + 'src="https://profiles.example.test/u/postmelee/card.png" '
+  + 'alt="Codex usage profile" /></a>';
+
 test("prints help and version without loading credentials", async () => {
   const help = createIo();
   const version = createIo();
@@ -130,8 +135,11 @@ test("prints metadata-only status using an environment token", async () => {
 
 test("skips device login when the stored credential is still valid", async () => {
   let loginCalls = 0;
+  let starPromptCalls = 0;
   const io = createIo({
     env: {},
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
     credentialStore: createMemoryCredentialStore({
       token: "cup_file_secret",
       serviceOrigin: "https://profiles.example.test",
@@ -143,12 +151,44 @@ test("skips device login when the stored credential is still valid", async () =>
         return { account: { handle: "postmelee" } };
       }
     }),
-    loginWithDeviceCode: async () => { loginCalls += 1; }
+    loginWithDeviceCode: async () => { loginCalls += 1; },
+    maybePromptGithubStar: async () => { starPromptCalls += 1; }
   });
 
   assert.equal(await runCli(["login"], io), 0);
   assert.equal(loginCalls, 0);
+  assert.equal(starPromptCalls, 0);
   assert.match(io.stdout.value, /Already signed in as @postmelee/);
+});
+
+test("never offers the star prompt for status, logout, help, or version", async () => {
+  let starPromptCalls = 0;
+  const interactive = {
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
+    maybePromptGithubStar: async () => { starPromptCalls += 1; }
+  };
+  const statusIo = createIo({
+    ...interactive,
+    env: { CODEX_USAGE_PROFILE_TOKEN: "cup_environment_secret" },
+    credentialStore: createMemoryCredentialStore(),
+    createClient: () => ({
+      async getStatus() { return { account: { handle: "postmelee" } }; }
+    })
+  });
+  const logoutIo = createIo({
+    ...interactive,
+    env: {},
+    credentialStore: createMemoryCredentialStore()
+  });
+  const helpIo = createIo({ ...interactive });
+  const versionIo = createIo({ ...interactive });
+
+  assert.equal(await runCli(["status"], statusIo), 0);
+  assert.equal(await runCli(["logout"], logoutIo), 0);
+  assert.equal(await runCli([], helpIo), 0);
+  assert.equal(await runCli(["--version"], versionIo), 0);
+  assert.equal(starPromptCalls, 0);
 });
 
 test("restarts device login for a revoked file credential", async () => {
@@ -179,6 +219,49 @@ test("restarts device login for a revoked file credential", async () => {
   assert.equal(loginOptions.intent, "login");
   assert.match(io.stdout.value, /Login complete/);
   assert.equal(io.stdout.value.includes("cup_revoked_secret"), false);
+});
+
+test("waits for the star prompt before printing fresh login completion", async () => {
+  const enteredPrompt = createDeferred();
+  const releasePrompt = createDeferred();
+  const events = [];
+  let promptOptions;
+  const env = {};
+  const stdin = createInput({ isTTY: true });
+  const stdout = createOutput({ isTTY: true });
+  const io = createIo({
+    env,
+    stdin,
+    stdout,
+    credentialStore: createMemoryCredentialStore(),
+    createClient: () => ({}),
+    loginWithDeviceCode: async () => {
+      events.push("login");
+    },
+    maybePromptGithubStar: async (options) => {
+      promptOptions = options;
+      events.push("prompt");
+      enteredPrompt.resolve();
+      await releasePrompt.promise;
+    }
+  });
+
+  const command = runCli(["login"], io);
+  await enteredPrompt.promise;
+
+  assert.deepEqual(events, ["login", "prompt"]);
+  assert.equal(stdout.value.includes("Login complete."), false);
+  assert.deepEqual(promptOptions, {
+    env,
+    json: false,
+    stdin,
+    stdout
+  });
+
+  releasePrompt.resolve();
+  assert.equal(await command, 0);
+  assert.equal(stdout.value, "Login complete.\n");
+  assert.equal(io.stderr.value, "");
 });
 
 test("never sends file credentials to a different service origin", async () => {
@@ -267,6 +350,98 @@ test("runs analyzer submit with the bound credential and device", async () => {
   assert.equal(io.stdout.value.includes("usage_private_revision"), false);
 });
 
+test("waits for the star prompt before printing a human submit result", async () => {
+  const enteredPrompt = createDeferred();
+  const releasePrompt = createDeferred();
+  const events = [];
+  let promptOptions;
+  const env = { TERM_PROGRAM: "iTerm.app" };
+  const stdin = createInput({ isTTY: true });
+  const stdout = createOutput({ isTTY: true });
+  const io = createIo({
+    env,
+    stdin,
+    stdout,
+    credentialStore: createMemoryCredentialStore({
+      token: "cup_file_secret",
+      serviceOrigin: DEFAULT_SERVICE_ORIGIN,
+      tokenRecordId: "cli_token_1",
+      deviceId: "device_1"
+    }),
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() {
+        events.push("submit");
+        return createSubmitResponse();
+      }
+    }),
+    maybePromptGithubStar: async (options) => {
+      promptOptions = options;
+      events.push("prompt");
+      enteredPrompt.resolve();
+      await releasePrompt.promise;
+    }
+  });
+
+  const command = runCli(["submit"], io);
+  await enteredPrompt.promise;
+
+  assert.deepEqual(events, ["submit", "prompt"]);
+  assert.equal(stdout.value, "");
+  assert.deepEqual(promptOptions, {
+    env,
+    json: false,
+    stdin,
+    stdout
+  });
+
+  releasePrompt.resolve();
+  assert.equal(await command, 0);
+  assert.match(stdout.value, /^✓ Usage submitted successfully\.\n/);
+  assert.match(stdout.value, /\n\n\u001B\[90mLinks\u001B\[0m\n/);
+  assert.match(stdout.value, /  Profile: \u001B\[36m\u001B\]8;;https:/);
+  assert.equal(
+    stdout.value.split("\n").find((line) => line.startsWith("  README:")),
+    `  README:  ${README_EMBED}`
+  );
+  assert.equal(io.stderr.value, "");
+});
+
+test("does not invoke the star helper for JSON, CI, or non-TTY submit", async () => {
+  const cases = [
+    { argv: ["submit", "--json"], env: {}, stdinTty: true, stdoutTty: true },
+    { argv: ["submit"], env: { CI: "true" }, stdinTty: true, stdoutTty: true },
+    { argv: ["submit"], env: {}, stdinTty: false, stdoutTty: true },
+    { argv: ["submit"], env: {}, stdinTty: true, stdoutTty: false }
+  ];
+
+  for (const scenario of cases) {
+    let starPromptCalls = 0;
+    const io = createIo({
+      env: scenario.env,
+      stdin: createInput({ isTTY: scenario.stdinTty }),
+      stdout: createOutput({ isTTY: scenario.stdoutTty }),
+      credentialStore: createMemoryCredentialStore({
+        token: "cup_file_secret",
+        serviceOrigin: DEFAULT_SERVICE_ORIGIN,
+        tokenRecordId: "cli_token_1",
+        deviceId: "device_1"
+      }),
+      readAccountUsage: async () => createAccountUsageDocument(),
+      createClient: () => ({
+        async submitAccountUsage() { return createSubmitResponse(); }
+      }),
+      maybePromptGithubStar: async () => { starPromptCalls += 1; }
+    });
+
+    assert.equal(await runCli(scenario.argv, io), 0);
+    assert.equal(starPromptCalls, 0);
+    if (scenario.argv.includes("--json")) {
+      assert.equal(JSON.parse(io.stdout.value).submission.status, "accepted");
+    }
+  }
+});
+
 test("handles asynchronous command failures without stack traces or credentials", async () => {
   const missing = createIo({
     env: { CODEX_USAGE_PROFILE_URL: "https://profiles.example.test" },
@@ -293,13 +468,102 @@ test("handles asynchronous command failures without stack traces or credentials"
   assert.equal(network.stderr.value.includes("cup_secret_value"), false);
 });
 
+test("does not invoke the star helper after login or submit failure", async () => {
+  let loginStarPromptCalls = 0;
+  const loginIo = createIo({
+    env: {},
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
+    credentialStore: createMemoryCredentialStore(),
+    createClient: () => ({}),
+    loginWithDeviceCode: async () => {
+      throw new Error("cup_login_failure");
+    },
+    maybePromptGithubStar: async () => { loginStarPromptCalls += 1; }
+  });
+
+  assert.equal(await runCli(["login"], loginIo), 1);
+  assert.equal(loginStarPromptCalls, 0);
+  assert.equal(loginIo.stdout.value, "");
+  assert.equal(loginIo.stderr.value.includes("cup_login_failure"), false);
+
+  let submitStarPromptCalls = 0;
+  const submitIo = createIo({
+    env: {},
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
+    credentialStore: createMemoryCredentialStore({
+      token: "cup_file_secret",
+      serviceOrigin: DEFAULT_SERVICE_ORIGIN,
+      tokenRecordId: "cli_token_1",
+      deviceId: "device_1"
+    }),
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() {
+        throw new ServiceClientError("rejected", "cup_submit_failure", { status: 400 });
+      }
+    }),
+    maybePromptGithubStar: async () => { submitStarPromptCalls += 1; }
+  });
+
+  assert.equal(await runCli(["submit"], submitIo), 1);
+  assert.equal(submitStarPromptCalls, 0);
+  assert.equal(submitIo.stdout.value, "");
+  assert.equal(submitIo.stderr.value.includes("cup_submit_failure"), false);
+});
+
+test("preserves successful login and submit results when the star helper rejects", async () => {
+  const rejectStarPrompt = async () => {
+    throw new Error("cup_star_prompt_secret");
+  };
+  const loginIo = createIo({
+    env: {},
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
+    credentialStore: createMemoryCredentialStore(),
+    createClient: () => ({}),
+    loginWithDeviceCode: async () => {},
+    maybePromptGithubStar: rejectStarPrompt
+  });
+
+  assert.equal(await runCli(["login"], loginIo), 0);
+  assert.equal(loginIo.stdout.value, "Login complete.\n");
+  assert.equal(loginIo.stderr.value, "");
+
+  const submitIo = createIo({
+    env: {},
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
+    credentialStore: createMemoryCredentialStore({
+      token: "cup_file_secret",
+      serviceOrigin: DEFAULT_SERVICE_ORIGIN,
+      tokenRecordId: "cli_token_1",
+      deviceId: "device_1"
+    }),
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() { return createSubmitResponse(); }
+    }),
+    maybePromptGithubStar: rejectStarPrompt
+  });
+
+  assert.equal(await runCli(["submit"], submitIo), 0);
+  assert.match(submitIo.stdout.value, /^✓ Usage submitted successfully\.\n/);
+  assert.equal(submitIo.stdout.value.includes("cup_star_prompt_secret"), false);
+  assert.equal(submitIo.stderr.value, "");
+});
+
 test("logs in automatically before submit and never persists an environment token", async () => {
   const store = createMemoryCredentialStore();
   let loginCalls = 0;
   let loginIntent;
   let submittedToken;
+  let starPromptCalls = 0;
   const io = createIo({
     env: { CODEX_USAGE_PROFILE_URL: "https://profiles.example.test" },
+    stdin: createInput({ isTTY: true }),
+    stdout: createOutput({ isTTY: true }),
     credentialStore: store,
     loginWithDeviceCode: async ({ credentialStore, intent, serviceOrigin }) => {
       loginCalls += 1;
@@ -317,13 +581,15 @@ test("logs in automatically before submit and never persists an environment toke
         submittedToken = token;
         return createSubmitResponse();
       }
-    })
+    }),
+    maybePromptGithubStar: async () => { starPromptCalls += 1; }
   });
 
   assert.equal(await runCli(["submit"], io), 0);
   assert.equal(loginCalls, 1);
   assert.equal(loginIntent, "submit");
   assert.equal(submittedToken, "cup_login_secret");
+  assert.equal(starPromptCalls, 1);
   assert.equal(io.stdout.value.includes("cup_login_secret"), false);
 
   const environmentStore = createMemoryCredentialStore();
@@ -382,9 +648,16 @@ test("disables terminal hyperlinks while JSON submit performs automatic login", 
 
 function createIo(overrides = {}) {
   return {
+    stdin: createInput(),
     stdout: createOutput(),
     stderr: createOutput(),
     ...overrides
+  };
+}
+
+function createInput(options = {}) {
+  return {
+    isTTY: options.isTTY === true
   };
 }
 
@@ -396,6 +669,14 @@ function createOutput(options = {}) {
       this.value += value;
     }
   };
+}
+
+function createDeferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function createMemoryCredentialStore(initial = null) {
@@ -446,7 +727,7 @@ function createSubmitResponse() {
       visibility: "public",
       profileUrl: "https://profiles.example.test/profile",
       imageUrl: "https://profiles.example.test/u/postmelee/card.png",
-      readmeMarkdown: "![Codex usage profile](https://profiles.example.test/u/postmelee/card.png)"
+      readmeMarkdown: README_EMBED
     }
   };
 }

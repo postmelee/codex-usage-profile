@@ -1,24 +1,34 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { createPortal } from "react-dom";
 
 import { CardImageFrame } from "../profile-marketing/MarketingLanding.jsx";
 import { BrandLogo } from "./BrandLogo.jsx";
 import { CodexCheckCircleIcon, Icon } from "./Icons.jsx";
 import {
-  buildLocalizedCardUrl,
-  buildReadmeCardSnippet
+  buildReadmeCardSnippet,
+  buildSameOriginCardPreviewUrl
 } from "./cardShare.js";
 import {
-  buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
-  getShareStudioCopy
+  getShareStudioCopy,
+  isMobileShareEnvironment,
+  resolveShareStudioCardUrls,
+  resolveShareStudioProfileUrls
 } from "./shareStudio.js";
 import { useCardImageReadiness } from "./cardImageReadiness.js";
 import {
   CARD_HANDOFF_PHASES,
   useCardHandoffMotion
 } from "./useCardHandoffMotion.js";
+import { useCardFrameRadius } from "./useCardFrameRadius.js";
 
 export function ShareStudio({
   cardLocale,
@@ -29,11 +39,15 @@ export function ShareStudio({
   onClose,
   onMakePrivate,
   open,
+  ownerUpdatedAt,
   publicCardUrl,
   publicOwnerHandle,
+  selectedPublicCardUrl,
+  shareRevision,
   sourceCardImage,
   sourceCardRef,
-  sourceRect
+  sourceRect,
+  usageUploadedAt
 }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -41,51 +55,77 @@ export function ShareStudio({
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [toast, setToast] = useState(null);
+  const mobileShareEnvironment = isMobileShareEnvironment(globalThis.navigator);
   const copy = useMemo(() => getShareStudioCopy(locale), [locale]);
-  const imageUrl = useMemo(
-    () => buildLocalizedCardUrl(
+  const { copyImageUrl, selectedImageUrl } = useMemo(
+    () => resolveShareStudioCardUrls({
+      cardLocale,
+      cardTheme,
+      locale,
       publicCardUrl,
-      cardLocale ?? locale,
-      cardTheme
-    ),
-    [cardLocale, cardTheme, locale, publicCardUrl]
+      selectedPublicCardUrl
+    }),
+    [
+      cardLocale,
+      cardTheme,
+      locale,
+      publicCardUrl,
+      selectedPublicCardUrl
+    ]
   );
-  const markdown = useMemo(() => buildReadmeCardSnippet(imageUrl), [imageUrl]);
-  const publicProfileUrl = useMemo(
-    () => buildPublicProfileShareUrl(locationOrigin, publicOwnerHandle),
-    [locationOrigin, publicOwnerHandle]
+  const previewImageUrl = useMemo(
+    () => buildSameOriginCardPreviewUrl(
+      selectedImageUrl,
+      locationOrigin,
+      publicOwnerHandle
+    ),
+    [locationOrigin, publicOwnerHandle, selectedImageUrl]
+  );
+  const { readmeProfileUrl, shareProfileUrl } = useMemo(
+    () => resolveShareStudioProfileUrls(locationOrigin, publicOwnerHandle, {
+      ownerUpdatedAt,
+      shareRevision,
+      usageUploadedAt
+    }),
+    [
+      locationOrigin,
+      ownerUpdatedAt,
+      publicOwnerHandle,
+      shareRevision,
+      usageUploadedAt
+    ]
+  );
+  const markdown = useMemo(
+    () => buildReadmeCardSnippet(copyImageUrl, readmeProfileUrl),
+    [copyImageUrl, readmeProfileUrl]
   );
   const shareTargets = useMemo(
-    () => buildShareTargets({ locale, profileUrl: publicProfileUrl }),
-    [locale, publicProfileUrl]
+    () => buildShareTargets({
+      locale,
+      mobile: mobileShareEnvironment,
+      profileUrl: shareProfileUrl
+    }),
+    [locale, mobileShareEnvironment, shareProfileUrl]
   );
   const canRender = Boolean(
     open
-    && imageUrl
-    && markdown
+    && copyImageUrl
+    && selectedImageUrl
     && typeof document !== "undefined"
   );
   const cardImage = useCardImageReadiness({
     scopeKey: publicOwnerHandle ?? "share-studio",
     sourceKind: "public",
-    src: canRender ? imageUrl : null
+    src: canRender ? previewImageUrl : null
   });
-  const hasSourceRequest = Boolean(
+  const hasWarmSource = Boolean(
     canRender &&
     sourceCardImage?.displaySrc &&
     sourceCardImage?.scopeKey &&
     sourceCardImage?.sourceKind &&
     sourceCardImage?.sourceUrl
   );
-  const sourceImage = useCardImageReadiness({
-    scopeKey: sourceCardImage?.scopeKey ?? "share-source",
-    sourceKind: sourceCardImage?.sourceKind ?? "owner",
-    src: hasSourceRequest ? sourceCardImage.sourceUrl : null
-  });
-  const sourceDisplaySrc = sourceImage.displaySrc ?? (
-    hasSourceRequest ? sourceCardImage.displaySrc : null
-  );
-  const hasWarmSource = Boolean(sourceDisplaySrc);
+  const sourceDisplaySrc = hasWarmSource ? sourceCardImage.displaySrc : null;
 
   const {
     cardRef: motionCardRef,
@@ -95,12 +135,24 @@ export function ShareStudio({
     settleAtTarget
   } = useCardHandoffMotion({
     active: canRender,
+    allowPartiallyVisibleHandoff: true,
     onClose,
     ready: hasWarmSource || (cardImage.ready && !previewFailed),
     restartKey: cardImage.desiredSrc,
     sourceCardRef,
     sourceRect
   });
+  const {
+    radius: measuredRadius,
+    setElement: setRadiusElement
+  } = useCardFrameRadius(canRender);
+  const setMotionCardElement = useCallback((element) => {
+    motionCardRef.current = element;
+    setRadiusElement(element);
+  }, [motionCardRef, setRadiusElement]);
+  const cardStyle = measuredRadius === null
+    ? undefined
+    : { "--usage-card-radius": `${measuredRadius}px` };
 
   useEffect(() => {
     if (!canRender || !cardImage.failed) return;
@@ -196,7 +248,7 @@ export function ShareStudio({
     : sourceCardImage?.sourceKind ?? "public";
   const previewSourceUrl = showPublicTarget
     ? cardImage.visibleSrc
-    : sourceImage.visibleSrc ?? sourceCardImage?.sourceUrl ?? cardImage.visibleSrc;
+    : sourceCardImage?.sourceUrl ?? cardImage.visibleSrc;
 
   async function copyValue(value, status) {
     try {
@@ -213,7 +265,9 @@ export function ShareStudio({
       if (!navigator.clipboard?.write || !globalThis.ClipboardItem) {
         throw new Error("Image clipboard unavailable");
       }
-      const response = await fetch(imageUrl, { credentials: "same-origin" });
+      const response = await fetch(previewImageUrl ?? selectedImageUrl, {
+        credentials: "same-origin"
+      });
       if (!response.ok) throw new Error("Could not load image");
       const blob = await response.blob();
       const png = blob.type === "image/png"
@@ -280,11 +334,13 @@ export function ShareStudio({
           data-share-preview-source={showPublicTarget ? "public" : hasWarmSource ? "source" : "cold"}
           data-share-target-status={previewFailed ? "error" : cardImage.status}
           data-testid="share-studio-card-motion"
-          ref={motionCardRef}
+          ref={setMotionCardElement}
+          style={cardStyle}
         >
           <CardImageFrame
             alt={copy.previewAlt}
             busy={previewBusy}
+            cardTheme={cardTheme}
             errorLabel={copy.previewUnavailable}
             imageClassName={`share-card-preview share-studio-card${showPublicTarget ? ` is-public-target${hasWarmSource ? " is-warm-handoff-target" : ""}` : hasWarmSource ? " is-handoff-source" : ""}`}
             loadingLabel={copy.previewAlt}
@@ -310,7 +366,7 @@ export function ShareStudio({
             aria-label={copy.saveAriaLabel}
             className="share-studio-primary-action"
             download="codex-usage-profile.png"
-            href={imageUrl}
+            href={selectedImageUrl}
             onClick={() => showToast(copy.imageSaved)}
             style={{ "--share-action-index": shareTargets.length }}
           >
@@ -322,41 +378,43 @@ export function ShareStudio({
         </div>
 
         <div className="share-studio-secondary">
-          {publicProfileUrl ? (
+          {shareProfileUrl ? (
             <ShareValue
               copyLabel={copy.copyShareLink}
               label={copy.shareLink}
-              onCopy={() => copyValue(publicProfileUrl, {
+              onCopy={() => copyValue(shareProfileUrl, {
                 error: copy.shareLinkCopyFailed,
                 success: copy.shareLinkCopied
               })}
               primary
-              value={publicProfileUrl}
+              value={shareProfileUrl}
+            />
+          ) : null}
+          {markdown ? (
+            <ShareValue
+              label={copy.readme}
+              onCopy={() => copyValue(markdown, {
+                error: copy.readmeCopyFailed,
+                success: copy.readmeCopied
+              })}
+              copyLabel={copy.copyReadme}
+              value={markdown}
             />
           ) : null}
           <ShareValue
-            label={copy.readme}
-            onCopy={() => copyValue(markdown, {
-              error: copy.readmeCopyFailed,
-              success: copy.readmeCopied
-            })}
-            copyLabel={copy.copyReadme}
-            value={markdown}
-          />
-          <ShareValue
             label={copy.imageUrl}
-            onCopy={() => copyValue(imageUrl, {
+            onCopy={() => copyValue(copyImageUrl, {
               error: copy.imageUrlCopyFailed,
               success: copy.imageUrlCopied
             })}
             copyLabel={copy.copyImageUrl}
-            value={imageUrl}
+            value={copyImageUrl}
           />
           <ShareValue
             copyLabel={copy.copyImage}
             label={copy.copyImage}
             onCopy={copyImage}
-            value={imageUrl}
+            value={selectedImageUrl}
           />
           {onMakePrivate ? (
             <button

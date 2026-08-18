@@ -52,6 +52,12 @@ Site 생성, storage 추가 또는 high-usage Site의 public 유지가 제한될
   version으로 저장한다. production deployment는 saved version만 사용한다.
 - `.openai/hosting.json`의 기존 project와 `DB`/`PROFILE_MEDIA` linkage를
   재사용한다. 새 Site나 storage를 임의로 만들지 않는다.
+- v4 dark authority의 additive `canonicalTheme`·`canonicalLocale` pair가 queryless
+  README image의 대표 설정이다. 둘 다 없는 legacy authority만 dark/en으로 읽고
+  partial/invalid metadata는 공개 응답을 fail-close한다.
+- 공개 설정 변경은 immutable revision을 prepare한 뒤 owner CAS가 성공한 경우에만
+  최신 owner/usage version을 확인하고 card/social authority를 commit한다. DB 성공
+  뒤 media 실패는 같은 설정 PATCH의 exact retry로 수렴시킨다.
 - GitHub client secret과 maintenance token은 Sites environment secret으로만
   보관한다. source, archive, URL, 로그와 보고서에 값을 복제하지 않는다.
 - access policy 변경은 deployment와 별도다. staging/candidate 검증은
@@ -151,15 +157,24 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `200`인지 확인한다. 이 전환이나 확인이 실패하면 다음 단계로 진행하지
    않는다.
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
-   private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
-   query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
-   User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
-   Twitter Card metadata를 확인하고, 정합 publication의
+   private preview, 카드 dark/light·en/ko 저장을 확인한다. queryless README URL은
+   `Content-Type: image/png`, `public, no-cache, must-revalidate`, application ETag와
+   저장된 대표 이미지를 반환해야 하며 설정·사용량 변경 뒤 같은 URL에서 새 ETag와
+   bytes를 제공해야 한다. explicit dark/light × en/ko의 GET/HEAD/304 하위 호환,
+   `v` query가 canonical 선택을 바꾸지 않는지, publish/unpublish/404도 검증한다.
+   card authority와 social object의 owner/publication id가 같은지 확인한 뒤 crawler
+   User-Agent로 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical·`og:url`·`og:image`와
+   Twitter Card metadata를 확인한다. matching revision은 모든 token이 일치하고,
+   stale revision은 `200` 현재 revision metadata로 수렴하며, invalid revision은
+   public document로 처리되지 않아야 한다. 이어서 정합 publication의
    `/u/{handle}/social.png` GET/HEAD/If-None-Match 304와 2400x1260 응답을
    검증한다. 이어서 legacy social-missing fixture에서 personalized route 404와
    HTML의 `/assets/codex-social-sample.png` 선언, fallback asset GET/HEAD 200을
    함께 확인한다. private·missing handle은 동일한 기본 OG/unavailable HTML과
-   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다.
+   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다. 마지막으로
+   `npm run cleanup:card-media` dry-run이 새 object를 만들거나 삭제하지 않고 현재
+   authority 참조를 보호하는지 확인한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -169,6 +184,42 @@ expected/applied에 missing 또는 unexpected version이 있으면 기능 smoke,
 policy를 유지하고 environment를 disabled/secret-absent baseline 또는 직전 key
 set으로 되돌린 뒤 operator route `404`와 같은 health를 확인한다. provider
 오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지 않는다.
+
+## 소셜 미리보기 revision smoke
+
+Share Studio 전환이나 public cutover에서는 application 응답과 외부 provider 결과를
+분리해 확인한다. provider 작성 화면의 성공만으로 backend metadata가 맞다고 판단하지
+않고, crawler `200`만으로 provider cache가 갱신됐다고 판단하지 않는다.
+
+1. 같은 public test profile에서 카드 저장 또는 새 submit 전 revision A와 이후 최신
+   revision B를 기록한다. token은 `max(owner.updatedAt, usage.uploadedAt)`의 epoch
+   milliseconds이며 URL은 `/api/share/{handle}/r/{revision}`이다.
+2. B 문서의 status·final URL·`canonical`·`og:url`과 `og:image`,
+   `og:image:secure_url`, `twitter:image` token이 모두 B인지 확인한다. social image의
+   status·content type·ETag도 함께 기록한다.
+3. desktop browser와 X, LinkedIn, Meta/Threads, Reddit crawler User-Agent로 B가
+   같은 metadata를 반환하는지 확인한다. A stale 요청은 redirect 없이 `200` 현재 B
+   metadata로 수렴해야 하며 과거 snapshot으로 해석하지 않는다.
+4. 실제 제품과 같은 target 형식으로 X·LinkedIn·Threads·Facebook·Reddit 새 작성
+   화면을 연다. 링크 복사와 다섯 target을 decode했을 때 모두 같은 B URL이어야 한다.
+   게시·초안 저장은 하지 않는다.
+5. X는 cold image 처리에 시간이 걸릴 수 있으므로 crawler 응답 시각과 composer 최초
+   표시 시각을 따로 기록한다. 즉시 표시를 보장하지 않는다. LinkedIn 작성 화면이
+   stale이면 [Post Inspector](https://www.linkedin.com/post-inspector/)에서 같은 B URL을
+   재수집한 뒤 결과와 시각을 기록한다. 자동 cache purge나 provider OAuth/API 호출은
+   운영 절차에 포함하지 않는다.
+6. fixed `/api/share/{handle}`는 기존 링크 하위 호환으로 계속 확인하되 새 공유의 cache
+   갱신 판정에는 사용하지 않는다. timestamp가 없거나 invalid한 profile의 Share Studio만
+   fixed URL로 fail safe해야 한다.
+
+Task #101 공개 validation에서는 X가 최신 revision을 약 11초 안에 표시했고 LinkedIn은
+새 작성 화면에서 즉시 표시했다. Threads는 약 10초 뒤 표시됐으며 Facebook·Reddit도
+최신 카드를 표시했다. 이 수치는 provider SLA가 아니라 해당 실측의 관찰값이다.
+
+application metadata가 틀리거나 X·LinkedIn 중 하나가 새 revision을 최신 identity로
+인식하지 못하면 공유 URL 전환을 중단하고 직전 application saved version을 다시
+배포한다. application rollback은 이미 게시된 provider cache를 삭제하지 않으므로 기존
+게시물의 소급 갱신이나 cache purge 성공을 rollback 조건으로 두지 않는다.
 
 ## Environment와 OAuth rotation
 
@@ -199,7 +250,9 @@ contract/schema version, digest와 count만 남긴다.
   theme·locale별 revision plan, D1 owner-dependent plan이 일치할 때만 apply한다.
 - partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
-  조건으로 수행한다.
+  조건으로 수행한다. v4 repair publication은 D1 owner에 저장된 canonical
+  `cardLocale`·`cardStyle.theme` pair를 반드시 포함하며 pair 없는 입력은
+  dark/en으로 추측하지 않고 mutation 전에 거절한다.
 
 operator CLI는 `npm run sites:profile-maintenance -- <command>`를 사용하며
 mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두
@@ -245,10 +298,14 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    필수다.
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
-   profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
-   query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
-   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/api/share/{handle}` HTML의
-   canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
+   profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit을 확인한다.
+   publish 뒤 queryless README URL의 PNG content type, cache policy, ETag와 저장된
+   canonical theme·locale bytes를 확인하고 설정·사용량 변경 뒤 같은 URL 갱신을
+   검증한다. explicit dark/light × en/ko `GET|HEAD|304` 호환과
+   `selectedPublicCardUrl` 전환도 확인한다. card/social owner·publication id가
+   일치하는지 확인한 뒤 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical/OG/Twitter metadata와 locale
+   문구, `/u/{handle}/social.png`의
    `GET|HEAD|304`·2400x1260을 확인한다. 기존 public publication처럼 social object가
    없으면 personalized route 404와 HTML의 packaged sample URL·asset 200을 함께
    확인한다. private 및 missing 상태에서 HTML이 같은 기본 metadata/unavailable
@@ -299,6 +356,10 @@ gate를 통과한 것으로 간주하지 않는다. 긴급 rollback이 필요하
 별도 Gate에서 검토하고 작업지시자 승인을 받은 경우에만 known-compatible saved
 version을 선택한다.
 
+share revision application rollback은 새 DB row나 media snapshot을 삭제하지 않는다.
+revision path는 metadata cache identity이므로 이전 saved version 재배포만 수행하고,
+외부 provider cache나 이미 게시된 링크를 파괴적으로 정리하지 않는다.
+
 - 이전 application이 요구하는 migration version이 모두 적용돼 있다.
 - 추가된 migration이 이전 application의 read/write 계약과 backward-compatible
   하다는 source/migration 검토 증적이 있다.
@@ -310,8 +371,9 @@ version을 선택한다.
 schema/data rollback은 먼저 승인된 D1/R2 backup 복구 가능성을 검증하고,
 backward-compatible migration 구간을 벗어나면 자동으로 진행하지 않는다.
 Task #74의 `card_style`과 `card_locale`은 default가 있는 additive column이며 기존
-query 없는 dark stable key를 보존한다. 따라서 이전 saved version application
-rollback 후보는 새 column과 light object를 무시할 수 있지만, readiness의
+query 없는 dark stable key를 보존한다. Task #100의 canonical pair도 v4 authority의
+additive metadata이므로 이전 v4 saved version application은 이 pair와 light object를
+무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. 다만 readiness의
 unexpected version 우회와 실제 rollback 실행은 여전히 별도 Gate 승인 사항이다.
 
 Cloud Run fallback은 다음 순서로 평가하며 별도 승인 전에는 provider resource를

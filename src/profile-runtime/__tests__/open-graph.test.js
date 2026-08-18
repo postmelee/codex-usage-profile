@@ -76,6 +76,70 @@ test("builds handle specific Open Graph tags for a public profile", () => {
   );
 });
 
+test("uses a matching revision share URL as its canonical identity", () => {
+  const revision = Date.parse(UPLOADED_AT);
+  const document = buildProfileOpenGraphDocument({
+    handle: "postmelee",
+    origin: ORIGIN,
+    profile: createProfile(),
+    requestedShareRevision: revision
+  });
+
+  assert.equal(
+    document.canonicalUrl,
+    `${ORIGIN}/api/share/postmelee/r/${revision}`
+  );
+  assert.equal(readTag(document, "og:url"), document.canonicalUrl);
+  assert.equal(
+    readTag(document, "og:image"),
+    `${ORIGIN}/u/postmelee/social.png?v=${revision}`
+  );
+  assert.equal(
+    readTag(document, "twitter:image"),
+    readTag(document, "og:image")
+  );
+});
+
+test("converges a stale revision request on the current metadata identity", () => {
+  const currentRevision = Date.parse(UPLOADED_AT);
+  const document = buildProfileOpenGraphDocument({
+    handle: "postmelee",
+    origin: ORIGIN,
+    profile: createProfile(),
+    requestedShareRevision: currentRevision - 1
+  });
+
+  assert.equal(
+    document.canonicalUrl,
+    `${ORIGIN}/api/share/postmelee/r/${currentRevision}`
+  );
+  assert.equal(readTag(document, "og:url"), document.canonicalUrl);
+  assert.match(
+    readTag(document, "og:image"),
+    new RegExp(`v=${currentRevision}$`)
+  );
+});
+
+test("keeps fallback metadata non-enumerating for revision requests", () => {
+  const missing = buildProfileOpenGraphDocument({
+    handle: "ghost",
+    origin: ORIGIN,
+    profile: null,
+    requestedShareRevision: Date.parse(UPLOADED_AT)
+  });
+  const fixed = buildProfileOpenGraphDocument({
+    handle: "hidden",
+    origin: ORIGIN,
+    profile: null
+  });
+
+  assert.equal(missing.canonicalUrl, `${ORIGIN}/`);
+  assert.deepEqual(
+    renderProfileOpenGraphHead(missing),
+    renderProfileOpenGraphHead(fixed)
+  );
+});
+
 test("uses the packaged social image for missing and private profiles", () => {
   const document = buildProfileOpenGraphDocument({
     handle: "ghost",

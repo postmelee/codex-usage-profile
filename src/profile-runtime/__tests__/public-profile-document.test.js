@@ -102,6 +102,37 @@ test("reads the handle from the Worker-routed API share path", () => {
     ),
     null
   );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(
+        `${BASE_URL}/api/share/postmelee/r/${Date.parse(UPLOADED_AT)}`
+      )
+    ),
+    "postmelee"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(
+        `${BASE_URL}/api/share/foo%20bar/r/${Date.parse(UPLOADED_AT)}/`
+      )
+    ),
+    "foo bar"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(
+        `${BASE_URL}/api/share/postmelee/r/${Date.parse(UPLOADED_AT)}` +
+        "?locale=ko"
+      )
+    ),
+    "postmelee"
+  );
+  assert.equal(
+    readPublicProfileDocumentRequestHandle(
+      new Request(`${BASE_URL}/api/share/postmelee/r/001`)
+    ),
+    null
+  );
 });
 
 test("matches only GET and HEAD document requests", () => {
@@ -157,6 +188,38 @@ test("matches only GET and HEAD document requests", () => {
     ),
     false
   );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(
+        `${BASE_URL}/api/share/postmelee/r/${Date.parse(UPLOADED_AT)}`
+      )
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(
+        `${BASE_URL}/api/share/postmelee/r/${Date.parse(UPLOADED_AT)}`,
+        { method: "HEAD" }
+      )
+    ),
+    true
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(
+        `${BASE_URL}/api/share/postmelee/r/${Date.parse(UPLOADED_AT)}`,
+        { method: "POST" }
+      )
+    ),
+    false
+  );
+  assert.equal(
+    isPublicProfileDocumentRequest(
+      new Request(`${BASE_URL}/api/share/postmelee/r/invalid`)
+    ),
+    false
+  );
 });
 
 test("returns null for requests it does not own", async () => {
@@ -196,6 +259,63 @@ test("serves the injected document for a public profile", async () => {
   assert.ok(body.includes(`${BASE_URL}/u/postmelee/social.png?v=`));
   assert.ok(body.includes("<div id=\"root\"></div>"));
 });
+
+test("serves matching revision metadata with one shared identity", async () => {
+  const revision = Date.parse(UPLOADED_AT);
+  const handler = createHandler();
+  const response = await handler(
+    new Request(`${BASE_URL}/api/share/postmelee/r/${revision}`)
+  );
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.ok(body.includes(
+    `rel="canonical" href="${BASE_URL}/api/share/postmelee/r/${revision}"`
+  ));
+  assert.ok(body.includes(
+    `property="og:url" ` +
+    `content="${BASE_URL}/api/share/postmelee/r/${revision}"`
+  ));
+  assert.ok(body.includes(`${BASE_URL}/u/postmelee/social.png?v=${revision}`));
+});
+
+test("serves stale revision requests with current revision metadata", async () => {
+  const currentRevision = Date.parse(UPLOADED_AT);
+  const staleRevision = currentRevision - 1;
+  const handler = createHandler();
+  const response = await handler(
+    new Request(`${BASE_URL}/api/share/postmelee/r/${staleRevision}`)
+  );
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.ok(body.includes(
+    `${BASE_URL}/api/share/postmelee/r/${currentRevision}`
+  ));
+  assert.ok(!body.includes(`${BASE_URL}/api/share/postmelee/r/${staleRevision}`));
+  assert.ok(body.includes(
+    `${BASE_URL}/u/postmelee/social.png?v=${currentRevision}`
+  ));
+});
+
+test(
+  "keeps revision fallback documents identical for private and missing handles",
+  async () => {
+    const revision = Date.parse(UPLOADED_AT);
+    const handler = createHandler();
+    const missing = await (
+      await handler(new Request(`${BASE_URL}/api/share/ghost/r/${revision}`))
+    ).text();
+    const privateProfile = await (
+      await handler(new Request(`${BASE_URL}/api/share/hidden/r/${revision}`))
+    ).text();
+
+    assert.equal(missing, privateProfile);
+    assert.ok(missing.includes(`rel="canonical" href="${BASE_URL}/"`));
+    assert.ok(!missing.includes("/api/share/ghost/r/"));
+    assert.ok(!missing.includes("/api/share/hidden/r/"));
+  }
+);
 
 test("accepts the minimal store resolver summary", async () => {
   const handler = createHandler({
@@ -303,6 +423,23 @@ test("omits the body for HEAD requests", async () => {
   const handler = createHandler();
   const response = await handler(
     new Request(`${BASE_URL}/api/share/postmelee`, { method: "HEAD" })
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "");
+  assert.equal(
+    response.headers.get("cache-control"),
+    PUBLIC_PROFILE_DOCUMENT_CACHE_CONTROL
+  );
+});
+
+test("omits the body for revision HEAD requests", async () => {
+  const revision = Date.parse(UPLOADED_AT);
+  const handler = createHandler();
+  const response = await handler(
+    new Request(`${BASE_URL}/api/share/postmelee/r/${revision}`, {
+      method: "HEAD"
+    })
   );
 
   assert.equal(response.status, 200);

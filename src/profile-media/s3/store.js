@@ -30,7 +30,8 @@ import {
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
   normalizeProfileMediaSocialRecord,
-  normalizeProfileMediaTheme
+  normalizeProfileMediaTheme,
+  resolveProfileMediaSelection
 } from "../media-store-contract.js";
 import {
   DEFAULT_PROFILE_MEDIA_S3_OPERATION_TIMEOUT_MS,
@@ -50,6 +51,8 @@ const METADATA_PRESENTATION_DIGEST = "presentation-digest";
 const METADATA_CREATED_AT = "created-at";
 const METADATA_PUBLICATION_ID = "publication-id";
 const METADATA_PUBLISHED_AT = "published-at";
+const METADATA_CANONICAL_LOCALE = "canonical-locale";
+const METADATA_CANONICAL_THEME = "canonical-theme";
 const METADATA_AUTHORITY_KEY = "authority-key";
 
 export function createS3ProfileMediaStore(options = {}) {
@@ -63,13 +66,18 @@ export function createS3ProfileMediaStore(options = {}) {
 
   const store = {
     async getPublishedCard(getOptions = {}) {
-      return readPublishedCard({
+      const readOptions = {
         handle: normalizeHandle(getOptions.handle),
         ifNoneMatch: getOptions.ifNoneMatch,
-        includeBody: getOptions.includeBody,
-        locale: normalizeProfileMediaLocale(getOptions.locale),
-        theme: normalizeProfileMediaTheme(getOptions.theme)
-      });
+        includeBody: getOptions.includeBody
+      };
+      if (Object.hasOwn(getOptions, "locale")) {
+        readOptions.locale = getOptions.locale;
+      }
+      if (Object.hasOwn(getOptions, "theme")) {
+        readOptions.theme = getOptions.theme;
+      }
+      return readPublishedCard(readOptions);
     },
 
     async getRevision(getOptions = {}) {
@@ -284,16 +292,12 @@ export function createS3ProfileMediaStore(options = {}) {
         stableKey: publication.stableKey
       }, "publish stable media");
 
-      return store.getPublishedCard({
-        handle: publication.handle,
-        locale: PROFILE_MEDIA_DEFAULT_LOCALE,
-        theme: PROFILE_MEDIA_DEFAULT_THEME
-      });
+      return store.getPublishedCard({ handle: publication.handle });
     },
 
     async unpublishCard(unpublishOptions = {}) {
       const handle = normalizeHandle(unpublishOptions.handle);
-      const previous = await store.getPublishedCard({ handle });
+      const previous = await headPublication(handle);
       assertExpectedStorageEtag(previous, unpublishOptions);
       if (!previous) return null;
       await send(new DeleteObjectCommand({
@@ -319,13 +323,14 @@ export function createS3ProfileMediaStore(options = {}) {
   async function readPublishedCard(getOptions, stableReadAttempt = 0) {
     const publication = await headPublication(getOptions.handle);
     if (!publication) return null;
+    const selection = resolveProfileMediaSelection(publication, getOptions);
     const representations = getProfileMediaThemeRepresentations(
       publication,
-      getOptions.theme
+      selection.theme
     );
     if (!representations) return null;
-    const representation = representations[getOptions.locale];
-    const variant = getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME
+    const representation = representations[selection.locale];
+    const variant = selection.theme === PROFILE_MEDIA_DEFAULT_THEME
       ? {
           stableKey: publication.stableKey,
           storageEtag: publication.storageEtag
@@ -338,18 +343,18 @@ export function createS3ProfileMediaStore(options = {}) {
     const includeBody = getOptions.includeBody !== false && !notModified;
     let body = null;
 
-    if (getOptions.locale !== PROFILE_MEDIA_DEFAULT_LOCALE && !includeBody) {
+    if (selection.locale !== PROFILE_MEDIA_DEFAULT_LOCALE && !includeBody) {
       const revision = await headRevision({
-        locale: getOptions.locale,
+        locale: selection.locale,
         ownerId: publication.ownerId,
         revision: representation.revision,
-        theme: getOptions.theme
+        theme: selection.theme
       });
-      assertCoherentRevision(revision, publication, representation, getOptions.theme);
+      assertCoherentRevision(revision, publication, representation, selection.theme);
     }
 
     if (includeBody) {
-      const stableLocale = getOptions.locale === PROFILE_MEDIA_DEFAULT_LOCALE;
+      const stableLocale = selection.locale === PROFILE_MEDIA_DEFAULT_LOCALE;
       const key = stableLocale ? variant.stableKey : representation.revisionKey;
       let response;
       try {
@@ -374,7 +379,7 @@ export function createS3ProfileMediaStore(options = {}) {
       const responseBody = await readSdkBody(response.Body);
       if (stableLocale) {
         assertResponseMediaHeaders(response);
-        if (getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME) {
+        if (selection.theme === PROFILE_MEDIA_DEFAULT_THEME) {
           const coherent = publicationFromHead(response, {
             handle: publication.handle,
             stableKey: publication.stableKey
@@ -398,21 +403,23 @@ export function createS3ProfileMediaStore(options = {}) {
       } else {
         body = revisionRecordFromResponse(response, {
           body: responseBody,
-          locale: getOptions.locale,
+          locale: selection.locale,
           ownerId: publication.ownerId,
           revision: representation.revision,
           revisionKey: representation.revisionKey,
-          theme: getOptions.theme
+          theme: selection.theme
         }).body;
       }
     }
 
     return createSelectedPublicationRecord(publication, {
       body,
-      locale: getOptions.locale,
+      locale: selection.locale,
       notModified,
-      stableKey: variant.stableKey,
-      theme: getOptions.theme
+      stableKey: selection.mode === "canonical"
+        ? publication.stableKey
+        : variant.stableKey,
+      theme: selection.theme
     });
   }
 
@@ -598,6 +605,8 @@ function publicationMetadata(publication) {
   };
   const isV4 = publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
   if (isV4) {
+    metadata[METADATA_CANONICAL_LOCALE] = publication.canonicalLocale;
+    metadata[METADATA_CANONICAL_THEME] = publication.canonicalTheme;
     metadata[METADATA_CONTRACT_VERSION] = String(publication.contractVersion);
     metadata[METADATA_FORMAT] = publication.format;
     metadata[METADATA_PRESENTATION_DIGEST] = publication.presentationDigest;
@@ -693,6 +702,7 @@ function publicationFromHead(response, expected) {
         ]))
       : readRepresentationMetadata(metadata);
     const normalized = normalizeProfileMediaPublicationInput({
+      ...readCanonicalSelectionMetadata(metadata, isV4),
       contractVersion,
       format: metadata[METADATA_FORMAT] ?? PROFILE_MEDIA_FORMAT,
       handle: requireMetadata(metadata, METADATA_HANDLE),
@@ -775,6 +785,12 @@ function createSelectedPublicationRecord(publication, options) {
   );
   const representation = representations[options.locale];
   return {
+    ...(publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION
+      ? {
+          canonicalLocale: publication.canonicalLocale,
+          canonicalTheme: publication.canonicalTheme
+        }
+      : {}),
     body: options.body ? Buffer.from(options.body) : null,
     cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
     contentType: PROFILE_MEDIA_CONTENT_TYPE,
@@ -845,7 +861,24 @@ function isPublicationRevisionPresentationCompatible(revision, publication, them
 function samePublicationAuthority(left, right) {
   return left.publicationId === right.publicationId &&
     left.presentationDigest === right.presentationDigest &&
-    left.contractVersion === right.contractVersion;
+    left.contractVersion === right.contractVersion &&
+    left.canonicalLocale === right.canonicalLocale &&
+    left.canonicalTheme === right.canonicalTheme;
+}
+
+function readCanonicalSelectionMetadata(metadata, isV4) {
+  const hasLocale = Object.hasOwn(metadata, METADATA_CANONICAL_LOCALE);
+  const hasTheme = Object.hasOwn(metadata, METADATA_CANONICAL_THEME);
+  if (!isV4) {
+    if (hasLocale || hasTheme) throw malformedMetadataError();
+    return {};
+  }
+  if (!hasLocale && !hasTheme) return {};
+  if (!hasLocale || !hasTheme) throw malformedMetadataError();
+  return {
+    canonicalLocale: requireMetadata(metadata, METADATA_CANONICAL_LOCALE),
+    canonicalTheme: requireMetadata(metadata, METADATA_CANONICAL_THEME)
+  };
 }
 
 function assertExpectedStorageEtag(stable, options) {
