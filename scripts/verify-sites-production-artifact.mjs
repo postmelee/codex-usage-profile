@@ -69,6 +69,7 @@ const FORBIDDEN_WORKER_IMPORT_PATTERNS = Object.freeze([
 ]);
 
 export async function verifySitesProductionArtifact(options = {}) {
+  const expectedProjectId = requireExpectedProjectId(options.expectedProjectId);
   const outputDirectory = resolve(options.outputDirectory ?? "dist");
   const fullStack = await verifySitesFullStackArtifact({ outputDirectory });
   if (fullStack.hostingMode !== "hosted") {
@@ -77,7 +78,7 @@ export async function verifySitesProductionArtifact(options = {}) {
 
   const hostingPath = resolve(outputDirectory, ".openai/hosting.json");
   const hosting = JSON.parse(await readFile(hostingPath, "utf8"));
-  assertExactProductionBindings(hosting);
+  assertExactProductionBindings(hosting, expectedProjectId);
 
   const clientDirectory = resolve(outputDirectory, "client");
   const clientFiles = await listSitesArtifactFiles(clientDirectory);
@@ -139,7 +140,7 @@ export async function verifySitesProductionArtifact(options = {}) {
   });
 }
 
-function assertExactProductionBindings(hosting) {
+function assertExactProductionBindings(hosting, expectedProjectId) {
   if (
     typeof hosting.project_id !== "string" ||
     hosting.project_id.trim() === "" ||
@@ -151,6 +152,40 @@ function assertExactProductionBindings(hosting) {
       "Production Sites artifact requires project_id, DB, and PROFILE_MEDIA"
     );
   }
+  if (hosting.project_id !== expectedProjectId) {
+    throw new Error("Production Sites artifact targets an unexpected project_id");
+  }
+}
+
+function requireExpectedProjectId(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error("Production Sites artifact requires an expected project_id");
+  }
+  return value;
+}
+
+export function parseArguments(argv) {
+  const values = {};
+  const allowed = new Set(["expected-project-id", "output-directory"]);
+  for (let index = 0; index < argv.length; index += 2) {
+    const key = argv[index];
+    const value = argv[index + 1];
+    const name = key?.startsWith("--") ? key.slice(2) : "";
+    if (!allowed.has(name) || !value || values[name] !== undefined) {
+      throw new Error(
+        "Expected unique --expected-project-id and optional " +
+        "--output-directory arguments"
+      );
+    }
+    values[name] = value;
+  }
+  if (!values["expected-project-id"]) {
+    throw new Error("Expected --expected-project-id");
+  }
+  return {
+    expectedProjectId: values["expected-project-id"],
+    outputDirectory: values["output-directory"]
+  };
 }
 
 async function readArtifactText(files) {
@@ -193,7 +228,7 @@ const invokedPath = process.argv[1]
 if (invokedPath === import.meta.url) {
   try {
     const result = await verifySitesProductionArtifact({
-      outputDirectory: process.argv[2]
+      ...parseArguments(process.argv.slice(2))
     });
     console.log(JSON.stringify({
       artifactBytes: result.artifactBytes,

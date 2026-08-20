@@ -2,15 +2,15 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-The public release line starts at `codex-usage-profile@0.1.0`. This package is
-the immutable `0.1.1` patch, prepared for provenance publishing and production
-validation through the existing staged-release gate.
+The public release line starts at `codex-usage-profile@0.1.0`. This source tree
+contains the unpublished `0.1.2` candidate, which uses the canonical production
+service by default and keeps custom service origins available through the
+explicit `--server` option.
 
-> The production MVP service runs at
-> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`, which is
-> also the CLI default. For reproducible automation, pin `0.1.1`; for an
-> interactive first run, review the version npm displays before accepting
-> `@latest`.
+> The public `latest` tag remains `0.1.1` and defaults to
+> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` until the
+> canonical Site passes private/public smoke. Do not request or pin `0.1.2`
+> from npm before its release gate completes.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ One command can start browser login when needed and continue with submission:
 npx codex-usage-profile@latest submit
 ```
 
-The CLI defaults to the production Sites origin. Once login succeeds, the
+The public `@latest` CLI defaults to the current stage5 service. Once login succeeds, the
 service origin and a narrow submit credential are stored locally. Use
 `--server` only for local development or an explicitly reviewed alternative
 deployment.

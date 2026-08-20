@@ -6,8 +6,10 @@ Worker, D1 `DB`, native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud
 Run/Postgres/S3-compatible R2는 fallback이다. remote 변경은 해당 작업의
 수행계획과 Gate 승인을 각각 받은 범위에서만 수행한다. 현재
 `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 공개
-validation origin이다. 새 canonical production hostname과 이 origin의 테스트 전환은
-별도 migration Issue 전에는 실행하지 않는다.
+validation origin이다. Task #108 Gate A1에서
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`의 owner-only project만
+생성했으며 version·deployment·environment·D1/R2는 아직 없다. production private
+deploy·public cutover와 stage5 테스트 전환은 각각 후속 Gate 승인 전에는 실행하지 않는다.
 
 Task #84 Gate C는 exact-main saved version 24를 public으로 전환했고, 이후 #101이
 revision share 계약을 검증하며 같은 project를 saved version 33으로 이동시켰다.
@@ -44,6 +46,11 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | Task #101 validation | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` | public revision 59 | revision 89 | revision share provider 검증 기준 |
 | Task #84 Stage 5 | version 33 유지 | revision 59 유지 | revision 89 유지 | read-only 종료 audit, remote mutation 0건 |
 
+| Task #108 target | origin | access/version | 역할 |
+|---|---|---|---|
+| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | custom owner-only revision 1 / version 0 | canonical target; undeployed, D1/R2/environment 없음 |
+| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | public revision 59 / version 33 | migration 완료 전 validation continuity |
+
 현재 application rollback 후보는 version 32/source
 `6cf2bab664e5a1f0b1e6051cc35887721c307e99`이며, 실제 재배포·access 변경과
 data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
@@ -58,12 +65,44 @@ Site 생성, storage 추가 또는 high-usage Site의 public 유지가 제한될
 [가격 FAQ](https://learn.chatgpt.com/docs/pricing#how-much-does-sites-cost)를
 운영 시점마다 다시 확인한다.
 
+## dual-Site target과 packaging
+
+- `.openai/hosting.json`은 production project와 logical `DB`·`PROFILE_MEDIA`만 가리키는
+  canonical manifest다.
+- `.openai/hosting-targets.json`은 production·stage5의 nonsecret project/origin/binding
+  registry다. credential과 environment 값은 기록하지 않는다.
+- `scripts/materialize-sites-target.mjs`는 ignored `dist/`를 삭제하고 clean exact commit에서
+  production build를 다시 만든다. repository 밖 임시 packaging root에 선택한 target
+  manifest를 넣어 공식 Sites `package-site.sh`를 호출하며 archive path의 symlink를 포함한
+  real path도 repository 밖이어야 한다.
+- production/stage5 project 또는 origin이 같거나 canonical manifest가 production registry와
+  다르면 packaging을 시작하지 않는다. `--expected-project-id`는 packaging 직전 live
+  read-only Site preflight에서 얻은 값이어야 하며 registry/manifest와 다르면 중단한다.
+  생성된 archive는 안전한 임시 경로에 다시 풀어 exact project/binding/migration과
+  credential·절대 경로 검사를 반복한다.
+
+```bash
+npm run package:sites-target -- \
+  --target production \
+  --expected-project-id {live_preflight_project_id} \
+  --source-sha {exact_clean_commit} \
+  --archive /absolute/external/path/production.tar.gz \
+  --package-helper /absolute/path/to/sites/scripts/package-site.sh
+```
+
+stage5 후보는 같은 명령에서 `--target stage5`와 live stage5 project id를 사용한다.
+canonical manifest를 stage5 값으로 수정하거나 archive를 repository 안에 만들지 않는다.
+실패한 실행이 이번에 만든 partial archive는 자동 정리되며, 이미 존재하던 archive는
+덮어쓰거나 삭제하지 않는다. Stage 2에서는 guard와 test만 검증하며 source
+push·save/deploy는 하지 않는다.
+
 ## 운영 불변식
 
 - 검증된 commit을 source로 push하고 같은 commit에서 만든 `dist/`만 saved
   version으로 저장한다. production deployment는 saved version만 사용한다.
-- `.openai/hosting.json`의 기존 project와 `DB`/`PROFILE_MEDIA` linkage를
-  재사용한다. 새 Site나 storage를 임의로 만들지 않는다.
+- `.openai/hosting.json`의 canonical production project와 `DB`/`PROFILE_MEDIA` linkage만
+  production에 사용한다. stage5는 target materializer를 통해서만 선택한다. 승인된 Gate 밖에서
+  새 Site나 storage를 만들지 않는다.
 - v4 dark authority의 additive `canonicalTheme`·`canonicalLocale` pair가 queryless
   README image의 대표 설정이다. 둘 다 없는 legacy authority만 dark/en으로 읽고
   partial/invalid metadata는 공개 응답을 fail-close한다.
@@ -128,7 +167,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    key 존재 여부를 read-only로 확인한다. secret plaintext는 읽거나 출력하지
    않는다.
 2. `npm run build:production`, `npm run verify:sites-fullstack`,
-   `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
+   `npm run verify:sites-production`을 같은 clean commit에서 실행한다. target archive는
+   위 materializer가 기존 `dist/`를 제거하고 같은 commit에서 다시 build한 결과만 사용한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
    현재 `devel`의 Task #74·#78 누적 candidate는 D1 migration `1..5`와
@@ -144,9 +184,9 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
 
    ```bash
    npm run sites:profile-maintenance -- migrate \
-     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+     --origin {approved_target_origin}
    npm run sites:profile-maintenance -- readiness \
-     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+     --origin {approved_target_origin}
    ```
 
    migrate 응답은 `appliedVersions`, `newlyAppliedVersions`, `operation=migrate`
@@ -282,7 +322,7 @@ stable은 orphan candidate가 될 수 있다.
 
 ```bash
 npm run sites:profile-maintenance -- retention \
-  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+  --origin {approved_target_origin} \
   --retention-days 90
 ```
 

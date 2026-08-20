@@ -19,6 +19,7 @@
     "cleanup:card-media": "node scripts/cleanup-orphan-card-media.mjs",
     "migrate:postgres": "node src/profile-backend/postgres/migrate.js",
     "migrate:seed": "node scripts/migrate-file-store-to-postgres.mjs",
+    "package:sites-target": "node scripts/materialize-sites-target.mjs",
     "preview:sites": "vite preview --config vite.sites.config.js --configLoader runner --host 127.0.0.1 --port 4174",
     "preview:sites-fullstack": "vite preview --config vite.sites-fullstack.config.js --host 127.0.0.1 --port 4175",
     "scan:public-release": "node scripts/scan-public-release-surface.mjs",
@@ -32,7 +33,7 @@
     "test:e2e": "playwright test",
     "verify:npm-release": "node scripts/verify-npm-release.mjs",
     "verify:sites-fullstack": "node scripts/verify-sites-fullstack-artifact.mjs",
-    "verify:sites-production": "node scripts/verify-sites-production-artifact.mjs"
+    "verify:sites-production": "node scripts/verify-sites-production-artifact.mjs --expected-project-id appgprj_6a83ecc3c4c08191bda7f14d7c26c974"
   },
   "engines": {
     "node": ">=20"

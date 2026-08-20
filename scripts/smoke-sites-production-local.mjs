@@ -15,6 +15,8 @@ const REPOSITORY_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   ".."
 );
+const PRODUCTION_PROJECT_ID =
+  "appgprj_6a83ecc3c4c08191bda7f14d7c26c974";
 
 export async function runSitesProductionLocalSmoke(options = {}) {
   const buildProductionArtifact = options.buildProductionArtifact ??
@@ -28,6 +30,7 @@ export async function runSitesProductionLocalSmoke(options = {}) {
     await buildProductionArtifact();
   }
   const artifact = await verifyProductionArtifact({
+    expectedProjectId: options.expectedProjectId ?? PRODUCTION_PROJECT_ID,
     outputDirectory: options.outputDirectory ?? resolve(REPOSITORY_ROOT, "dist")
   });
   const runtime = await runRuntimeSmoke({

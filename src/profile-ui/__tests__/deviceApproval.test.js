@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   DEVICE_APPROVAL_ERROR_KIND,
-  DEVICE_APPROVAL_PRODUCTION_ORIGIN,
+  DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN,
   DEVICE_APPROVAL_SUBMIT_COMMAND,
   buildDeviceSubmitCommand,
   classifyDeviceApprovalError,
@@ -112,7 +112,7 @@ test("builds intent-specific guidance without embedding response metadata", () =
     "login",
     "http://127.0.0.1:5177/path?user_code=SECRET#fragment"
   );
-  const legacy = createDeviceApprovalGuidance(null, DEVICE_APPROVAL_PRODUCTION_ORIGIN);
+  const legacy = createDeviceApprovalGuidance(null, DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN);
 
   assert.equal(submit.command, null);
   assert.equal(
@@ -152,9 +152,9 @@ test("builds intent-specific guidance without embedding response metadata", () =
   );
 });
 
-test("uses the default command on production and a normalized local origin elsewhere", () => {
+test("uses the default command on the published CLI origin and an explicit server elsewhere", () => {
   assert.equal(
-    buildDeviceSubmitCommand(DEVICE_APPROVAL_PRODUCTION_ORIGIN),
+    buildDeviceSubmitCommand(DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN),
     DEVICE_APPROVAL_SUBMIT_COMMAND
   );
   assert.equal(

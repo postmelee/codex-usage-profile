@@ -3,7 +3,7 @@
 Codex Usage Profile은 GitHub 계정 정보와 Codex 사용량을 서버에서 병합해 1497x918 PNG 카드를 제공한다. 사용자는 query 없는 공개 이미지 URL을 포함한 HTML 임베드를 한 번만 GitHub README에 넣으면 된다. 이후 사용량 제출이나 카드 테마·언어 설정 저장이 성공하면 같은 이미지 URL이 저장된 대표 카드로 갱신된다. 기본 표시 폭은 `50%`이고 README Markdown의 클릭 대상도 고정 `/api/share/{handle}`를 유지하므로 새 submit이나 설정 저장 뒤 Markdown을 교체할 필요가 없다.
 
 > [!IMPORTANT]
-> Task #84 Gate C는 saved version 24를 public으로 전환했고, Task #101은 현재 공개 validation version 33에서 fixed README와 revision share 계약을 검증했다. README Markdown은 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 유지한다. **공유 링크 복사**와 X·LinkedIn·Threads·Facebook·Reddit만 `/api/share/{handle}/r/{revision}`을 사용한다. 새 canonical production hostname과 현재 stage5의 테스트 전환은 별도 migration Issue 전에는 실행하지 않는다.
+> Task #84 Gate C는 saved version 24를 public으로 전환했고, Task #101은 공개 validation version 33에서 fixed README와 revision share 계약을 검증했다. Task #108의 canonical production hostname은 `codex-usage-profile.meleeisdeveloping.chatgpt.site`지만 public cutover 전까지 아래 사용자 예시는 현재 live stage5를 유지한다. README Markdown은 항상 fixed `/api/share/{handle}` href와 query 없는 `/u/{handle}/card.png` src를 유지한다. **공유 링크 복사**와 X·LinkedIn·Threads·Facebook·Reddit만 `/api/share/{handle}/r/{revision}`을 사용한다.
 
 ## #84 공개 전환 뒤 사용자 흐름
 
@@ -89,7 +89,7 @@ Markdown을 교체할 필요가 없다.
 npx codex-usage-profile@latest submit
 ```
 
-CLI는 production Sites origin을 기본값으로 사용한다. 첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장되며, 이후에는 같은 stable device id로 명령을 실행할 수 있다.
+현재 public `@latest` CLI는 stage5 origin을 기본값으로 사용한다. 첫 GitHub browser 승인 후 service origin과 submit credential이 로컬에 저장되며, 이후에는 같은 stable device id로 명령을 실행할 수 있다. canonical owner-only 검증은 `--server {canonical}`을 명시한다.
 
 ```bash
 npx codex-usage-profile@latest status
