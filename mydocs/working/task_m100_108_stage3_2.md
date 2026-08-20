@@ -56,6 +56,8 @@ git diff --check
 node --check scripts/materialize-sites-target.mjs
 node --check scripts/verify-sites-production-artifact.mjs
 node --test scripts/__tests__/materialize-sites-target.test.js scripts/__tests__/verify-sites-production-artifact.test.js scripts/__tests__/smoke-sites-production-local.test.js scripts/__tests__/smoke-npm-package-local.test.js src/profile-ui/__tests__/deviceApproval.test.js src/profile-ui/__tests__/production-origin-contract.test.js
+npm test -- --test-concurrency=1
+npm run test:e2e
 npm run build:production
 npm run verify:sites-fullstack
 npm run verify:sites-production
@@ -78,21 +80,15 @@ npm run scan:public-release
 - **OK — public release scan**: 2,889 blobs, blocker 0. 기존 review/info 분류만 남았다.
 - **OK — 2026-08-20 승인 뒤 재검증**: focused 31 tests, production build, 두 Sites
   verifier, npm candidate verifier와 public release scan을 같은 결과로 다시 통과했다.
-
-추가 관찰:
-
-- `npm test -- --test-concurrency=1`은 Stage 3.2 변경 테스트를 포함해 출력된 항목이 모두
-  통과한 뒤 기존 Miniflare `d1-concurrency.test.js`의 local listener 준비에서 종료되지 않았다.
-  단독 재현도 같았으며 sandbox 밖 재실행 요청은 현재 실행 환경의 승인 한도 제한으로
-  허용되지 않았다.
-- `npm run test:e2e`는 Playwright webServer가 `127.0.0.1:5724`를 열 때 `listen EPERM`으로
-  시작 전 차단됐다. 두 항목은 assertion failure가 아니라 현재 sandbox의 local listener
-  제약이며 PR CI에서 재검증한다.
+- **OK — full Node regression**: local listener가 허용된 실행 환경에서 Miniflare D1 동시성까지
+  포함해 831 pass, 6 skip, 0 fail로 통과했다.
+- **OK — Playwright E2E**: 101 pass, 0 fail. Device Approval과 submit 전후 README 고정·공유
+  링크 및 5개 SNS revision 갱신 browser 계약을 포함한다.
+- **OK — Draft PR CI**: pushed head에서 CLI package와 exact candidate 검증이 Node 20·22·24
+  모두 통과했고 publish job은 의도대로 skip됐다.
 
 ## 잔여 위험
 
-- PR CI에서 전체 Node test와 Playwright E2E를 다시 통과해야 한다. local listener 기반 두
-  검증이 실패하면 checkpoint merge를 중단한다.
 - canonical Site는 아직 owner-only·undeployed이고 npm `0.1.2`는 미게시 후보다. public 문서와
   Device Approval 기본 명령은 Gate C 완료 전까지 stage5/`0.1.1` 연속성을 유지해야 한다.
 - materializer의 `--expected-project-id`는 packaging 직전 live read-only preflight 결과를
@@ -100,8 +96,8 @@ npm run scan:public-release
 
 ## 다음 단계 영향
 
-- Stage 3.2 커밋을 기존 Draft PR #109 head에 push한 뒤 CI와 동일 리뷰 1~15의 해소 여부를
-  재확인한다.
+- Stage 3.2 보정과 전체 회귀가 반영된 Draft PR #109를 작업지시자가 다시 검토하고 checkpoint
+  merge 여부를 승인한다.
 - PR #109와 후속 `devel → main` release PR이 merge돼 exact main source가 고정되기 전에는
   Sites source push/save/deploy, access/environment 변경, tag 또는 npm publish를 하지 않는다.
 - 이후 Stage 4에서 canonical private/public smoke를 통과한 뒤에만 README/CLI 안내와 npm
@@ -109,4 +105,5 @@ npm run scan:public-release
 
 ## 승인 요청
 
-- Stage 3.2 산출물과 검증 결과를 승인하면 기존 Draft PR #109 갱신과 CI 재검증으로 진행한다.
+- Stage 3.2 산출물, 전체 회귀와 Draft PR CI 결과를 승인하면 PR #109를 Ready로 전환하고
+  checkpoint merge 단계로 진행한다.
