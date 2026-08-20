@@ -23,7 +23,11 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,
   stage5·local 같은 대체 환경만 explicit `--server {origin}`을 사용한다.
 - `0.1.2` artifact와 tag는 immutable이다. 공개 뒤 문서나 UI 보정은 기존 package를
-  덮어쓰지 않으며 npm package 내용 변경이 필요하면 새 patch release를 계획한다.
+  덮어쓰지 않는다.
+- `0.1.3`은 사용자-facing package README를 공식 공개 기준으로 고정하고 공개 README에서
+  internal transition·test origin 설명을 제거하는 documentation patch다. exact source,
+  public Site와 registry package를 다시 검증한 별도 승인 뒤에만 tag와 staged publish를
+  시작한다.
 - 기존 `0.1.0` artifact와 canonical/recovery tag는 immutable 상태로
   보존한다.
 - exact `0.1.0` install의 production device login, status, Account Usage

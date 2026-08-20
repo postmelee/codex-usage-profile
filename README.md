@@ -94,15 +94,8 @@ npx codex-usage-profile@latest logout
 
 The CLI first looks for `codex` on `PATH`. On macOS it also checks the standard system and user Applications folders for `ChatGPT.app` and `Codex.app`.
 
-For repeatable automation, pin the current public release instead of using `@latest`:
-
-```bash
-CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
-CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.2 submit --json
-```
-
-Only use a pre-issued service token on a trusted machine. See [CLI login and usage submit](docs/cli-submit.md) for credential locations, transmitted fields, error mapping, and package validation.
+For non-interactive automation, credential details, transmitted fields, error
+mapping, and troubleshooting, see [CLI login and usage submit](docs/cli-submit.md).
 
 ## How it works
 
