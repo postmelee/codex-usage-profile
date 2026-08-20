@@ -683,7 +683,17 @@ test("public restore stages D1 privately before publication", async () => {
 
 test("publication repair stages every v4 variant before replacing authority", async () => {
   const calls = [];
-  const fixture = await createServiceFixture({ calls });
+  const fixture = await createServiceFixture({
+    calls,
+    owner: {
+      cardLocale: "ko",
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    }
+  });
   const plan = await fixture.service.planOwner(OWNER_SCOPE);
   const applicationEtag = `"${"C".repeat(43)}"`;
 
@@ -712,12 +722,21 @@ test("publication repair stages every v4 variant before replacing authority", as
   );
   assert.equal(repaired.summary.objectCount, 6);
   assert.equal(repaired.summary.operation, "repair-publication");
+  assert.equal(
+    fixture.repairPublicationInput.publication.canonicalLocale,
+    "ko"
+  );
+  assert.equal(
+    fixture.repairPublicationInput.publication.canonicalTheme,
+    "light"
+  );
 });
 
 async function createServiceFixture(options = {}) {
   const digestA = "A".repeat(43);
   const digestB = "B".repeat(43);
   const calls = options.calls ?? [];
+  let repairPublicationInput = null;
   const structuredPlan = {
     profile: durableProfile(),
     summary: createProfileMaintenanceSummary({
@@ -814,8 +833,9 @@ async function createServiceFixture(options = {}) {
       };
     },
     async applyRetention() {},
-    async repairPublication() {
+    async repairPublication(input) {
       calls.push("r2.repair");
+      repairPublicationInput = input;
       return {
         stable: {
           kind: "publication",
@@ -830,7 +850,7 @@ async function createServiceFixture(options = {}) {
       async updateVisibility() {}
     },
     async getOwnerById() {
-      return OWNER;
+      return { ...OWNER, ...options.owner };
     }
   };
   const mediaStore = {
@@ -866,7 +886,12 @@ async function createServiceFixture(options = {}) {
     },
     now: () => new Date(NOW)
   });
-  return { service };
+  return {
+    get repairPublicationInput() {
+      return repairPublicationInput;
+    },
+    service
+  };
 }
 
 function createStubService() {

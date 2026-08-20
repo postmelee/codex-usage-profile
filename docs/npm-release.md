@@ -19,6 +19,13 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 ## 현재 운영 상태
 
 - `codex-usage-profile@0.1.1`은 public이며 `latest`가 이 버전을 가리킨다.
+- repository의 `0.1.2`는 canonical production origin을 기본값으로 둔 **미게시
+  candidate**다. canonical Site의 owner-only/private smoke, public cutover와 exact
+  provenance Gate가 모두 끝나기 전에는 `codex-usage-profile-v0.1.2` tag를 만들거나
+  npm stage/publish를 시작하지 않는다.
+- cutover 동안 public `@latest`와 Device Approval 기본 명령은 stage5 continuity를
+  유지한다. canonical owner-only 검증은 public `0.1.1`에 explicit
+  `--server https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 붙인다.
 - 기존 `0.1.0` artifact와 canonical/recovery tag는 immutable 상태로
   보존한다.
 - exact `0.1.0` install의 production device login, status, Account Usage

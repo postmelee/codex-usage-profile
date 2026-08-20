@@ -1,8 +1,57 @@
 import {
+  formatLocalizedDate,
   formatLocalizedNumber,
   formatMessage,
   resolveLocale
 } from "./i18n.js";
+
+export function formatLastUpdatedAt(
+  uploadedAt,
+  locale = "en",
+  options = {}
+) {
+  if (typeof uploadedAt !== "string" || uploadedAt.trim() === "") {
+    return null;
+  }
+
+  const dateTime = uploadedAt.trim();
+  const date = new Date(dateTime);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const normalizedLocale = resolveLocale(locale);
+  const timeZone = options?.timeZone;
+  const dateOptions = {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: normalizedLocale === "ko" ? "long" : "short",
+    ...(timeZone === undefined ? {} : { timeZone })
+  };
+
+  try {
+    const dateLabel = normalizeLocalizedDayPeriod(
+      formatLocalizedDate(date, normalizedLocale, dateOptions),
+      normalizedLocale
+    );
+    return Object.freeze({
+      dateTime,
+      label: formatMessage(normalizedLocale, "profile.lastUpdated", {
+        date: dateLabel
+      })
+    });
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+function normalizeLocalizedDayPeriod(value, locale) {
+  if (locale !== "ko") return value;
+
+  return value
+    .replace(/\bAM\b/u, "오전")
+    .replace(/\bPM\b/u, "오후");
+}
 
 export function formatStatValue(key, value, locale = "en") {
   if (value == null) {

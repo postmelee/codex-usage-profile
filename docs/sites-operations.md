@@ -1,43 +1,62 @@
 # Sites 운영 가이드
 
-이 문서는 Codex Usage Profile의 canonical ChatGPT Sites 배포를 owner-only
-후보에서 공개 MVP까지 운영하는 절차다. Sites Worker, D1 `DB`, native R2
-`PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatible R2는
-fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은
-범위에서만 수행한다. production origin은
-`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`이고,
-검증된 public baseline saved version 7의 HTML profile은 `/?profile={handle}`, stable
-README card는 `/u/{handle}/card.png`를 사용한다. Task #83의 최종 Gate B에서는
-saved version 17의 canonical `/api/share/{handle}`, 정합한
-`/u/{handle}/social.png` 또는 packaged `/assets/codex-social-sample.png`, README
-card 변형과 공개·비공개 경계를 검증한 뒤 custom owner-only로 복원했다. 현재는
-owner profile 경로와 card readiness·resource reuse·공유 handoff·profile Skeleton을
-보정한 exact source의 saved version 23, custom owner-only 상태다. 영구 public 전환과
-CTA 활성화는 #84 Gate C에서 수행한다.
+이 문서는 Codex Usage Profile의 ChatGPT Sites 후보를 owner-only에서 공개
+validation까지 운영한 절차와 후속 production migration 경계를 기록한다. Sites
+Worker, D1 `DB`, native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud
+Run/Postgres/S3-compatible R2는 fallback이다. remote 변경은 해당 작업의
+수행계획과 Gate 승인을 각각 받은 범위에서만 수행한다. 현재
+`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 공개
+validation origin이다. Task #108 Gate A1에서
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`의 owner-only project만
+생성했으며 version·deployment·environment·D1/R2는 아직 없다. production private
+deploy·public cutover와 stage5 테스트 전환은 각각 후속 Gate 승인 전에는 실행하지 않는다.
+
+Task #84 Gate C는 exact-main saved version 24를 public으로 전환했고, 이후 #101이
+revision share 계약을 검증하며 같은 project를 saved version 33으로 이동시켰다.
+따라서 version 24는 유효한 release·cutover 이력이고 version 33은 현재 live
+validation 기준이다. Stage 5 read-only audit은 후속 상태를 version 24로 되돌리지
+않으며 project·D1·R2·OAuth·CLI origin과 validation data를 변경하지 않는다.
 
 owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
 extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
 두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
 smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
-## 현재 production baseline
+## 현재 validation baseline과 Gate C 이력
 
 | 항목 | 값 |
 |---|---|
 | Site | `Codex Usage Profile` |
-| saved version/source | 23 / `c030339d848f961c54358d9d3523b340bed09670` |
-| access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
-| environment | revision 85 |
+| live origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
+| 역할 | public validation; 새 canonical production migration 전까지 유지 |
+| saved version/source | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` |
+| access | public revision 59, external visitor 0명 |
+| environment | revision 89, key 9개 |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
-| disposable QA state | owner/session/token/D1/R2/local credential 없음 |
+| health/operator | `/healthz` `200`, 닫힌 operator route `404` |
+| D1 readiness | migration `[1,2,3,4,5]` exact |
+| 원복 access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
+| validation data | 테스트 계정·validation data 보존; exact owner/session/D1/R2 상태 확인·폐기는 migration Issue의 data disposal Gate |
 
-원복 access는 직전 custom owner-only policy다. owner 1명만 허용하고 추가
-user, workspace group과 tenant group은 0개로 둔다. 현재 application의 직전
-rollback target은 Gate B를 통과한 version 17이며, legacy public 동작 비교 기준은
-version 7이다. 현재 UX 후보의 직전 비교 대상은 version 22다. data/schema rollback은
-별도 digest/count 승인 없이 수행하지 않는다.
+| 시점 | saved version/source | access | environment | 의미 |
+|---|---|---|---|---|
+| Task #84 Gate C | 24 / `0c804733e41988467ecd7fbd8e6a152cbfc2fad0` | public revision 57 | revision 87 | exact-main production 공개 전환의 역사적 기준 |
+| Task #101 validation | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` | public revision 59 | revision 89 | revision share provider 검증 기준 |
+| Task #84 Stage 5 | version 33 유지 | revision 59 유지 | revision 89 유지 | read-only 종료 audit, remote mutation 0건 |
+
+| Task #108 target | origin | access/version | 역할 |
+|---|---|---|---|
+| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | custom owner-only revision 1 / version 0 | canonical target; undeployed, D1/R2/environment 없음 |
+| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | public revision 59 / version 33 | migration 완료 전 validation continuity |
+
+현재 application rollback 후보는 version 32/source
+`6cf2bab664e5a1f0b1e6051cc35887721c307e99`이며, 실제 재배포·access 변경과
+data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
+owner-only nonproduction 문구는 역사적 metadata이며 live access 판정에는 사용하지
+않는다. 새 migration은 hostname만 바꾸는 작업으로 축소하지 않고 project linkage,
+D1/R2 보존·폐기, OAuth callback, CLI 기본 origin과 rollback을 함께 승인받는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
@@ -46,12 +65,50 @@ Site 생성, storage 추가 또는 high-usage Site의 public 유지가 제한될
 [가격 FAQ](https://learn.chatgpt.com/docs/pricing#how-much-does-sites-cost)를
 운영 시점마다 다시 확인한다.
 
+## dual-Site target과 packaging
+
+- `.openai/hosting.json`은 production project와 logical `DB`·`PROFILE_MEDIA`만 가리키는
+  canonical manifest다.
+- `.openai/hosting-targets.json`은 production·stage5의 nonsecret project/origin/binding
+  registry다. credential과 environment 값은 기록하지 않는다.
+- `scripts/materialize-sites-target.mjs`는 ignored `dist/`를 삭제하고 clean exact commit에서
+  production build를 다시 만든다. repository 밖 임시 packaging root에 선택한 target
+  manifest를 넣어 공식 Sites `package-site.sh`를 호출하며 archive path의 symlink를 포함한
+  real path도 repository 밖이어야 한다.
+- production/stage5 project 또는 origin이 같거나 canonical manifest가 production registry와
+  다르면 packaging을 시작하지 않는다. `--expected-project-id`는 packaging 직전 live
+  read-only Site preflight에서 얻은 값이어야 하며 registry/manifest와 다르면 중단한다.
+  생성된 archive는 안전한 임시 경로에 다시 풀어 exact project/binding/migration과
+  credential·절대 경로 검사를 반복한다.
+
+```bash
+npm run package:sites-target -- \
+  --target production \
+  --expected-project-id {live_preflight_project_id} \
+  --source-sha {exact_clean_commit} \
+  --archive /absolute/external/path/production.tar.gz \
+  --package-helper /absolute/path/to/sites/scripts/package-site.sh
+```
+
+stage5 후보는 같은 명령에서 `--target stage5`와 live stage5 project id를 사용한다.
+canonical manifest를 stage5 값으로 수정하거나 archive를 repository 안에 만들지 않는다.
+실패한 실행이 이번에 만든 partial archive는 자동 정리되며, 이미 존재하던 archive는
+덮어쓰거나 삭제하지 않는다. Stage 2에서는 guard와 test만 검증하며 source
+push·save/deploy는 하지 않는다.
+
 ## 운영 불변식
 
 - 검증된 commit을 source로 push하고 같은 commit에서 만든 `dist/`만 saved
   version으로 저장한다. production deployment는 saved version만 사용한다.
-- `.openai/hosting.json`의 기존 project와 `DB`/`PROFILE_MEDIA` linkage를
-  재사용한다. 새 Site나 storage를 임의로 만들지 않는다.
+- `.openai/hosting.json`의 canonical production project와 `DB`/`PROFILE_MEDIA` linkage만
+  production에 사용한다. stage5는 target materializer를 통해서만 선택한다. 승인된 Gate 밖에서
+  새 Site나 storage를 만들지 않는다.
+- v4 dark authority의 additive `canonicalTheme`·`canonicalLocale` pair가 queryless
+  README image의 대표 설정이다. 둘 다 없는 legacy authority만 dark/en으로 읽고
+  partial/invalid metadata는 공개 응답을 fail-close한다.
+- 공개 설정 변경은 immutable revision을 prepare한 뒤 owner CAS가 성공한 경우에만
+  최신 owner/usage version을 확인하고 card/social authority를 commit한다. DB 성공
+  뒤 media 실패는 같은 설정 PATCH의 exact retry로 수렴시킨다.
 - GitHub client secret과 maintenance token은 Sites environment secret으로만
   보관한다. source, archive, URL, 로그와 보고서에 값을 복제하지 않는다.
 - access policy 변경은 deployment와 별도다. staging/candidate 검증은
@@ -110,7 +167,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    key 존재 여부를 read-only로 확인한다. secret plaintext는 읽거나 출력하지
    않는다.
 2. `npm run build:production`, `npm run verify:sites-fullstack`,
-   `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
+   `npm run verify:sites-production`을 같은 clean commit에서 실행한다. target archive는
+   위 materializer가 기존 `dist/`를 제거하고 같은 commit에서 다시 build한 결과만 사용한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
    현재 `devel`의 Task #74·#78 누적 candidate는 D1 migration `1..5`와
@@ -126,9 +184,9 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
 
    ```bash
    npm run sites:profile-maintenance -- migrate \
-     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+     --origin {approved_target_origin}
    npm run sites:profile-maintenance -- readiness \
-     --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+     --origin {approved_target_origin}
    ```
 
    migrate 응답은 `appliedVersions`, `newlyAppliedVersions`, `operation=migrate`
@@ -151,15 +209,24 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    `200`인지 확인한다. 이 전환이나 확인이 실패하면 다음 단계로 진행하지
    않는다.
 7. maintenance가 닫힌 candidate에서 OAuth/session/logout, packed CLI,
-   private preview, 카드 dark/light·en/ko 저장, 네 README PNG의 GET/HEAD/304,
-   query 없는 dark 호환, publish/unpublish/ETag/404를 검증한다. 이어서 crawler
-   User-Agent로 `/api/share/{handle}` HTML의 canonical·`og:url`·`og:image`와
-   Twitter Card metadata를 확인하고, 정합 publication의
+   private preview, 카드 dark/light·en/ko 저장을 확인한다. queryless README URL은
+   `Content-Type: image/png`, `public, no-cache, must-revalidate`, application ETag와
+   저장된 대표 이미지를 반환해야 하며 설정·사용량 변경 뒤 같은 URL에서 새 ETag와
+   bytes를 제공해야 한다. explicit dark/light × en/ko의 GET/HEAD/304 하위 호환,
+   `v` query가 canonical 선택을 바꾸지 않는지, publish/unpublish/404도 검증한다.
+   card authority와 social object의 owner/publication id가 같은지 확인한 뒤 crawler
+   User-Agent로 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical·`og:url`·`og:image`와
+   Twitter Card metadata를 확인한다. matching revision은 모든 token이 일치하고,
+   stale revision은 `200` 현재 revision metadata로 수렴하며, invalid revision은
+   public document로 처리되지 않아야 한다. 이어서 정합 publication의
    `/u/{handle}/social.png` GET/HEAD/If-None-Match 304와 2400x1260 응답을
    검증한다. 이어서 legacy social-missing fixture에서 personalized route 404와
    HTML의 `/assets/codex-social-sample.png` 선언, fallback asset GET/HEAD 200을
    함께 확인한다. private·missing handle은 동일한 기본 OG/unavailable HTML과
-   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다.
+   packaged sample로 닫히고 README/social PNG는 같은 404여야 한다. 마지막으로
+   `npm run cleanup:card-media` dry-run이 새 object를 만들거나 삭제하지 않고 현재
+   authority 참조를 보호하는지 확인한다.
 8. error event를 확인한 뒤 profile private와 test token/session revoked
    baseline을 복원한다.
 
@@ -169,6 +236,42 @@ expected/applied에 missing 또는 unexpected version이 있으면 기능 smoke,
 policy를 유지하고 environment를 disabled/secret-absent baseline 또는 직전 key
 set으로 되돌린 뒤 operator route `404`와 같은 health를 확인한다. provider
 오류의 원문을 출력하거나 원격 D1을 임의 수정해 통과시키지 않는다.
+
+## 소셜 미리보기 revision smoke
+
+Share Studio 전환이나 public cutover에서는 application 응답과 외부 provider 결과를
+분리해 확인한다. provider 작성 화면의 성공만으로 backend metadata가 맞다고 판단하지
+않고, crawler `200`만으로 provider cache가 갱신됐다고 판단하지 않는다.
+
+1. 같은 public test profile에서 카드 저장 또는 새 submit 전 revision A와 이후 최신
+   revision B를 기록한다. token은 `max(owner.updatedAt, usage.uploadedAt)`의 epoch
+   milliseconds이며 URL은 `/api/share/{handle}/r/{revision}`이다.
+2. B 문서의 status·final URL·`canonical`·`og:url`과 `og:image`,
+   `og:image:secure_url`, `twitter:image` token이 모두 B인지 확인한다. social image의
+   status·content type·ETag도 함께 기록한다.
+3. desktop browser와 X, LinkedIn, Meta/Threads, Reddit crawler User-Agent로 B가
+   같은 metadata를 반환하는지 확인한다. A stale 요청은 redirect 없이 `200` 현재 B
+   metadata로 수렴해야 하며 과거 snapshot으로 해석하지 않는다.
+4. 실제 제품과 같은 target 형식으로 X·LinkedIn·Threads·Facebook·Reddit 새 작성
+   화면을 연다. 링크 복사와 다섯 target을 decode했을 때 모두 같은 B URL이어야 한다.
+   게시·초안 저장은 하지 않는다.
+5. X는 cold image 처리에 시간이 걸릴 수 있으므로 crawler 응답 시각과 composer 최초
+   표시 시각을 따로 기록한다. 즉시 표시를 보장하지 않는다. LinkedIn 작성 화면이
+   stale이면 [Post Inspector](https://www.linkedin.com/post-inspector/)에서 같은 B URL을
+   재수집한 뒤 결과와 시각을 기록한다. 자동 cache purge나 provider OAuth/API 호출은
+   운영 절차에 포함하지 않는다.
+6. fixed `/api/share/{handle}`는 기존 링크 하위 호환으로 계속 확인하되 새 공유의 cache
+   갱신 판정에는 사용하지 않는다. timestamp가 없거나 invalid한 profile의 Share Studio만
+   fixed URL로 fail safe해야 한다.
+
+Task #101 공개 validation에서는 X가 최신 revision을 약 11초 안에 표시했고 LinkedIn은
+새 작성 화면에서 즉시 표시했다. Threads는 약 10초 뒤 표시됐으며 Facebook·Reddit도
+최신 카드를 표시했다. 이 수치는 provider SLA가 아니라 해당 실측의 관찰값이다.
+
+application metadata가 틀리거나 X·LinkedIn 중 하나가 새 revision을 최신 identity로
+인식하지 못하면 공유 URL 전환을 중단하고 직전 application saved version을 다시
+배포한다. application rollback은 이미 게시된 provider cache를 삭제하지 않으므로 기존
+게시물의 소급 갱신이나 cache purge 성공을 rollback 조건으로 두지 않는다.
 
 ## Environment와 OAuth rotation
 
@@ -199,7 +302,9 @@ contract/schema version, digest와 count만 남긴다.
   theme·locale별 revision plan, D1 owner-dependent plan이 일치할 때만 apply한다.
 - partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
-  조건으로 수행한다.
+  조건으로 수행한다. v4 repair publication은 D1 owner에 저장된 canonical
+  `cardLocale`·`cardStyle.theme` pair를 반드시 포함하며 pair 없는 입력은
+  dark/en으로 추측하지 않고 mutation 전에 거절한다.
 
 operator CLI는 `npm run sites:profile-maintenance -- <command>`를 사용하며
 mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두
@@ -217,7 +322,7 @@ stable은 orphan candidate가 될 수 있다.
 
 ```bash
 npm run sites:profile-maintenance -- retention \
-  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+  --origin {approved_target_origin} \
   --retention-days 90
 ```
 
@@ -245,10 +350,14 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    필수다.
 2. test profile은 private, test token/session은 새 일회성 값으로 준비한다.
 3. public access로 전환하고 anonymous landing, private API 401/403, private
-   profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit, publish 뒤
-   query 없는 dark와 dark/light × en/ko 네 README PNG의 `GET|HEAD|304`, 설정 저장
-   뒤 `selectedPublicCardUrl` 전환을 확인한다. 이어서 `/api/share/{handle}` HTML의
-   canonical/OG/Twitter metadata와 locale 문구, `/u/{handle}/social.png`의
+   profile/card의 query 없음·theme·locale 조합 404, OAuth/CLI/submit을 확인한다.
+   publish 뒤 queryless README URL의 PNG content type, cache policy, ETag와 저장된
+   canonical theme·locale bytes를 확인하고 설정·사용량 변경 뒤 같은 URL 갱신을
+   검증한다. explicit dark/light × en/ko `GET|HEAD|304` 호환과
+   `selectedPublicCardUrl` 전환도 확인한다. card/social owner·publication id가
+   일치하는지 확인한 뒤 fixed `/api/share/{handle}`와 최신
+   `/api/share/{handle}/r/{revision}` HTML의 canonical/OG/Twitter metadata와 locale
+   문구, `/u/{handle}/social.png`의
    `GET|HEAD|304`·2400x1260을 확인한다. 기존 public publication처럼 social object가
    없으면 personalized route 404와 HTML의 packaged sample URL·asset 200을 함께
    확인한다. private 및 missing 상태에서 HTML이 같은 기본 metadata/unavailable
@@ -262,9 +371,9 @@ Gate B smoke 또는 Gate C cutover의 승인된 시간과 범위에서만 public
    검증한다.
 
 중간 실패도 같은 원복 절차를 먼저 수행한다. public 상태에서 원인 분석을
-계속하지 않는다. 현재 saved version 7 baseline의 공개 화면은
+계속하지 않는다. legacy saved version 7 baseline의 공개 화면은
 `/?profile={handle}`을 사용하지만 owner-only version 15에서 root query initial
-HTML이 정적 asset으로 처리됨을 확인했다. 검증된 릴리스 후보는
+HTML이 정적 asset으로 처리됨을 확인했다. 현재 public validation 경로는
 `/api/share/{handle}`에서 handle별 canonical/OG/Twitter metadata와 같은 SPA 공개
 화면을 제공한다. root query와 extension 없는 `/u/{handle}`은 source 하위
 호환으로만 유지하며 production share link로 안내하지 않는다.
@@ -299,6 +408,10 @@ gate를 통과한 것으로 간주하지 않는다. 긴급 rollback이 필요하
 별도 Gate에서 검토하고 작업지시자 승인을 받은 경우에만 known-compatible saved
 version을 선택한다.
 
+share revision application rollback은 새 DB row나 media snapshot을 삭제하지 않는다.
+revision path는 metadata cache identity이므로 이전 saved version 재배포만 수행하고,
+외부 provider cache나 이미 게시된 링크를 파괴적으로 정리하지 않는다.
+
 - 이전 application이 요구하는 migration version이 모두 적용돼 있다.
 - 추가된 migration이 이전 application의 read/write 계약과 backward-compatible
   하다는 source/migration 검토 증적이 있다.
@@ -310,8 +423,9 @@ version을 선택한다.
 schema/data rollback은 먼저 승인된 D1/R2 backup 복구 가능성을 검증하고,
 backward-compatible migration 구간을 벗어나면 자동으로 진행하지 않는다.
 Task #74의 `card_style`과 `card_locale`은 default가 있는 additive column이며 기존
-query 없는 dark stable key를 보존한다. 따라서 이전 saved version application
-rollback 후보는 새 column과 light object를 무시할 수 있지만, readiness의
+query 없는 dark stable key를 보존한다. Task #100의 canonical pair도 v4 authority의
+additive metadata이므로 이전 v4 saved version application은 이 pair와 light object를
+무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. 다만 readiness의
 unexpected version 우회와 실제 rollback 실행은 여전히 별도 Gate 승인 사항이다.
 
 Cloud Run fallback은 다음 순서로 평가하며 별도 승인 전에는 provider resource를

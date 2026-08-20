@@ -111,7 +111,11 @@ test("Sites backend fixes maintenance, owner-only, and quota stop semantics", as
   // The public profile document and its social image close with the rest of
   // the public surface, otherwise owner-only would still expose Open Graph
   // thumbnails to external crawlers.
-  for (const pathname of ["/u/private-owner", "/u/private-owner/social.png"]) {
+  for (const pathname of [
+    "/u/private-owner",
+    "/u/private-owner/social.png",
+    "/api/share/private-owner/r/1783990860001"
+  ]) {
     const stopped = createProfileSitesOperationalStopResponse(
       new Request(`https://profile.test${pathname}`),
       { serviceMode: "owner-only" }

@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState
+} from "react";
 import { BorderBeam } from "border-beam";
 
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
+import { useCardFrameRadius } from "../profile-ui/useCardFrameRadius.js";
+import { normalizeCardTheme } from "../profile-card/theme.js";
 import {
   createMarketingConfig,
   resolveMarketingCopy
@@ -15,6 +21,7 @@ const HOME_CARD_SKELETON_HEATMAP_CELL_COUNT = (
   HOME_CARD_SKELETON_HEATMAP_ROW_COUNT
 );
 const HOME_CARD_SKELETON_STAT_COUNT = 4;
+const HOME_CARD_SKELETON_EXIT_DURATION_MS = 240;
 
 export function MarketingLanding({
   cardAlt,
@@ -26,6 +33,7 @@ export function MarketingLanding({
   cardSourceKind,
   cardSourceUrl,
   cardStatus,
+  cardTheme = "dark",
   cardTransitionSuspended = false,
   config = createMarketingConfig(),
   heroAction = null,
@@ -66,6 +74,7 @@ export function MarketingLanding({
             sourceUrl={cardSourceUrl}
             src={resolvedCardUrl}
             status={cardStatus ?? (cardBusy ? "loading" : "ready")}
+            cardTheme={cardTheme}
             transitionSuspended={cardTransitionSuspended}
           />
 
@@ -92,23 +101,39 @@ export function MarketingCardPreview({
   sourceUrl,
   src,
   status = "ready",
+  cardTheme = "dark",
   transitionSuspended = false
 }) {
   const { t } = useLocale();
+  const {
+    radius: measuredRadius,
+    setElement: setRadiusElement
+  } = useCardFrameRadius();
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const supportsCardTilt = useMediaQuery(
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
   );
+  const setCardElement = useCallback((element) => {
+    setRadiusElement(element);
+    if (element && measuredRadius !== null) {
+      setCardRadiusStyle(element, measuredRadius);
+    }
+    if (typeof cardRef === "function") {
+      cardRef(element);
+    } else if (cardRef) {
+      cardRef.current = element;
+    }
+  }, [cardRef, measuredRadius, setRadiusElement]);
 
   return (
     <MarketingCardTilt
-      elementRef={cardRef}
+      elementRef={setCardElement}
       enabled={supportsCardTilt && !prefersReducedMotion && !busy}
       suspended={transitionSuspended}
     >
       <BorderBeam
-        active={!busy && !prefersReducedMotion && !transitionSuspended}
-        borderRadius={41}
+        active={!busy && !prefersReducedMotion}
+        borderRadius={measuredRadius ?? undefined}
         brightness={1.05}
         className="home-card-beam"
         colorVariant="ocean"
@@ -127,6 +152,7 @@ export function MarketingCardPreview({
           sourceUrl={sourceUrl}
           src={src}
           status={status}
+          cardTheme={cardTheme}
         />
       </BorderBeam>
     </MarketingCardTilt>
@@ -144,12 +170,14 @@ export function CardImageFrame({
   sourceKind = null,
   sourceUrl,
   src,
-  status = "ready"
+  status = "ready",
+  cardTheme = "dark"
 }) {
   return (
     <div
       aria-busy={busy}
       className="home-card-media"
+      data-card-theme={normalizeCardTheme(cardTheme)}
       data-card-source-kind={sourceKind ?? undefined}
       data-card-source-url={sourceUrl ?? undefined}
       data-card-status={status}
@@ -189,6 +217,25 @@ export function CardImageFrame({
 }
 
 export function CardImageSkeleton({ active }) {
+  const [retained, setRetained] = useState(active);
+
+  useEffect(() => {
+    if (active) {
+      setRetained(true);
+      return undefined;
+    }
+
+    const timeoutId = globalThis.setTimeout(() => {
+      setRetained(false);
+    }, HOME_CARD_SKELETON_EXIT_DURATION_MS);
+
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [active]);
+
+  if (!active && !retained) {
+    return null;
+  }
+
   return (
     <div
       aria-hidden="true"
@@ -331,37 +378,19 @@ function MarketingAppAction({ config }) {
 }
 
 function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
-  const [ready, setReady] = useState(
-    () => Boolean(globalThis.customElements?.get("hover-tilt"))
-  );
-
   useEffect(() => {
-    let isCurrent = true;
+    if (
+      !enabled ||
+      globalThis.customElements?.get("hover-tilt")
+    ) {
+      return;
+    }
 
-    if (!enabled || ready) return () => { isCurrent = false; };
-
-    import("hover-tilt/web-component").then(() => {
-      if (isCurrent) setReady(true);
-    }).catch(() => {
-      if (isCurrent) setReady(false);
-    });
-
-    return () => { isCurrent = false; };
-  }, [enabled, ready]);
-
-  if (!enabled || !ready) {
-    return (
-      <div
-        className="home-card-tilt"
-        data-card-source="true"
-        data-share-transition-active={suspended ? "true" : undefined}
-        data-tilt-enabled="false"
-        ref={elementRef}
-      >
-        {children}
-      </div>
-    );
-  }
+    // The unresolved custom element is intentionally already in the DOM.
+    // Registration upgrades that same node in place so card readiness never
+    // remounts the source used by scroll anchoring and Share handoff motion.
+    import("hover-tilt/web-component").catch(() => {});
+  }, [enabled]);
 
   return (
     <hover-tilt
@@ -369,18 +398,30 @@ function MarketingCardTilt({ children, elementRef, enabled, suspended }) {
       className="home-card-tilt"
       data-card-source="true"
       data-share-transition-active={suspended ? "true" : undefined}
-      data-tilt-enabled="true"
+      data-tilt-enabled={enabled ? "true" : "false"}
       exit-delay="120"
       glare-hue="210"
-      glare-intensity="0.15"
-      scale-factor="1.018"
-      tilt-factor="0.45"
-      tilt-factor-y="0.35"
+      glare-intensity={enabled ? "0.15" : "0"}
+      scale-factor={enabled ? "1.018" : "1"}
+      tilt-factor={enabled ? "0.45" : "0"}
+      tilt-factor-y={enabled ? "0.35" : "0"}
       ref={elementRef}
     >
       {children}
     </hover-tilt>
   );
+}
+
+function setCardRadiusStyle(element, radius) {
+  const existingStyle = element.getAttribute("style") ?? "";
+  const preservedStyle = existingStyle
+    .split(";")
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => (
+      declaration && !declaration.startsWith("--usage-card-radius:")
+    ));
+  preservedStyle.push(`--usage-card-radius: ${radius}px`);
+  element.setAttribute("style", `${preservedStyle.join("; ")};`);
 }
 
 function useMediaQuery(mediaQuery) {

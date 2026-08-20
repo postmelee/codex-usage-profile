@@ -12,7 +12,7 @@ import {
 test("defines the approved Sites production service origin", () => {
   assert.equal(
     DEFAULT_SERVICE_ORIGIN,
-    "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site"
+    "https://codex-usage-profile.meleeisdeveloping.chatgpt.site"
   );
 });
 
@@ -35,6 +35,10 @@ test("resolves service origin by CLI, environment, stored, then default preceden
     env: {},
     defaultOrigin: "https://default.example.test"
   }), "https://default.example.test");
+  assert.equal(resolveServiceOrigin({
+    server: "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site",
+    env: {}
+  }), "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site");
 });
 
 test("allows HTTPS and loopback HTTP service origins", () => {

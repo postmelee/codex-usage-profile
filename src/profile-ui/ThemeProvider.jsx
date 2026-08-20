@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import {
+  normalizeThemePreference,
   readDocumentThemeState,
   subscribeToThemeChanges,
   syncDocumentTheme,
@@ -15,6 +16,9 @@ import {
 } from "./theme.js";
 
 const ThemeContext = createContext(null);
+
+export const THEME_TRANSITION_ATTRIBUTE = "data-theme-animating";
+export const THEME_TRANSITION_DURATION = 240;
 
 export function ThemeProvider({
   children,
@@ -52,8 +56,12 @@ export function ThemeProvider({
   }), [targetDocument, targetStorage, targetWindow]);
 
   const setPreference = useCallback((preference) => {
+    const requestedPreference = normalizeThemePreference(preference);
+    if (requestedPreference !== themeState.preference) {
+      markThemeTransition(targetDocument, targetWindow);
+    }
     const normalized = writeStoredThemePreference(
-      preference,
+      requestedPreference,
       targetStorage,
       targetWindow
     );
@@ -64,7 +72,12 @@ export function ThemeProvider({
 
     setThemeState(nextState);
     return nextState;
-  }, [targetDocument, targetStorage, targetWindow]);
+  }, [
+    targetDocument,
+    targetStorage,
+    targetWindow,
+    themeState.preference
+  ]);
 
   const contextValue = useMemo(() => Object.freeze({
     preference: themeState.preference,
@@ -91,4 +104,27 @@ export function useTheme() {
 function isSameThemeState(left, right) {
   return left.preference === right.preference
     && left.resolvedTheme === right.resolvedTheme;
+}
+
+// Colour transitions stay off by default so they never fight other motion.
+// Every user preference surface enters the same short transition timeline.
+export function markThemeTransition(
+  targetDocument = globalThis.document,
+  targetWindow = globalThis.window
+) {
+  const root = targetDocument?.documentElement;
+  if (!root) return;
+  const timerHost = targetWindow ?? globalThis;
+
+  const prefersReducedMotion = timerHost.matchMedia?.(
+    "(prefers-reduced-motion: reduce)"
+  )?.matches ?? false;
+  if (prefersReducedMotion) return;
+
+  timerHost.clearTimeout?.(root.dataset.themeAnimatingTimer);
+  root.setAttribute(THEME_TRANSITION_ATTRIBUTE, "");
+  root.dataset.themeAnimatingTimer = String(timerHost.setTimeout?.(() => {
+    root.removeAttribute(THEME_TRANSITION_ATTRIBUTE);
+    delete root.dataset.themeAnimatingTimer;
+  }, THEME_TRANSITION_DURATION + 60));
 }

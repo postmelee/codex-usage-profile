@@ -23,7 +23,7 @@ test("local npm smoke isolates install and verifies the installed CLI boundaries
     }
   });
 
-  assert.equal(result.packageId, "codex-usage-profile@0.1.1");
+  assert.equal(result.packageId, "codex-usage-profile@0.1.2");
   assert.equal(result.entryCount, 13);
   assert.equal(result.checksVerified, 6);
   assert.equal(commands.length, 7);
@@ -96,9 +96,9 @@ function createFakeCandidate({ candidateDirectory }) {
     tarballPath: join(
       candidateDirectory,
       "artifact",
-      "codex-usage-profile-0.1.1.tgz"
+      "codex-usage-profile-0.1.2.tgz"
     ),
-    packageId: "codex-usage-profile@0.1.1",
+    packageId: "codex-usage-profile@0.1.2",
     entryCount: 13,
     packedBytes: 1000,
     unpackedBytes: 5000,
@@ -117,7 +117,7 @@ function fakeSmokeResult(args) {
       stderr: "",
       stdout:
         "Usage: codex-usage-profile <command> [options]\n" +
-        "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site\n"
+        "https://codex-usage-profile.meleeisdeveloping.chatgpt.site\n"
     };
   }
   if (args[0] === "status") {

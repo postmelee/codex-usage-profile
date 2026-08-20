@@ -21,6 +21,7 @@ export function AccountMenu({
   settingsHref = "/?view=settings"
 }) {
   const { locale, t } = useLocale();
+  const focusOutCheckRef = useRef(null);
   const menuRef = useRef(null);
   const menuItemRefs = useRef([]);
   const triggerRef = useRef(null);
@@ -53,6 +54,7 @@ export function AccountMenu({
 
     function handlePointerDown(event) {
       if (root && event.target && !root.contains(event.target)) {
+        cancelFocusOutCheck();
         setIsOpen(false);
       }
     }
@@ -60,6 +62,7 @@ export function AccountMenu({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        cancelFocusOutCheck();
         setIsOpen(false);
         triggerRef.current?.focus();
       }
@@ -69,12 +72,14 @@ export function AccountMenu({
     ownerDocument.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      cancelFocusOutCheck();
       ownerDocument.removeEventListener("pointerdown", handlePointerDown);
       ownerDocument.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
 
   function handleToggleMenu() {
+    cancelFocusOutCheck();
     setLogoutState((current) => (
       current.status === "error" ? { error: null, status: "idle" } : current
     ));
@@ -82,9 +87,13 @@ export function AccountMenu({
   }
 
   function handleMenuBlur(event) {
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-      setIsOpen(false);
+    const menu = event.currentTarget;
+    if (event.relatedTarget && menu.contains(event.relatedTarget)) {
+      cancelFocusOutCheck();
+      return;
     }
+
+    scheduleFocusOutCheck(menu);
   }
 
   function handleMenuKeyDown(event) {
@@ -104,6 +113,7 @@ export function AccountMenu({
   }
 
   function handleMenuItemClick() {
+    cancelFocusOutCheck();
     setIsOpen(false);
   }
 
@@ -112,6 +122,7 @@ export function AccountMenu({
       return;
     }
 
+    cancelFocusOutCheck();
     setLogoutState({ error: null, status: "submitting" });
 
     try {
@@ -128,6 +139,35 @@ export function AccountMenu({
         status: "error"
       });
     }
+  }
+
+  function cancelFocusOutCheck() {
+    focusOutCheckRef.current?.();
+    focusOutCheckRef.current = null;
+  }
+
+  function scheduleFocusOutCheck(menu) {
+    cancelFocusOutCheck();
+
+    const ownerWindow = menu.ownerDocument?.defaultView ?? globalThis;
+    const checkActiveElement = () => {
+      focusOutCheckRef.current = null;
+      if (
+        menu.isConnected
+        && !menu.contains(menu.ownerDocument.activeElement)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (typeof ownerWindow.requestAnimationFrame === "function") {
+      const frame = ownerWindow.requestAnimationFrame(checkActiveElement);
+      focusOutCheckRef.current = () => ownerWindow.cancelAnimationFrame(frame);
+      return;
+    }
+
+    const timer = ownerWindow.setTimeout(checkActiveElement, 0);
+    focusOutCheckRef.current = () => ownerWindow.clearTimeout(timer);
   }
 
   if (authStatus === "anonymous") {
@@ -183,7 +223,9 @@ export function AccountMenu({
           className="account-popover"
           id="account-menu-popover"
           onBlur={handleMenuBlur}
+          onFocus={cancelFocusOutCheck}
           onKeyDown={handleMenuKeyDown}
+          onPointerDown={cancelFocusOutCheck}
           role="menu"
         >
           <div className="account-popover-header">

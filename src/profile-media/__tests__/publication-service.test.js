@@ -61,6 +61,8 @@ test("publishes all theme and locale revisions before exposing public visibility
   assert.equal(english.publicationId, korean.publicationId);
   assert.equal(english.publicationId, lightEnglish.publicationId);
   assert.equal(english.contractVersion, 4);
+  assert.equal(english.canonicalLocale, "en");
+  assert.equal(english.canonicalTheme, "dark");
   assert.equal(english.representations.dark.en.etag, english.etag);
   assert.equal(english.representations.dark.ko.etag, korean.etag);
   assert.equal(english.representations.light.en.etag, lightEnglish.etag);
@@ -86,7 +88,7 @@ test("keeps an exact public request idempotent and repairs a missing stable publ
   );
 });
 
-test("converges a public owner to v4 variants and can roll back an uncommitted setting", async () => {
+test("prepares v4 variants without changing authority and commits after owner CAS", async () => {
   const fixture = createFixture();
   const first = await fixture.service.publishOwnerCard({ ownerId: OWNER.id });
   fixture.store.saveLatestUsage({
@@ -118,14 +120,26 @@ test("converges a public owner to v4 variants and can roll back an uncommitted s
 
   assert.equal(prepared.idempotent, false);
   assert.equal(staged.contractVersion, 4);
-  assert.equal(staged.publicationId, prepared.publication.publicationId);
+  assert.equal(staged.publicationId, first.publication.publicationId);
   assert.equal(staged.presentationDigest, first.publication.presentationDigest);
-  assert.equal(await prepared.rollback(), "succeeded");
-  const restored = await fixture.mediaStore.getPublishedCard({
+  assert.equal(await prepared.rollback(), "not_needed");
+
+  const currentOwner = await fixture.store.getOwnerById(OWNER.id);
+  const committed = await fixture.store.atomic.updateCardSettings({
+    ownerId: OWNER.id,
+    expectedOwnerUpdatedAt: currentOwner.updatedAt,
+    cardLocale: currentOwner.cardLocale,
+    cardStyle: lightStyle,
+    updatedAt: "2026-07-22T03:00:00.000Z"
+  });
+  assert.equal(await prepared.commit({ owner: committed.owner }), "succeeded");
+  const selected = await fixture.mediaStore.getPublishedCard({
     handle: OWNER.handle
   });
-  assert.equal(restored.publicationId, first.publication.publicationId);
-  assert.equal(restored.presentationDigest, first.publication.presentationDigest);
+  assert.notEqual(selected.publicationId, first.publication.publicationId);
+  assert.equal(selected.canonicalTheme, "light");
+  assert.equal(selected.theme, "light");
+  assert.equal(selected.presentationDigest, first.publication.presentationDigest);
 });
 
 test("upgrades a legacy public publication to four v4 representations", async () => {
@@ -162,6 +176,14 @@ test("upgrades a legacy public publication to four v4 representations", async ()
     ownerId: OWNER.id,
     cardStyle: owner.cardStyle
   });
+  const committed = await fixture.store.atomic.updateCardSettings({
+    ownerId: OWNER.id,
+    expectedOwnerUpdatedAt: owner.updatedAt,
+    cardLocale: owner.cardLocale,
+    cardStyle: owner.cardStyle,
+    updatedAt: "2026-07-22T03:00:00.000Z"
+  });
+  await result.commit({ owner: committed.owner });
   const publication = await fixture.mediaStore.getPublishedCard({
     handle: OWNER.handle,
     theme: "light"

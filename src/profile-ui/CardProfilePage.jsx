@@ -237,11 +237,15 @@ export function CardProfilePage({ authState, client, onAuthStateChange }) {
         onClose={closeShare}
         onMakePrivate={() => updateVisibility("private")}
         open={shareOpen && (canShare || Boolean(shareSourceImage))}
-        publicCardUrl={profile?.selectedPublicCardUrl ?? profile?.publicCardUrl}
+        ownerUpdatedAt={profile?.owner?.updatedAt}
+        publicCardUrl={profile?.publicCardUrl}
         publicOwnerHandle={profile?.owner?.handle ?? authState?.account?.owner?.handle}
+        selectedPublicCardUrl={profile?.selectedPublicCardUrl}
+        shareRevision={profile?.shareRevision}
         sourceCardImage={shareSourceImage}
         sourceCardRef={shareSourceCardRef}
         sourceRect={shareSourceRectRef.current}
+        usageUploadedAt={profile?.usage?.uploadedAt}
       />
     </ProfileShell>
   );
@@ -303,6 +307,9 @@ function CardProfileContent(props) {
           <MarketingCardPreview
             alt={t("profile.card.alt.owner")}
             busy={props.cardImage.busy}
+            cardTheme={props.cardSettingsState.draftStyle?.theme
+              ?? props.profile.cardStyle?.theme
+              ?? "dark"}
             cardRef={props.sourceCardRef}
             errorLabel={t("home.cardUnavailable")}
             sourceKind="owner"

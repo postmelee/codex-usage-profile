@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { LastUpdatedTime } from "./LastUpdatedTime.jsx";
 import { useLocale } from "./LocaleProvider.jsx";
 
 export function ProfileHeader({
   header,
   headingId,
-  headingLevel = 2
+  headingLevel = 2,
+  uploadedAt
 }) {
   const { t } = useLocale();
   const displayName = header.displayName ?? t("profile.header.defaultUser");
@@ -22,6 +24,12 @@ export function ProfileHeader({
           <span>{username}</span>
           {header.planLabel ? <span className="plan-pill">{header.planLabel}</span> : null}
         </p>
+        <div className="profile-last-updated-slot">
+          <LastUpdatedTime
+            className="profile-last-updated"
+            uploadedAt={uploadedAt}
+          />
+        </div>
       </div>
     </header>
   );

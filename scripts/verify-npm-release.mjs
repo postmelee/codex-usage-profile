@@ -25,8 +25,8 @@ const DEFAULT_REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, "..");
 
 export const EXPECTED_NPM_PACKAGE = Object.freeze({
   name: "codex-usage-profile",
-  version: "0.1.1",
-  id: "codex-usage-profile@0.1.1",
+  version: "0.1.2",
+  id: "codex-usage-profile@0.1.2",
   license: "MIT",
   registry: "https://registry.npmjs.org/"
 });
@@ -54,6 +54,7 @@ export const EXPECTED_NPM_PACKAGE_FILES = Object.freeze([
   "src/credentials.js",
   "src/device-login.js",
   "src/errors.js",
+  "src/github-star.js",
   "src/index.js",
   "src/output.js",
   "src/service-client.js",

@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildReadmeCardSnippet } from "../cardShare.js";
 import {
   buildPublicProfileShareUrl,
   buildShareTargets,
   formatShareStudioPlatformMessage,
-  getShareStudioCopy
+  getShareStudioCopy,
+  isMobileShareEnvironment,
+  resolveShareStudioCardUrls,
+  resolveShareStudioProfileUrls
 } from "../shareStudio.js";
 
 test("resolves Korean and English Share Studio copy", () => {
@@ -56,17 +60,245 @@ test("rejects unsupported platform message keys and invalid labels", () => {
   );
 });
 
-test("builds the canonical Sites public profile URL", () => {
+test("separates the canonical copy URL from the selected card asset", () => {
+  assert.deepEqual(resolveShareStudioCardUrls({
+    cardLocale: "ko",
+    cardTheme: "light",
+    publicCardUrl: "https://profiles.example.test/u/postmelee/card.png?v=old",
+    selectedPublicCardUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=dark"
+  }), {
+    copyImageUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedImageUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko"
+  });
+});
+
+test("never promotes a selected asset to the canonical copy URL", () => {
+  const selected =
+    "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko";
+  assert.deepEqual(resolveShareStudioCardUrls({
+    publicCardUrl: null,
+    selectedPublicCardUrl: selected
+  }), { copyImageUrl: null, selectedImageUrl: null });
+  assert.deepEqual(resolveShareStudioCardUrls({
+    cardLocale: "ko",
+    cardTheme: "light",
+    publicCardUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedPublicCardUrl: "data:image/png;base64,abc"
+  }), {
+    copyImageUrl: "https://profiles.example.test/u/postmelee/card.png",
+    selectedImageUrl:
+      "https://profiles.example.test/u/postmelee/card.png?theme=light&locale=ko"
+  });
+});
+
+test("builds the latest revision Sites public profile URL", () => {
+  const ownerUpdatedAt = "2026-07-15T00:02:00.000Z";
+  const usageUploadedAt = "2026-07-15T00:01:00.000Z";
+  const shareRevision = Date.parse(ownerUpdatedAt);
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${shareRevision}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: 0 }
+    ),
+    "https://profiles.example.test/api/share/postmelee/r/0"
+  );
   assert.equal(
     buildPublicProfileShareUrl(
       "https://profiles.example.test/ignored?view=settings",
-      "postmelee"
+      "postmelee",
+      { ownerUpdatedAt, usageUploadedAt }
     ),
-    "https://profiles.example.test/api/share/postmelee"
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(ownerUpdatedAt)}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { usageUploadedAt }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: undefined, usageUploadedAt }
+    ),
+    `https://profiles.example.test/api/share/postmelee/r/${Date.parse(usageUploadedAt)}`
+  );
+});
+
+test("falls back to the fixed public profile URL for missing or invalid timestamps", () => {
+  const fixedUrl = "https://profiles.example.test/api/share/postmelee";
+  assert.equal(
+    buildPublicProfileShareUrl("https://profiles.example.test", "postmelee"),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      {
+        shareRevision: "001",
+        usageUploadedAt: "2026-07-15T00:01:00.000Z"
+      }
+    ),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      { shareRevision: null }
+    ),
+    fixedUrl
+  );
+  assert.equal(
+    buildPublicProfileShareUrl(
+      "https://profiles.example.test",
+      "postmelee",
+      {
+        ownerUpdatedAt: "invalid",
+        usageUploadedAt: "2026-07-15T00:01:00.000Z"
+      }
+    ),
+    fixedUrl
   );
   assert.equal(buildPublicProfileShareUrl("javascript:alert(1)", "postmelee"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", "../owner"), null);
   assert.equal(buildPublicProfileShareUrl("https://profiles.example.test", ""), null);
+});
+
+test("keeps README fixed while submit advances the share link and five targets", () => {
+  const imageUrl = "https://profiles.example.test/u/postmelee/card.png";
+  const before = resolveShareStudioProfileUrls(
+    "https://profiles.example.test",
+    "postmelee",
+    { usageUploadedAt: "2026-07-15T00:01:00.000Z" }
+  );
+  const after = resolveShareStudioProfileUrls(
+    "https://profiles.example.test",
+    "postmelee",
+    { usageUploadedAt: "2026-07-16T00:01:00.000Z" }
+  );
+
+  assert.equal(before.readmeProfileUrl, "https://profiles.example.test/api/share/postmelee");
+  assert.equal(after.readmeProfileUrl, before.readmeProfileUrl);
+  assert.equal(
+    buildReadmeCardSnippet(imageUrl, after.readmeProfileUrl),
+    buildReadmeCardSnippet(imageUrl, before.readmeProfileUrl)
+  );
+  assert.notEqual(after.shareProfileUrl, before.shareProfileUrl);
+
+  const resolveTargetProfileUrls = (profileUrl) => buildShareTargets({ profileUrl })
+    .map(({ href, id }) => {
+      const url = new URL(href);
+      if (id === "x") return url.searchParams.get("text").split("\n").at(-1);
+      if (id === "linkedin") return url.searchParams.get("shareUrl");
+      if (id === "facebook") return url.searchParams.get("u");
+      return url.searchParams.get("url");
+    });
+  assert.deepEqual(
+    resolveTargetProfileUrls(before.shareProfileUrl),
+    Array(5).fill(before.shareProfileUrl)
+  );
+  assert.deepEqual(
+    resolveTargetProfileUrls(after.shareProfileUrl),
+    Array(5).fill(after.shareProfileUrl)
+  );
+});
+
+test("detects mobile share environments without viewport heuristics", () => {
+  const cases = [
+    {
+      expected: true,
+      label: "UA-CH mobile",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        userAgentData: { mobile: true }
+      }
+    },
+    {
+      expected: false,
+      label: "UA-CH desktop remains authoritative over a mobile-looking UA",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+        userAgentData: { mobile: false }
+      }
+    },
+    {
+      expected: true,
+      label: "iPhone UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPod UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPod touch; CPU iPhone OS 17_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPad UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)"
+      }
+    },
+    {
+      expected: true,
+      label: "Android UA fallback",
+      navigatorLike: {
+        userAgent: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro)"
+      }
+    },
+    {
+      expected: true,
+      label: "iPadOS desktop-class UA fallback",
+      navigatorLike: {
+        maxTouchPoints: 5,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"
+      }
+    },
+    {
+      expected: false,
+      label: "Mac desktop",
+      navigatorLike: {
+        maxTouchPoints: 0,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)"
+      }
+    },
+    {
+      expected: false,
+      label: "touch-capable Windows desktop",
+      navigatorLike: {
+        maxTouchPoints: 10,
+        platform: "Win32",
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+      }
+    },
+    { expected: false, label: "partial navigator", navigatorLike: {} },
+    { expected: false, label: "missing navigator", navigatorLike: null }
+  ];
+
+  for (const { expected, label, navigatorLike } of cases) {
+    assert.equal(isMobileShareEnvironment(navigatorLike), expected, label);
+  }
 });
 
 test("builds allowlisted external share composition URLs", () => {
@@ -84,10 +316,14 @@ test("builds allowlisted external share composition URLs", () => {
   const [x, threads, linkedIn, facebook, reddit] = targets
     .map((target) => new URL(target.href));
   assert.equal(x.origin, "https://x.com");
-  assert.equal(x.pathname, "/intent/post");
-  assert.equal(x.searchParams.get("text"), "나의 Codex 사용량 활동을 확인해 보세요.");
-  assert.equal(x.searchParams.get("url"), profileUrl);
-  assert.deepEqual([...x.searchParams.keys()].sort(), ["text", "url"]);
+  assert.equal(x.pathname, "/intent/tweet");
+  assert.equal(
+    x.searchParams.get("text"),
+    `나의 Codex 사용량 활동을 확인해 보세요.\n${profileUrl}`
+  );
+  assert.equal(x.searchParams.get("url"), null);
+  assert.deepEqual([...x.searchParams.keys()], ["text"]);
+  assert.match(x.href, /[?&]text=[^&]*%0Ahttps%3A%2F%2F/);
 
   assert.equal(threads.origin, "https://www.threads.net");
   assert.equal(threads.pathname, "/intent/post");
@@ -121,6 +357,48 @@ test("builds allowlisted external share composition URLs", () => {
   );
   assert.equal(reddit.searchParams.get("url"), profileUrl);
   assert.deepEqual([...reddit.searchParams.keys()].sort(), ["title", "url"]);
+});
+
+test("limits mobile share targets without changing narrow desktop defaults", () => {
+  const profileUrl = "https://profiles.example.test/u/postmelee";
+
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", mobile: true, profileUrl })
+      .map(({ id }) => id),
+    ["x", "threads", "reddit"]
+  );
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", mobile: false, profileUrl })
+      .map(({ id }) => id),
+    ["x", "threads", "linkedin", "facebook", "reddit"]
+  );
+  assert.deepEqual(
+    buildShareTargets({ locale: "en", profileUrl }).map(({ id }) => id),
+    ["x", "threads", "linkedin", "facebook", "reddit"]
+  );
+});
+
+test("serializes Threads spaces as percent escapes and preserves literal plus signs", () => {
+  for (const locale of ["en-US", "ko-KR"]) {
+    const profileUrl = "https://profiles.example.test/u/activity+plus";
+    const threads = buildShareTargets({ locale, profileUrl })
+      .find(({ id }) => id === "threads");
+    const copy = getShareStudioCopy(locale);
+    const url = new URL(threads.href);
+
+    assert.ok(
+      threads.href.includes(`text=${encodeURIComponent(copy.socialText)}`),
+      `${locale} text uses %20 serialization`
+    );
+    assert.doesNotMatch(
+      threads.href,
+      /[?&]text=[^&]*\+/,
+      `${locale} text does not contain form-encoded spaces`
+    );
+    assert.match(threads.href, /url=[^&]*activity%2Bplus/);
+    assert.equal(url.searchParams.get("text"), copy.socialText);
+    assert.equal(url.searchParams.get("url"), profileUrl);
+  }
 });
 
 test("rejects non-http and missing public profile targets", () => {

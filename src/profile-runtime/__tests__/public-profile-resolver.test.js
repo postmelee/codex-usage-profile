@@ -53,7 +53,7 @@ function createStore(overrides = {}) {
 }
 
 function createMediaStore(overrides = {}) {
-  const authority = overrides.authority === null ? null : {
+  const publication = overrides.authority === null ? null : {
     ownerId: "owner_1",
     publicationId: "publication_1",
     ...overrides.authority
@@ -68,10 +68,12 @@ function createMediaStore(overrides = {}) {
 
   return {
     calls,
-    async getPublishedCard(options) {
+    async inspectStableCard(options) {
       calls.push(["authority", options]);
       if (overrides.authorityError) throw overrides.authorityError;
-      return authority;
+      return publication
+        ? { kind: "publication", publication }
+        : { kind: "missing" };
     },
     async getSocialCard(options) {
       calls.push(["social", options]);
@@ -102,7 +104,7 @@ test("allows a personalized social image only for coherent media metadata", asyn
 
   assert.equal((await resolve("postmelee")).socialImageAvailable, true);
   assert.deepEqual(mediaStore.calls, [
-    ["authority", { handle: "postmelee", includeBody: false }],
+    ["authority", { handle: "postmelee" }],
     ["social", { handle: "postmelee", includeBody: false }]
   ]);
 });

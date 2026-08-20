@@ -143,6 +143,34 @@ test("light stable HEAD to GET race retries one coherent S3 variant", async () =
   assert.deepEqual(current.body, representations.light.en.body);
 });
 
+test("S3 stable read rejects canonical authority drift with the same storage ETag", async () => {
+  const client = new FailureS3Client();
+  const store = createS3ProfileMediaStore({
+    bucket: BUCKET,
+    client,
+    operationTimeoutMs: 1_000
+  });
+  const representations = createThemeRepresentations("canonical-drift");
+  for (const theme of ["dark", "light"]) {
+    await store.putRevision(representations[theme].en);
+    await store.putRevision(representations[theme].ko);
+  }
+  await store.publishRevision(
+    themePublicationInput(representations, "publication_canonical")
+  );
+  const stableKey = createProfileMediaStableKey({ handle: HANDLE });
+  const drifted = client.snapshotObject(stableKey);
+  drifted.Metadata["canonical-theme"] = "light";
+  client.replaceBeforeNextGets(stableKey, [drifted]);
+
+  await assert.rejects(
+    () => store.getPublishedCard({ handle: HANDLE }),
+    (error) =>
+      error.code === "unavailable" &&
+      error.message === "stable media changed repeatedly during read"
+  );
+});
+
 test("missing media bucket is unavailable rather than an unpublished object", async () => {
   const fixture = await createPublishedFixture();
   fixture.client.failNext("HeadObjectCommand", {

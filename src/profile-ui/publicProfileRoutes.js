@@ -1,19 +1,25 @@
 import { isAccountUsageReadResult } from "../profile-card/account-usage.js";
+import {
+  parsePublicShareHandle,
+  parsePublicSharePath,
+  parsePublicShareRevision
+} from "../profile-shared/public-share-url.js";
 
 export function resolvePublicProfileRoute(location) {
   const pathname = normalizePathname(location?.pathname);
   const rootHandle = pathname === "/"
     ? new URLSearchParams(location?.search ?? "").get("profile")
     : null;
-  const match = pathname.match(/^\/(?:u|api\/share)\/([^/]+)$/);
+  const profileMatch = pathname.match(/^\/u\/([^/]+)$/);
+  const sharePath = parsePublicSharePath(pathname);
 
-  if (rootHandle === null && !match) {
+  if (rootHandle === null && !profileMatch && !sharePath) {
     return createState("unavailable", null, null);
   }
 
   const handle = rootHandle === null
-    ? decodeHandle(match[1])
-    : normalizeHandle(rootHandle);
+    ? sharePath?.handle ?? decodeHandle(profileMatch[1])
+    : parsePublicShareHandle(rootHandle);
   if (!handle) {
     return createState("unavailable", null, null);
   }
@@ -60,21 +66,20 @@ function createState(status, handle, profile) {
 
 function decodeHandle(value) {
   try {
-    return normalizeHandle(decodeURIComponent(value));
+    return parsePublicShareHandle(decodeURIComponent(value));
   } catch {
     return null;
   }
-}
-
-function normalizeHandle(value) {
-  const handle = typeof value === "string" ? value.trim() : "";
-  return handle || null;
 }
 
 function isPublicProfile(profile) {
   return Boolean(
     profile &&
     profile.visibility === "public" &&
+    (
+      profile.shareRevision === undefined ||
+      parsePublicShareRevision(profile.shareRevision) !== null
+    ) &&
     isShareableCardUrl(profile.publicCardUrl) &&
     (
       profile.selectedPublicCardUrl === undefined ||

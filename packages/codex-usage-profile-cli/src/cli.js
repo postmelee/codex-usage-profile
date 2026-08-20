@@ -14,13 +14,14 @@ import {
 } from "./config.js";
 import { loginWithDeviceCode } from "./device-login.js";
 import { CliError } from "./errors.js";
+import { maybePromptGithubStar as defaultMaybePromptGithubStar } from "./github-star.js";
 import { writeSubmitOutput } from "./output.js";
 import {
   createServiceClient
 } from "./service-client.js";
 import { submitAccountUsage } from "./submit.js";
 
-export const CLI_VERSION = "0.1.1";
+export const CLI_VERSION = "0.1.2";
 export const CLI_USAGE = `Usage: codex-usage-profile <command> [options]
 
 Commands:
@@ -41,6 +42,7 @@ Default service: ${DEFAULT_SERVICE_ORIGIN}`;
 const COMMANDS = new Set(["login", "status", "logout", "submit"]);
 
 export async function runCli(argv, options = {}) {
+  const stdin = options.stdin ?? process.stdin;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
 
@@ -98,8 +100,10 @@ export async function runCli(argv, options = {}) {
         credentialStore,
         env,
         serviceOrigin,
+        stdin,
         stdout,
         login: options.loginWithDeviceCode ?? loginWithDeviceCode,
+        maybePromptGithubStar: options.maybePromptGithubStar ?? defaultMaybePromptGithubStar,
         loginOptions: {
           label: options.deviceName ?? os.hostname(),
           now: options.now,
@@ -117,11 +121,13 @@ export async function runCli(argv, options = {}) {
       credentialStore,
       env,
       serviceOrigin,
+      stdin,
       stdout,
       json: parsed.json,
       timeoutMs,
       readAccountUsage: options.readAccountUsage ?? defaultReadAccountUsage,
       login: options.loginWithDeviceCode ?? loginWithDeviceCode,
+      maybePromptGithubStar: options.maybePromptGithubStar ?? defaultMaybePromptGithubStar,
       deviceName: options.deviceName ?? os.hostname(),
       now: options.now,
       sleep: options.sleep,
@@ -282,6 +288,7 @@ async function runLogin(options) {
     ...withoutUndefined(options.loginOptions),
     intent: "login"
   });
+  await runGithubStarPrompt({ ...options, json: false });
   options.stdout.write("Login complete.\n");
   return 0;
 }
@@ -341,12 +348,38 @@ async function runSubmit(options) {
     deviceName: options.deviceName,
     sleep: options.sleep
   });
+  await runGithubStarPrompt(options);
   writeSubmitOutput(result, {
+    env: options.env,
     forbiddenValues: [credentialSource.token],
+    hyperlinks: options.hyperlinks,
     json: options.json,
     stdout: options.stdout
   });
   return 0;
+}
+
+async function runGithubStarPrompt(options) {
+  if (!isGithubStarPromptEligible(options)) return;
+  try {
+    await options.maybePromptGithubStar({
+      env: options.env,
+      json: options.json === true,
+      stdin: options.stdin,
+      stdout: options.stdout
+    });
+  } catch {
+    // GitHub starring is optional and must not replace a successful command result.
+  }
+}
+
+function isGithubStarPromptEligible({ env, json, stdin, stdout }) {
+  if (json === true || stdin?.isTTY !== true || stdout?.isTTY !== true) {
+    return false;
+  }
+  if (!env || typeof env.CI !== "string") return true;
+  const ci = env.CI.trim().toLowerCase();
+  return ci === "" || ci === "0" || ci === "false";
 }
 
 async function ensureDeviceId(options) {

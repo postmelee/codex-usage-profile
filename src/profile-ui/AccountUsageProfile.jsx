@@ -17,6 +17,7 @@ export function AccountUsageProfile({ headingId, owner, usage }) {
         }}
         headingId={headingId}
         headingLevel={1}
+        uploadedAt={usage.uploadedAt}
       />
       <ProfileStats stats={[
         {

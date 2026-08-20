@@ -7,7 +7,10 @@ import { createProfileCardService } from "../../profile-card/service.js";
 import {
   sampleAccountUsageReadResult
 } from "../../profile-card/fixtures/sample-account-usage.js";
-import { createMemoryProfileMediaStore } from "../media-store-contract.js";
+import {
+  createMemoryProfileMediaStore,
+  createProfileMediaStoreError
+} from "../media-store-contract.js";
 import { createProfilePublicationService } from "../publication-service.js";
 
 const OWNER = Object.freeze({
@@ -43,6 +46,7 @@ function createFixture(options = {}) {
       service?.ensurePublishedCardVariants({
         ownerId: ensureOptions.owner.id,
         owner: ensureOptions.owner,
+        usageRecord: ensureOptions.usageRecord,
         cardLocale: ensureOptions.cardLocale,
         cardStyle: ensureOptions.cardStyle
       }).then(async (preparation) => {
@@ -99,8 +103,12 @@ test("the social object follows the saved locale and theme", async () => {
 
   await service.publishOwnerCard({ ownerId: OWNER.id });
   const social = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const card = await mediaStore.getPublishedCard({ handle: OWNER.handle });
 
   assert.equal(Buffer.from(social.body).toString(), "social:light:en");
+  assert.equal(card.canonicalLocale, "en");
+  assert.equal(card.canonicalTheme, "light");
+  assert.equal(Buffer.from(card.body).toString(), "card:light:en");
 });
 
 test("saving new card settings refreshes the same social object", async () => {
@@ -129,6 +137,7 @@ test("a failed card-settings CAS leaves the stable social object unchanged", asy
   const { cardService, mediaStore, service, store } = createFixture();
   await service.publishOwnerCard({ ownerId: OWNER.id });
   const before = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const beforeCard = await mediaStore.getPublishedCard({ handle: OWNER.handle });
   const originalUpdate = store.atomic.updateCardSettings;
   store.atomic.updateCardSettings = async () => {
     throw new Error("forced card settings conflict");
@@ -149,8 +158,12 @@ test("a failed card-settings CAS leaves the stable social object unchanged", asy
   store.atomic.updateCardSettings = originalUpdate;
 
   const after = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const afterCard = await mediaStore.getPublishedCard({ handle: OWNER.handle });
   assert.equal(after.etag, before.etag);
   assert.equal(Buffer.from(after.body).toString(), "social:dark:ko");
+  assert.equal(afterCard.publicationId, beforeCard.publicationId);
+  assert.equal(afterCard.canonicalLocale, "ko");
+  assert.equal(afterCard.canonicalTheme, "dark");
   assert.equal((await store.getOwnerById(OWNER.id)).cardLocale, "ko");
 });
 
@@ -168,10 +181,16 @@ test("only the winning concurrent card-settings request commits social media", a
   const { cardService, mediaStore, service } = fixture;
   await service.publishOwnerCard({ ownerId: OWNER.id });
   const putSocialCard = mediaStore.putSocialCard.bind(mediaStore);
+  const publishRevision = mediaStore.publishRevision.bind(mediaStore);
   let commitWrites = 0;
+  let publicationWrites = 0;
   mediaStore.putSocialCard = async (options) => {
     commitWrites += 1;
     return putSocialCard(options);
+  };
+  mediaStore.publishRevision = async (options) => {
+    publicationWrites += 1;
+    return publishRevision(options);
   };
   const update = () => cardService.updateCardSettings({
     ownerId: OWNER.id,
@@ -187,11 +206,102 @@ test("only the winning concurrent card-settings request commits social media", a
   assert.equal(results.filter(({ status }) => status === "fulfilled").length, 1);
   assert.equal(results.filter(({ status }) => status === "rejected").length, 1);
   assert.equal(commitWrites, 1);
+  assert.equal(publicationWrites, 1);
+  assert.equal(
+    (await mediaStore.getPublishedCard({ handle: OWNER.handle })).canonicalLocale,
+    "en"
+  );
   assert.equal(
     Buffer.from((await mediaStore.getSocialCard({ handle: OWNER.handle })).body)
       .toString(),
     "social:dark:en"
   );
+});
+
+test("an exact settings retry repairs a post-CAS authority failure", async () => {
+  const { cardService, mediaStore, service, store } = createFixture();
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const previous = await mediaStore.getPublishedCard({ handle: OWNER.handle });
+  const publishRevision = mediaStore.publishRevision.bind(mediaStore);
+  let failCommit = true;
+  mediaStore.publishRevision = async (options) => {
+    if (failCommit && options.canonicalTheme === "light") {
+      failCommit = false;
+      throw createProfileMediaStoreError(
+        "unavailable",
+        "injected authority failure"
+      );
+    }
+    return publishRevision(options);
+  };
+  const settings = {
+    ownerId: OWNER.id,
+    cardLocale: "en",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "light",
+      effect: { preset: "none", version: 1 }
+    }
+  };
+
+  await assert.rejects(
+    () => cardService.updateCardSettings(settings),
+    (error) => error.code === "media_unavailable"
+  );
+  assert.equal((await store.getOwnerById(OWNER.id)).cardLocale, "en");
+  const stale = await mediaStore.getPublishedCard({ handle: OWNER.handle });
+  assert.equal(stale.publicationId, previous.publicationId);
+  assert.equal(stale.canonicalTheme, "dark");
+
+  await cardService.updateCardSettings(settings);
+  const repaired = await mediaStore.getPublishedCard({ handle: OWNER.handle });
+  const social = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  assert.equal(repaired.canonicalLocale, "en");
+  assert.equal(repaired.canonicalTheme, "light");
+  assert.equal(Buffer.from(repaired.body).toString(), "card:light:en");
+  assert.equal(Buffer.from(social.body).toString(), "social:light:en");
+  assert.equal(social.publicationId, repaired.publicationId);
+});
+
+test("a post-publication supersession keeps social coherent and asks for retry", async () => {
+  const { cardService, mediaStore, service, store } = createFixture();
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const publishRevision = mediaStore.publishRevision.bind(mediaStore);
+  let advanceUsageAfterCommit = true;
+  mediaStore.publishRevision = async (options) => {
+    const published = await publishRevision(options);
+    if (advanceUsageAfterCommit && options.canonicalTheme === "light") {
+      advanceUsageAfterCommit = false;
+      const usage = await store.getLatestUsageByOwnerId(OWNER.id);
+      store.saveLatestUsage({
+        ...usage,
+        uploadedAt: "2026-07-22T04:00:00.000Z"
+      });
+    }
+    return published;
+  };
+  const settings = {
+    ownerId: OWNER.id,
+    cardLocale: "en",
+    cardStyle: {
+      schemaVersion: 1,
+      theme: "light",
+      effect: { preset: "none", version: 1 }
+    }
+  };
+
+  await assert.rejects(
+    () => cardService.updateCardSettings(settings),
+    (error) => error.code === "media_unavailable" && error.status === 503
+  );
+  const publication = await mediaStore.getPublishedCard({ handle: OWNER.handle });
+  const social = await mediaStore.getSocialCard({ handle: OWNER.handle });
+
+  assert.equal(publication.canonicalLocale, "en");
+  assert.equal(publication.canonicalTheme, "light");
+  assert.equal(social.publicationId, publication.publicationId);
+  assert.equal(Buffer.from(social.body).toString(), "social:light:en");
+  await cardService.updateCardSettings(settings);
 });
 
 test("unpublishing removes the social object", async () => {

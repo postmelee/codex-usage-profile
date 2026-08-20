@@ -21,7 +21,8 @@ import {
   normalizeProfileMediaPublicationInput,
   normalizeProfileMediaRevisionRecord,
   normalizeProfileMediaSocialRecord,
-  normalizeProfileMediaTheme
+  normalizeProfileMediaTheme,
+  resolveProfileMediaSelection
 } from "../media-store-contract.js";
 
 const TOMBSTONE_CONTENT_TYPE = "application/octet-stream";
@@ -39,6 +40,8 @@ const METADATA_PRESENTATION_DIGEST = "presentation-digest";
 const METADATA_CREATED_AT = "created-at";
 const METADATA_PUBLICATION_ID = "publication-id";
 const METADATA_PUBLISHED_AT = "published-at";
+const METADATA_CANONICAL_LOCALE = "canonical-locale";
+const METADATA_CANONICAL_THEME = "canonical-theme";
 const METADATA_AUTHORITY_KEY = "authority-key";
 const METADATA_TOMBSTONE_ID = "tombstone-id";
 const METADATA_UNPUBLISHED_AT = "unpublished-at";
@@ -50,13 +53,18 @@ export function createR2BindingProfileMediaStore(options = {}) {
 
   const store = {
     async getPublishedCard(getOptions = {}) {
-      return readPublishedCard({
+      const readOptions = {
         handle: normalizeHandle(getOptions.handle),
         ifNoneMatch: getOptions.ifNoneMatch,
-        includeBody: getOptions.includeBody,
-        locale: normalizeProfileMediaLocale(getOptions.locale),
-        theme: normalizeProfileMediaTheme(getOptions.theme)
-      });
+        includeBody: getOptions.includeBody
+      };
+      if (Object.hasOwn(getOptions, "locale")) {
+        readOptions.locale = getOptions.locale;
+      }
+      if (Object.hasOwn(getOptions, "theme")) {
+        readOptions.theme = getOptions.theme;
+      }
+      return readPublishedCard(readOptions);
     },
 
     async getRevision(getOptions = {}) {
@@ -270,14 +278,16 @@ export function createR2BindingProfileMediaStore(options = {}) {
       }
       if (!created) throw stableConflict();
 
+      const selection = resolveProfileMediaSelection(publication);
       return createSelectedPublicationRecord({
         ...publication,
         storageEtag: requireStorageEtag(created)
       }, {
-        body: revisions.dark[PROFILE_MEDIA_DEFAULT_LOCALE].body,
-        locale: PROFILE_MEDIA_DEFAULT_LOCALE,
+        body: revisions[selection.theme][selection.locale].body,
+        locale: selection.locale,
         notModified: false,
-        theme: PROFILE_MEDIA_DEFAULT_THEME
+        stableKey: publication.stableKey,
+        theme: selection.theme
       });
     },
 
@@ -315,8 +325,15 @@ export function createR2BindingProfileMediaStore(options = {}) {
       }
       if (!tombstone) throw stableConflict();
 
+      const selection = resolveProfileMediaSelection(current.publication);
       return {
-        ...current.publication,
+        ...createSelectedPublicationRecord(current.publication, {
+          body: null,
+          locale: selection.locale,
+          notModified: false,
+          stableKey: current.publication.stableKey,
+          theme: selection.theme
+        }),
         unpublishedStorageEtag: requireStorageEtag(tombstone)
       };
     },
@@ -340,13 +357,14 @@ export function createR2BindingProfileMediaStore(options = {}) {
     if (stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) return null;
 
     const publication = stable.publication;
+    const selection = resolveProfileMediaSelection(publication, getOptions);
     const representations = getProfileMediaThemeRepresentations(
       publication,
-      getOptions.theme
+      selection.theme
     );
     if (!representations) return null;
-    const representation = representations[getOptions.locale];
-    const variant = getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME
+    const representation = representations[selection.locale];
+    const variant = selection.theme === PROFILE_MEDIA_DEFAULT_THEME
       ? {
           stableKey: publication.stableKey,
           storageEtag: publication.storageEtag
@@ -359,14 +377,14 @@ export function createR2BindingProfileMediaStore(options = {}) {
     const includeBody = getOptions.includeBody !== false && !notModified;
     let body = null;
 
-    if (getOptions.locale !== PROFILE_MEDIA_DEFAULT_LOCALE) {
+    if (selection.locale !== PROFILE_MEDIA_DEFAULT_LOCALE) {
       const revision = await store.getRevision({
-        locale: getOptions.locale,
+        locale: selection.locale,
         ownerId: publication.ownerId,
         revision: representation.revision,
-        theme: getOptions.theme
+        theme: selection.theme
       });
-      assertCoherentRevision(revision, publication, representation, getOptions.theme);
+      assertCoherentRevision(revision, publication, representation, selection.theme);
       if (includeBody) body = revision.body;
     } else if (includeBody) {
       let object;
@@ -389,7 +407,7 @@ export function createR2BindingProfileMediaStore(options = {}) {
         }
         throw repeatedStableReadError();
       }
-      if (getOptions.theme === PROFILE_MEDIA_DEFAULT_THEME) {
+      if (selection.theme === PROFILE_MEDIA_DEFAULT_THEME) {
         const coherent = publicationFromObject(object, {
           handle: publication.handle,
           stableKey: publication.stableKey
@@ -414,10 +432,12 @@ export function createR2BindingProfileMediaStore(options = {}) {
 
     return createSelectedPublicationRecord(publication, {
       body,
-      locale: getOptions.locale,
+      locale: selection.locale,
       notModified,
-      theme: getOptions.theme,
-      stableKey: variant.stableKey
+      theme: selection.theme,
+      stableKey: selection.mode === "canonical"
+        ? publication.stableKey
+        : variant.stableKey
     });
   }
 }
@@ -595,6 +615,7 @@ function publicationFromObject(object, expected) {
         ]))
       : readRepresentationMetadata(metadata);
     const normalized = normalizeProfileMediaPublicationInput({
+      ...readCanonicalSelectionMetadata(metadata, isV4),
       contractVersion,
       format: metadata[METADATA_FORMAT] ?? PROFILE_MEDIA_FORMAT,
       handle: requireMetadata(metadata, METADATA_HANDLE),
@@ -677,6 +698,12 @@ function createSelectedPublicationRecord(publication, options) {
   );
   const representation = representations[options.locale];
   return {
+    ...(publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION
+      ? {
+          canonicalLocale: publication.canonicalLocale,
+          canonicalTheme: publication.canonicalTheme
+        }
+      : {}),
     body: options.body ? Buffer.from(options.body) : null,
     cacheControl: PROFILE_MEDIA_CACHE_CONTROL,
     contentType: PROFILE_MEDIA_CONTENT_TYPE,
@@ -745,6 +772,8 @@ function publicationMetadata(publication) {
   };
   const isV4 = publication.contractVersion === PROFILE_MEDIA_STORE_CONTRACT_VERSION;
   if (isV4) {
+    metadata[METADATA_CANONICAL_LOCALE] = publication.canonicalLocale;
+    metadata[METADATA_CANONICAL_THEME] = publication.canonicalTheme;
     metadata[METADATA_CONTRACT_VERSION] = String(publication.contractVersion);
     metadata[METADATA_FORMAT] = publication.format;
     metadata[METADATA_PRESENTATION_DIGEST] = publication.presentationDigest;
@@ -812,7 +841,24 @@ function isPublicationRevisionPresentationCompatible(revision, publication, them
 function samePublicationAuthority(left, right) {
   return left.publicationId === right.publicationId &&
     left.presentationDigest === right.presentationDigest &&
-    left.contractVersion === right.contractVersion;
+    left.contractVersion === right.contractVersion &&
+    left.canonicalLocale === right.canonicalLocale &&
+    left.canonicalTheme === right.canonicalTheme;
+}
+
+function readCanonicalSelectionMetadata(metadata, isV4) {
+  const hasLocale = Object.hasOwn(metadata, METADATA_CANONICAL_LOCALE);
+  const hasTheme = Object.hasOwn(metadata, METADATA_CANONICAL_THEME);
+  if (!isV4) {
+    if (hasLocale || hasTheme) throw malformedMetadataError();
+    return {};
+  }
+  if (!hasLocale && !hasTheme) return {};
+  if (!hasLocale || !hasTheme) throw malformedMetadataError();
+  return {
+    canonicalLocale: requireMetadata(metadata, METADATA_CANONICAL_LOCALE),
+    canonicalTheme: requireMetadata(metadata, METADATA_CANONICAL_THEME)
+  };
 }
 
 function socialMetadata(record) {

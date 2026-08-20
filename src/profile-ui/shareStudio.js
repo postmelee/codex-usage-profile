@@ -1,4 +1,13 @@
-import { resolveShareLocale } from "./cardShare.js";
+import {
+  buildCanonicalCardUrl,
+  buildLocalizedCardUrl,
+  resolveShareLocale
+} from "./cardShare.js";
+import {
+  buildPublicShareUrl,
+  parsePublicShareRevision,
+  resolvePublicShareRevision
+} from "../profile-shared/public-share-url.js";
 import { formatMessage } from "./i18n.js";
 
 const SHARE_MESSAGE_IDS = Object.freeze({
@@ -71,19 +80,79 @@ export function formatShareStudioPlatformMessage(locale, key, platform) {
   });
 }
 
-export function buildPublicProfileShareUrl(origin, handle) {
-  const normalizedHandle = normalizeHandle(handle);
-  if (!normalizedHandle) return null;
+export function resolveShareStudioCardUrls(options = {}) {
+  const copyImageUrl = buildCanonicalCardUrl(options.publicCardUrl);
+  if (!copyImageUrl) {
+    return Object.freeze({ copyImageUrl: null, selectedImageUrl: null });
+  }
 
-  const url = normalizeHttpUrl(origin);
-  if (!url) return null;
+  const selectedImageUrl = buildLocalizedCardUrl(
+    options.selectedPublicCardUrl,
+    options.cardLocale ?? options.locale,
+    options.cardTheme
+  ) ?? buildLocalizedCardUrl(
+    copyImageUrl,
+    options.cardLocale ?? options.locale,
+    options.cardTheme
+  );
+  return Object.freeze({ copyImageUrl, selectedImageUrl });
+}
 
-  // ChatGPT Sites dispatches the API prefix to the Worker, while the root
-  // query is served as a static asset before dynamic metadata can run.
-  url.pathname = `/api/share/${encodeURIComponent(normalizedHandle)}`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+export function buildPublicProfileShareUrl(origin, handle, options = {}) {
+  let revision;
+  try {
+    if (
+      Object.prototype.hasOwnProperty.call(options, "shareRevision") &&
+      options.shareRevision !== undefined
+    ) {
+      revision = parsePublicShareRevision(options.shareRevision);
+      if (revision === null) {
+        throw new TypeError("shareRevision must be a canonical safe integer token");
+      }
+    } else {
+      revision = resolvePublicShareRevision(
+        options?.ownerUpdatedAt,
+        options?.usageUploadedAt
+      );
+    }
+  } catch {
+    // Legacy profiles and malformed timestamps keep the fixed share route.
+    revision = undefined;
+  }
+
+  try {
+    // ChatGPT Sites dispatches the API prefix to the Worker, while the root
+    // query is served as a static asset before dynamic metadata can run.
+    return buildPublicShareUrl(origin, handle, revision);
+  } catch {
+    return null;
+  }
+}
+
+export function resolveShareStudioProfileUrls(origin, handle, options = {}) {
+  return Object.freeze({
+    readmeProfileUrl: buildPublicProfileShareUrl(origin, handle),
+    shareProfileUrl: buildPublicProfileShareUrl(origin, handle, options)
+  });
+}
+
+export function isMobileShareEnvironment(navigatorLike) {
+  if (!navigatorLike || typeof navigatorLike !== "object") return false;
+
+  const userAgentDataMobile = navigatorLike.userAgentData?.mobile;
+  if (typeof userAgentDataMobile === "boolean") {
+    return userAgentDataMobile;
+  }
+
+  const userAgent = typeof navigatorLike.userAgent === "string"
+    ? navigatorLike.userAgent
+    : "";
+  if (/\b(?:Android|iPad|iPhone|iPod)\b/i.test(userAgent)) {
+    return true;
+  }
+
+  return navigatorLike.platform === "MacIntel"
+    && Number(navigatorLike.maxTouchPoints) > 1;
 }
 
 export function buildShareTargets(options = {}) {
@@ -91,18 +160,20 @@ export function buildShareTargets(options = {}) {
   if (!profileUrl) return [];
 
   const copy = getShareStudioCopy(options.locale);
-  return [
+  const targets = [
     createTarget({
-      baseUrl: "https://x.com/intent/post",
+      baseUrl: "https://x.com/intent/tweet",
       id: "x",
       label: copy.x,
       accessibleLabel: copy.shareX,
       params: {
-        text: copy.socialText,
-        url: profileUrl
+        text: `${copy.socialText}\n${profileUrl}`
       }
     }),
     createTarget({
+      // The Threads iOS app shows the raw query verbatim, so form-encoded
+      // spaces reach the composer as literal plus signs. X and Reddit decode
+      // "+" as a space, so only Threads needs the percent-escaped form.
       baseUrl: "https://www.threads.net/intent/post",
       id: "threads",
       label: copy.threads,
@@ -110,7 +181,8 @@ export function buildShareTargets(options = {}) {
       params: {
         text: copy.socialText,
         url: profileUrl
-      }
+      },
+      serializeSpacesAsPercent20: true
     }),
     createTarget({
       baseUrl: "https://www.linkedin.com/feed/",
@@ -144,12 +216,26 @@ export function buildShareTargets(options = {}) {
       }
     })
   ];
+
+  return options.mobile === true
+    ? targets.filter(({ id }) => id !== "linkedin" && id !== "facebook")
+    : targets;
 }
 
-function createTarget({ accessibleLabel, baseUrl, id, label, params }) {
+function createTarget({
+  accessibleLabel,
+  baseUrl,
+  id,
+  label,
+  params,
+  serializeSpacesAsPercent20 = false
+}) {
   const url = new URL(baseUrl);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
+  }
+  if (serializeSpacesAsPercent20) {
+    url.search = url.search.replaceAll("+", "%20");
   }
 
   return Object.freeze({
@@ -158,21 +244,6 @@ function createTarget({ accessibleLabel, baseUrl, id, label, params }) {
     id,
     label
   });
-}
-
-function normalizeHandle(value) {
-  if (typeof value !== "string") return null;
-
-  const handle = value.trim();
-  if (
-    handle === ""
-    || handle.length > 100
-    || /[\u0000-\u001f\u007f/?#]/.test(handle)
-  ) {
-    return null;
-  }
-
-  return handle;
 }
 
 function normalizeHttpUrl(value) {

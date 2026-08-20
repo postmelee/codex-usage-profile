@@ -1,4 +1,8 @@
 import { normalizeCardLocale } from "../profile-card/presentation.js";
+import {
+  PROFILE_MEDIA_STABLE_STATE_KINDS
+} from "../profile-media/media-store-contract.js";
+import { resolvePublicShareRevision } from "../profile-shared/public-share-url.js";
 
 export function createStorePublicProfileResolver(store, options = {}) {
   if (
@@ -11,7 +15,7 @@ export function createStorePublicProfileResolver(store, options = {}) {
   if (
     mediaStore &&
     (
-      typeof mediaStore.getPublishedCard !== "function" ||
+      typeof mediaStore.inspectStableCard !== "function" ||
       typeof mediaStore.getSocialCard !== "function"
     )
   ) {
@@ -40,11 +44,11 @@ export function createStorePublicProfileResolver(store, options = {}) {
 
 async function hasCoherentSocialImage(mediaStore, handle) {
   try {
-    const authority = await mediaStore.getPublishedCard({
-      handle,
-      includeBody: false
+    const stable = await mediaStore.inspectStableCard({
+      handle
     });
-    if (!authority) return false;
+    if (stable.kind !== PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) return false;
+    const authority = stable.publication;
 
     const social = await mediaStore.getSocialCard({
       handle,
@@ -62,11 +66,5 @@ async function hasCoherentSocialImage(mediaStore, handle) {
 }
 
 function latestRevisionAt(...values) {
-  const times = values
-    .filter((value) => value !== undefined && value !== null)
-    .map((value) => new Date(value).getTime());
-  if (times.length === 0 || times.some((time) => !Number.isFinite(time))) {
-    throw new TypeError("public profile summary has an invalid revision date");
-  }
-  return new Date(Math.max(...times)).toISOString();
+  return new Date(resolvePublicShareRevision(...values)).toISOString();
 }

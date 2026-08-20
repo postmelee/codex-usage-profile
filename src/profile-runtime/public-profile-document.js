@@ -1,4 +1,8 @@
 import {
+  parsePublicShareHandle,
+  parsePublicSharePath
+} from "../profile-shared/public-share-url.js";
+import {
   buildProfileOpenGraphDocument,
   injectProfileOpenGraphHead
 } from "./open-graph.js";
@@ -14,15 +18,9 @@ const PUBLIC_PROFILE_DOCUMENT_HEADERS = Object.freeze({
 
 const PUBLIC_PROFILE_DOCUMENT_METHODS = Object.freeze(["GET", "HEAD"]);
 const PUBLIC_PROFILE_DOCUMENT_PATH_RE = /^\/u\/([^/]+)$/;
-const PUBLIC_PROFILE_SHARE_PATH_RE = /^\/api\/share\/([^/]+)$/;
-const UNSUPPORTED_HANDLE_RE = new RegExp("[\\u0000-\\u001f\\u007f/?#]");
 
 export function readPublicProfileDocumentHandle(pathname) {
   return readEncodedPathHandle(pathname, PUBLIC_PROFILE_DOCUMENT_PATH_RE);
-}
-
-function readPublicProfileShareHandle(pathname) {
-  return readEncodedPathHandle(pathname, PUBLIC_PROFILE_SHARE_PATH_RE);
 }
 
 function readEncodedPathHandle(pathname, pattern) {
@@ -42,22 +40,36 @@ function readEncodedPathHandle(pathname, pattern) {
     return null;
   }
 
-  return normalizePublicProfileDocumentHandle(handle);
+  return parsePublicShareHandle(handle);
 }
 
 export function readPublicProfileDocumentRequestHandle(request) {
+  return readPublicProfileDocumentRequestContext(request)?.handle ?? null;
+}
+
+function readPublicProfileDocumentRequestContext(request) {
   if (!request || typeof request.url !== "string") return null;
 
   const url = new URL(request.url);
-  const shareHandle = readPublicProfileShareHandle(url.pathname);
-  if (shareHandle !== null) return shareHandle;
+  const sharePath = parsePublicSharePath(url.pathname);
+  if (sharePath !== null) {
+    return Object.freeze({
+      handle: sharePath.handle,
+      requestedShareRevision: sharePath.revision
+    });
+  }
   const pathHandle = readPublicProfileDocumentHandle(url.pathname);
-  if (pathHandle !== null) return pathHandle;
+  if (pathHandle !== null) {
+    return Object.freeze({ handle: pathHandle, requestedShareRevision: null });
+  }
   if (url.pathname !== "/") return null;
 
   const queryHandles = url.searchParams.getAll("profile");
   if (queryHandles.length !== 1) return null;
-  return normalizePublicProfileDocumentHandle(queryHandles[0]);
+  const handle = parsePublicShareHandle(queryHandles[0]);
+  return handle === null
+    ? null
+    : Object.freeze({ handle, requestedShareRevision: null });
 }
 
 export function isPublicProfileDocumentRequest(request) {
@@ -82,7 +94,8 @@ export function createPublicProfileDocumentHandler(options = {}) {
     if (!isPublicProfileDocumentRequest(request)) return null;
 
     const url = new URL(request.url);
-    const handle = readPublicProfileDocumentRequestHandle(request);
+    const requestContext = readPublicProfileDocumentRequestContext(request);
+    const handle = requestContext.handle;
     const origin = publicBaseUrl ?? url.origin;
     const profile = await resolveProfileSummary(resolveProfile, handle);
 
@@ -92,7 +105,8 @@ export function createPublicProfileDocumentHandler(options = {}) {
         handle,
         origin,
         profile,
-        requestedLocale: url.searchParams.get("locale")
+        requestedLocale: url.searchParams.get("locale"),
+        requestedShareRevision: requestContext.requestedShareRevision
       });
     } catch {
       return null;
@@ -118,21 +132,6 @@ export function createPublicProfileDocumentHandler(options = {}) {
       }
     });
   };
-}
-
-function normalizePublicProfileDocumentHandle(value) {
-  if (typeof value !== "string") return null;
-
-  const handle = value.trim();
-  if (
-    handle === "" ||
-    handle.length > 100 ||
-    UNSUPPORTED_HANDLE_RE.test(handle)
-  ) {
-    return null;
-  }
-
-  return handle;
 }
 
 async function resolveProfileSummary(resolveProfile, handle) {

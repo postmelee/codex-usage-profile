@@ -20,7 +20,11 @@ export const DEVICE_APPROVAL_INTENT = Object.freeze({
 
 export const DEVICE_APPROVAL_SUBMIT_COMMAND =
   "npx codex-usage-profile@latest submit";
-export const DEVICE_APPROVAL_PRODUCTION_ORIGIN =
+// Keep this aligned with the public npm `latest` default. During the Task #108
+// cutover the unpublished 0.1.2 source defaults to canonical production, while
+// public 0.1.1 still defaults to stage5. Canonical therefore needs --server
+// until Gate C publishes 0.1.2.
+export const DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN =
   "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
 
 export function normalizeDeviceApprovalResult(result) {
@@ -122,13 +126,13 @@ export function createDeviceApprovalGuidance(intent, currentOrigin, locale = "en
 }
 
 export function buildDeviceSubmitCommand(
-  currentOrigin = DEVICE_APPROVAL_PRODUCTION_ORIGIN,
-  productionOrigin = DEVICE_APPROVAL_PRODUCTION_ORIGIN
+  currentOrigin = DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN,
+  publishedCliOrigin = DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN
 ) {
   const normalizedCurrentOrigin = normalizeHttpOrigin(currentOrigin);
-  const normalizedProductionOrigin = normalizeHttpOrigin(productionOrigin);
+  const normalizedPublishedCliOrigin = normalizeHttpOrigin(publishedCliOrigin);
 
-  if (normalizedCurrentOrigin === normalizedProductionOrigin) {
+  if (normalizedCurrentOrigin === normalizedPublishedCliOrigin) {
     return DEVICE_APPROVAL_SUBMIT_COMMAND;
   }
 

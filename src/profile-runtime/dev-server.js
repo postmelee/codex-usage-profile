@@ -68,26 +68,29 @@ export function createProfileRuntimeNodeHandler(options = {}) {
     try {
       const requestUrl = createNodeRequestUrl(nodeRequest, { publicBaseUrl });
       const pathname = new URL(requestUrl).pathname;
-
-      if (isProfileBackendRoutePath(pathname, apiPrefix)) {
-        const request = createWebRequestFromNodeRequest(nodeRequest, {
-          url: requestUrl
-        });
-        const response = await hostHandler(request);
-
-        await writeWebResponseToNodeResponse(response, nodeResponse);
-        return;
-      }
+      let webRequest = null;
+      const getWebRequest = () => {
+        if (!webRequest) {
+          webRequest = createWebRequestFromNodeRequest(nodeRequest, {
+            url: requestUrl
+          });
+        }
+        return webRequest;
+      };
 
       if (documentHandler) {
-        const request = createWebRequestFromNodeRequest(nodeRequest, {
-          url: requestUrl
-        });
-        const documentResponse = await documentHandler(request);
+        const documentResponse = await documentHandler(getWebRequest());
         if (documentResponse) {
           await writeWebResponseToNodeResponse(documentResponse, nodeResponse);
           return;
         }
+      }
+
+      if (isProfileBackendRoutePath(pathname, apiPrefix)) {
+        const response = await hostHandler(getWebRequest());
+
+        await writeWebResponseToNodeResponse(response, nodeResponse);
+        return;
       }
 
       frontendMiddleware(nodeRequest, nodeResponse, (error) => {

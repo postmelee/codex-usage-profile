@@ -14,6 +14,10 @@ test("production local smoke verifies artifact before one-runtime contract smoke
     async verifyProductionArtifact(options) {
       calls.push("verify");
       assert.match(options.outputDirectory, /dist$/);
+      assert.equal(
+        options.expectedProjectId,
+        "appgprj_6a83ecc3c4c08191bda7f14d7c26c974"
+      );
       return {
         artifactBytes: 1024,
         clientFileCount: 3,

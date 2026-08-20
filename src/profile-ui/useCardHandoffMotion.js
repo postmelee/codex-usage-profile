@@ -3,6 +3,16 @@ import { useLayoutEffect, useRef, useState } from "react";
 export const CARD_HANDOFF_IDENTITY_TRANSFORM = "translate3d(0, 0, 0) scale(1)";
 export const CARD_HANDOFF_SOURCE_DURATION = 120;
 
+export const CARD_HANDOFF_MODES = Object.freeze({
+  SCALE: "scale",
+  TARGET: "target",
+  TRANSLATE: "translate"
+});
+
+const CARD_HANDOFF_MAX_SCALE = 1.5;
+const CARD_HANDOFF_MIN_SCALE = 2 / 3;
+const CARD_HANDOFF_SCALE_DISTORTION_LIMIT = 0.08;
+
 export const CARD_HANDOFF_PHASES = Object.freeze({
   CLOSING: "closing",
   HANDOFF: "handoff",
@@ -14,6 +24,8 @@ export const CARD_HANDOFF_PHASES = Object.freeze({
 export function useCardHandoffMotion(options = {}) {
   const {
     active,
+    allowOffscreenCloseHandoff = false,
+    allowPartiallyVisibleHandoff = false,
     closeEasing = "cubic-bezier(0.3, 0, 1, 1)",
     introDuration = 280,
     introFrames = null,
@@ -85,10 +97,22 @@ export function useCardHandoffMotion(options = {}) {
     // Intro frames win over a measurable source rect: the handoff target is
     // already in the DOM below the fold, but the opening is not a handoff.
     const sourceTransform = !reduceMotion && !introFrames
-      ? buildRectTransform(resolvedSourceRect, targetRect)
+      ? resolveCardHandoffMotion({
+        allowPartialTranslate: allowPartiallyVisibleHandoff,
+        coarsePointer: prefersCoarsePointer(),
+        source: resolvedSourceRect,
+        target: targetRect,
+        viewport: getMotionViewportRect()
+      })
       : null;
+    const usesSourceMotion = Boolean(
+      sourceTransform
+      && sourceTransform.mode !== CARD_HANDOFF_MODES.TARGET
+    );
     const duration = sourceTransform
-      ? getOpenDuration(sourceTransform.distance)
+      ? sourceTransform.mode === CARD_HANDOFF_MODES.TARGET
+        ? 180
+        : getOpenDuration(sourceTransform.distance)
       : introFrames
       ? introDuration
       : 280;
@@ -98,10 +122,15 @@ export function useCardHandoffMotion(options = {}) {
         { opacity: 1 }
       ]
       : sourceTransform
-      ? [
-        { opacity: 1, transform: sourceTransform.value },
-        { opacity: 1, transform: CARD_HANDOFF_IDENTITY_TRANSFORM }
-      ]
+      ? sourceTransform.mode === CARD_HANDOFF_MODES.TARGET
+        ? [
+          { opacity: 0, transform: CARD_HANDOFF_IDENTITY_TRANSFORM },
+          { opacity: 1, transform: CARD_HANDOFF_IDENTITY_TRANSFORM }
+        ]
+        : [
+          { opacity: 1, transform: sourceTransform.value },
+          { opacity: 1, transform: CARD_HANDOFF_IDENTITY_TRANSFORM }
+        ]
       : introFrames ?? [
         {
           opacity: 0,
@@ -111,7 +140,8 @@ export function useCardHandoffMotion(options = {}) {
       ];
 
     setPhase(CARD_HANDOFF_PHASES.OPENING);
-    card.dataset.motionOrigin = sourceTransform ? "source" : "target";
+    card.dataset.motionOrigin = usesSourceMotion ? "source" : "target";
+    card.dataset.motionMode = sourceTransform?.mode ?? "intro";
     delete card.dataset.motionFallback;
 
     if (typeof card.animate !== "function") {
@@ -142,7 +172,14 @@ export function useCardHandoffMotion(options = {}) {
         animationRef.current = null;
       }
     };
-  }, [active, ready, restartKey, sourceCardRef, sourceRect]);
+  }, [
+    active,
+    allowPartiallyVisibleHandoff,
+    ready,
+    restartKey,
+    sourceCardRef,
+    sourceRect
+  ]);
 
   useLayoutEffect(() => {
     if (!active) return undefined;
@@ -200,16 +237,28 @@ export function useCardHandoffMotion(options = {}) {
     const currentTransform = currentStyle.transform === "none"
       ? CARD_HANDOFF_IDENTITY_TRANSFORM
       : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+    const currentOpacity = readCardOpacity(currentStyle.opacity);
 
     animationRef.current?.cancel();
     animationRef.current = null;
     const targetRect = card.getBoundingClientRect();
     const resolvedSourceRect = resolveSourceRect(sourceCardRef, sourceRect, true);
     const sourceTransform = !reduceMotion
-      ? buildRectTransform(resolvedSourceRect, targetRect)
+      ? resolveCardHandoffMotion({
+        allowOffscreenTranslate: allowOffscreenCloseHandoff,
+        allowPartialTranslate: allowPartiallyVisibleHandoff,
+        coarsePointer: prefersCoarsePointer(),
+        source: resolvedSourceRect,
+        target: targetRect,
+        viewport: getMotionViewportRect()
+      })
       : null;
-    const duration = sourceTransform ? 280 : 180;
+    card.dataset.motionMode = sourceTransform?.mode ?? CARD_HANDOFF_MODES.TARGET;
+    const usesSourceMotion = Boolean(
+      sourceTransform
+      && sourceTransform.mode !== CARD_HANDOFF_MODES.TARGET
+    );
+    const duration = usesSourceMotion ? 280 : 180;
     const frames = reduceMotion
       ? [
         { opacity: currentOpacity },
@@ -218,7 +267,7 @@ export function useCardHandoffMotion(options = {}) {
       : [
         { opacity: currentOpacity, transform: currentTransform },
         {
-          opacity: sourceTransform ? 1 : 0,
+          opacity: usesSourceMotion ? 1 : 0,
           transform: sourceTransform?.value ?? CARD_HANDOFF_IDENTITY_TRANSFORM
         }
       ];
@@ -260,7 +309,7 @@ export function useCardHandoffMotion(options = {}) {
     const previousStyle = revealedSourceStyleRef.current?.trim();
     source.setAttribute(
       "style",
-      `${previousStyle ? `${previousStyle};` : ""}opacity: 1;`
+      `${previousStyle ? `${previousStyle};` : ""}opacity: 1; transition: none;`
     );
 
     const duration = reduceMotion ? 80 : CARD_HANDOFF_SOURCE_DURATION;
@@ -270,7 +319,7 @@ export function useCardHandoffMotion(options = {}) {
     const currentTransform = currentStyle.transform === "none"
       ? CARD_HANDOFF_IDENTITY_TRANSFORM
       : currentStyle.transform;
-    const currentOpacity = Number.parseFloat(currentStyle.opacity) || 1;
+    const currentOpacity = readCardOpacity(currentStyle.opacity);
     const frames = reduceMotion
       ? [
         { opacity: currentOpacity },
@@ -297,6 +346,7 @@ export function useCardHandoffMotion(options = {}) {
     const card = cardRef.current;
     if (card) {
       card.dataset.motionFallback = reason;
+      card.dataset.motionMode = CARD_HANDOFF_MODES.TARGET;
       card.dataset.motionOrigin = "target";
     }
     setPhase(CARD_HANDOFF_PHASES.OPEN);
@@ -338,6 +388,65 @@ export function buildRectTransform(source, target) {
   };
 }
 
+export function resolveCardHandoffMotion({
+  allowOffscreenTranslate = false,
+  allowPartialTranslate = false,
+  coarsePointer = false,
+  source,
+  target,
+  viewport
+} = {}) {
+  const scaleTransform = buildRectTransform(source, target);
+  if (!scaleTransform) return null;
+  if (!isValidViewportRect(viewport)) {
+    return {
+      distance: 0,
+      mode: CARD_HANDOFF_MODES.TARGET,
+      value: CARD_HANDOFF_IDENTITY_TRANSFORM
+    };
+  }
+
+  if (
+    !coarsePointer
+    && isSafeScaleTransform(source, target, viewport)
+  ) {
+    return {
+      ...scaleTransform,
+      mode: CARD_HANDOFF_MODES.SCALE
+    };
+  }
+
+  const translateX = rectCenterX(source) - rectCenterX(target);
+  const translateY = rectCenterY(source) - rectCenterY(target);
+  const translatedTarget = offsetRect(target, translateX, translateY);
+
+  if (
+    allowOffscreenTranslate
+    || isRectWithinViewport(translatedTarget, viewport)
+    || (
+      allowPartialTranslate
+      && isRectMeaningfullyVisible(translatedTarget, viewport)
+    )
+  ) {
+    return {
+      distance: Math.hypot(translateX, translateY),
+      mode: CARD_HANDOFF_MODES.TRANSLATE,
+      value: `translate3d(${translateX}px, ${translateY}px, 0) scale(1)`
+    };
+  }
+
+  return {
+    distance: 0,
+    mode: CARD_HANDOFF_MODES.TARGET,
+    value: CARD_HANDOFF_IDENTITY_TRANSFORM
+  };
+}
+
+export function readCardOpacity(value, fallback = 1) {
+  const opacity = Number.parseFloat(value);
+  return Number.isFinite(opacity) ? opacity : fallback;
+}
+
 export function getOpenDuration(distance) {
   return Math.round(Math.min(440, Math.max(320, 320 + (distance * 0.3))));
 }
@@ -354,6 +463,64 @@ export function isValidRect(rect) {
   );
 }
 
+export function getMotionViewportRect() {
+  const visualViewport = globalThis.visualViewport;
+  const left = finiteOr(visualViewport?.offsetLeft, 0);
+  const top = finiteOr(visualViewport?.offsetTop, 0);
+  const width = finiteOr(visualViewport?.width, globalThis.innerWidth);
+  const height = finiteOr(visualViewport?.height, globalThis.innerHeight);
+
+  return {
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    top,
+    width
+  };
+}
+
+export function isRectWithinViewport(rect, viewport) {
+  if (!isValidRect(rect) || !isValidViewportRect(viewport)) return false;
+
+  return (
+    rect.left >= viewport.left
+    && rect.top >= viewport.top
+    && rect.left + rect.width <= viewport.right
+    && rect.top + rect.height <= viewport.bottom
+  );
+}
+
+export function isRectMeaningfullyVisible(rect, viewport, minimumRatio = 0.25) {
+  if (
+    !isValidRect(rect)
+    || !isValidViewportRect(viewport)
+    || !Number.isFinite(minimumRatio)
+    || minimumRatio <= 0
+    || minimumRatio > 1
+  ) {
+    return false;
+  }
+
+  const visibleWidth = Math.max(
+    0,
+    Math.min(rect.left + rect.width, viewport.right)
+      - Math.max(rect.left, viewport.left)
+  );
+  const visibleHeight = Math.max(
+    0,
+    Math.min(rect.top + rect.height, viewport.bottom)
+      - Math.max(rect.top, viewport.top)
+  );
+  const visibleRatio = (visibleWidth * visibleHeight) / (rect.width * rect.height);
+
+  return visibleRatio >= minimumRatio;
+}
+
+export function prefersCoarsePointer() {
+  return globalThis.matchMedia?.("(pointer: coarse)").matches ?? false;
+}
+
 export function prefersReducedMotion() {
   return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
@@ -365,4 +532,50 @@ export function resolveSourceRect(sourceCardRef, snapshot, preferLive = false) {
   if (!isValidRect(liveRect)) return null;
   if (preferLive) return liveRect;
   return isValidRect(snapshot) ? snapshot : liveRect;
+}
+
+function finiteOr(value, fallback) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function isSafeScaleTransform(source, target, viewport) {
+  const scaleX = source.width / target.width;
+  const scaleY = source.height / target.height;
+  const scaleDistortion = Math.abs(scaleX - scaleY) / Math.max(scaleX, scaleY);
+
+  return (
+    scaleX >= CARD_HANDOFF_MIN_SCALE
+    && scaleX <= CARD_HANDOFF_MAX_SCALE
+    && scaleY >= CARD_HANDOFF_MIN_SCALE
+    && scaleY <= CARD_HANDOFF_MAX_SCALE
+    && scaleDistortion <= CARD_HANDOFF_SCALE_DISTORTION_LIMIT
+    && isRectWithinViewport(source, viewport)
+  );
+}
+
+function isValidViewportRect(rect) {
+  return Boolean(
+    isValidRect(rect)
+    && Number.isFinite(rect.right)
+    && Number.isFinite(rect.bottom)
+    && rect.right === rect.left + rect.width
+    && rect.bottom === rect.top + rect.height
+  );
+}
+
+function offsetRect(rect, offsetX, offsetY) {
+  return {
+    height: rect.height,
+    left: rect.left + offsetX,
+    top: rect.top + offsetY,
+    width: rect.width
+  };
+}
+
+function rectCenterX(rect) {
+  return rect.left + (rect.width / 2);
+}
+
+function rectCenterY(rect) {
+  return rect.top + (rect.height / 2);
 }

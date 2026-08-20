@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "production": {
+    "project_id": "appgprj_6a83ecc3c4c08191bda7f14d7c26c974",
+    "origin": "https://codex-usage-profile.meleeisdeveloping.chatgpt.site",
+    "d1": "DB",
+    "r2": "PROFILE_MEDIA"
+  },
+  "stage5": {
+    "project_id": "appgprj_6a62f58721788191a7cd82f37320f244",
+    "origin": "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site",
+    "d1": "DB",
+    "r2": "PROFILE_MEDIA"
+  }
+}
