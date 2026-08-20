@@ -17,12 +17,13 @@ import {
   createNpmReleaseCandidate,
   publicReleaseSummary
 } from "./verify-npm-release.mjs";
+import {
+  DEFAULT_SERVICE_ORIGIN
+} from "../packages/codex-usage-profile-cli/src/config.js";
 
 const execFileAsync = promisify(execFileCallback);
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, "..");
-const DEFAULT_SERVICE_ORIGIN =
-  "https://codex-usage-profile.meleeisdeveloping.chatgpt.site";
 const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "ComSpec",
   "HTTP_PROXY",

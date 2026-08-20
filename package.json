@@ -33,7 +33,7 @@
     "test:e2e": "playwright test",
     "verify:npm-release": "node scripts/verify-npm-release.mjs",
     "verify:sites-fullstack": "node scripts/verify-sites-fullstack-artifact.mjs",
-    "verify:sites-production": "node scripts/verify-sites-production-artifact.mjs"
+    "verify:sites-production": "node scripts/verify-sites-production-artifact.mjs --expected-project-id appgprj_6a83ecc3c4c08191bda7f14d7c26c974"
   },
   "engines": {
     "node": ">=20"

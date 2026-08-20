@@ -71,25 +71,30 @@ Site 생성, storage 추가 또는 high-usage Site의 public 유지가 제한될
   canonical manifest다.
 - `.openai/hosting-targets.json`은 production·stage5의 nonsecret project/origin/binding
   registry다. credential과 environment 값은 기록하지 않는다.
-- `scripts/materialize-sites-target.mjs`는 clean exact commit의 `dist`를 repository 밖
-  임시 packaging root로 복사하고 선택한 target manifest를 만든 뒤 공식 Sites
-  `package-site.sh`를 호출한다. archive path도 repository 밖이어야 한다.
+- `scripts/materialize-sites-target.mjs`는 ignored `dist/`를 삭제하고 clean exact commit에서
+  production build를 다시 만든다. repository 밖 임시 packaging root에 선택한 target
+  manifest를 넣어 공식 Sites `package-site.sh`를 호출하며 archive path의 symlink를 포함한
+  real path도 repository 밖이어야 한다.
 - production/stage5 project 또는 origin이 같거나 canonical manifest가 production registry와
-  다르면 packaging을 시작하지 않는다. artifact verifier는 선택한 exact project id를 다시
-  확인한다.
+  다르면 packaging을 시작하지 않는다. `--expected-project-id`는 packaging 직전 live
+  read-only Site preflight에서 얻은 값이어야 하며 registry/manifest와 다르면 중단한다.
+  생성된 archive는 안전한 임시 경로에 다시 풀어 exact project/binding/migration과
+  credential·절대 경로 검사를 반복한다.
 
 ```bash
-npm run build:production
 npm run package:sites-target -- \
   --target production \
+  --expected-project-id {live_preflight_project_id} \
   --source-sha {exact_clean_commit} \
   --archive /absolute/external/path/production.tar.gz \
   --package-helper /absolute/path/to/sites/scripts/package-site.sh
 ```
 
-stage5 후보는 같은 명령에서 `--target stage5`만 사용한다. canonical manifest를 stage5
-값으로 수정하거나 archive를 repository 안에 만들지 않는다. Stage 2에서는 guard와 test만
-검증하며 source push·save/deploy는 하지 않는다.
+stage5 후보는 같은 명령에서 `--target stage5`와 live stage5 project id를 사용한다.
+canonical manifest를 stage5 값으로 수정하거나 archive를 repository 안에 만들지 않는다.
+실패한 실행이 이번에 만든 partial archive는 자동 정리되며, 이미 존재하던 archive는
+덮어쓰거나 삭제하지 않는다. Stage 2에서는 guard와 test만 검증하며 source
+push·save/deploy는 하지 않는다.
 
 ## 운영 불변식
 
@@ -162,7 +167,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    key 존재 여부를 read-only로 확인한다. secret plaintext는 읽거나 출력하지
    않는다.
 2. `npm run build:production`, `npm run verify:sites-fullstack`,
-   `npm run verify:sites-production`을 같은 clean commit에서 실행한다.
+   `npm run verify:sites-production`을 같은 clean commit에서 실행한다. target archive는
+   위 materializer가 기존 `dist/`를 제거하고 같은 commit에서 다시 build한 결과만 사용한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
    현재 `devel`의 Task #74·#78 누적 candidate는 D1 migration `1..5`와
@@ -316,7 +322,7 @@ stable은 orphan candidate가 될 수 있다.
 
 ```bash
 npm run sites:profile-maintenance -- retention \
-  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+  --origin {approved_target_origin} \
   --retention-days 90
 ```
 

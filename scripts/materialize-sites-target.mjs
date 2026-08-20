@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   stat,
   writeFile
@@ -16,7 +17,8 @@ import {
   isAbsolute,
   join,
   relative,
-  resolve
+  resolve,
+  sep
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -97,8 +99,12 @@ export async function materializeSitesTarget(options = {}) {
   if (typeof options.archivePath !== "string" || !isAbsolute(options.archivePath)) {
     throw new Error("Sites target archive path must be absolute");
   }
+  const expectedProjectId = requireProjectId(
+    options.expectedProjectId,
+    "Sites target packaging requires the live preflight project_id"
+  );
   const archivePath = resolve(options.archivePath);
-  assertPathOutside(archivePath, repositoryRoot, "Sites target archive");
+  await assertPathOutside(archivePath, repositoryRoot, "Sites target archive");
   await assertPathAbsent(archivePath, "Sites target archive");
 
   if (
@@ -112,6 +118,11 @@ export async function materializeSitesTarget(options = {}) {
 
   const registry = await readSitesTargetRegistry({ repositoryRoot });
   const target = registry[targetName];
+  if (target.project_id !== expectedProjectId) {
+    throw new Error(
+      "Sites target registry does not match the live preflight project_id"
+    );
+  }
   const canonicalHosting = JSON.parse(
     await readFile(join(repositoryRoot, ".openai/hosting.json"), "utf8")
   );
@@ -130,10 +141,25 @@ export async function materializeSitesTarget(options = {}) {
     throw new Error("Sites target packaging requires a clean repository");
   }
 
-  const outputDirectory = join(repositoryRoot, "dist");
-  await requireDirectory(outputDirectory, "Sites build output");
   const temporaryRoot = await mkdtemp(join(tmpdir(), "codex-usage-profile-sites-target-"));
+  let completed = false;
   try {
+    const outputDirectory = join(repositoryRoot, "dist");
+    await rm(outputDirectory, { force: true, recursive: true });
+    const buildInvoker = options.buildInvoker ?? buildProductionArtifact;
+    await buildInvoker({ outputDirectory, repositoryRoot });
+    await requireDirectory(outputDirectory, "Sites build output");
+
+    const sourceAfterBuild = await sourceProbe(repositoryRoot);
+    if (
+      sourceAfterBuild.head !== options.sourceSha ||
+      sourceAfterBuild.clean !== true
+    ) {
+      throw new Error(
+        "Sites target source changed while rebuilding the production artifact"
+      );
+    }
+
     const stagedOutput = join(temporaryRoot, "dist");
     const stagedMetadata = join(temporaryRoot, ".openai");
     await cp(outputDirectory, stagedOutput, { recursive: true });
@@ -153,8 +179,8 @@ export async function materializeSitesTarget(options = {}) {
     );
 
     const verifyArtifact = options.verifyArtifact ?? verifySitesProductionArtifact;
-    const artifact = await verifyArtifact({
-      expectedProjectId: target.project_id,
+    await verifyArtifact({
+      expectedProjectId,
       outputDirectory: stagedOutput
     });
 
@@ -169,11 +195,21 @@ export async function materializeSitesTarget(options = {}) {
       throw new Error("Sites target archive is empty");
     }
 
+    const archiveInspector = options.archiveInspector ?? inspectSitesArchive;
+    const inspected = await archiveInspector({
+      archivePath,
+      expectedProjectId,
+      manifestBytes,
+      temporaryRoot,
+      verifyArtifact
+    });
+    completed = true;
+
     return Object.freeze({
       archiveBytes: archive.length,
       archivePath,
       archiveSha256: sha256(archive),
-      artifactBytes: artifact.artifactBytes ?? null,
+      artifactBytes: inspected.artifactBytes ?? null,
       manifestSha256: sha256(Buffer.from(manifestBytes)),
       origin: target.origin,
       projectId: target.project_id,
@@ -182,7 +218,19 @@ export async function materializeSitesTarget(options = {}) {
     });
   } finally {
     await rm(temporaryRoot, { force: true, recursive: true });
+    if (!completed) {
+      await rm(archivePath, { force: true });
+    }
   }
+}
+
+async function buildProductionArtifact(options) {
+  const executable = process.platform === "win32" ? "npm.cmd" : "npm";
+  await execFileAsync(executable, ["run", "build:production"], {
+    cwd: options.repositoryRoot,
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024
+  });
 }
 
 async function probeGitSource(repositoryRoot) {
@@ -212,6 +260,64 @@ async function invokePackageHelper(options) {
   });
 }
 
+export async function inspectSitesArchive(options) {
+  const { stdout } = await execFileAsync("tar", ["-tzf", options.archivePath], {
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024
+  });
+  const entries = stdout.split(/\r?\n/).filter(Boolean);
+  if (entries.length === 0) {
+    throw new Error("Sites target archive has no entries");
+  }
+  for (const entry of entries) {
+    assertSafeArchiveEntry(entry);
+  }
+  if (!entries.includes("dist/server/index.js")) {
+    throw new Error("Sites target archive is missing the Worker entry");
+  }
+  if (!entries.includes("dist/.openai/hosting.json")) {
+    throw new Error("Sites target archive is missing the hosting manifest");
+  }
+
+  const extractionRoot = join(options.temporaryRoot, "archive-inspection");
+  await mkdir(extractionRoot, { recursive: true });
+  await execFileAsync("tar", [
+    "-xzf",
+    options.archivePath,
+    "-C",
+    extractionRoot
+  ], {
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024
+  });
+
+  const outputDirectory = join(extractionRoot, "dist");
+  const archivedManifest = await readFile(
+    join(outputDirectory, ".openai/hosting.json"),
+    "utf8"
+  );
+  if (archivedManifest !== options.manifestBytes) {
+    throw new Error("Sites target archive contains an unexpected hosting manifest");
+  }
+  return options.verifyArtifact({
+    expectedProjectId: options.expectedProjectId,
+    outputDirectory
+  });
+}
+
+function assertSafeArchiveEntry(entry) {
+  const components = entry.split("/").filter(Boolean);
+  if (
+    entry.startsWith("/") ||
+    entry.startsWith("\\") ||
+    /^[A-Za-z]:/.test(entry) ||
+    components.includes("..") ||
+    components[0] !== "dist"
+  ) {
+    throw new Error("Sites target archive contains an unsafe entry");
+  }
+}
+
 function assertHostingMatchesTarget(hosting, target, label) {
   assertExactKeys(hosting, ["d1", "project_id", "r2"], label);
   if (
@@ -234,7 +340,7 @@ function assertExactKeys(value, expected, label) {
   }
 }
 
-function normalizeOrigin(value) {
+export function normalizeOrigin(value) {
   let url;
   try {
     url = new URL(String(value));
@@ -254,24 +360,47 @@ function normalizeOrigin(value) {
   return url.origin;
 }
 
-function assertPathOutside(candidatePath, parentPath, label) {
-  const pathFromParent = relative(resolve(parentPath), resolve(candidatePath));
+async function assertPathOutside(candidatePath, parentPath, label) {
+  const realParent = await realpath(resolve(parentPath));
+  const realCandidate = await resolveThroughExistingAncestor(candidatePath);
+  const pathFromParent = relative(realParent, realCandidate);
   if (
     pathFromParent === "" ||
-    pathFromParent === ".." ||
-    !pathFromParent.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    (
+      pathFromParent !== ".." &&
+      !pathFromParent.startsWith(`..${sep}`) &&
+      !isAbsolute(pathFromParent)
+    )
   ) {
     throw new Error(`${label} must be outside the repository`);
+  }
+}
+
+async function resolveThroughExistingAncestor(candidatePath) {
+  const missing = [];
+  let cursor = resolve(candidatePath);
+  while (true) {
+    try {
+      const existing = await realpath(cursor);
+      return resolve(existing, ...missing.reverse());
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = dirname(cursor);
+      if (parent === cursor) throw error;
+      missing.push(cursor.slice(parent.length + 1));
+      cursor = parent;
+    }
   }
 }
 
 async function assertPathAbsent(path, label) {
   try {
     await lstat(path);
-    throw new Error(`${label} already exists`);
   } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
+    if (error?.code === "ENOENT") return;
+    throw error;
   }
+  throw new Error(`${label} already exists`);
 }
 
 async function requireDirectory(path, label) {
@@ -288,22 +417,53 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function parseArguments(argv) {
+export function parseArguments(argv) {
+  const allowed = new Set([
+    "archive",
+    "expected-project-id",
+    "package-helper",
+    "source-sha",
+    "target"
+  ]);
   const values = {};
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
     const value = argv[index + 1];
-    if (!key?.startsWith("--") || !value) {
-      throw new Error("Expected --target, --archive, --source-sha, and --package-helper");
+    const name = key?.startsWith("--") ? key.slice(2) : "";
+    if (!allowed.has(name) || !value || values[name] !== undefined) {
+      throw new Error(
+        "Expected unique --target, --archive, --source-sha, " +
+        "--package-helper, and --expected-project-id arguments"
+      );
     }
-    values[key.slice(2)] = value;
+    values[name] = value;
+  }
+  if ([
+    "archive",
+    "expected-project-id",
+    "package-helper",
+    "source-sha",
+    "target"
+  ].some((name) => !values[name])) {
+    throw new Error(
+      "Expected unique --target, --archive, --source-sha, " +
+      "--package-helper, and --expected-project-id arguments"
+    );
   }
   return {
     archivePath: values.archive,
+    expectedProjectId: values["expected-project-id"],
     packageHelperPath: values["package-helper"],
     sourceSha: values["source-sha"],
     target: values.target
   };
+}
+
+function requireProjectId(value, message) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(message);
+  }
+  return value;
 }
 
 const invokedPath = process.argv[1]

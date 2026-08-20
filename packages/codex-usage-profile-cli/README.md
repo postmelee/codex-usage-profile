@@ -2,15 +2,15 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-The public release line starts at `codex-usage-profile@0.1.0`. Version `0.1.2`
-uses the canonical production service by default and keeps custom service
-origins available through the explicit `--server` option.
+The public release line starts at `codex-usage-profile@0.1.0`. This source tree
+contains the unpublished `0.1.2` candidate, which uses the canonical production
+service by default and keeps custom service origins available through the
+explicit `--server` option.
 
-> The production MVP service runs at
-> `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`, which is
-> also the CLI default. For reproducible automation, pin `0.1.2`; for an
-> interactive first run, review the version npm displays before accepting
-> `@latest`.
+> The public `latest` tag remains `0.1.1` and defaults to
+> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` until the
+> canonical Site passes private/public smoke. Do not request or pin `0.1.2`
+> from npm before its release gate completes.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ One command can start browser login when needed and continue with submission:
 npx codex-usage-profile@latest submit
 ```
 
-The CLI defaults to the production Sites origin. Once login succeeds, the
+The public `@latest` CLI defaults to the current stage5 service. Once login succeeds, the
 service origin and a narrow submit credential are stored locally. Use
 `--server` only for local development or an explicitly reviewed alternative
 deployment.
@@ -137,9 +137,9 @@ Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROF
 On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-issued service token and pin the CLI to an exact version. `--yes` intentionally skips npm's installation confirmation and should not be combined with `@latest` in unattended execution.
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.2 submit --json
+npx --yes codex-usage-profile@0.1.1 submit --json
 ```
 
 JSON, CI, and non-TTY execution never run the optional star prompt, so stdout

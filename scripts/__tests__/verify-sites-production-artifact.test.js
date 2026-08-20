@@ -6,13 +6,16 @@ import test from "node:test";
 
 import {
   MAX_SITES_PRODUCTION_ARTIFACT_BYTES,
+  parseArguments,
   verifySitesProductionArtifact
 } from "../verify-sites-production-artifact.mjs";
+
+const EXPECTED_PROJECT_ID = "opaque-sites-project-id";
 
 test("production artifact verifier accepts the exact hosted candidate shape", async () => {
   const outputDirectory = await createProductionArtifact();
   const result = await verifySitesProductionArtifact({
-    expectedProjectId: "opaque-sites-project-id",
+    expectedProjectId: EXPECTED_PROJECT_ID,
     outputDirectory
   });
 
@@ -41,7 +44,10 @@ test("production artifact verifier rejects pre-hosted linkage", async () => {
   });
 
   await assert.rejects(
-    () => verifySitesProductionArtifact({ outputDirectory }),
+    () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
+      outputDirectory
+    }),
     /requires the hosted linkage/
   );
 });
@@ -52,6 +58,7 @@ test("production artifact verifier rejects credentials and local paths", async (
   });
   await assert.rejects(
     () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
       outputDirectory: credentialArtifact
     }),
     /forbidden credential/
@@ -62,6 +69,7 @@ test("production artifact verifier rejects credentials and local paths", async (
   });
   await assert.rejects(
     () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
       outputDirectory: localPathArtifact
     }),
     /forbidden pattern|forbidden absolute local path/
@@ -77,7 +85,10 @@ test("production artifact verifier rejects fallback runtime imports", async () =
   });
 
   await assert.rejects(
-    () => verifySitesProductionArtifact({ outputDirectory }),
+    () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
+      outputDirectory
+    }),
     /forbidden pattern|forbidden Node runtime import/
   );
 });
@@ -90,7 +101,10 @@ test("production artifact verifier enforces the total candidate size", async () 
   );
 
   await assert.rejects(
-    () => verifySitesProductionArtifact({ outputDirectory }),
+    () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
+      outputDirectory
+    }),
     /artifact size .* exceeds/
   );
 });
@@ -103,8 +117,51 @@ test("production verifier rejects an unreviewed future migration", async () => {
   });
 
   await assert.rejects(
-    () => verifySitesProductionArtifact({ outputDirectory }),
+    () => verifySitesProductionArtifact({
+      expectedProjectId: EXPECTED_PROJECT_ID,
+      outputDirectory
+    }),
     /unexpected filenames/
+  );
+});
+
+test("production verifier requires an independent expected project id", async () => {
+  const outputDirectory = await createProductionArtifact();
+  await assert.rejects(
+    () => verifySitesProductionArtifact({ outputDirectory }),
+    /requires an expected project_id/
+  );
+  await assert.rejects(
+    () => verifySitesProductionArtifact({
+      expectedProjectId: null,
+      outputDirectory
+    }),
+    /requires an expected project_id/
+  );
+});
+
+test("production verifier CLI arguments reject omissions and duplicates", () => {
+  assert.deepEqual(
+    parseArguments([
+      "--expected-project-id",
+      EXPECTED_PROJECT_ID,
+      "--output-directory",
+      "/tmp/dist"
+    ]),
+    {
+      expectedProjectId: EXPECTED_PROJECT_ID,
+      outputDirectory: "/tmp/dist"
+    }
+  );
+  assert.throws(() => parseArguments([]), /expected-project-id/);
+  assert.throws(
+    () => parseArguments([
+      "--expected-project-id",
+      EXPECTED_PROJECT_ID,
+      "--expected-project-id",
+      EXPECTED_PROJECT_ID
+    ]),
+    /unique/
   );
 });
 

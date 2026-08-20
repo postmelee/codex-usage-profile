@@ -78,10 +78,12 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 - tracked `.openai/hosting-targets.json`은 production·stage5 role별 project, origin, D1/R2 logical
   binding만 기록하고 credential은 기록하지 않는다.
 - stage5 target materialization은 repository 밖 임시 staging tree/archive에서만 수행한다.
-  helper는 validated `dist`와 generated manifest를 임시 packaging root에 배치한 뒤 공식
-  `package-site.sh`를 호출한다.
+  materializer는 live preflight project id를 별도 필수 입력으로 받고 exact clean source에서
+  기존 `dist`를 제거한 뒤 production artifact를 새로 build한다. 공식 `package-site.sh`가 만든
+  archive를 임시 경로에 다시 풀어 generated manifest와 production verifier를 반복 검증한다.
 - packaging preflight는 requested role, resolved project, expected origin, D1/R2 binding,
-  exact clean source SHA, target manifest digest와 archive digest가 모두 맞아야 통과한다.
+  live project id, exact clean source SHA, target manifest digest와 archive digest가 모두 맞아야
+  통과한다. archive 생성·검증 실패 시 이번 실행이 만든 partial archive는 제거한다.
 - project/origin/source/binding 중 하나라도 어긋나면 credential 발급, source push,
   `save_site_version`, deploy를 시작하지 않는다.
 - Stage 1에서 안전한 materialization을 지원하지 않는 것으로 확인되면 Stage 2를 시작하지 않고
@@ -324,6 +326,15 @@ Task #108 Stage 2: canonical production source와 target guard 구현
 
 ## Stage 3 — checkpoint integration과 exact-main release
 
+> 2026-08-18 PR #109 리뷰 뒤 작업지시자는 별도 이슈로 분리하지 않고 Task #108에서
+> production 배포, public cutover, CLI/README 전환과 stage5 역할 전환까지 완료한다고
+> 다시 확인했다. 이에 따라 아래 checkpoint/release PR은 전체 task를 완료했다고 선언하는
+> PR이 아니라 exact-main 배포를 가능하게 하는 **Task #108 한정 선행 integration 예외**다.
+> 작업지시자 명시 지시를 우선하는
+> `agent_code_hyperfall_rule_conflict.md`의 우선순위에 근거하며, Issue를 close하거나
+> `task-final-report`를 호출하지 않는다. 전체 Stage와 remote Gate가 끝난 뒤에만 최종
+> 보고서와 task-closing PR을 작성한다. 이 예외를 일반 workflow 규칙으로 확장하지 않는다.
+
 ### 진입 조건
 
 - Stage 2 보고서와 exact source candidate가 승인됐다.
@@ -340,24 +351,33 @@ Task #108 Stage 2: canonical production source와 target guard 구현
 
 1. 최신 `origin/devel`과 Stage 2 branch의 merge-base/diff/CI를 확인한다. 충돌이면 임의
    rebase/merge하지 않고 중단한다.
-2. root/package README의 canonical URL·private default·fixed README/revision share·CLI `0.1.2`
-   표현을 launch-ready로 보정한다. 실제 공개 전에는 홍보를 시작하지 않고 #90의 badge·GitHub
-   metadata·전면 copy 범위는 건드리지 않는다.
-3. README 보정과 구현계획 결정을 `Task #108 [Stage 3.1]` 커밋으로 고정하고 Stage 2 전체
+2. PR #109 리뷰 1~15를 반영한다. checkpoint의 root/package README와 public 명령은 현재
+   실제 public stage5와 npm `latest=0.1.1`을 계속 가리키며, canonical/`0.1.2`는
+   unpublished·undeployed candidate로만 기술한다. production owner-only smoke 동안 Device
+   Approval은 `@latest --server {production}`을 제시하고 Gate C가 끝날 때까지 `--server`를
+   생략하지 않는다.
+3. materializer는 live read-only preflight에서 얻은 별도 expected project id를 필수 입력으로
+   받고, 현재 exact clean source에서 build를 새로 만든다. 공식 helper가 만든 archive를 안전한
+   임시 경로에 다시 풀어 manifest·binding·migration·credential/path 검사를 반복한다. 실패 시
+   이번 실행이 만든 archive를 정리한다.
+4. verifier의 expected project id를 모든 호출 경로에서 필수로 하고 realpath 기반 repository
+   외부 경계, 실제 git/helper·CLI argument와 negative test를 보강한다. origin 중복은 runtime
+   consumer에서는 줄이되 registry와 independent allowlist의 교차 검증은 보존한다.
+5. README·guard·구현계획 보정을 `Task #108 [Stage 3.2]` 커밋으로 고정하고 Stage 2 전체
    검증 중 README·CLI·share 계약에 직접 연결된 focused test와 build/verifier를 재실행한다.
-4. `local/task108:publish/task108`을 push하고 base `devel`의 checkpoint PR을 생성한다.
+6. `local/task108:publish/task108`을 push하고 base `devel`의 checkpoint PR을 생성한다.
    Issue를 close하지 않으며 Stage 4~6과 remote Gate가 남았음을 본문에 적는다.
-5. PR check, review, head SHA와 diff를 확인하고 작업지시자에게 merge를 요청한다.
-6. merge 통지 뒤 PR `MERGED`, `origin/devel` source 포함과 remote branch 삭제를 확인한다.
-7. 새 local commit이 없는 branch를 `origin/devel` merge commit까지 `git merge --ff-only`한다.
+7. PR check, review, head SHA와 diff를 확인하고 작업지시자에게 merge를 요청한다.
+8. merge 통지 뒤 PR `MERGED`, `origin/devel` source 포함과 remote branch 삭제를 확인한다.
+9. 새 local commit이 없는 branch를 `origin/devel` merge commit까지 `git merge --ff-only`한다.
    불가능하면 중단하고 복구 승인을 받는다.
-8. integrated `devel` Actions와 clean-worktree 전체 검증을 확인한다.
-9. 중복 release PR이 없을 때 `devel → main` PR을 만든다. tag/npm/Sites deploy가 PR merge에
+10. integrated `devel` Actions와 clean-worktree 전체 검증을 확인한다.
+11. 중복 release PR이 없을 때 `devel → main` PR을 만든다. tag/npm/Sites deploy가 PR merge에
    포함되지 않음을 명시한다.
-10. 작업지시자 review·merge 뒤 `origin/main`이 candidate를 포함하고 tree diff가 빈 출력인지
+12. 작업지시자 review·merge 뒤 `origin/main`이 candidate를 포함하고 tree diff가 빈 출력인지
    확인한다.
-11. tag, Release, npm publish, Sites source push/save/deploy/access/environment mutation은 하지 않는다.
-12. PR·SHA·tree·check 결과를 보고서에 기록하고 Stage 3 커밋 뒤 승인을 요청한다.
+13. tag, Release, npm publish, Sites source push/save/deploy/access/environment mutation은 하지 않는다.
+14. PR·SHA·tree·check 결과를 보고서에 기록하고 Stage 3 커밋 뒤 승인을 요청한다.
 
 ### 검증
 
@@ -377,8 +397,9 @@ git status --short
 
 ### 완료·중단 조건
 
-- 완료: checkpoint PR과 release PR이 작업지시자 merge로 끝났고 Issue는 open이며 exact main tree가
-  integrated candidate와 같다. Sites와 npm state는 변하지 않았다.
+- 완료: checkpoint PR과 release PR이 작업지시자 승인 예외에 따라 merge됐고 Issue는 open이며
+  exact main tree가 integrated candidate와 같다. public README와 npm `latest`는 stage5/`0.1.1`
+  continuity를 유지하고 Sites와 npm remote state는 변하지 않았다.
 - 중단: PR base/head/diff/check/review 불일치, main tree mismatch, branch fast-forward 불가,
   Issue 조기 close 또는 예상하지 않은 tag/publish/deploy.
 
@@ -676,7 +697,9 @@ Task #108 Stage 6: dual Site runbook과 통합 검증 완료
 - **single manifest 오배포**: canonical production manifest, repository 밖 stage5 materialization과
   role/project/origin/source digest preflight를 함께 강제한다.
 - **checkpoint workflow 예외**: Issue를 close하거나 final-report를 호출하지 않는다. merge 뒤
-  `--ff-only`만 허용하고 final PR 때 같은 publish branch 이름을 새로 쓴다.
+  `--ff-only`만 허용하고 final PR 때 같은 publish branch 이름을 새로 쓴다. 2026-08-18
+  작업지시자가 Task #108 안에서 배포까지 진행한다는 전제를 재확인했으며, 이 명시 지시는
+  Task #108 한정 예외의 승인 근거다.
 - **OAuth callback 충돌**: app을 환경별로 분리하고 기존 stage5 secret을 production에 복사하지 않는다.
 - **npm immutability**: production public 뒤 publish하고 새 `@latest` 확인 전 stage5 continuity를
   유지한다. 같은 version은 덮어쓰지 않는다.

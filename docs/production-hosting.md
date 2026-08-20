@@ -43,7 +43,11 @@ production project를 생성했다. 이 project는 아직 version·deployment·e
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
 policy는 공유하지 않는다. production artifact는 canonical manifest로 만들고 stage5 artifact는
-repository 밖 임시 packaging root에서 role-specific manifest를 materialize한다. connector가
+repository 밖 임시 packaging root에서 role-specific manifest를 materialize한다. packaging은
+live read-only preflight에서 확인한 project id를 필수 입력으로 받아 registry와 대조하고,
+exact clean source의 기존 `dist`를 제거한 뒤 production artifact를 다시 build한다. 공식 helper가
+만든 archive는 임시 경로에 다시 풀어 manifest·binding·migration·credential/path 검사를
+반복하며, 실패한 실행의 partial archive는 제거한다. connector가
 physical D1/R2 provider ID를 노출하지 않으므로 ID 동일·상이 여부를 추정하지 않고, first private
 deploy에서 서로 다른 Site project/manifest, empty baseline과 교차 state 부재로 분리를 검증한다.
 
