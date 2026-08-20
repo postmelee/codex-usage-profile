@@ -10,35 +10,34 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 - Worker-compatible JS/Wasm renderer가 Sites의 hosted card renderer다.
 
 이 결정은 Task #49의 architecture 적합성 검증과 Task #51의 production
-migration 결과에 따른 **MVP production PASS**다. 현재 공개된
-`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 검증된
-GitHub OAuth app, D1/R2, Worker renderer와 운영 guardrail을 보존하는 validation
-origin이다. 새 `codex-usage-profile` hostname을 canonical production으로 승격하고
-현재 `stage5`를 테스트 전용으로 전환하는 Task #108은 Gate A1에서 별도 owner-only
-production project를 생성했다. 이 project는 아직 version·deployment·environment·D1/R2가
-없다. storage attach, OAuth, private/public deploy와 stage5 전환은 이후 Gate에서 분리한다.
+migration 결과에 따른 **MVP production PASS**다. Task #108은
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 별도 GitHub OAuth
+app, D1/R2와 environment를 가진 canonical production으로 공개했다. production은
+exact `main` saved version 1과 public access revision 8을 사용하며 migration
+`[1,2,3,4,5]`가 적용돼 있다. 기존 stage5는 Stage 5의 owner-only 테스트 전환과
+승인된 test data disposal이 끝날 때까지 별도 public validation 상태를 유지한다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
-### 현재 validation 상태와 production release 이력
+### 현재 production 상태
 
 | 항목 | 값 |
 |---|---|
-| live validation origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
+| canonical origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 33 |
-| deployed source | `53a7132630dcb6f43459880d79730e10e2b59d6e` |
-| access | public revision 59; external visitor 0명 |
-| environment | revision 89, maintenance disabled, service normal, operator secret absent |
+| saved version | 1 |
+| deployed source | `9835fb94c7cd9116114a8b936d5e9eebfb0f85d0` |
+| access | public revision 8 |
+| environment | production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
 | live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5]` |
-| rollback candidate | version 32 / source `6cf2bab664e5a1f0b1e6051cc35887721c307e99` |
+| CLI | public `latest=0.1.2`, production default origin |
 
 ### Task #108 dual-Site target
 
 | 역할 | origin | manifest·resource 상태 |
 |---|---|---|
-| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; owner-only version 0, undeployed, D1/R2/environment 없음 |
-| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; 현재 public version 33 continuity |
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 1, D1/R2/environment attached |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; Stage 5 전까지 public version 33 continuity |
 
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
@@ -464,8 +463,8 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- public npm `codex-usage-profile@0.1.1` provenance/integrity는 Task #108 Gate C까지 유지하고,
-  canonical production 기본 origin을 가진 `0.1.2` candidate는 private/public Site smoke 뒤에만 게시
+- public npm `codex-usage-profile@0.1.2` provenance/integrity와 production 기본 origin을
+  유지한다. npm package 내용 보정은 immutable `0.1.2`를 덮어쓰지 않고 새 patch로 처리한다.
 - Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
   완료 상태 유지
 - 월별 90일 retention dry-run과 owner 요청 기반 account deletion

@@ -20,12 +20,10 @@ export const DEVICE_APPROVAL_INTENT = Object.freeze({
 
 export const DEVICE_APPROVAL_SUBMIT_COMMAND =
   "npx codex-usage-profile@latest submit";
-// Keep this aligned with the public npm `latest` default. During the Task #108
-// cutover the unpublished 0.1.2 source defaults to canonical production, while
-// public 0.1.1 still defaults to stage5. Canonical therefore needs --server
-// until Gate C publishes 0.1.2.
+// Keep this aligned with the public npm `latest` default. Alternative
+// deployments, including stage5 and local development, must stay explicit.
 export const DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN =
-  "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
+  "https://codex-usage-profile.meleeisdeveloping.chatgpt.site";
 
 export function normalizeDeviceApprovalResult(result) {
   if (!result || typeof result !== "object" || Array.isArray(result)) {

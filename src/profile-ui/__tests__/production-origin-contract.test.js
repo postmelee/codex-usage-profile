@@ -14,9 +14,9 @@ const EXPECTED_PRODUCTION_ORIGIN =
 const STAGE5_ORIGIN =
   "https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site";
 
-test("0.1.2 candidate uses canonical while published CLI guidance remains on stage5", () => {
+test("published CLI and device guidance use the canonical production origin", () => {
   assert.equal(DEFAULT_SERVICE_ORIGIN, EXPECTED_PRODUCTION_ORIGIN);
-  assert.equal(DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN, STAGE5_ORIGIN);
+  assert.equal(DEVICE_APPROVAL_PUBLISHED_CLI_ORIGIN, EXPECTED_PRODUCTION_ORIGIN);
 
   const url = new URL(DEFAULT_SERVICE_ORIGIN);
   assert.equal(url.protocol, "https:");
@@ -28,13 +28,13 @@ test("0.1.2 candidate uses canonical while published CLI guidance remains on sta
   assert.equal(url.hash, "");
 });
 
-test("canonical stays an explicit override until npm latest moves to 0.1.2", () => {
+test("production uses the default command and stage5 stays an explicit override", () => {
   assert.equal(
     buildDeviceSubmitCommand(EXPECTED_PRODUCTION_ORIGIN),
-    `npx codex-usage-profile@latest submit --server ${EXPECTED_PRODUCTION_ORIGIN}`
+    "npx codex-usage-profile@latest submit"
   );
   assert.equal(
     buildDeviceSubmitCommand(STAGE5_ORIGIN),
-    "npx codex-usage-profile@latest submit"
+    `npx codex-usage-profile@latest submit --server ${STAGE5_ORIGIN}`
   );
 });

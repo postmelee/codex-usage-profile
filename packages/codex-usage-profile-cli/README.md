@@ -2,15 +2,9 @@
 
 Connect the account usage shown by Codex to a GitHub-backed Codex Usage Profile and receive a stable README card URL.
 
-The public release line starts at `codex-usage-profile@0.1.0`. This source tree
-contains the unpublished `0.1.2` candidate, which uses the canonical production
-service by default and keeps custom service origins available through the
-explicit `--server` option.
-
-> The public `latest` tag remains `0.1.1` and defaults to
-> `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` until the
-> canonical Site passes private/public smoke. Do not request or pin `0.1.2`
-> from npm before its release gate completes.
+The current public `codex-usage-profile@0.1.2` release and the `latest` tag use
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site` by default. Custom
+service origins remain available through the explicit `--server` option.
 
 ## Requirements
 
@@ -37,8 +31,8 @@ One command can start browser login when needed and continue with submission:
 npx codex-usage-profile@latest submit
 ```
 
-The public `@latest` CLI defaults to the current stage5 service. Once login succeeds, the
-service origin and a narrow submit credential are stored locally. Use
+The public `@latest` CLI defaults to the production service. Once login succeeds,
+the service origin and a narrow submit credential are stored locally. Use
 `--server` only for local development or an explicitly reviewed alternative
 deployment.
 
@@ -137,9 +131,9 @@ Set `CODEX_USAGE_PROFILE_URL` instead of repeating `--server`. `CODEX_USAGE_PROF
 On a trusted machine with an existing ChatGPT-backed Codex sign-in, use a pre-issued service token and pin the CLI to an exact version. `--yes` intentionally skips npm's installation confirmation and should not be combined with `@latest` in unattended execution.
 
 ```bash
-CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
+CODEX_USAGE_PROFILE_URL=https://codex-usage-profile.meleeisdeveloping.chatgpt.site \
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.1 submit --json
+npx --yes codex-usage-profile@0.1.2 submit --json
 ```
 
 JSON, CI, and non-TTY execution never run the optional star prompt, so stdout
@@ -166,9 +160,9 @@ Device login returns a raw service credential once. The CLI stores it in an owne
 
 ## Documentation
 
-- [CLI login, submit, privacy, and troubleshooting](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/cli-submit.md)
-- [README card and cache behavior](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/readme-card.md)
-- [Analyzer responsibility boundary](https://github.com/postmelee/codex-usage-profile/blob/devel/docs/codex-usage-analyzer.md)
+- [CLI login, submit, privacy, and troubleshooting](https://github.com/postmelee/codex-usage-profile/blob/main/docs/cli-submit.md)
+- [README card and cache behavior](https://github.com/postmelee/codex-usage-profile/blob/main/docs/readme-card.md)
+- [Analyzer responsibility boundary](https://github.com/postmelee/codex-usage-profile/blob/main/docs/codex-usage-analyzer.md)
 
 ## License
 
