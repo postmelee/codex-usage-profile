@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/postmelee/codex-usage-profile/discussions/categories/q-a
+    about: Get help with setup, usage, or project behavior in Q&A.
+  - name: Share a profile card customization idea
+    url: https://github.com/postmelee/codex-usage-profile/discussions/115
+    about: Explore themes, layouts, stats, and other open-ended card ideas.
+  - name: Report a security vulnerability privately
+    url: https://github.com/postmelee/codex-usage-profile/security/advisories/new
+    about: Do not disclose security vulnerabilities in a public issue or discussion.

@@ -1,5 +1,5 @@
-name: Hyper-Waterfall Task
-description: Create a tracked task that can be used as the next AI work prompt.
+name: Maintainer Task
+description: Maintainer-only Hyper-Waterfall task for tracked repository work.
 title: "Task: "
 body:
   - type: markdown
