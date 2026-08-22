@@ -5,10 +5,11 @@ production까지 운영한 절차와 후속 stage5 테스트 전환 경계를 �
 Worker, D1 `DB`, native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud
 Run/Postgres/S3-compatible R2는 fallback이다. remote 변경은 해당 작업의
 수행계획과 Gate 승인을 각각 받은 범위에서만 수행한다. 현재
-`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`는 exact `main` saved
-version 1, public access revision 8과 전용 D1/R2/OAuth/environment를 사용하는
-canonical production이다. stage5는 Stage 5의 owner-only 테스트 전환과 승인된
-test data disposal이 끝날 때까지 기존 public validation 상태를 유지한다.
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`는 Stage 4 release source를
+새로 배포하기 전 관찰 baseline에서 saved version 1, public access revision 8과
+전용 D1/R2/OAuth/environment를 사용하는 canonical production이다. stage5는 Stage 5의
+owner-only 테스트 전환과 승인된 test data disposal이 끝날 때까지 기존 public validation
+상태를 유지한다.
 
 Task #84 Gate C는 exact-main saved version 24를 public으로 전환했고, 이후 #101이
 revision share 계약을 검증하며 같은 project를 saved version 33으로 이동시켰다.
@@ -21,7 +22,7 @@ extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다
 두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
 smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
-## 현재 production baseline과 stage5 이력
+## Stage 4 release 전 production baseline과 stage5 이력
 
 | 항목 | 값 |
 |---|---|
@@ -38,6 +39,10 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | D1 readiness | migration `[1,2,3,4,5]` exact |
 | CLI | public `latest=0.1.2`, production default origin |
 | production data | 실제 운영 계정·session·token·media로 취급; stage5와 공유하지 않음 |
+
+위 production 표는 PR #112 병합으로 자동 갱신되는 desired state가 아니라 cutover 전에
+원격에서 관찰한 baseline이다. 신규 saved version, access revision과 deployed source는 exact
+release 배포가 성공한 뒤 Stage 4 보고서에 기록한다.
 
 | 시점 | saved version/source | access | environment | 의미 |
 |---|---|---|---|---|

@@ -511,6 +511,22 @@ Gate C가 성공한 뒤에는 배포 전 호환 분기와 표현을 그대로 �
    2FA 승인, provenance/integrity, `latest=0.1.3`과 clean production submit을 확인한 뒤에만
    Stage 4 보고서와 오늘할일을 마감한다.
 
+### Stage 4F — release PR 리뷰 보정
+
+PR #112 리뷰에서 확인된 release artifact와 문서 계약을 병합 전에 보정한다.
+
+1. sample-only marketing mirror의 `publicDir: false` privacy 경계는 유지하고, 승인된 favicon
+   asset 4개만 `sitesArtifactPlugin`이 `dist-sites/client/` root로 복사한다. marketing
+   artifact verifier는 네 파일을 required output으로 검사해 HTML만 남는 404 회귀를 막는다.
+2. production hosting·operations의 version/source 표는 working tree의 현재 `main`을 뜻하지
+   않는 Stage 4 cutover 전 관찰 baseline으로 명시한다. 신규 saved version, access revision과
+   source는 remote 배포가 성공한 뒤 Stage 4 보고서에 기록한다.
+3. public README contract는 `candidate`, `migration`, `gate` 같은 일반 단어 전체가 아니라
+   stage5, unpublished, release/deployment candidate, production migration, Gate A/B/C,
+   `--server`와 custom origin 환경 변수처럼 실제 내부 전환 표현만 금지한다.
+4. `npm run build:sites`, marketing artifact verifier, focused tests, production build/Sites
+   verifier, 전체 test/E2E와 public release scan을 다시 실행한다.
+
 ### 산출물
 
 - exact-main production saved version과 private→public deployment
@@ -548,7 +564,7 @@ Sites connector로 saved source, deployment success, access/environment revision
 
 - 완료: canonical production이 public이며 exact main, 별도 Site project와 application에서
   관찰 가능한 독립 D1/R2 state, 별도 OAuth/secret을 쓴다. OAuth/CLI/privacy/media/fixed
-  README/revision share가 통과하고 `@latest=0.1.2` clean production login/status/submit이
+  README/revision share가 통과하고 `@latest=0.1.3` clean production login/status/submit이
   성공한다. stage5는 기존 public validation 상태다.
 - 중단: source/archive/deploy mismatch, environment/migration/health/auth/privacy/media 실패,
   credential 노출·추가 과금, rollback 불가, npm provenance/integrity/default origin 불일치.
@@ -558,7 +574,7 @@ Sites connector로 saved source, deployment success, access/environment revision
 ### 커밋
 
 ```text
-Task #108 Stage 4: production cutover와 CLI 0.1.2 release 검증
+Task #108 Stage 4: production cutover와 CLI 0.1.3 release 검증
 ```
 
 ## Stage 5 — stage5 테스트 전용 전환과 승인된 data disposal
