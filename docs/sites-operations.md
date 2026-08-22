@@ -1,15 +1,14 @@
 # Sites 운영 가이드
 
 이 문서는 Codex Usage Profile의 ChatGPT Sites 후보를 owner-only에서 공개
-validation까지 운영한 절차와 후속 production migration 경계를 기록한다. Sites
+production까지 운영한 절차와 후속 stage5 테스트 전환 경계를 기록한다. Sites
 Worker, D1 `DB`, native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud
 Run/Postgres/S3-compatible R2는 fallback이다. remote 변경은 해당 작업의
 수행계획과 Gate 승인을 각각 받은 범위에서만 수행한다. 현재
-`https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site`는 공개
-validation origin이다. Task #108 Gate A1에서
-`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`의 owner-only project만
-생성했으며 version·deployment·environment·D1/R2는 아직 없다. production private
-deploy·public cutover와 stage5 테스트 전환은 각각 후속 Gate 승인 전에는 실행하지 않는다.
+`https://codex-usage-profile.meleeisdeveloping.chatgpt.site`는 exact `main` saved
+version 1, public access revision 8과 전용 D1/R2/OAuth/environment를 사용하는
+canonical production이다. stage5는 Stage 5의 owner-only 테스트 전환과 승인된
+test data disposal이 끝날 때까지 기존 public validation 상태를 유지한다.
 
 Task #84 Gate C는 exact-main saved version 24를 public으로 전환했고, 이후 #101이
 revision share 계약을 검증하며 같은 project를 saved version 33으로 이동시켰다.
@@ -22,23 +21,23 @@ extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다
 두 경로는 Sites share URL로 사용하지 않는다. 공개 문서는 Worker 전달과 public
 smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
-## 현재 validation baseline과 Gate C 이력
+## 현재 production baseline과 stage5 이력
 
 | 항목 | 값 |
 |---|---|
-| Site | `Codex Usage Profile` |
-| live origin | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` |
-| 역할 | public validation; 새 canonical production migration 전까지 유지 |
-| saved version/source | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` |
-| access | public revision 59, external visitor 0명 |
-| environment | revision 89, key 9개 |
+| Site | `Codex Usage Profile` production |
+| live origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
+| 역할 | canonical public production |
+| saved version/source | 1 / `9835fb94c7cd9116114a8b936d5e9eebfb0f85d0` |
+| access | public revision 8 |
+| environment | production 전용 OAuth/secret과 D1/R2 binding |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
 | health/operator | `/healthz` `200`, 닫힌 operator route `404` |
 | D1 readiness | migration `[1,2,3,4,5]` exact |
-| 원복 access | custom owner-only revision 56, owner 1명, 추가 user/group 0명 |
-| validation data | 테스트 계정·validation data 보존; exact owner/session/D1/R2 상태 확인·폐기는 migration Issue의 data disposal Gate |
+| CLI | public `latest=0.1.2`, production default origin |
+| production data | 실제 운영 계정·session·token·media로 취급; stage5와 공유하지 않음 |
 
 | 시점 | saved version/source | access | environment | 의미 |
 |---|---|---|---|---|
@@ -48,10 +47,10 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 
 | Task #108 target | origin | access/version | 역할 |
 |---|---|---|---|
-| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | custom owner-only revision 1 / version 0 | canonical target; undeployed, D1/R2/environment 없음 |
-| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | public revision 59 / version 33 | migration 완료 전 validation continuity |
+| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | public revision 8 / version 1 | canonical production |
+| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | public revision 59 / version 33 | Stage 5 전까지 validation continuity |
 
-현재 application rollback 후보는 version 32/source
+stage5 application rollback 후보는 version 32/source
 `6cf2bab664e5a1f0b1e6051cc35887721c307e99`이며, 실제 재배포·access 변경과
 data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
 owner-only nonproduction 문구는 역사적 metadata이며 live access 판정에는 사용하지

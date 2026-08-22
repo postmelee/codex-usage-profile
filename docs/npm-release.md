@@ -18,14 +18,16 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 ## 현재 운영 상태
 
-- `codex-usage-profile@0.1.1`은 public이며 `latest`가 이 버전을 가리킨다.
-- repository의 `0.1.2`는 canonical production origin을 기본값으로 둔 **미게시
-  candidate**다. canonical Site의 owner-only/private smoke, public cutover와 exact
-  provenance Gate가 모두 끝나기 전에는 `codex-usage-profile-v0.1.2` tag를 만들거나
-  npm stage/publish를 시작하지 않는다.
-- cutover 동안 public `@latest`와 Device Approval 기본 명령은 stage5 continuity를
-  유지한다. canonical owner-only 검증은 public `0.1.1`에 explicit
-  `--server https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 붙인다.
+- `codex-usage-profile@0.1.2`는 public이며 `latest`가 이 버전을 가리킨다.
+- `0.1.2`는 canonical production origin을 기본값으로 사용한다. production의
+  일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,
+  stage5·local 같은 대체 환경만 explicit `--server {origin}`을 사용한다.
+- `0.1.2` artifact와 tag는 immutable이다. 공개 뒤 문서나 UI 보정은 기존 package를
+  덮어쓰지 않는다.
+- `0.1.3`은 사용자-facing package README를 공식 공개 기준으로 고정하고 공개 README에서
+  internal transition·test origin 설명을 제거하는 documentation patch다. exact source,
+  public Site와 registry package를 다시 검증한 별도 승인 뒤에만 tag와 staged publish를
+  시작한다.
 - 기존 `0.1.0` artifact와 canonical/recovery tag는 immutable 상태로
   보존한다.
 - exact `0.1.0` install의 production device login, status, Account Usage
@@ -52,6 +54,31 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   bundle 자동 탐색을 담는다. approved Stage 3 commit과 annotated tag,
   trusted publisher stage, maintainer 2FA를 거쳐 공개됐고 prefix 없는
   production submit/status smoke가 통과했다.
+
+## `0.1.2` production release 결과
+
+| 항목 | 검증 값 |
+|---|---|
+| package | `codex-usage-profile@0.1.2` |
+| dependency | exact `codex-usage-analyzer@0.4.1` |
+| source commit | `9835fb94c7cd9116114a8b936d5e9eebfb0f85d0` |
+| annotated tag | `codex-usage-profile-v0.1.2` |
+| workflow | `.github/workflows/publish-npm.yml` |
+| trusted publisher | `postmelee/codex-usage-profile`, workflow `publish-npm.yml`, environment `npm-publish` |
+| Actions run | [`32377344510`](https://github.com/postmelee/codex-usage-profile/actions/runs/32377344510), Node 20/22/24 verify와 staged publish 성공 |
+| SHA-1 | `c90fde18f10f46402f64358c6330a2e1b9f83277` |
+| SHA-512 | `sha512-7N0ZAIGVYbhzUyYrzFAre/Q045A+npIH+CS0Md1P/4UgV7cQ28qN1sEw5imLO+ipdezoHY67FwrZaORF3msiSg==` |
+| dist-tag | `latest=0.1.2` |
+| production smoke | clean `npx codex-usage-profile@latest` version/help/default origin, login/status/submit accepted, revoke/logout 성공 |
+
+npm attestation은 SLSA provenance를 제공하며 package subject와 integrity는 registry
+tarball과 일치한다. prefix 없는 `npx codex-usage-profile@latest submit`은 canonical
+production에서 device login과 Account Usage Contract v1 submit을 완료했다. 검증용
+submit token은 웹 Settings에서 revoke했고 격리된 local credential도 logout으로 제거했다.
+
+`0.1.2`는 immutable이다. 배포 뒤 발견된 repository README, package README 또는
+Device Approval 표현을 수정하더라도 같은 version을 다시 게시하지 않는다. npm package
+내용까지 사용자에게 전달해야 하는 변경은 별도 승인된 patch version으로 게시한다.
 
 ## `0.1.1` patch release 결과
 
