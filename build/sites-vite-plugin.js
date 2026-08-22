@@ -8,6 +8,13 @@ import {
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+const SITE_ICON_FILES = Object.freeze([
+  "apple-touch-icon.png",
+  "favicon-32x32.png",
+  "favicon.ico",
+  "site-icon-512.png"
+]);
+
 export function sitesArtifactPlugin({ outputDirectory, projectDirectory }) {
   const clientDirectory = resolve(outputDirectory, "client");
   const generatedHtml = resolve(clientDirectory, "sites.html");
@@ -43,6 +50,10 @@ export function sitesArtifactPlugin({ outputDirectory, projectDirectory }) {
         `${JSON.stringify({ d1: null, r2: null }, null, 2)}\n`
       );
       await copyFile(sampleCardSource, sampleCardOutput);
+      await Promise.all(SITE_ICON_FILES.map((file) => copyFile(
+        resolve(projectDirectory, "public", file),
+        resolve(clientDirectory, file)
+      )));
 
       const workerContents = await readFile(workerOutput, "utf8");
       if (!workerContents.includes("export default")) {

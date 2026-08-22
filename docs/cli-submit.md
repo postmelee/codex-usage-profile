@@ -3,13 +3,9 @@
 `codex-usage-profile` CLI는 로컬 Codex account usage를 읽어 GitHub 계정에 연결된 Codex Usage Profile로 제출한다. GitHub identity는 웹 로그인으로만 결정하며 CLI usage document에는 이름, 사용자명, 아바타 또는 account id가 없다.
 
 > canonical production service URL은
-> `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`이며 repository의
-> CLI `0.1.2` candidate 기본값에도 반영돼 있다. 이 version은 production
-> private/public cutover와 provenance Gate가 끝날 때까지 npm에 게시하지 않는다.
-> 현재 public `latest=0.1.1`의 기본 origin과 공개 서비스는 stage5다. owner-only
-> production smoke에서는 `@latest --server {canonical}`을 사용하고, 기존 stage5
-> credential은 새 origin에 전송되지 않으므로 production에서 다시 login한다.
-> 자동화에서는 registry에서 검증한 exact version을 고정한다.
+> `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`다. public
+> `@latest`는 이 origin을 기본값으로 사용하므로 일반 사용자는 추가 service
+> option이 필요 없다. 자동화에서는 registry에서 검증한 exact version을 고정한다.
 
 ## 요구사항
 
@@ -40,7 +36,7 @@ npx codex-usage-profile@latest submit
 npx codex-usage-profile@latest status
 ```
 
-현재 public `@latest` CLI는 stage5 origin을 기본값으로 사용하고 첫 로그인에서 credential과 함께 저장한다. canonical migration smoke는 `--server`로 production origin을 명시한다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
+현재 public `@latest` CLI는 production origin을 기본값으로 사용하고 첫 로그인에서 credential과 함께 저장한다. 첫 실행에서 npm이 설치할 package와 version을 표시하고 확인을 요청할 수 있으므로 두 값을 확인한 뒤 승인한다.
 
 raw token을 command argument, URL 또는 shell history에 넣는 옵션은 제공하지 않는다.
 
@@ -121,9 +117,8 @@ file이 아니면 analyzer는 안전한 `CODEX_NOT_FOUND`만 반환한다. 검�
 - CLI package를 `@latest`가 아닌 정확한 version으로 고정함
 
 ```bash
-export CODEX_USAGE_PROFILE_URL=https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
 export CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>'
-npx --yes codex-usage-profile@0.1.1 submit --json
+npx --yes codex-usage-profile@0.1.3 submit --json
 ```
 
 여기서 `--yes`는 npm의 package 설치 확인을 의도적으로 생략한다. unattended execution에서는 재현성과 공급망 변경 통제를 위해 정확한 CLI version을 고정하고, version 갱신은 별도 검토 후 수행한다. `CODEX_USAGE_PROFILE_TOKEN`은 repository variable이나 command argument가 아니라 접근이 제한된 secret으로 관리한다.
@@ -147,7 +142,7 @@ publish 전 package artifact는 tarball로 검증한다.
 
 ```bash
 npm pack --workspace packages/codex-usage-profile-cli
-npx --package=./codex-usage-profile-0.1.2.tgz \
+npx --package=./codex-usage-profile-0.1.3.tgz \
   codex-usage-profile --help
 ```
 
@@ -173,12 +168,13 @@ tarball 이름의 version은 package version에 따라 달라질 수 있다.
   완료만 의미하며 usage submit 성공을 의미하지 않는다.
 - 명시적인 `login`에서 시작한 승인은 로그인만 완료한다. 다음
   submit 명령을 화면에 제공하며, 사용자가 copy button을 눌렀을 때만
-  clipboard에 복사한다. 현재 public `@latest` 기본 origin과 다른 canonical
-  candidate에서는 `--server {canonical}`이 명령에 포함된다.
+  clipboard에 복사한다. 현재 public `@latest` 기본 origin인 production에서는
+  짧은 명령을 제공한다. 개발·검증용 non-default service는 아래 전용 override
+  계약을 따른다.
 - intent를 보내지 않는 이전 CLI의 승인은 특정 명령을 제안하지 않고
   terminal로 돌아가라고 안내한다.
 
-local 또는 기본값이 아닌 service에서 `login --server <origin>`을 사용한
+local 또는 개발·검증용 service에서 `login --server <origin>`을 사용한
 경우, 승인 화면이 제공하는 다음 submit 명령에도 같은 normalized origin의
 `--server`가 포함된다. user code, URL query와 hash는 명령에 포함되지
 않는다.
@@ -285,9 +281,9 @@ Active token limit reached. Revoke an API token in Settings, then try again.
 Captured: 2026-07-11T00:00:00.000Z
 
 Links
-  Profile: https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/?view=profile
-  Card:    https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png
-  README:  <a href="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
+  Profile: https://codex-usage-profile.meleeisdeveloping.chatgpt.site/?view=profile
+  Card:    https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/octocat/card.png
+  README:  <a href="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/api/share/octocat"><img width="50%" src="https://codex-usage-profile.meleeisdeveloping.chatgpt.site/u/octocat/card.png" alt="Codex usage profile" /></a>
 ```
 
 성공 표시는 결과 시작점을 나타내고 capture metadata 뒤의 빈 줄과 들여쓴

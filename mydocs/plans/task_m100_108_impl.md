@@ -477,12 +477,64 @@ deploy mutation을 승인하기 전에는 credential 발급, environment update�
 7. 실제 결과를 `docs/npm-release.md`에 최소 반영하고 `task-stage-report`로 Stage 4 결과를
    커밋한 뒤 승인을 요청한다.
 
+### Stage 4E — 공개 뒤 전환 표현·Site icon 최종화
+
+Gate C가 성공한 뒤에는 배포 전 호환 분기와 표현을 그대로 두지 않고 실제 공개 상태와
+정렬한다. 이 하위 단계는 작업지시자가 승인한 Task #108 Stage 4 보정 범위이며 npm
+`0.1.2`를 다시 게시하지 않는다.
+
+1. 코드·테스트·public 문서에서 `0.1.1`, stage5 기본 origin, unpublished/candidate와
+   explicit production `--server` 표현을 전수 검색한다. historical release 증적,
+   stage5 target registry와 Stage 5 explicit-origin 절차는 유지하고 현재 사용자 계약만
+   production/`0.1.2`로 바꾼다.
+2. Device Approval의 published CLI origin을 production과 맞춘다. production은
+   `npx codex-usage-profile@latest submit`, stage5·local은 `--server {origin}`을 제공한다.
+3. 승인된 1024px source artwork를 deterministic resize해 standard ICO 32px, PNG 32px,
+   Apple touch 180px와 high-resolution 512px Site icon으로 저장하고 `index.html`과
+   `sites.html`이 같은 asset contract를 선언하게 한다.
+4. icon signature/dimension, 두 HTML entry, production/stage5 command 분기를 단위 테스트로
+   고정하고 전체 test/E2E/build/Sites verifier와 public release scan을 재실행한다.
+5. public `0.1.2` tarball은 immutable이므로 같은 version이나 tag를 덮어쓰지 않는다.
+   사용자-facing root/package README를 공식 공개 관점으로 먼저 고정하고, public README에서
+   stage5·candidate·migration·Gate·custom origin 문구를 금지하는 contract test를 추가한다.
+   상세 star prompt는 `docs/cli-submit.md`에 유지하고 package README에는 선택성·거절 영향·
+   CI/non-interactive skip을 알리는 짧은 고지만 둔다.
+6. source 보정을 checkpoint PR로 `devel`에 통합한 뒤 `devel → main` release PR로 exact
+   provenance를 다시 만든다. 승인·merge 전 local source를 production에 직접 배포하지 않는다.
+7. merged exact `main`에서 새 production archive를 만들고 live project id, binding,
+   migration과 digest를 다시 검증한다. 기존 version 1을 덮어쓰지 않고 새 saved version을
+   만들며 owner-only smoke와 별도 public access 승인 뒤 production을 갱신한다.
+8. favicon route 200/content type, production Device Approval 짧은 명령, stage5 explicit
+   origin과 기존 OAuth/CLI/privacy/media/fixed README/revision share 회귀가 없음을 확인한다.
+9. exact `main`의 package version과 verifier를 `0.1.3`으로 고정하고 Gate C2 승인 뒤
+   `codex-usage-profile-v0.1.3` annotated tag와 trusted publisher stage를 시작한다. maintainer
+   2FA 승인, provenance/integrity, `latest=0.1.3`과 clean production submit을 확인한 뒤에만
+   Stage 4 보고서와 오늘할일을 마감한다.
+
+### Stage 4F — release PR 리뷰 보정
+
+PR #112 리뷰에서 확인된 release artifact와 문서 계약을 병합 전에 보정한다.
+
+1. sample-only marketing mirror의 `publicDir: false` privacy 경계는 유지하고, 승인된 favicon
+   asset 4개만 `sitesArtifactPlugin`이 `dist-sites/client/` root로 복사한다. marketing
+   artifact verifier는 네 파일을 required output으로 검사해 HTML만 남는 404 회귀를 막는다.
+2. production hosting·operations의 version/source 표는 working tree의 현재 `main`을 뜻하지
+   않는 Stage 4 cutover 전 관찰 baseline으로 명시한다. 신규 saved version, access revision과
+   source는 remote 배포가 성공한 뒤 Stage 4 보고서에 기록한다.
+3. public README contract는 `candidate`, `migration`, `gate` 같은 일반 단어 전체가 아니라
+   stage5, unpublished, release/deployment candidate, production migration, Gate A/B/C,
+   `--server`와 custom origin 환경 변수처럼 실제 내부 전환 표현만 금지한다.
+4. `npm run build:sites`, marketing artifact verifier, focused tests, production build/Sites
+   verifier, 전체 test/E2E와 public release scan을 다시 실행한다.
+
 ### 산출물
 
 - exact-main production saved version과 private→public deployment
 - production project에 attach된 logical D1/R2, 전용 environment/OAuth/secret과 migration
   `[1,2,3,4,5]`
-- public `codex-usage-profile@0.1.2`, annotated tag와 provenance workflow
+- immutable public `0.1.2` 이력과 public `codex-usage-profile@0.1.3` documentation patch,
+  annotated tag와 provenance workflow
+- production 기본 명령과 대체 origin 분리, standard Site favicon asset 4종
 - 신규: `mydocs/working/task_m100_108_stage4.md`
 - 수정: `docs/npm-release.md`, 실제 작업일의 `mydocs/orders/yyyyMMdd.md`
 
@@ -498,7 +550,7 @@ npm run verify:sites-production
 npm run verify:npm-release
 npm run scan:public-release
 npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile.meleeisdeveloping.chatgpt.site
-npm view codex-usage-profile@0.1.2 --json
+npm view codex-usage-profile@0.1.3 --json
 npm view codex-usage-profile dist-tags --json
 gh run list --workflow publish-npm.yml
 git diff --check
@@ -512,7 +564,7 @@ Sites connector로 saved source, deployment success, access/environment revision
 
 - 완료: canonical production이 public이며 exact main, 별도 Site project와 application에서
   관찰 가능한 독립 D1/R2 state, 별도 OAuth/secret을 쓴다. OAuth/CLI/privacy/media/fixed
-  README/revision share가 통과하고 `@latest=0.1.2` clean production login/status/submit이
+  README/revision share가 통과하고 `@latest=0.1.3` clean production login/status/submit이
   성공한다. stage5는 기존 public validation 상태다.
 - 중단: source/archive/deploy mismatch, environment/migration/health/auth/privacy/media 실패,
   credential 노출·추가 과금, rollback 불가, npm provenance/integrity/default origin 불일치.
@@ -522,7 +574,7 @@ Sites connector로 saved source, deployment success, access/environment revision
 ### 커밋
 
 ```text
-Task #108 Stage 4: production cutover와 CLI 0.1.2 release 검증
+Task #108 Stage 4: production cutover와 CLI 0.1.3 release 검증
 ```
 
 ## Stage 5 — stage5 테스트 전용 전환과 승인된 data disposal

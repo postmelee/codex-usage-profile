@@ -4,7 +4,11 @@ import { relative, resolve } from "node:path";
 const outputDirectory = resolve(process.argv[2] ?? "dist-sites");
 const requiredFiles = [
   ".openai/hosting.json",
+  "client/apple-touch-icon.png",
+  "client/favicon-32x32.png",
+  "client/favicon.ico",
   "client/index.html",
+  "client/site-icon-512.png",
   "server/index.js"
 ];
 const forbiddenPatterns = [
