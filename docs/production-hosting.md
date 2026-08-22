@@ -13,13 +13,14 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 migration 결과에 따른 **MVP production PASS**다. Task #108은
 `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 별도 GitHub OAuth
 app, D1/R2와 environment를 가진 canonical production으로 공개했다. production은
-exact `main` saved version 1과 public access revision 8을 사용하며 migration
-`[1,2,3,4,5]`가 적용돼 있다. 기존 stage5는 Stage 5의 owner-only 테스트 전환과
-승인된 test data disposal이 끝날 때까지 별도 public validation 상태를 유지한다.
+Stage 4 release 전 관찰 baseline에서 saved version 1과 public access revision 8을
+사용하며 migration `[1,2,3,4,5]`가 적용돼 있다. 기존 stage5는 Stage 5의 owner-only
+테스트 전환과 승인된 test data disposal이 끝날 때까지 별도 public validation 상태를
+유지한다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
-### 현재 production 상태
+### Stage 4 release 전 production baseline
 
 | 항목 | 값 |
 |---|---|
@@ -31,6 +32,10 @@ exact `main` saved version 1과 public access revision 8을 사용하며 migrati
 | environment | production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
 | live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5]` |
 | CLI | public `latest=0.1.2`, production default origin |
+
+이 표는 PR #112 병합으로 자동 갱신되는 desired state가 아니라 cutover 전에 원격에서
+관찰한 live baseline이다. 신규 saved version, access revision과 deployed source는 exact
+release 배포가 성공한 뒤 Stage 4 보고서에 기록한다.
 
 ### Task #108 dual-Site target
 

@@ -37,3 +37,29 @@ test("favicon assets use the expected formats and square dimensions", async () =
     assert.equal(png.readUInt32BE(20), size, `${file} height`);
   }
 });
+
+test("sample-only marketing artifact copies and verifies only the approved icons", async () => {
+  const [config, plugin, verifier] = await Promise.all([
+    readFile(new URL("../../../vite.sites.config.js", import.meta.url), "utf8"),
+    readFile(new URL("../../../build/sites-vite-plugin.js", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../../scripts/verify-marketing-artifact.mjs", import.meta.url),
+      "utf8"
+    )
+  ]);
+
+  assert.match(config, /publicDir:\s*false/);
+  for (const file of [
+    "apple-touch-icon.png",
+    "favicon-32x32.png",
+    "favicon.ico",
+    "site-icon-512.png"
+  ]) {
+    assert.equal(plugin.includes(`"${file}"`), true, `plugin omits ${file}`);
+    assert.equal(
+      verifier.includes(`"client/${file}"`),
+      true,
+      `verifier omits client/${file}`
+    );
+  }
+});

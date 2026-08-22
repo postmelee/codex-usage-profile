@@ -18,10 +18,11 @@ const PUBLIC_READMES = Object.freeze([
 
 const INTERNAL_TERMS = Object.freeze([
   /\bstage5\b/i,
-  /\bcandidate\b/i,
   /\bunpublished\b/i,
-  /\bmigration\b/i,
-  /\bgate\b/i,
+  /\b(?:release|deployment) candidate\b/i,
+  /\bproduction migration\b/i,
+  /\bGate\s+[A-Z](?:\d+)?\b/,
+  /custom service origins?/i,
   /--server\b/i,
   /CODEX_USAGE_PROFILE_URL/
 ]);
