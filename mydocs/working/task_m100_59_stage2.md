@@ -48,7 +48,7 @@ schema와 production 배포 설정은 변경하지 않았다.
 실행 명령:
 
 ```bash
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test \
   src/profile-backend/__tests__/cli-login.test.js \
   src/profile-backend/__tests__/http.test.js \
@@ -56,7 +56,7 @@ schema와 production 배포 설정은 변경하지 않았다.
   src/profile-backend/__tests__/d1-concurrency.test.js \
   src/profile-backend/__tests__/postgres-concurrency.test.js
 
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test src/profile-backend/__tests__/store-contract.test.js
 
 git diff --check

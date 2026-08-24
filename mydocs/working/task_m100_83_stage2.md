@@ -31,7 +31,7 @@ npm run test:e2e
 npm run build:production
 npm run verify:sites-fullstack
 npm run verify:sites-production
-/Users/melee/.codex/plugins/cache/openai-bundled/sites/0.1.34/scripts/package-site.sh \
+$HOME/.codex/plugins/cache/openai-bundled/sites/0.1.34/scripts/package-site.sh \
   "$PWD" "${temporary_archive}"
 git diff --check
 git status --short

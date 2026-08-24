@@ -61,13 +61,13 @@ production 배포 설정은 변경하지 않았다.
 실행 명령:
 
 ```bash
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test \
   packages/codex-usage-profile-cli/test/cli.test.js \
   packages/codex-usage-profile-cli/test/device-login.test.js \
   packages/codex-usage-profile-cli/test/service-client.test.js
 
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test \
   src/profile-backend/__tests__/cli-login.test.js \
   src/profile-backend/__tests__/http.test.js \
@@ -76,7 +76,7 @@ production 배포 설정은 변경하지 않았다.
   src/profile-backend/__tests__/postgres-migrate.test.js \
   src/profile-backend/__tests__/postgres-store.test.js
 
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test src/profile-backend/__tests__/store.test.js
 
 git diff --check

@@ -38,8 +38,10 @@ npm test
 npm run build
 ```
 
-If you change the npm package or public release surface, also run the release
-verification commands documented in the root README.
+If you change the npm package or public release surface, also follow the
+relevant verification in the [maintainer release documentation](docs/npm-release.md).
+The [documentation index](docs/README.md) separates user guides, contributor
+contracts, and privileged maintainer operations.
 
 ## Pull requests
 
