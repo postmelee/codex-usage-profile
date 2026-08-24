@@ -70,19 +70,27 @@ Stage 1에서는 runtime을 수정하지 않고 현재 failure를 기대하는 �
   그대로인지 확인한다.
 - operation ID·phase·승인 count가 유지되고 atomic claim/assertion residue가 0인지 확인한다.
 
-Stage 2에서는 다음 원칙으로 runtime을 보정한다.
+Stage 2에서는 확정 원인만 다음 원칙으로 보정했다.
 
-- safe key segment의 ASCII/code-point binary comparator를 사용해 JavaScript fingerprint 순서를
-  SQLite `BINARY ORDER BY id`와 일치시킨다.
-- device의 `id`, `updatedAt`, `lastSubmittedAt` exact guard 필드는 유지한다.
-- count-only 비교로 guard를 약화하거나 transaction을 분할하지 않는다.
-- 같은 fixture를 conflict 기대에서 atomic success 기대 회귀로 전환한다.
-- terminal invariant failure와 retryable conflict의 외부 정보 경계를 별도로 검증한다.
+- safe key segment의 ASCII/code-unit binary comparator를 사용해 JavaScript fingerprint 순서를
+  SQLite `BINARY ORDER BY id`와 일치시켰다.
+- device의 `id`, `updatedAt`, `lastSubmittedAt` exact guard 필드를 유지했다.
+- count-only 비교로 guard를 약화하거나 transaction을 분할하지 않았다.
+- 같은 fixture를 conflict 기대에서 atomic success 기대 회귀로 전환했다.
+- owner delete를 trigger로 강제 중단해 71개 structured 객체, operation 승인값과 atomic
+  claim/assertion이 모두 원상 rollback되는지 검증했다.
+- confirmed state drift에는 기존 top-level `maintenance_conflict`와 함께 allowlist된
+  `structured_state_changed`, `retryable: false`만 제공하고 임의 reason, SQL, provider 원문과
+  row payload는 응답에서 제거했다.
 
 변경 파일:
 
 - `src/profile-backend/__tests__/d1-maintenance.test.js`
-- Stage 2 예정: `src/profile-backend/d1/maintenance.js`
+- `src/profile-backend/__tests__/_d1-test-fixture.js`
+- `src/profile-backend/__tests__/_d1-worker-harness.js`
+- `src/profile-backend/d1/maintenance.js`
+- `src/profile-runtime/sites/__tests__/maintenance.test.js`
+- `src/profile-runtime/sites/maintenance.js`
 
 ## 재발 방지
 
@@ -98,16 +106,20 @@ Stage 2에서는 다음 원칙으로 runtime을 보정한다.
 ## 검증
 
 ```bash
-node --test src/profile-backend/__tests__/d1-maintenance.test.js
+node --test \
+  src/profile-backend/__tests__/d1-maintenance.test.js \
+  src/profile-runtime/sites/__tests__/maintenance.test.js
 npm run smoke:sites-fullstack:local
 git diff --check
 ```
 
 결과:
 
-- OK — D1 maintenance 8 tests, 8 pass, 0 fail.
-- OK — mixed-case live-equivalent fixture가 conflict를 재현하고 structured row와 operation을
-  full rollback했다.
+- OK — D1 maintenance 9 tests와 Sites maintenance 23 tests, 합계 32 pass, 0 fail.
+- OK — mixed-case live-equivalent fixture가 동일 operation·approval 경계에서 원자 완료됐다.
+- OK — injected owner-delete failure가 structured row와 operation을 full rollback했다.
+- OK — allowlist된 terminal conflict만 reason·retryability를 제공하며 provider detail은
+  외부 응답에 노출되지 않는다.
 - OK — 기존 full-stack smoke 67 routes, canonical update 2회 검증.
 - OK — Stage5 확인은 read-only table overview/row projection만 사용했고 mutation은 0건이다.
 

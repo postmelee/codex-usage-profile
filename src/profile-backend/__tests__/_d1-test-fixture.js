@@ -47,6 +47,10 @@ export async function createD1TestFixture(options = {}) {
         error.code = result.code;
         error.status = result.status;
         error.headers = result.headers;
+        if (typeof result.reason === "string") error.reason = result.reason;
+        if (typeof result.retryable === "boolean") {
+          error.retryable = result.retryable;
+        }
         throw error;
       }
       return result;
@@ -65,6 +69,10 @@ export async function createD1TestFixture(options = {}) {
 
     atomic(operation, command) {
       return fixture.call("/atomic", { operation, command });
+    },
+
+    exec(sql) {
+      return fixture.call("/exec", { sql });
     },
 
     maintenance(method, options = {}) {

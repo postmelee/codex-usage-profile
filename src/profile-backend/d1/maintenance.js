@@ -37,6 +37,10 @@ const OWNER_COUNT_KEYS = Object.freeze([
   "sessions",
   "submittedDevices"
 ]);
+const OWNER_DELETE_STATE_CHANGED_DETAILS = Object.freeze({
+  reason: "structured_state_changed",
+  retryable: false
+});
 
 export function createD1ProfileMaintenance(options = {}) {
   const database = requireD1Database(options.database ?? options.db);
@@ -501,13 +505,13 @@ export function createD1ProfileMaintenance(options = {}) {
     assertExpectedPlan(plan.summary, {
       expectedContentDigest,
       expectedObjectCount
-    });
+    }, OWNER_DELETE_STATE_CHANGED_DETAILS);
     await beforeDeleteOwner?.({ plan });
     plan = await planOwnerDeletion(deleteOptions);
     assertExpectedPlan(plan.summary, {
       expectedContentDigest,
       expectedObjectCount
-    });
+    }, OWNER_DELETE_STATE_CHANGED_DETAILS);
 
     const nonce = createNonce();
     const guard = buildOwnerDeleteGuard(plan, nonce);
@@ -566,10 +570,25 @@ export function createD1ProfileMaintenance(options = {}) {
         throw new Error("owner delete did not affect exactly one row");
       }
     } catch (error) {
+      let details;
+      try {
+        const current = await planOwnerDeletion(deleteOptions);
+        if (!matchesExpectedPlan(current.summary, {
+          expectedContentDigest,
+          expectedObjectCount
+        })) {
+          details = OWNER_DELETE_STATE_CHANGED_DETAILS;
+        }
+      } catch (recheckError) {
+        if (recheckError?.code === "not_found") {
+          details = OWNER_DELETE_STATE_CHANGED_DETAILS;
+        }
+      }
       throw maintenanceError(
         "conflict",
         "owner changed before account deletion committed",
-        error
+        error,
+        details
       );
     }
     return plan;
@@ -827,7 +846,7 @@ function buildOwnerDeleteGuard(plan, nonce) {
   const snapshot = profile.latestSnapshot;
   const deviceFingerprint = profile.submittedDevices
     .slice()
-    .sort((left, right) => left.id.localeCompare(right.id))
+    .sort((left, right) => compareSafeKeySegments(left.id, right.id))
     .map((device) =>
       `${device.id}:${device.updatedAt ?? ""}:${device.lastSubmittedAt ?? ""}`
     )
@@ -879,6 +898,11 @@ function buildOwnerDeleteGuard(plan, nonce) {
     ],
     sql
   };
+}
+
+function compareSafeKeySegments(left, right) {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
 }
 
 function claimAssertion(prepare, operation, claimKey, nonce) {
@@ -1046,16 +1070,22 @@ function deviceParams(record) {
   ];
 }
 
-function assertExpectedPlan(summary, expected) {
-  if (
-    !safeEqualText(summary.contentDigest, expected.expectedContentDigest) ||
-    summary.objectCount !== expected.expectedObjectCount
-  ) {
+function assertExpectedPlan(summary, expected, errorDetails) {
+  if (!matchesExpectedPlan(summary, expected)) {
     throw maintenanceError(
       "conflict",
-      "maintenance plan no longer matches expected digest and count"
+      "maintenance plan no longer matches expected digest and count",
+      undefined,
+      errorDetails
     );
   }
+}
+
+function matchesExpectedPlan(summary, expected) {
+  return safeEqualText(
+    summary.contentDigest,
+    expected.expectedContentDigest
+  ) && summary.objectCount === expected.expectedObjectCount;
 }
 
 function normalizeOwnerDeletionOperation(row) {
@@ -1208,10 +1238,14 @@ function nextIsoTimestamp(previous, current) {
   return candidate.toISOString();
 }
 
-function maintenanceError(code, message, cause) {
+function maintenanceError(code, message, cause, details = {}) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.name = "ProfileMaintenanceError";
   error.code = code;
+  if (typeof details.reason === "string") error.reason = details.reason;
+  if (typeof details.retryable === "boolean") {
+    error.retryable = details.retryable;
+  }
   return error;
 }
 

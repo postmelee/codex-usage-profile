@@ -88,7 +88,13 @@ test("D1 account deletion requires an exact plan and removes owner-dependent row
       expectedContentDigest: initial.summary.contentDigest,
       expectedObjectCount: initial.summary.objectCount
     }),
-    /plan no longer matches/
+    (error) => {
+      assert.match(error.message, /plan no longer matches/);
+      assert.equal(error.code, "conflict");
+      assert.equal(error.reason, "structured_state_changed");
+      assert.equal(error.retryable, false);
+      return true;
+    }
   );
   assert.equal((await fixture.rpc("getOwnerById", OWNER_SCOPE.ownerId)).id, OWNER_SCOPE.ownerId);
 
@@ -104,7 +110,10 @@ test("D1 account deletion requires an exact plan and removes owner-dependent row
   });
 
   assert.equal(await fixture.rpc("getOwnerById", OWNER_SCOPE.ownerId), null);
-  assert.equal(await fixture.rpc("getLatestUsageByOwnerId", OWNER_SCOPE.ownerId), null);
+  assert.equal(
+    await fixture.rpc("getLatestUsageByOwnerId", OWNER_SCOPE.ownerId),
+    null
+  );
   assert.equal(await fixture.rpc("getSession", "session_1"), null);
   assert.deepEqual(await fixture.inspect("rateLimits"), []);
 });
@@ -275,61 +284,54 @@ test("D1 account deletion lease can be recovered after expiry and cascades with 
   assert.deepEqual(await fixture.inspect("deletionOperations"), []);
 });
 
-test("D1 account deletion rolls back when locale and binary device orders disagree", async (t) => {
+test("D1 account deletion uses SQLite binary device order and completes atomically", async (t) => {
   const fixture = await createD1TestFixture();
   t.after(() => fixture.dispose());
   await fixture.migrate();
   await seedLiveEquivalentOwner(fixture);
 
   const initial = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
-  assert.deepEqual(initial.counts, {
-    cliLoginChallenges: 11,
-    cliTokens: 8,
-    latestSnapshots: 0,
-    latestUsages: 1,
-    oauthStates: 19,
-    owners: 1,
-    rateLimits: 2,
-    sessions: 22,
-    submittedDevices: 7
-  });
-  assert.equal(initial.summary.objectCount, 71);
-  const deviceIds = initial.profile.submittedDevices.map(({ id }) => id);
-  assert.deepEqual(deviceIds, [...deviceIds].sort((left, right) =>
-    left.localeCompare(right)
-  ));
-  assert.notDeepEqual(deviceIds, [...deviceIds].sort());
+  assertLiveEquivalentPlan(initial);
+  await advanceLiveEquivalentOperation(fixture, initial);
 
-  const operationId = "delete_live_equivalent";
-  const combinedApproval = {
+  const deleted = await fixture.maintenance("deleteOwner", {
     ...OWNER_SCOPE,
-    operationId,
-    expectedContentDigest: "A".repeat(43),
-    expectedObjectCount: initial.summary.objectCount + 6
-  };
-  await fixture.maintenance(
-    "beginOwnerDeletionOperation",
-    combinedApproval
+    expectedContentDigest: initial.summary.contentDigest,
+    expectedObjectCount: initial.summary.objectCount
+  });
+
+  assert.equal(deleted.summary.contentDigest, initial.summary.contentDigest);
+  assert.equal(await fixture.rpc("getOwnerById", OWNER_SCOPE.ownerId), null);
+  assert.equal(await fixture.rpc("getOAuthState", "oauth_0"), null);
+  assert.equal(await fixture.rpc("getSession", "session_0"), null);
+  assert.equal(await fixture.rpc("getCliLoginChallenge", "challenge_0"), null);
+  assert.equal(await fixture.rpc("getCliTokenById", "token_0"), null);
+  assert.equal(await fixture.rpc("getLatestUsageByOwnerId", OWNER_SCOPE.ownerId), null);
+  assert.deepEqual(
+    await fixture.rpc("listSubmittedDevicesByOwnerId", OWNER_SCOPE.ownerId),
+    []
   );
-  const lease = await fixture.maintenance("acquireOwnerDeletionLease", {
-    ...OWNER_SCOPE,
-    operationId,
-    acquiredAt: NOW
+  assert.deepEqual(await fixture.inspect("rateLimits"), []);
+  assert.deepEqual(await fixture.inspect("atomicClaims"), {
+    assertions: [],
+    claims: []
   });
-  await fixture.maintenance("advanceOwnerDeletionPhase", {
-    ...OWNER_SCOPE,
-    operationId,
-    leaseNonce: lease.leaseNonce,
-    phase: "media",
-    advancedAt: "2026-07-23T00:00:10.000Z"
-  });
-  await fixture.maintenance("advanceOwnerDeletionPhase", {
-    ...OWNER_SCOPE,
-    operationId,
-    leaseNonce: lease.leaseNonce,
-    phase: "structured",
-    advancedAt: "2026-07-23T00:00:20.000Z"
-  });
+  assert.deepEqual(await fixture.inspect("deletionOperations"), []);
+});
+
+test("D1 account deletion rolls back every structured row when owner delete aborts", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await seedLiveEquivalentOwner(fixture);
+
+  const initial = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
+  assertLiveEquivalentPlan(initial);
+  await advanceLiveEquivalentOperation(fixture, initial);
+  await fixture.exec(
+    "CREATE TRIGGER abort_owner_delete BEFORE DELETE ON owners " +
+    "BEGIN SELECT RAISE(ABORT, 'injected owner delete failure'); END"
+  );
 
   await assert.rejects(
     fixture.maintenance("deleteOwner", {
@@ -337,7 +339,16 @@ test("D1 account deletion rolls back when locale and binary device orders disagr
       expectedContentDigest: initial.summary.contentDigest,
       expectedObjectCount: initial.summary.objectCount
     }),
-    /owner changed before account deletion committed/
+    (error) => {
+      assert.match(
+        error.message,
+        /owner changed before account deletion committed/
+      );
+      assert.equal(error.code, "conflict");
+      assert.equal(error.reason, undefined);
+      assert.equal(error.retryable, undefined);
+      return true;
+    }
   );
 
   const afterFailure = await fixture.maintenance(
@@ -349,10 +360,18 @@ test("D1 account deletion rolls back when locale and binary device orders disagr
     afterFailure.summary.contentDigest,
     initial.summary.contentDigest
   );
+  assert.equal(afterFailure.summary.objectCount, initial.summary.objectCount);
+  assert.notEqual(await fixture.rpc("getOAuthState", "oauth_0"), null);
+  assert.notEqual(await fixture.rpc("getSession", "session_0"), null);
+  assert.notEqual(await fixture.rpc("getCliTokenById", "token_0"), null);
   assert.equal(
-    afterFailure.summary.objectCount,
-    initial.summary.objectCount
+    (await fixture.rpc(
+      "listSubmittedDevicesByOwnerId",
+      OWNER_SCOPE.ownerId
+    )).length,
+    7
   );
+  assert.equal((await fixture.inspect("rateLimits")).length, 2);
   assert.deepEqual(await fixture.inspect("atomicClaims"), {
     assertions: [],
     claims: []
@@ -365,7 +384,7 @@ test("D1 account deletion rolls back when locale and binary device orders disagr
     })),
     [{
       approvedObjectCount: 77,
-      operationId,
+      operationId: "delete_live_equivalent",
       phase: "structured"
     }]
   );
@@ -621,6 +640,55 @@ async function seedLiveEquivalentOwner(fixture) {
     burstWindowMs: 60_000,
     sustainedLimit: 10,
     sustainedWindowMs: 3_600_000
+  });
+}
+
+function assertLiveEquivalentPlan(plan) {
+  assert.deepEqual(plan.counts, {
+    cliLoginChallenges: 11,
+    cliTokens: 8,
+    latestSnapshots: 0,
+    latestUsages: 1,
+    oauthStates: 19,
+    owners: 1,
+    rateLimits: 2,
+    sessions: 22,
+    submittedDevices: 7
+  });
+  assert.equal(plan.summary.objectCount, 71);
+  const deviceIds = plan.profile.submittedDevices.map(({ id }) => id);
+  assert.deepEqual(deviceIds, [...deviceIds].sort((left, right) =>
+    left.localeCompare(right)
+  ));
+  assert.notDeepEqual(deviceIds, [...deviceIds].sort());
+}
+
+async function advanceLiveEquivalentOperation(fixture, plan) {
+  const operationId = "delete_live_equivalent";
+  await fixture.maintenance("beginOwnerDeletionOperation", {
+    ...OWNER_SCOPE,
+    operationId,
+    expectedContentDigest: "A".repeat(43),
+    expectedObjectCount: plan.summary.objectCount + 6
+  });
+  const lease = await fixture.maintenance("acquireOwnerDeletionLease", {
+    ...OWNER_SCOPE,
+    operationId,
+    acquiredAt: NOW
+  });
+  await fixture.maintenance("advanceOwnerDeletionPhase", {
+    ...OWNER_SCOPE,
+    operationId,
+    leaseNonce: lease.leaseNonce,
+    phase: "media",
+    advancedAt: "2026-07-23T00:00:10.000Z"
+  });
+  await fixture.maintenance("advanceOwnerDeletionPhase", {
+    ...OWNER_SCOPE,
+    operationId,
+    leaseNonce: lease.leaseNonce,
+    phase: "structured",
+    advancedAt: "2026-07-23T00:00:20.000Z"
   });
 }
 
