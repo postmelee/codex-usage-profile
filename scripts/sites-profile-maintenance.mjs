@@ -52,6 +52,8 @@ const COMMANDS = new Set([
 const MAX_BACKUP_FILE_BYTES = 512 * 1024;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_DELETE_ACCOUNT_MAX_ITERATIONS = 128;
+const MAX_DELETE_ACCOUNT_MAX_ITERATIONS = 256;
 
 export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   const parsed = parseSitesProfileMaintenanceArgs(args);
@@ -64,6 +66,8 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   const environment = options.environment ?? process.env;
   const token = requireToken(environment.PROFILE_MAINTENANCE_TOKEN);
   const origin = normalizeOrigin(parsed.origin);
+  const createOperationId = options.createOperationId ??
+    (() => `maintenance_delete_${randomUUID().replaceAll("-", "")}`);
   const payload = await createOperationPayload(parsed, {
     readBackup: options.readBackup ?? readBackupFile,
     repositoryRoot: options.repositoryRoot ?? resolve(".")
@@ -75,41 +79,26 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   const requestTimeoutMs = requireRequestTimeoutMs(
     options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   );
+  const request = (requestPayload) => sendMaintenanceRequest(requestPayload, {
+    fetchImpl,
+    origin,
+    requestTimeoutMs,
+    token
+  });
 
-  let response;
-  const controller = new AbortController();
-  let timeout;
-  try {
-    response = await Promise.race([
-      fetchImpl(
-        new URL(PROFILE_SITES_MAINTENANCE_PATH, `${origin}/`),
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-            origin
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        }
+  if (parsed.command === "delete-account") {
+    return runDeleteAccount(request, payload, {
+      createOperationId,
+      maxIterations: requireDeleteAccountMaxIterations(
+        options.deleteAccountMaxIterations ??
+          DEFAULT_DELETE_ACCOUNT_MAX_ITERATIONS
       ),
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => {
-          controller.abort();
-          reject(cliError("network_unavailable"));
-        }, requestTimeoutMs);
-      })
-    ]);
-  } catch {
-    throw cliError("network_unavailable");
-  } finally {
-    clearTimeout(timeout);
+      sleep: options.sleep ?? sleep,
+      stdout
+    });
   }
-  const result = await readSafeResponse(response);
-  if (!response.ok || result?.ok !== true) {
-    throw cliError(result?.error?.code ?? "maintenance_failed");
-  }
+
+  const result = await request(payload);
 
   if (parsed.command === "export") {
     if (!result.backup || typeof result.backup !== "object") {
@@ -125,8 +114,12 @@ export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
     : parsed.command === "migrate"
       ? normalizeMigrationSummary(result.summary)
       : result.summary;
+  const progress = parsed.command === "plan" && result.progress !== undefined
+    ? normalizeOwnerDeletionProgress(result.progress)
+    : null;
+  if (progress) stdout(JSON.stringify(progress));
   stdout(JSON.stringify(summary));
-  return { summary };
+  return { ...(progress ? { progress } : {}), summary };
 }
 
 export function parseSitesProfileMaintenanceArgs(args = []) {
@@ -191,6 +184,7 @@ export function sitesProfileMaintenanceHelpText() {
     "",
     "Owner commands require --owner-id and --handle.",
     "Mutations require --apply, --expected-digest, --expected-count, and exact owner options.",
+    "Delete-account may resume an exact operation with --operation-id.",
     "Repair additionally requires dark/light en/ko application ETags and the stable ETag.",
     "The maintenance token is read only from PROFILE_MAINTENANCE_TOKEN.",
     "Export requires --output outside the repository and writes a new 0600 file."
@@ -238,6 +232,12 @@ async function createOperationPayload(parsed, options) {
   if (["migrate", "readiness"].includes(parsed.command)) {
     assertIdentitylessOptions(parsed);
     return { operation: parsed.command };
+  }
+  if (
+    parsed.operationId !== undefined &&
+    parsed.command !== "delete-account"
+  ) {
+    throw new TypeError("--operation-id is accepted only by delete-account");
   }
   if (OWNER_COMMANDS.has(parsed.command)) {
     requireKeySegment(parsed.ownerId, "ownerId");
@@ -290,6 +290,9 @@ async function createOperationPayload(parsed, options) {
       handle: parsed.handle,
       ownerId: parsed.ownerId
     };
+  }
+  if (parsed.command === "delete-account" && parsed.operationId !== undefined) {
+    payload.operationId = requireKeySegment(parsed.operationId, "operationId");
   }
   if (parsed.command === "repair-publication") {
     payload.expectedStorageEtag = parsed.expectedStorageEtag === "missing"
@@ -422,6 +425,380 @@ function normalizeNewMigrationVersions(value, appliedVersions) {
     throw cliError("invalid_response");
   }
   return Object.freeze(normalized);
+}
+
+async function sendMaintenanceRequest(payload, options) {
+  const controller = new AbortController();
+  let timeout;
+  let response;
+  try {
+    response = await Promise.race([
+      options.fetchImpl(
+        new URL(PROFILE_SITES_MAINTENANCE_PATH, `${options.origin}/`),
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${options.token}`,
+            "content-type": "application/json",
+            origin: options.origin
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        }
+      ),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(cliError("network_unavailable"));
+        }, options.requestTimeoutMs);
+      })
+    ]);
+  } catch {
+    throw cliError("network_unavailable");
+  } finally {
+    clearTimeout(timeout);
+  }
+  const result = await readSafeResponse(response);
+  if (!response.ok || result?.ok !== true) {
+    throw cliError(result?.error?.code ?? "maintenance_failed");
+  }
+  return result;
+}
+
+async function runDeleteAccount(request, payload, options) {
+  const planPayload = Object.freeze({
+    operation: "plan",
+    ownerId: payload.ownerId,
+    handle: payload.handle
+  });
+  const approval = Object.freeze({
+    contentDigest: payload.expectedContentDigest,
+    objectCount: payload.expectedObjectCount
+  });
+  let operationId = payload.operationId ?? null;
+  let initialSummary;
+  let lastProgress = null;
+  let applyAttempted = false;
+  let unchangedRetryAvailable = true;
+
+  const emitProgress = (progress, source = "plan") => {
+    assertDeleteProgress(progress, { approval, operationId });
+    if (operationId === null) operationId = progress.operationId;
+    assertMonotonicDeleteProgress(lastProgress, progress, source);
+    if (!lastProgress || !sameDeleteProgress(lastProgress, progress)) {
+      options.stdout(JSON.stringify(progress));
+    }
+    lastProgress = progress;
+  };
+
+  const reconcile = async () => {
+    let result;
+    try {
+      result = await request(planPayload);
+    } catch (error) {
+      if (applyAttempted && error?.code === "not_found") {
+        return { completed: true };
+      }
+      throw error;
+    }
+    const summary = normalizeMaintenanceSummary(result.summary, "plan");
+    initialSummary ??= summary;
+    if (result.progress !== undefined) {
+      const progress = normalizeOwnerDeletionProgress(result.progress);
+      if (progress.status !== "in_progress") {
+        throw cliError("invalid_response");
+      }
+      if (
+        operationId !== null &&
+        operationId !== progress.operationId
+      ) {
+        throw cliError("maintenance_conflict");
+      }
+      emitProgress(progress, "plan");
+      return { progress };
+    }
+    assertDeleteApproval(summary, approval);
+    if (!applyAttempted) return { unchanged: true };
+    if (unchangedRetryAvailable) {
+      unchangedRetryAvailable = false;
+      return { unchanged: true };
+    }
+    throw cliError("maintenance_conflict");
+  };
+
+  const first = await reconcile();
+  if (first.completed) {
+    throw cliError("not_found");
+  }
+  if (operationId === null) {
+    operationId = requireKeySegment(options.createOperationId(), "operationId");
+  }
+  const applyPayload = Object.freeze({ ...payload, operationId });
+
+  for (let iteration = 0; iteration < options.maxIterations; iteration += 1) {
+    if (lastProgress?.retryAfterSeconds !== undefined) {
+      await options.sleep(lastProgress.retryAfterSeconds * 1_000);
+      const waited = await reconcile();
+      if (waited.completed) {
+        return completeDeleteAccount({
+          approval,
+          initialSummary,
+          lastProgress,
+          operationId,
+          stdout: options.stdout
+        });
+      }
+      if (lastProgress?.retryAfterSeconds !== undefined) continue;
+    }
+
+    let result;
+    try {
+      applyAttempted = true;
+      result = await request(applyPayload);
+    } catch (error) {
+      if (error?.code === "not_found") {
+        return completeDeleteAccount({
+          approval,
+          initialSummary,
+          lastProgress,
+          operationId,
+          stdout: options.stdout
+        });
+      }
+      if (
+        error?.code !== "network_unavailable" &&
+        error?.code !== "maintenance_conflict"
+      ) {
+        throw error;
+      }
+      const reconciled = await reconcile();
+      if (reconciled.completed) {
+        return completeDeleteAccount({
+          approval,
+          initialSummary,
+          lastProgress,
+          operationId,
+          stdout: options.stdout
+        });
+      }
+      continue;
+    }
+
+    const summary = normalizeMaintenanceSummary(
+      result.summary,
+      "delete-account"
+    );
+    assertDeleteApproval(summary, approval);
+    const progress = normalizeOwnerDeletionProgress(result.progress);
+    emitProgress(progress, "apply");
+    if (progress.status === "completed") {
+      options.stdout(JSON.stringify(summary));
+      return { progress, summary };
+    }
+  }
+  throw cliError("delete_account_iteration_limit");
+}
+
+function completeDeleteAccount(options) {
+  const progress = Object.freeze({
+    contractVersion: 1,
+    status: "completed",
+    phase: "completed",
+    operationId: options.operationId,
+    deletedRevisionCount: options.lastProgress?.deletedRevisionCount ?? 0,
+    remainingRevisionCount: 0
+  });
+  assertMonotonicDeleteProgress(options.lastProgress, progress, "plan");
+  if (!options.lastProgress || !sameDeleteProgress(options.lastProgress, progress)) {
+    options.stdout(JSON.stringify(progress));
+  }
+  const summary = Object.freeze({
+    contentDigest: options.approval.contentDigest,
+    contractVersion: 1,
+    createdAt: options.initialSummary.createdAt,
+    objectCount: options.approval.objectCount,
+    operation: "delete-account",
+    ownerCount: 1,
+    schemaVersion: 1
+  });
+  options.stdout(JSON.stringify(summary));
+  return { progress, summary };
+}
+
+function normalizeMaintenanceSummary(value, operation) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw cliError("invalid_response");
+  }
+  const keys = Object.keys(value).sort();
+  const expected = [
+    "contentDigest",
+    "contractVersion",
+    "createdAt",
+    "objectCount",
+    "operation",
+    "ownerCount",
+    "schemaVersion"
+  ];
+  if (
+    keys.length !== expected.length ||
+    keys.some((key, index) => key !== expected[index]) ||
+    value.contractVersion !== 1 ||
+    value.schemaVersion !== 1 ||
+    value.operation !== operation ||
+    value.ownerCount !== 1 ||
+    !Number.isSafeInteger(value.objectCount) ||
+    value.objectCount < 0 ||
+    typeof value.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(value.createdAt))
+  ) {
+    throw cliError("invalid_response");
+  }
+  let contentDigest;
+  try {
+    contentDigest = requireDigest(value.contentDigest);
+  } catch {
+    throw cliError("invalid_response");
+  }
+  return Object.freeze({ ...value, contentDigest });
+}
+
+function normalizeOwnerDeletionProgress(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw cliError("invalid_response");
+  }
+  const completedKeys = [
+    "contractVersion",
+    "deletedRevisionCount",
+    "operationId",
+    "phase",
+    "remainingRevisionCount",
+    "status"
+  ];
+  const inProgressKeys = [
+    "contractVersion",
+    "deletedRevisionCount",
+    "expectedContentDigest",
+    "expectedObjectCount",
+    "operationId",
+    "phase",
+    "remainingRevisionCount",
+    "status"
+  ];
+  const keys = Object.keys(value).sort();
+  const expectedKeys = value.status === "completed"
+    ? completedKeys
+    : value.retryAfterSeconds === undefined
+      ? inProgressKeys
+      : [...inProgressKeys, "retryAfterSeconds"].sort();
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index]) ||
+    value.contractVersion !== 1 ||
+    !Number.isSafeInteger(value.deletedRevisionCount) ||
+    value.deletedRevisionCount < 0 ||
+    !Number.isSafeInteger(value.remainingRevisionCount) ||
+    value.remainingRevisionCount < 0
+  ) {
+    throw cliError("invalid_response");
+  }
+  try {
+    requireKeySegment(value.operationId, "operationId");
+  } catch {
+    throw cliError("invalid_response");
+  }
+  if (value.status === "completed") {
+    if (value.phase !== "completed" || value.remainingRevisionCount !== 0) {
+      throw cliError("invalid_response");
+    }
+    return Object.freeze({ ...value });
+  }
+  if (
+    value.status !== "in_progress" ||
+    !["prepare", "media", "structured"].includes(value.phase) ||
+    !Number.isSafeInteger(value.expectedObjectCount) ||
+    value.expectedObjectCount < 0
+  ) {
+    throw cliError("invalid_response");
+  }
+  try {
+    requireDigest(value.expectedContentDigest);
+  } catch {
+    throw cliError("invalid_response");
+  }
+  if (
+    value.retryAfterSeconds !== undefined &&
+    (!Number.isSafeInteger(value.retryAfterSeconds) ||
+      value.retryAfterSeconds < 1 ||
+      value.retryAfterSeconds > 120)
+  ) {
+    throw cliError("invalid_response");
+  }
+  return Object.freeze({ ...value });
+}
+
+function assertDeleteApproval(summary, approval) {
+  if (
+    summary.contentDigest !== approval.contentDigest ||
+    summary.objectCount !== approval.objectCount
+  ) {
+    throw cliError("maintenance_conflict");
+  }
+}
+
+function assertDeleteProgress(progress, options) {
+  if (
+    options.operationId !== null &&
+    progress.operationId !== options.operationId
+  ) {
+    throw cliError("maintenance_conflict");
+  }
+  if (
+    progress.status === "in_progress" &&
+    (progress.expectedContentDigest !== options.approval.contentDigest ||
+      progress.expectedObjectCount !== options.approval.objectCount)
+  ) {
+    throw cliError("maintenance_conflict");
+  }
+}
+
+function assertMonotonicDeleteProgress(previous, current, source) {
+  if (!previous) return;
+  const ranks = { prepare: 0, media: 1, structured: 2, completed: 3 };
+  if (
+    current.operationId !== previous.operationId ||
+    ranks[current.phase] < ranks[previous.phase] ||
+    current.remainingRevisionCount > previous.remainingRevisionCount
+  ) {
+    throw cliError("maintenance_conflict");
+  }
+  if (
+    source === "apply" &&
+    current.status === "in_progress" &&
+    current.phase === previous.phase &&
+    current.remainingRevisionCount === previous.remainingRevisionCount &&
+    current.retryAfterSeconds === undefined
+  ) {
+    throw cliError("progress_stalled");
+  }
+}
+
+function sameDeleteProgress(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function requireDeleteAccountMaxIterations(value) {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_DELETE_ACCOUNT_MAX_ITERATIONS
+  ) {
+    throw new TypeError("deleteAccountMaxIterations must be bounded");
+  }
+  return value;
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
 async function readSafeResponse(response) {
@@ -589,6 +966,7 @@ const OPTION_KEYS = Object.freeze({
   "--handle": "handle",
   "--input": "input",
   "--origin": "origin",
+  "--operation-id": "operationId",
   "--output": "output",
   "--owner-id": "ownerId",
   "--recent-revisions": "recentRevisions",

@@ -21,7 +21,7 @@ test("production artifact verifier accepts the exact hosted candidate shape", as
 
   assert.equal(result.clientFileCount, 3);
   assert.equal(result.expectedBindingCount, 3);
-  assert.equal(result.migrationFileCount, 5);
+  assert.equal(result.migrationFileCount, 6);
   assert.equal(result.workerFileCount, 1);
   assert.ok(result.artifactBytes > 0);
 });
@@ -112,7 +112,7 @@ test("production artifact verifier enforces the total candidate size", async () 
 test("production verifier rejects an unreviewed future migration", async () => {
   const outputDirectory = await createProductionArtifact({
     additionalMigrations: [
-      ["0006_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
+      ["0007_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
     ]
   });
 
@@ -177,6 +177,7 @@ test("production verifier keeps an independent migration allowlist", async () =>
   assert.match(source, /"0003_cli_login_intent\.sql"/);
   assert.match(source, /"0004_card_style\.sql"/);
   assert.match(source, /"0005_card_locale\.sql"/);
+  assert.match(source, /"0006_account_deletion_operations\.sql"/);
 });
 
 async function createProductionArtifact(options = {}) {
@@ -254,6 +255,10 @@ async function createProductionArtifact(options = {}) {
   await writeFile(
     join(migrationsDirectory, "0005_card_locale.sql"),
     "ALTER TABLE owners ADD COLUMN card_locale TEXT;"
+  );
+  await writeFile(
+    join(migrationsDirectory, "0006_account_deletion_operations.sql"),
+    "CREATE TABLE account_deletion_operations (owner_id TEXT PRIMARY KEY);"
   );
   for (const [name, sql] of options.additionalMigrations ?? []) {
     await writeFile(join(migrationsDirectory, name), sql);

@@ -175,9 +175,10 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    위 materializer가 기존 `dist/`를 제거하고 같은 commit에서 다시 build한 결과만 사용한다.
 3. Sites packaging helper로 `dist/`, hosting metadata와 migration을 하나의
    archive로 만든다. source push commit과 archive commit이 같음을 확인한다.
-   현재 `devel`의 Task #74·#78 누적 candidate는 D1 migration `1..5`와
-   `0004_card_style.sql`, `0005_card_locale.sql`이 누락·중복 없이 manifest
-   순서로 포함돼야 한다.
+   현재 `devel`의 Task #119 누적 candidate는 D1 migration `1..6`과
+   `0004_card_style.sql`, `0005_card_locale.sql`,
+   `0006_account_deletion_operations.sql`이 누락·중복 없이 manifest 순서로
+   포함돼야 한다.
 4. temporary `PROFILE_MAINTENANCE_MODE=enabled`와 새 operator secret을
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
@@ -200,7 +201,8 @@ usage/card bytes와 exception 원문은 기록하지 않는다. 응답의 `x-req
    SQL/provider message와 R2 metadata가 포함되면 통과로 취급하지 않는다.
    Sites가 package migration의 physical schema를 먼저 적용하고 application
    `schema_migrations` metadata를 남기지 않은 경우, migration 1·2의 모든
-   explicit table/index DDL과 migration 3~5의 additive column contract가
+   explicit table/index DDL, migration 3~5의 additive column contract와
+   migration 6의 account deletion operation table·constraint·owner cascade가
    candidate와 exact-match할 때만 metadata-only로 reconcile한다. 일부 object만
    있거나 drift가 있으면 mutation 전 `maintenance_conflict`로 중단한다.
    `schema_migrations` table이 아직 없거나 expected version이 누락된 상태는
@@ -302,13 +304,53 @@ contract/schema version, digest와 count만 남긴다.
   rate-limit row는 포함하지 않는다.
 - restore는 disposable target에서 먼저 수행하고 export와 같은 digest/count를
   확인한다. 인증 상태는 복구하지 않으므로 다시 로그인해야 한다.
-- account deletion은 dark authority를 먼저 tombstone으로 확인한 뒤 light stable과
-  theme·locale별 revision plan, D1 owner-dependent plan이 일치할 때만 apply한다.
-- partial failure나 stale ETag/digest/count에서는 다음 mutation을 중단한다.
+- account deletion은 최초 combined plan의 exact owner/handle, digest/count를
+  승인하면 persistent operation을 한 번 만들고 publication tombstone, D1 private
+  quiesce, R2 revision, D1 structured data 순서로 처리한다. R2 revision은 요청당
+  기본 8개만 삭제하며 하나라도 남으면 D1 owner를 삭제하지 않는다.
+- CLI는 delete-account에 한해 active operation을 먼저 plan으로 확인하고 같은
+  operation ID와 최초 승인값으로 batch를 직렬 재개한다. 수동 재개가 필요하면
+  safe progress의 ID를 `--operation-id`로 명시할 수 있지만 새 ID로 active 작업을
+  덮어쓰지 않는다.
+- live lease progress에는 1~120초의 `retryAfterSeconds`와 HTTP `Retry-After`가
+  함께 제공된다. CLI는 해당 시간을 기다리고 read-only plan을 다시 확인한 뒤에만
+  다음 apply를 보낸다.
+- apply 응답을 받지 못했거나 `maintenance_conflict`가 발생하면 즉시 apply를
+  겹쳐 보내지 않는다. read-only plan의 operation ID와 최초 digest/count가 같을
+  때만 재개하고, active operation 없이 original plan이 그대로인 경우 initial
+  apply를 한 번만 재시도한다. apply를 보낸 뒤 plan이 `not_found`인 경우에만
+  최종 D1 삭제 완료로 판정하며 최초 plan의 `not_found`는 완료가 아니다.
+- operation ID·승인값 불일치, phase·남은 revision 수 역행, 진행 정체, 반복 상한,
+  stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
   조건으로 수행한다. v4 repair publication은 D1 owner에 저장된 canonical
   `cardLocale`·`cardStyle.theme` pair를 반드시 포함하며 pair 없는 입력은
   dark/en으로 추측하지 않고 mutation 전에 거절한다.
+
+계정 삭제 전에는 다음처럼 repository 밖 backup을 확보하고 plan의 digest/count를
+사람이 확인한다. CLI 출력은 safe progress JSON line과 마지막 completed summary만
+사용하며 owner/handle, lease nonce, R2 key·ETag와 provider 오류 원문을 기록하지 않는다.
+
+```bash
+npm run sites:profile-maintenance -- plan \
+  --origin {approved_target_origin} \
+  --owner-id {exact_owner_id} \
+  --handle {exact_handle}
+
+npm run sites:profile-maintenance -- delete-account \
+  --origin {approved_target_origin} \
+  --owner-id {exact_owner_id} \
+  --handle {exact_handle} \
+  --expected-digest {approved_digest} \
+  --expected-count {approved_count} \
+  --apply
+```
+
+부분 삭제 뒤 application rollback은 진행하지 않는다. maintenance를 계속 닫아 둔
+채 active plan과 lease 만료를 확인하고 같은 operation으로 재개한다. 복구가 필요하면
+삭제 전에 만든 backup을 disposable target에서 검증한 뒤 restore하고, publication은
+별도 exact repair 절차로 복원한다. operation은 owner와 함께 cascade 삭제되므로 별도
+완료 ledger나 장기 PII 기록을 만들지 않는다.
 
 operator CLI는 `npm run sites:profile-maintenance -- <command>`를 사용하며
 mutation에는 `--apply`, exact owner id/handle, digest/count 확인이 모두

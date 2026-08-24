@@ -79,6 +79,11 @@ export const D1_MIGRATION_MANIFEST = createD1MigrationManifest([
     version: 5,
     name: "card_locale",
     file: "db/migrations/0005_card_locale.sql"
+  },
+  {
+    version: 6,
+    name: "account_deletion_operations",
+    file: "db/migrations/0006_account_deletion_operations.sql"
   }
 ]);
 
