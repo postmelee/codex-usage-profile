@@ -30,13 +30,15 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 - README Markdown은 fixed `/api/share/{handle}` href와 query 없는
   `/u/{handle}/card.png` src를 유지한다. submit·settings 저장 뒤 README Markdown은 byte 단위로
   같고, 공유 링크와 X·LinkedIn·Threads·Facebook·Reddit target만 새 revision으로 바뀐다.
-- CLI patch 후보는 `codex-usage-profile@0.1.2`다. production public smoke 전에는 tag와 npm
-  publish를 하지 않고, 새 `@latest` end-to-end 확인 전에는 stage5 public 경로를 닫지 않는다.
+- CLI production release는 `codex-usage-profile@0.1.3`과 `@latest=0.1.3`으로 완료됐다.
+  이후 production parity Gate는 package를 다시 게시하지 않고 현재 `@latest`의 default origin과
+  exact-main service 호환성만 재검증한다.
 - Task 완료 직후 canonical Site 운영과 프로젝트 홍보를 시작하므로 root/package README는
   `main` release 전에 launch-ready 사용자 표현으로 고정한다. `candidate`·`unpublished` 같은
   내부 전환 문구는 제거하되, badge·GitHub metadata·전면 copy 개편은 #90에 남긴다.
-- 기존 stage5 test state는 보존 요구가 없지만 자동 삭제하지 않는다. Gate E에서 exact owner
-  plan/export/digest/count와 production 비공유를 확인한 대상만 guarded maintenance로 삭제한다.
+- 기존 stage5 test state는 보존 요구가 없지만 자동 삭제하지 않는다. Task #122에서 기존
+  operation과 backup을 보존한 채 Stage5를 안전 종료했고, credential 비노출 실행 경로와 별도
+  파괴적 승인이 필요한 live recovery·data disposal은 비차단 Task #125로 이관했다.
 - source integration은 일반 최종 PR과 구분한 non-closing checkpoint PR로 수행한다.
   checkpoint merge 뒤 task branch를 `origin/devel` merge commit까지 fast-forward하고,
   `devel → main` release PR은 작업지시자가 review·merge한다.
@@ -48,10 +50,10 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 | Stage | 제목 | 주요 산출 | 검증 |
 |---|---|---|---|
 | 1 | dual-Site baseline과 target contract 고정 | read-only topology·Sites·npm inventory | source/live/quota/linkage/release stop condition 대조 |
-| 2 | Gate A1 project 생성과 canonical source 구현 | owner-only production project, target registry·canonical manifest, CLI `0.1.2` 후보 | project identity, 전체 test/E2E/build/verifier |
+| 2 | Gate A1 project 생성과 canonical source 구현 | owner-only production project, target registry·canonical manifest, CLI release 후보 | project identity, 전체 test/E2E/build/verifier |
 | 3 | checkpoint integration과 exact-main release | non-closing task PR, release PR, exact tree provenance | PR base/head/check/review와 tree equality |
-| 4 | production deploy·public cutover·CLI release | exact-main production, npm `0.1.2` | migration·OAuth·CLI·media·SNS·provenance·rollback |
-| 5 | stage5 테스트 전용 전환과 data disposal | owner-only stage5, synthetic state, 승인된 cleanup | resource 비공유·explicit origin·digest/count |
+| 4 | production deploy·public cutover·CLI release | 최초 production public deployment, npm `0.1.3` | migration·OAuth·CLI·media·SNS·provenance·rollback |
+| 5 | Stage5 안전 고정과 production exact-main parity | owner-only Stage5 handoff, production migration 6·exact-main release | resource 비공유·production full smoke·안전 종료 |
 | 6 | runbook 완성·통합 검증과 handoff | 공식 문서, Stage 6·최종 보고서와 final PR | 전체 회귀·public surface·remote state audit |
 
 ## 문서 위치 확인
@@ -62,7 +64,7 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 | production architecture | `docs/` | `docs/production-hosting.md` | OK | project·storage·OAuth·provenance 경계 |
 | README card 계약 | `docs/` | `docs/readme-card.md` | OK | fixed README/revision share 유지 |
 | CLI 사용자 문서 | `docs/` | `docs/cli-submit.md` | OK | production default와 stage5 override |
-| npm package 문서 | package 내부 | `packages/codex-usage-profile-cli/README.md` | OK | 배포 tarball의 `0.1.2` 사용법 |
+| npm package 문서 | package 내부 | `packages/codex-usage-profile-cli/README.md` | OK | 배포 tarball의 `0.1.3` 사용법 |
 | npm release 결과 | 기존 `docs/` | `docs/npm-release.md` | OK | 수행계획 예상 목록에는 없지만 기존 release 진실 원천이므로 Stage 4 실측 결과만 최소 보정 |
 | 공개 진입 문서 | repository root | `README.md` | OK | 기능적 hostname·version만 수정, 전면 copy·metadata는 #90 |
 | 단계·최종 보고서 | `mydocs/` | `working/task_m100_108_stage{1..6}.md`, `report/task_m100_108_report.md` | OK | Hyper-Waterfall 증적 |
@@ -94,7 +96,7 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 - source 변경은 `local/task108`에서 검증한 뒤 checkpoint PR로 `devel`에 integration한다.
 - production artifact는 merged exact `main`의 detached clean worktree에서 새로 build·package한다.
 - 공식 Sites package helper와 기존 artifact verifier를 모두 사용하고
-  `dist/server/index.js`, static assets, final hosting manifest, migration `0001..0005`를 확인한다.
+  `dist/server/index.js`, static assets, final hosting manifest, migration `0001..0006`을 확인한다.
 - saved version `commit_sha`, requested source, archive source와 deployed source는 같아야 한다.
 
 ### Access·인증·durable data
@@ -107,8 +109,8 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 - production D1/R2는 Stage 4 exact-main private save/deploy에서 production project에 처음
   attach·provision하고 empty baseline과 stage5 비공유를 검증한다. stage5 data를 import하거나
   production fixture로 쓰지 않는다.
-- stage5 삭제는 `plan → export → delete-account --apply`와 exact digest/count guard를 사용한다.
-  retention·orphan cleanup은 각각 dry-run과 별도 apply 승인을 거친다.
+- Stage5 live recovery·삭제는 #125에서만 `plan → export → delete-account --apply`와 exact
+  digest/count guard를 사용한다. #108은 Stage5 D1/R2·operation을 변경하지 않는다.
 - backup은 repository 밖 mode `0600` 파일로만 만들고 경로·payload를 보고서에 기록하지 않는다.
 
 ## 공통 증적·비식별화 규칙
@@ -128,7 +130,7 @@ GitHub Issue: [#108](https://github.com/postmelee/codex-usage-profile/issues/108
 | 2 | 없음 | Gate A1 `create_site` 1회, save/deploy 없음 | owner-only 확인, secret 없음 | D1/R2 미생성·미검증 | Stage 1 승인 + Gate A1 |
 | 3 | checkpoint·release PR, merge는 작업지시자 | 없음 | 없음 | 없음 | Stage 2 승인, PR별 merge 지시 |
 | 4 | Gate C npm tag/Actions | exact-main save/private deploy, Gate B public | production 전용 environment | Gate A2 D1/R2 attach·분리, migration·disposable smoke | Stage 3 + Gate A2/private/Gate B/Gate C 승인 |
-| 5 | 없음 | exact-main stage5 save/private deploy | Gate D owner-only | Gate E exact cleanup | Stage 4 + Gate D/Gate E 승인 |
+| 5 | 없음 | Stage5 read-only, production exact-main save/public deploy | production temporary maintenance 후 normal 복구 | production migration 6·disposable full smoke, Stage5 mutation 0 | #122 handoff + Gate F0, public deploy·migration·destructive smoke 각각 승인 |
 | 6 | final task PR | read-only audit | 변경 없음 | 삭제·copy 없음 | Stage 5·최종 보고 승인 |
 
 ## Stage 1 — dual-Site baseline과 target contract 고정
@@ -581,70 +583,75 @@ SNS 검증은 URL·revision·시각·결과만 기록한다.
 Task #108 Stage 4: production cutover와 CLI 0.1.3 release 검증
 ```
 
-## Stage 5 — stage5 테스트 전용 전환과 승인된 data disposal
+## Stage 5 — Stage5 안전 고정과 production exact-main parity
 
-> 2026-08-24 Stage 5 재개 보정: Task #119/PR #120의 계정 삭제 operation·lease,
-> bounded R2 batch와 D1 migration 6이 `devel`에 병합됐다. read-only 재확인 결과
-> production은 public version 2, stage5는 custom owner-only version 34이며 두 version 모두
-> exact `main` source `fae45095ddfe24a3fb03c4ec91a6e2a20900e005`다. stage5 익명 root·health·maintenance는
-> platform gate에서 `401`, production root·health는 `200`, 무인증 maintenance는 `404`다.
-> npm `latest`는 `0.1.3`이다. 따라서 Gate D의 owner-only·exact-main 전환은 완료된 입력으로
-> 취급하되, 현재 `main`과 stage5 DB에는 migration 6이 없으므로 Gate E mutation은 아직
-> 금지한다.
+> 2026-08-24 Task #122 종료 보정: Task #122 source fix는 exact `main`에 포함됐고 Stage5
+> owner-only version 36·migration `1..6` 배포까지 검증됐다. 기존 Stage5 account deletion
+> operation은 authority·`structured` phase·lease 없음·R2 revision 0을 유지하며 maintenance
+> disabled, service normal, operator token absent로 안전 종료됐다. credential 비노출 실행 경로와
+> 별도 파괴적 승인이 필요한 live recovery·data disposal은 비차단 #125로 이관한다.
 >
-> Gate E 전에는 다음 순서를 추가로 고정한다.
->
-> 1. Task #119를 포함한 `devel`을 reviewable release PR로 `main`에 승격하고 exact tree를
->    확인한다. 이 PR merge 자체는 Sites 배포·migration·data mutation을 수행하지 않는다.
-> 2. 새 exact `main`에서 stage5 target archive를 다시 만들고 migration `1..6`, stage5 project,
->    `DB`·`PROFILE_MEDIA` binding과 credential/path scan을 통과한다.
-> 3. stage5 owner-only access를 유지한 채 새 saved version을 private deploy하고, temporary
->    maintenance gate에서 migration 6을 적용해 readiness의 expected/applied version이
->    `[1,2,3,4,5,6]`과 정확히 일치하는지 확인한다.
-> 4. maintenance를 다시 닫고 exact main owner flow·explicit `--server`와 production public
->    baseline 무변경을 확인한 뒤에만 bounded plan/export를 Gate E 입력으로 제시한다.
-> 5. 기존 partial deletion은 새 operation ID를 추측하지 않는다. 새 CLI가 active operation을
->    read-only plan으로 발견하면 그 ID와 최초 승인값으로만 직렬 재개하고, active operation이
->    없으면 현재 plan의 새 digest/count를 별도 승인받는다.
+> production은 여전히 이전 saved version과 migration `1..5` baseline이므로 본 Stage의 남은
+> 차단 조건은 exact-main production 배포, migration 6과 공개 전 full smoke다. #108은 #125를
+> 기다리지 않으며 Stage5 D1/R2·operation·access/environment를 read-only로만 대조한다.
 
-### Stage 5A — Gate D 입력과 전환
+### Stage 5A — Task #122 handoff와 Gate F0 read-only preflight
 
-Gate D 전에 production/CLI 관찰 결과, stage5 source/version/access/environment/D1/R2,
-exact-main target artifact, owner-only policy, test OAuth 유지 범위, explicit `--server` flow와
-temporary-public crawler 절차를 제시한다.
+1. PR #124 exact `main` SHA/tree, PR #126 merge와 #122 완료 보고서를 대조한다.
+2. Stage5 version 36, owner-only access, migration `1..6`, maintenance disabled·service normal·
+   operator token absent와 기존 operation 불변을 read-only로 확인한다.
+3. production project/origin, public access, deployed version/source, environment revision,
+   maintenance baseline, D1 migration `1..5`와 R2 binding을 mutation 없이 수집한다.
+4. exact `main` clean detached worktree에서 production target artifact를 다시 만들고 live project,
+   origin, `DB`·`PROFILE_MEDIA`, migration `0001..0006`, credential/path scan과 archive digest를
+   검증한다.
+5. production migration·deployment 중단/복구 조건, temporary maintenance 환경 변경, public
+   deployment와 operator credential 전달 경로를 고정한다.
+6. Gate F1 입력으로 exact saved version 1개, 기존 public access 유지, temporary maintenance,
+   migration 6 apply와 최종 token 제거 범위를 제시한다. 이 단계는 read-only이며 credential
+   발급·save/deploy·environment·D1/R2 mutation은 0건이다.
 
-1. Gate D 승인 뒤 Stage 1 방식으로 exact main stage5 archive를 새로 만들고 target identity
-   negative test와 artifact verifier를 통과한다.
-2. stage5 source credential로 exact main을 push하고 saved version 1개를 만든다.
-3. private deploy가 가능하면 직접 private deploy한다. public deploy 뒤 즉시 access update가
-   필요하면 exact mutation을 다시 승인받는다.
-4. readiness, test OAuth와 `--server {stage5}` login/status/submit/profile/media를 확인한다.
-5. access를 owner-only로 바꾸고 anonymous 접근 거부, owner flow와 production public 무변경을
+### Stage 5B — Gate F1 production exact-main deploy와 migration 6
+
+1. 작업지시자가 기존 public access에 배포되는 exact version과 temporary maintenance·migration
+   mutation을 별도로 승인한 뒤에만 시작한다.
+2. exact `main` production artifact의 source credential을 요청별 authorization header로만 사용해
+   push하고 saved version 1개를 만든다. credential을 URL·git config·문서·명령행에 저장하지 않는다.
+3. production을 maintenance mode로 닫고 일회성 operator secret을 environment에 설정한 뒤,
+   approved saved version을 기존 public access에 배포한다.
+4. authenticated readiness에서 expected `1..6`, applied `1..5`만 허용하고 migration 6을 한 번
+   적용한다. 적용 뒤 expected/applied가 모두 `1..6`이고 account deletion operation schema가
+   exact contract인지 확인한다.
+5. migration 실패 전에는 이전 saved version으로 application rollback할 수 있다. migration 6은
+   additive이므로 적용 후에도 이전 app이 새 table을 읽지 않지만, active production deletion
+   operation이 생긴 뒤에는 rollback하지 않고 maintenance 상태에서 동일 operation recovery를
+   별도 승인한다.
+6. operator secret을 제거하고 maintenance disabled·service normal로 복구한다. source/version,
+   access/environment revision과 production readiness를 다시 확인한다.
+
+### Stage 5C — Gate F2 production full smoke와 공개 승인
+
+1. root·health·anonymous public profile/card/share, OAuth login/session/logout와 owner profile을
+   production origin에서 확인한다.
+2. clean environment의 `@latest=0.1.3`으로 default-origin login/status/submit, card publication,
+   fixed README와 revision share, 다섯 SNS target을 검증한다. SNS는 게시하지 않고 preview까지만
    확인한다.
-6. temporary-public crawler 절차는 명령과 stop/restore 조건만 dry-run하고 access는 열지 않는다.
-
-### Stage 5B — Gate E data disposal
-
-1. stage5 DB overview와 authenticated surface에서 test owner/session/token/media inventory를
-   bounded count로 만든다. raw payload는 기록하지 않는다.
-2. `sites:profile-maintenance plan`으로 exact digest/count를 얻고 production identity와 무관함을
-   확인한다.
-3. repository 밖 mode `0600` export와 restore 가능성을 확인해 Gate E 입력을 제시한다.
-4. exact owner/digest/count 승인 뒤에만 `delete-account --apply`를 실행한다.
-5. transient retention과 orphan media cleanup은 각각 dry-run한다. 추가 삭제는 candidate
-   count/reason을 제시해 별도 apply 승인을 받는다.
-6. 삭제 뒤 owner/session/token/public media 비열거, stage5 readiness와 production count·ETag
-   무변경을 확인한다.
-7. stage5 synthetic owner가 필요하면 production data 복제 없이 새 test flow로 최소 생성한다.
-8. local stage5 credential은 exact file과 revoke 상태를 확인한 별도 승인 뒤 정리한다. broad
-   directory 삭제는 하지 않는다.
-9. `task-stage-report`로 Stage 5 보고서와 오늘할일을 커밋하고 승인을 요청한다.
+3. account deletion end-to-end는 disposable production test owner와 repository 밖 mode `0600`
+   export, exact plan digest/count가 있을 때만 별도 파괴적 승인을 받아 실행한다. disposable
+   identity를 확정할 수 없으면 기존 owner를 삭제하거나 성공으로 추정하지 않고 release Gate를
+   미완료로 보고한다.
+4. 삭제 승인 시 동일 operation으로 R2→structured D1을 직렬 완료하고 owner/session/token/media
+   비열거를 확인한다. retention·orphan cleanup apply는 범위 밖이다.
+5. 최종 production public, maintenance disabled·service normal·operator token absent,
+   migration `1..6`과 Stage5 owner-only 무변경을 확인한다.
+6. `task-stage-report`로 Stage 5 보고서와 오늘할일을 커밋하고 Stage 6 승인을 요청한다.
 
 ### 산출물
 
-- exact-main stage5 saved version과 owner-only deployment
-- production과 분리된 test OAuth/environment/D1/R2 state
-- 승인된 test state cleanup 결과 또는 보류 근거
+- exact-main production saved version과 기존 public access deployment
+- production D1 migration `1..6`, maintenance disabled·service normal·operator token absent
+- production login→submit→publish→share→account deletion smoke 결과 또는 exact blocker
+- Stage5 owner-only/version 36/operation 불변과 #125 비차단 handoff
 - 신규: `mydocs/working/task_m100_108_stage5.md`
 - 수정: 실제 작업일의 `mydocs/orders/yyyyMMdd.md`
 
@@ -654,28 +661,29 @@ temporary-public crawler 절차를 제시한다.
 npm run build:production
 npm run verify:sites-fullstack
 npm run verify:sites-production
-npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
-npm run sites:profile-maintenance -- plan --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site --owner-id {owner_id} --handle {handle}
-npm run sites:profile-maintenance -- export --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site --owner-id {owner_id} --handle {handle} --output {external_backup}
-npm run cleanup:card-media
+npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile.meleeisdeveloping.chatgpt.site
+npm view codex-usage-profile@0.1.3 --json
+npm view codex-usage-profile dist-tags --json
+npm run scan:public-release
 git diff --check
 git status --short
 ```
 
-`delete-account --apply`, retention/media apply와 credential 삭제는 Gate E exact 승인 명령에만
-추가한다. 기본 검증에는 destructive apply가 없다.
+`save/deploy`, environment update, migration apply와 production account deletion은 각각 exact Gate
+승인에만 추가한다. Stage5 maintenance·delete-account·retention/media apply는 수행하지 않는다.
 
 ### 완료·중단 조건
 
-- 완료: stage5는 owner-only exact main과 전용 D1/R2/OAuth/secret을 쓰고 explicit origin으로만
-  검증된다. 승인된 test state만 digest/count guard로 삭제됐으며 production은 변하지 않았다.
-- 중단: target/source identity mismatch, owner-only 뒤 test flow 실패, production 영향,
-  plan/export/digest/count 또는 backup 불확실, resource 공유·예상 밖 candidate.
+- 완료: production은 public exact `main`, migration `1..6`, 별도 D1/R2/OAuth/secret과 final safe
+  environment를 사용한다. production full smoke가 통과하고 Stage5는 owner-only·operation 불변이다.
+- 중단: target/source/archive mismatch, public deployment 미승인, maintenance/operator credential
+  비노출 실패, migration drift, disposable account 부재, auth/privacy/media/share 실패, production
+  data 손실 또는 Stage5 영향.
 
 ### 커밋
 
 ```text
-Task #108 Stage 5: stage5 테스트 전환과 data disposal 검증
+Task #108 Stage 5: production exact-main parity와 공개 전 smoke 검증
 ```
 
 ## Stage 6 — runbook 완성·통합 검증과 final handoff
@@ -709,7 +717,7 @@ Stage 2 문구가 실제 remote 결과와 같은 파일은 결과 차이가 있�
 3. production hosting 문서에는 두 project/D1/R2/OAuth/secret 비공유와 exact-main provenance를
    확정한다.
 4. README/card/CLI/package/npm 문서의 canonical hostname, fixed README/revision share와
-   `0.1.2` 상태를 public surface와 대조한다. #90 범위는 흡수하지 않는다.
+   `0.1.3` 상태를 public surface와 대조한다. #90 범위는 흡수하지 않는다.
 5. 두 Site project/version/source/access/environment/readiness를 read-only audit한다.
 6. 전체 Node/E2E/build/Sites/npm verifier/public scan을 clean worktree에서 재실행한다.
 7. production hosted flow와 stage5 owner-only explicit origin flow를 검증한다. SNS는 preview-only다.
@@ -734,7 +742,7 @@ npm run verify:npm-release
 npm run scan:public-release
 npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile.meleeisdeveloping.chatgpt.site
 npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
-npm view codex-usage-profile@0.1.2 --json
+npm view codex-usage-profile@0.1.3 --json
 npm view codex-usage-profile dist-tags --json
 git diff --check
 git status --short
@@ -744,9 +752,9 @@ git status --short
 
 - production은 public, stage5는 owner-only이며 source/resource/identity 경계가 문서와 live state에서
   일치한다.
-- `@latest=0.1.2`, fixed README/revision share와 다섯 SNS target 전체 회귀가 통과한다.
-- Local→stage5→production 승격·rollback·temporary-public·data disposal runbook을 다음 release에서
-  재사용할 수 있다.
+- `@latest=0.1.3`, fixed README/revision share와 다섯 SNS target 전체 회귀가 통과한다.
+- Local→stage5→production 승격·rollback·temporary-public과 #125 data disposal handoff runbook을
+  다음 release에서 재사용할 수 있다.
 - worktree가 clean이고 final PR 예상 diff에 범위 밖 변경이 없다.
 
 ### 커밋
@@ -764,9 +772,9 @@ Task #108 Stage 6: dual Site runbook과 통합 검증 완료
 - public access, destructive apply, npm publish와 외부 게시·전송은 인접 Stage 승인과 별도로 exact
   Gate 승인을 받는다.
 - Stage 2는 Stage 1 보고서·보정 계획과 Gate A1, Stage 3은 Stage 2, Stage 4는 exact-main release와
-  Gate A2,
-  Stage 5는 production·`@latest` 관찰, Stage 6은 Stage 5 승인 뒤에만 진행한다.
-- Gate E는 Gate D 성공만으로 자동 승인되지 않는다.
+  Gate A2, Stage 5는 #122 handoff와 Gate F0, Stage 6은 Gate F1/F2와 Stage 5 승인 뒤에만 진행한다.
+- Gate F0 read-only 통과는 public deploy·environment update·migration apply 또는 destructive
+  account deletion 승인을 자동으로 포함하지 않는다.
 
 ## 위험과 대응
 
@@ -783,8 +791,8 @@ Task #108 Stage 6: dual Site runbook과 통합 검증 완료
 - **OAuth callback 충돌**: app을 환경별로 분리하고 기존 stage5 secret을 production에 복사하지 않는다.
 - **npm immutability**: production public 뒤 publish하고 새 `@latest` 확인 전 stage5 continuity를
   유지한다. 같은 version은 덮어쓰지 않는다.
-- **data disposal**: plan/export/digest/count, production 비공유와 exact apply 승인 중 하나라도
-  없으면 삭제하지 않는다.
+- **data disposal**: Stage5 live recovery는 #125로 분리한다. production smoke도 disposable owner,
+  plan/export/digest/count와 exact apply 승인 중 하나라도 없으면 삭제하지 않는다.
 - **Sites quota**: 추가 결제나 capacity 부족은 stop condition이다. shared storage로 우회하지 않는다.
 - **SNS cache**: application response를 먼저 검증하고 provider 지연을 별도 기록한다.
 - **문서 중복**: 기능적 hostname·version·runbook만 변경하고 전면 README/GitHub metadata는 #90이다.
@@ -796,7 +804,8 @@ Task #108 Stage 6: dual Site runbook과 통합 검증 완료
   exact-main Stage 4 Gate A2까지 금지
 - Stage 2 결과를 non-closing checkpoint PR로 `devel`에 integration한 뒤 별도 release PR을 merge
 - Stage 4 environment/private deploy, Gate B public과 Gate C npm publish를 각각 별도 승인
-- Stage 5 owner-only와 data disposal을 Gate D/E로 분리하고 raw DB/R2 삭제 금지
-- 기존 `docs/npm-release.md`의 `0.1.2` 실측 결과 최소 보정 추가 범위
+- Stage 5 Gate F0 read-only preflight, Gate F1 public deploy·migration, Gate F2 destructive smoke를
+  분리하고 Stage5 live recovery는 #125로 이관하며 raw DB/R2 삭제 금지
+- 기존 `docs/npm-release.md`의 immutable `0.1.2` 이력과 current `0.1.3` 실측 결과 최소 보정 범위
 - `.openai/hosting-targets.json`, `scripts/materialize-sites-target.mjs`와 negative test를 Stage 2
   source 범위에 추가하고 stage5 archive는 repository 밖에서만 생성
