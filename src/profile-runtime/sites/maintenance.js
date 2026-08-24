@@ -126,9 +126,18 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
         options.createService?.() ??
         createProfileSitesMaintenanceService(options);
       const result = await dispatchMaintenanceOperation(service, payload);
+      const headers = { ...JSON_HEADERS };
+      const retryAfterSeconds = result?.progress?.retryAfterSeconds;
+      if (
+        Number.isSafeInteger(retryAfterSeconds) &&
+        retryAfterSeconds >= 1 &&
+        retryAfterSeconds <= 120
+      ) {
+        headers["retry-after"] = String(retryAfterSeconds);
+      }
       return new Response(JSON.stringify({ ok: true, ...result }), {
         status: 200,
-        headers: JSON_HEADERS
+        headers
       });
     } catch (error) {
       if (error?.code === "not_found") {

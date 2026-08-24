@@ -861,6 +861,30 @@ test("account deletion reports a live lease without overlapping mutation", async
   assert.equal(result.progress.remainingRevisionCount, 2);
   assert.equal(calls.includes("r2.tombstone"), false);
   assert.equal(calls.includes("d1.quiesce"), false);
+
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: {
+      async deleteAccount() {
+        return result;
+      }
+    }
+  })(maintenanceRequest({
+    operation: "delete-account",
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  }));
+  const body = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("retry-after"), "60");
+  assert.deepEqual(JSON.parse(body).progress, result.progress);
+  assert.doesNotMatch(
+    body,
+    /owner_1|postmelee|leaseNonce|leaseExpiresAt|storageEtag|revisionKey/u
+  );
 });
 
 test("account deletion resumes after a released media-phase failure", async () => {
