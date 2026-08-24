@@ -124,6 +124,14 @@ Security boundaries include:
 
 Revoke the CLI token from web Settings if it is exposed or the machine is no longer trusted.
 
+## Contributing
+
+All contributions are welcome—code, documentation, bug reports, design feedback, and ideas.
+
+Have an idea for making profile cards more useful, expressive, or fun? Join the [Profile Card Customization Ideas](https://github.com/postmelee/codex-usage-profile/discussions/115) discussion. For bugs or concrete feature requests, open an [issue](https://github.com/postmelee/codex-usage-profile/issues/new/choose).
+
+If you would like to contribute code or documentation, please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
 ## Development
 
 ```bash

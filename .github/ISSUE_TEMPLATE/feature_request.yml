@@ -1,0 +1,64 @@
+name: Feature Request
+description: Propose a concrete, implementation-ready improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement.
+
+        If you are still exploring card styles, layouts, themes, or other open-ended possibilities, start with [Profile Card Customization Ideas](https://github.com/postmelee/codex-usage-profile/discussions/115). Use this form when the problem and desired outcome are concrete enough to scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user need or limitation should this feature address?
+      placeholder: Describe the problem without assuming a particular solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: Desired outcome
+      description: What should a user be able to do when this work is complete?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Describe the behavior, interface, or workflow you would like to add or change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternative approaches have you considered?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add public examples, mockups, screenshots, or related discussions if useful.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and discussions and did not find a duplicate.
+          required: true
+        - label: The problem and desired outcome are concrete enough to discuss implementation scope.
+          required: true
+        - label: This request does not disclose a security vulnerability or private account information.
+          required: true

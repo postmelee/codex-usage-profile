@@ -23,6 +23,8 @@ import {
 import { createR2BindingProfileMediaStore } from "./store.js";
 
 const MAX_LIST_PAGE_SIZE = 1_000;
+export const DEFAULT_OWNER_REVISION_DELETE_BATCH_SIZE = 8;
+export const MAX_OWNER_REVISION_DELETE_BATCH_SIZE = 32;
 
 export function createR2BindingProfileMediaMaintenance(options = {}) {
   const bucket = requireMaintenanceBucket(options.bucket);
@@ -35,6 +37,7 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
 
   return Object.freeze({
     applyRetention,
+    deleteOwnerRevisionBatch,
     deleteOwnerRevisions,
     listOwnerManifest,
     planOwnerDeletion,
@@ -136,6 +139,11 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
   }
 
   async function deleteOwnerRevisions(deleteOptions = {}) {
+    const result = await deleteOwnerRevisionBatch(deleteOptions);
+    return result.plan;
+  }
+
+  async function deleteOwnerRevisionBatch(deleteOptions = {}) {
     let plan = await planOwnerDeletion(deleteOptions);
     assertExpectedPlan(plan.summary, deleteOptions);
     if (plan.manifest.stable.kind === PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION) {
@@ -144,10 +152,20 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
         "owner revisions cannot be deleted while a publication is stable"
       );
     }
-    if (deleteOptions.apply !== true) return plan;
+    const batchSize = requireOwnerRevisionBatchSize(
+      deleteOptions.batchSize ?? DEFAULT_OWNER_REVISION_DELETE_BATCH_SIZE
+    );
+    if (deleteOptions.apply !== true) {
+      return deepFreeze({
+        deletedRevisionCount: 0,
+        plan,
+        remainingRevisionCount: plan.manifest.revisions.length
+      });
+    }
 
     const stableStorageEtag = plan.manifest.stable.storageEtag;
-    for (const revision of plan.manifest.revisions) {
+    let deletedRevisionCount = 0;
+    for (const revision of plan.manifest.revisions.slice(0, batchSize)) {
       await beforeDeleteRevision?.({ plan, revision });
       const stable = await readStableState(plan.manifest.handle);
       if (
@@ -178,9 +196,14 @@ export function createR2BindingProfileMediaMaintenance(options = {}) {
           "immutable revision remained after deletion"
         );
       }
+      deletedRevisionCount += 1;
     }
     plan = await planOwnerDeletion(deleteOptions);
-    return plan;
+    return deepFreeze({
+      deletedRevisionCount,
+      plan,
+      remainingRevisionCount: plan.manifest.revisions.length
+    });
   }
 
   async function planRetention(planOptions = {}) {
@@ -590,6 +613,19 @@ function requireOptionalStorageEtag(value) {
 function requireNonNegativeInteger(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new TypeError(`${label} must be a non-negative integer`);
+  }
+  return value;
+}
+
+function requireOwnerRevisionBatchSize(value) {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_OWNER_REVISION_DELETE_BATCH_SIZE
+  ) {
+    throw new TypeError(
+      `batchSize must be an integer from 1 to ${MAX_OWNER_REVISION_DELETE_BATCH_SIZE}`
+    );
   }
   return value;
 }
