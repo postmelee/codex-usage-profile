@@ -135,7 +135,7 @@ credential, session file 또는 raw usage aggregate를 출력·보고하지 않�
 덮어쓰지 않고 별도 patch version과 provenance를 준비하며, 필요하면
 `0.1.1` deprecate를 별도 승인받는다.
 
-## Stage 6 최종 release 판정
+## Task #44 Stage 6 최종 release 판정
 
 Task #44의 npm `0.1.0` release 판정은 **PASS**다.
 

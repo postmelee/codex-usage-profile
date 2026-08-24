@@ -13,36 +13,36 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 migration 결과에 따른 **MVP production PASS**다. Task #108은
 `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 별도 GitHub OAuth
 app, D1/R2와 environment를 가진 canonical production으로 공개했다. production은
-Stage 4 release 전 관찰 baseline에서 saved version 1과 public access revision 8을
-사용하며 migration `[1,2,3,4,5]`가 적용돼 있다. 기존 stage5는 Stage 5의 owner-only
-테스트 전환과 승인된 test data disposal이 끝날 때까지 별도 public validation 상태를
-유지한다.
+2026-08-24 최종 audit 기준 public saved version 3이고 migration
+`[1,2,3,4,5,6]`이 적용돼 있다. 기존 stage5는 별도 durable resource와 identity
+state를 사용하는 custom owner-only 테스트 환경이다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
-### Stage 4 release 전 production baseline
+### 현재 production 기준
 
 | 항목 | 값 |
 |---|---|
 | canonical origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 1 |
-| deployed source | `9835fb94c7cd9116114a8b936d5e9eebfb0f85d0` |
-| access | public revision 8 |
-| environment | production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
-| live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5]` |
-| CLI | public `latest=0.1.2`, production default origin |
+| saved version | 3 |
+| deployed source | `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd` |
+| artifact | 27 files, 5,437,440 bytes, `sha256:fb262880766b9543f39c97be44909f2dc1b94a5ce024783afe360cc282740f47` |
+| access | public revision 10 |
+| environment | revision 4, production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
+| live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5,6]` |
+| CLI | public `latest=0.1.3`, production default origin |
 
-이 표는 PR #112 병합으로 자동 갱신되는 desired state가 아니라 cutover 전에 원격에서
-관찰한 live baseline이다. 신규 saved version, access revision과 deployed source는 exact
-release 배포가 성공한 뒤 Stage 4 보고서에 기록한다.
+이 표는 desired state가 아니라 Task #108 Stage 5 종료 뒤 원격에서 다시 관찰한 live
+상태다. operator secret이 없는 안전 종료 상태에서는 protected readiness를 호출하지
+않고 Sites read-only D1 audit, health와 닫힌 operator route로 확인한다.
 
 ### Task #108 dual-Site target
 
 | 역할 | origin | manifest·resource 상태 |
 |---|---|---|
-| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 1, D1/R2/environment attached |
-| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; Stage 5 전까지 public version 33 continuity |
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 3, access revision 10, environment revision 4 |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 36, access revision 62, environment revision 119 |
 
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
@@ -338,7 +338,7 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
-3. Task #119 누적 candidate readiness는 D1 migration `1..6`이 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column이며, `0006_account_deletion_operations`는 owner cascade를 가진 additive operation table로 유지한다.
+3. release candidate readiness는 D1 migration `1..6`이 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column이며, `0006_account_deletion_operations`는 owner cascade를 가진 additive operation table로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
 5. public stable card는 application ETag 재검증을 사용한다. immutable media revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다. share revision path는 별도 snapshot 보존을 뜻하지 않으며 stale 요청도 현재 metadata로 수렴한다.
 6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
@@ -418,6 +418,20 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 실제 Sites에서 검증됨
 
+- Task #108 Stage 5에서 canonical production saved version 3/source
+  `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd`, public access revision 10,
+  environment revision 4와 migration exact `[1,2,3,4,5,6]`을 확인했다. 같은 source의
+  stage5 saved version 36은 custom owner-only access revision 62, environment revision
+  119와 별도 D1/R2/OAuth/identity state를 유지한다.
+- production은 maintenance disabled, service normal, operator secret absent이며
+  `/healthz` `200`, anonymous auth `401`, 닫힌 operator route `404`다. default-origin
+  `codex-usage-profile@0.1.3` OAuth/CLI submit, fixed README 불변과 다섯 SNS revision
+  갱신을 실제 검증하고 임시 token과 local credential을 제거했다.
+- production account deletion E2E는 실제 사용자 데이터 위험 때문에 실행하지 않았다.
+  Task #122의 stage5 live 검증과 #125 recovery handoff를 근거로 비차단 위험 수용했으며,
+  production 삭제 성공으로 표현하지 않는다. stage5의 기존 `structured` operation은
+  release 범위에서 변경하지 않았다.
+
 - Task #84 Stage 5 read-only audit에서 version 33, public access revision 59,
   environment revision 89와 9개 key 구성을 재확인했다. `/healthz`는 `200`, 닫힌
   operator route는 `404`, D1 `schema_migrations`는 exact `[1,2,3,4,5]`였으며
@@ -484,8 +498,8 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- public npm `codex-usage-profile@0.1.2` provenance/integrity와 production 기본 origin을
-  유지한다. npm package 내용 보정은 immutable `0.1.2`를 덮어쓰지 않고 새 patch로 처리한다.
+- public npm `codex-usage-profile@0.1.3` provenance/integrity와 production 기본 origin을
+  유지한다. npm package 내용 보정은 immutable `0.1.3`을 덮어쓰지 않고 새 patch로 처리한다.
 - Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
   완료 상태 유지
 - 월별 90일 retention dry-run과 owner 요청 기반 account deletion
@@ -498,9 +512,14 @@ Stage 5의 provider fault injection 공백은 위 판정의 승인된 위험 수
 ## 후속 작업
 
 1. 월별 90일 retention dry-run과 owner 요청 기반 account deletion을 운영한다.
-2. Sites의 plan별 limit 알림, public 유지 제한과 가격·정책 변경을
+2. stage5의 기존 structured deletion operation recovery는 production release와 분리해
+   [#125](https://github.com/postmelee/codex-usage-profile/issues/125)에서 진행한다.
+3. GitHub About homepage와 default branch 등 저장소 공개 metadata는 Task #108 범위에
+   흡수하지 않고 [#90](https://github.com/postmelee/codex-usage-profile/issues/90)에서
+   마케팅 시작 전에 정리한다.
+4. Sites의 plan별 limit 알림, public 유지 제한과 가격·정책 변경을
    주기적으로 확인한다.
-3. 가격·quota·정책 또는 장기 장애 trigger가 실제로 발생할 때만 #43의
+5. 가격·quota·정책 또는 장기 장애 trigger가 실제로 발생할 때만 #43의
    Cloud Run/Neon/S3-compatible R2 fallback을 평가한다.
-4. marketing-only Sites mirror였던 #46은 canonical full-stack Site와
+6. marketing-only Sites mirror였던 #46은 canonical full-stack Site와
    중복되므로 별도 구현하지 않는다.

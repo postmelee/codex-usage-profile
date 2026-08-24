@@ -746,8 +746,8 @@ npm run verify:sites-fullstack
 npm run verify:sites-production
 npm run verify:npm-release
 npm run scan:public-release
-npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile.meleeisdeveloping.chatgpt.site
-npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
+# protected readiness는 임시 operator credential이 있는 배포 창에서만 실행한다.
+# final safe state는 Sites read-only D1 audit + /healthz 200 + operator route 404로 확인한다.
 npm view codex-usage-profile@0.1.3 --json
 npm view codex-usage-profile dist-tags --json
 git diff --check
@@ -761,6 +761,7 @@ git status --short
 - `@latest=0.1.3`, fixed README/revision share와 다섯 SNS target 전체 회귀가 통과한다.
 - Local→stage5→production 승격·rollback·temporary-public과 #125 data disposal handoff runbook을
   다음 release에서 재사용할 수 있다.
+- GitHub About homepage/default branch는 범위 밖 #90 마케팅 전 Gate로 명시돼 있다.
 - worktree가 clean이고 final PR 예상 diff에 범위 밖 변경이 없다.
 
 ### 커밋
