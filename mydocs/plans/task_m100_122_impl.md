@@ -27,6 +27,11 @@
   인정한다. 새 operation을 만들거나 active row를 수동 수정하지 않는다.
 - phase `structured`, lease 없음, 최초 승인 object count 77이라는 현재 baseline을
   원격 mutation 직전에 다시 확인한다.
+- Gate 5A의 live D1 bounded count는 owner 1, OAuth state 22, session 22, login challenge 11,
+  CLI token 8, latest snapshot 0, latest usage 1, submitted device 7, rate limit 2와 deletion
+  operation 1이다. Sites table row 조회는 `has_more`/`next_offset`이 끝날 때까지 모든 page를
+  순회한다. Stage 1의 OAuth state 19 synthetic fixture는 당시 첫 page 관측을 고정한 역사적
+  재현 입력으로 유지하며 현재 live baseline으로 사용하지 않는다.
 - retryable provider busy와 terminal invariant failure를 구분한다. terminal failure에서는
   CLI가 iteration limit까지 같은 mutation을 반복하지 않는다.
 - apply 응답 유실 뒤 plan `not_found`는 기존 계약대로 완료 reconciliation이지만,
@@ -72,7 +77,7 @@ Stage 1 결과가 위 가설로 설명되지 않거나 real-workerd 경로에서
 | 2 | D1 원자 삭제와 Sites 오류 경계 보정 | provider-compatible guard/delete, safe reason·retryability | D1·Sites atomicity와 정보 경계 |
 | 3 | CLI reconciliation·운영 문서·통합 회귀 | bounded terminal handling, full-stack smoke, runbook | CLI·전체 Node·Sites artifact·real-workerd |
 | 4 | source integration checkpoint와 exact-main release | non-closing task PR, release PR, exact tree provenance | PR checks·tree equality·Stage5 artifact preflight |
-| 5 | Stage5 기존 operation 재개와 Task #108 handoff | exact-main private deployment, deletion completion, incident·handoff | D1/R2 0·비열거·access/service 복구·production 무변경 |
+| 5 | exact-main Stage5 안전 종료와 Task #108/#125 handoff | exact-main private deployment, operation 불변, incident·handoff | delete request 0·access/service/token 복구·production 무변경 |
 
 ## 문서 위치 확인
 
@@ -94,7 +99,7 @@ Task #108 active worktree의 계획·단계 문서는 이 branch에서 수정하
 | 2 | 없음 | 없음 | 없음 | local/real-workerd fixture만 | Stage 1 보고 승인 |
 | 3 | 없음 | local artifact만 | 없음 | local smoke만 | Stage 2 보고 승인 |
 | 4 | checkpoint·release PR | save/deploy 없음 | metadata read-only | Stage5/production overview read-only | Stage 3 보고 승인, PR별 merge 지시 |
-| 5 | 없음 | exact-main Stage5 save·owner-only deploy | maintenance token 일시 설정·제거 | 기존 active operation exact resume | Stage 4 보고 승인 + Stage5 preflight 승인 |
+| 5 | #125 등록·#108 handoff | exact-main Stage5 save·owner-only deploy | maintenance token 제거·우회 token 회전 | D1/R2 read-only projection, delete request 0 | Stage 4 보고 승인 + Stage5 preflight 승인 |
 
 Stage 4 checkpoint와 release PR은 Issue #122를 close하지 않는다. Stage 5 승인 후
 `task-final-report`가 만드는 최종 `devel` PR에서만 일반 종료 절차를 적용한다.
@@ -331,7 +336,7 @@ git status --short
 Task #122 Stage 4: checkpoint와 exact main release provenance 기록
 ```
 
-## Stage 5 — Stage5 기존 operation 재개와 Task #108 handoff
+## Stage 5 — exact-main Stage5 배포·안전 종료와 Task #108/#125 handoff
 
 ### Gate 5A — read-only preflight
 
@@ -341,7 +346,8 @@ Task #122 Stage 4: checkpoint와 exact main release provenance 기록
 - Stage5 project/origin, deployed version/source, owner-only access와 environment revision
 - readiness migration `1..6`, service normal, maintenance disabled
 - exact owner/handle, existing operation ID, phase `structured`, lease 없음과 최초 승인 digest/count
-- R2 revision 0, non-public stable과 structured table별 bounded count
+- R2 revision 0, non-public stable과 전 page를 순회한 structured table별 bounded count
+  (live OAuth state 22 포함)
 - repository 밖 mode `0600` backup 존재·checksum 일치·payload 미출력
 - production version 2, environment revision 2, 기록된 access policy와 HTTP baseline의
   read-only 비교
@@ -354,20 +360,23 @@ Task #122 Stage 4: checkpoint와 exact main release provenance 기록
 2. requested source, returned version source와 archive provenance가 일치할 때만 owner-only
    deployment로 승격한다.
 3. public access가 필요한 경로면 실행하지 않고 별도 승인받는다.
-4. health, readiness, owner-only anonymous denial과 production 무변경을 확인한다.
-5. 새 code의 read-only plan이 같은 active operation·approval·phase를 인식하는지 확인한다.
+4. health, owner-only anonymous denial과 production 무변경을 확인한다.
+5. maintenance가 닫힌 상태에서 D1/R2 read-only projection으로 같은 active
+   operation·approval·phase·lease 없음과 R2 revision 0을 확인한다.
 
-### Gate 5C — 동일 operation resume
+### Gate 5C — 안전 종료와 후속 이관
 
-1. 별도 Stage5 maintenance token을 일시 설정하고 revision을 기록하되 값을 출력하지 않는다.
-2. exact owner/handle, 기존 operation ID, 최초 expected digest/count와 `--apply`를 명시한다.
-3. retryable progress만 직렬 재개한다. terminal reason, mismatch, nonzero R2, public stable,
-   lease 역행 또는 plan drift가 나오면 즉시 중단한다.
-4. 완료 뒤 plan `not_found`, D1 owner/dependent rows/operation 0, R2 revision 0과 profile/card
-   404를 확인한다.
-5. maintenance token을 제거하고 disabled, service normal, owner-only access를 재검증한다.
-   실패해도 token 제거와 maintenance close를 우선한다.
-6. backup은 삭제하지 않고 production baseline을 다시 비교한다.
+1. operator readiness/plan 전에 credential handoff가 transcript, 오류 출력, 명령행 또는
+   process argument에 secret을 남기지 않는지 검토한다.
+2. 안전 조건을 충족하지 못하면 maintenance request와 `delete-account --apply`를 전송하지
+   않고 token 제거, maintenance disabled, service normal 복구를 우선한다.
+3. 노출 가능성이 생긴 일회성 owner-only 우회 token은 회전하고 이전 값의 폐기를 확인한다.
+4. exact-main version 36, owner-only access, environment revision 119의 maintenance disabled,
+   operator token absent와 production 무변경을 확인한다.
+5. 기존 operation ID·최초 digest/count·`structured` phase·lease 없음·R2 revision 0은
+   변경하지 않고 안전한 operator 실행 경로와 live resume를 #125로 이관한다.
+6. #125는 #108 production exact-main 배포·migration 6·사용자 흐름 smoke와 공개·마케팅
+   release gate를 차단하지 않는 비차단 후속 작업으로 유지한다.
 
 ### 산출물과 검증
 
@@ -384,35 +393,31 @@ Task #122 Stage 4: checkpoint와 exact main release provenance 기록
 npm run build:production
 npm run verify:sites-fullstack
 npm run verify:sites-production
-npm run sites:profile-maintenance -- readiness \
-  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site
-npm run sites:profile-maintenance -- plan \
-  --origin https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site \
-  --owner-id {approved_owner_id} \
-  --handle postmelee
 git diff --check
 git status --short
 ```
 
-`delete-account --apply`, Sites save/deploy와 environment mutation은 Gate 5A 결과를 제시한 뒤
-받는 명시 승인에만 추가한다.
+`readiness`, `plan`, `delete-account --apply`의 live operator 호출은 #125에서 안전한
+credential handoff 계획과 별도 승인을 받은 뒤 수행한다. Task #122 Stage 5에서는 Sites
+exact-main save/deploy와 안전 종료 environment mutation까지만 승인 범위로 둔다.
 
 ### 완료·중단 조건
 
-- 완료: existing operation이 새 ID·approval 변경 없이 completed되고 D1/R2 참조가 0이며,
-  Stage5 owner-only·service normal·maintenance disabled, backup 유지와 production 무변경을
-  확인했다.
-- 중단: source/target/operation/approval/backup mismatch, nonzero media, partial structured
-  state, public access 필요, token 제거 실패 또는 production 영향.
+- 완료: exact-main이 Stage5 owner-only로 배포되고 existing operation의 ID·approval·phase·lease와
+  R2 0 상태가 불변이며, Stage5 owner-only·service normal·maintenance disabled·operator token
+  absent, backup 유지, production 무변경과 #108/#125 handoff를 확인했다.
+- 중단: source/target/operation/approval/backup mismatch, public access 필요, token 제거·회전
+  실패 또는 production 영향.
 
 ### 커밋
 
 ```text
-Task #122 Stage 5: Stage5 삭제 재개와 Task #108 handoff 검증
+Task #122 Stage 5: exact-main Stage5 안전 종료와 후속 handoff 검증
 ```
 
-Stage 5 승인 뒤 `task-final-report`에서 최종 보고서, Task #108 exact handoff와 다시 생성한
-`publish/task122`의 final `devel` PR을 만든다.
+Stage 5 승인 뒤 `task-final-report`에서 최종 보고서, Task #108 production release 비차단
+handoff, #125 live recovery 후속 handoff와 다시 생성한 `publish/task122`의 final `devel` PR을
+만든다.
 
 ## 공통 검증과 단계 의존성
 

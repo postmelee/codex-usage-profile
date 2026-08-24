@@ -57,7 +57,7 @@ reduced-motion에서는 animation과 transform을 모두 제거한다.
 실행 명령:
 
 ```bash
-/Users/melee/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
+$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
   --test \
   src/profile-api/__tests__/client.test.js \
   src/profile-ui/__tests__/deviceApproval.test.js
