@@ -66,10 +66,9 @@ GitHub repository의 현재 default `devel` 화면을 Codex in-app browser에서
 - badges, 긴 서비스 설명, IMPORTANT callout 뒤에 카드가 나와 첫 사용자 가치보다 설명이 먼저 보였다.
 - 카드 오른쪽 절반이 빈 공간이라 실제 예시의 시각적 우선순위가 낮았다.
 
-Stage 2의 repository live example은 title과 한 문장 value proposition 바로 뒤로 옮기고
-`width="720"`을 사용한다. GitHub는 article 폭 이하로 줄이므로 narrow/mobile layout도 넘치지 않는다.
-CLI가 반환하고 사용자에게 복사되는 README Markdown과 문서의 embed 예시는 기존 계약인
-`width="50%"`를 유지한다.
+Stage 2의 repository live example은 title과 한 문장 value proposition 바로 뒤로 옮기되
+`width="50%"`를 유지한다. CLI가 반환하고 사용자에게 복사되는 README Markdown과 문서의 embed
+예시도 같은 50% 폭 계약을 유지한다. 이번 작업은 카드 위치와 주변 정보구조만 보정한다.
 
 ### 문서 audience와 language
 
@@ -171,7 +170,7 @@ checkpoint PR merge 뒤 release PR과 exact approved path diff를 검증해야 �
 ### README outline
 
 1. Title와 exact value proposition
-2. fixed share href/queryless card src를 쓰는 `postmelee` live example (`width="720"`)
+2. fixed share href/queryless card src를 쓰는 `postmelee` live example (`width="50%"`)
 3. Website/npm/license badge와 primary Website CTA
 4. GitHub sign-in → `npx codex-usage-profile@latest submit` → preview/publish/share의 3단계 Quick start
 5. private-by-default, stable README card, revision-aware SNS, credential 비수집의 사용자 benefit
@@ -241,12 +240,12 @@ README의 DOM·screenshot과 local Markdown link 10개 파일을 읽기 전용�
 
 ## 다음 단계 영향
 
-- Stage 2는 위 outline, live example `width="720"`, user surface English와 fixed README/revision SNS
+- Stage 2는 위 outline, live example `width="50%"`, user surface English와 fixed README/revision SNS
   분리 계약을 그대로 사용한다.
 - `width="50%"` CLI README 결과, package version, 제품 코드와 production remote는 변경하지 않는다.
 - Stage 2 완료 뒤 root/package/user guides render와 npm release verifier를 함께 검증한다.
 
 ## 승인 요청
 
-- Stage 1 산출물과 검증 결과, CI badge 제거, README outline, live example `width="720"`, language/audience
+- Stage 1 산출물과 검증 결과, CI badge 제거, README outline, live example `width="50%"`, language/audience
   matrix와 desired metadata payload를 승인하면 Stage 2로 진행한다.

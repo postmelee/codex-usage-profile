@@ -7,7 +7,7 @@ GitHub Issue: [#90](https://github.com/postmelee/codex-usage-profile/issues/90)
 ## 승인된 결정과 구현 해석
 
 - root README는 GitHub repository의 launch page다. 첫 화면은 `title → value proposition →
-  실제 카드 → primary CTA/Quick start` 순서로 구성하고 현재 50% 카드보다 크게 표시한다.
+  실제 카드 → primary CTA/Quick start` 순서로 구성하고 현재 `width="50%"`를 유지한다.
 - 실제 예시는 `postmelee`의 fixed `/api/share/postmelee` href와 query 없는
   `/u/postmelee/card.png` src를 유지한다. revision URL은 README embed로 사용하지 않는다.
 - public product surface인 root README, package README, `docs/cli-submit.md`,
@@ -74,7 +74,7 @@ GitHub Issue: [#90](https://github.com/postmelee/codex-usage-profile/issues/90)
 ### README content hierarchy
 
 1. Title, one-sentence value proposition
-2. Large live example card linked to fixed public share page
+2. Live example card at `width="50%"`, linked to the fixed public share page
 3. Website/npm/CI/license badges and primary Website CTA
 4. Three-step Quick start: GitHub sign-in → `npx ... submit` → preview/publish/share
 5. User outcomes: private by default, stable card, revision-aware SNS, no credential upload
@@ -197,7 +197,7 @@ Task #90 Stage 1: 공개 표면과 문서 정보구조 계약 확정
 
 ### 변경 내용
 
-- README를 공통 hierarchy대로 재구성하고 live card를 title/value proposition 다음에 배치한다.
+- README를 공통 hierarchy대로 재구성하고 `width="50%"` live card를 title/value proposition 다음에 배치한다.
 - Quick start는 `npx codex-usage-profile@latest submit` 한 명령과 browser approval, private preview,
   Publish/Share 흐름을 3단계로 설명한다.
 - 기능은 private-by-default, stable README card, revision-aware social share와 credential 비수집을
