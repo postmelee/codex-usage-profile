@@ -363,7 +363,7 @@ Task #90 Stage 4: 공개 문서 exact-main 승격 검증
 
 | 필드 | 현재 rollback 값 | desired 값 |
 |---|---|---|
-| `description` | `Turn your Codex account usage into a shareable profile and stable GitHub README card.` | 변경하지 않음; PATCH payload 제외 |
+| `description` | `Turn your Codex account usage into a shareable rich link previews and stable GitHub README card.` | 변경하지 않음; PATCH payload 제외 |
 | `homepage` | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | `default_branch` | `devel` | `main` |
 
