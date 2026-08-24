@@ -583,6 +583,30 @@ Task #108 Stage 4: production cutover와 CLI 0.1.3 release 검증
 
 ## Stage 5 — stage5 테스트 전용 전환과 승인된 data disposal
 
+> 2026-08-24 Stage 5 재개 보정: Task #119/PR #120의 계정 삭제 operation·lease,
+> bounded R2 batch와 D1 migration 6이 `devel`에 병합됐다. read-only 재확인 결과
+> production은 public version 2, stage5는 custom owner-only version 34이며 두 version 모두
+> exact `main` source `fae45095ddfe24a3fb03c4ec91a6e2a20900e005`다. stage5 익명 root·health·maintenance는
+> platform gate에서 `401`, production root·health는 `200`, 무인증 maintenance는 `404`다.
+> npm `latest`는 `0.1.3`이다. 따라서 Gate D의 owner-only·exact-main 전환은 완료된 입력으로
+> 취급하되, 현재 `main`과 stage5 DB에는 migration 6이 없으므로 Gate E mutation은 아직
+> 금지한다.
+>
+> Gate E 전에는 다음 순서를 추가로 고정한다.
+>
+> 1. Task #119를 포함한 `devel`을 reviewable release PR로 `main`에 승격하고 exact tree를
+>    확인한다. 이 PR merge 자체는 Sites 배포·migration·data mutation을 수행하지 않는다.
+> 2. 새 exact `main`에서 stage5 target archive를 다시 만들고 migration `1..6`, stage5 project,
+>    `DB`·`PROFILE_MEDIA` binding과 credential/path scan을 통과한다.
+> 3. stage5 owner-only access를 유지한 채 새 saved version을 private deploy하고, temporary
+>    maintenance gate에서 migration 6을 적용해 readiness의 expected/applied version이
+>    `[1,2,3,4,5,6]`과 정확히 일치하는지 확인한다.
+> 4. maintenance를 다시 닫고 exact main owner flow·explicit `--server`와 production public
+>    baseline 무변경을 확인한 뒤에만 bounded plan/export를 Gate E 입력으로 제시한다.
+> 5. 기존 partial deletion은 새 operation ID를 추측하지 않는다. 새 CLI가 active operation을
+>    read-only plan으로 발견하면 그 ID와 최초 승인값으로만 직렬 재개하고, active operation이
+>    없으면 현재 plan의 새 digest/count를 별도 승인받는다.
+
 ### Stage 5A — Gate D 입력과 전환
 
 Gate D 전에 production/CLI 관찰 결과, stage5 source/version/access/environment/D1/R2,
