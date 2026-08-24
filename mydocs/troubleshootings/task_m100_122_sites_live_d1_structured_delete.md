@@ -34,6 +34,15 @@ node --test src/profile-backend/__tests__/d1-maintenance.test.js
   JavaScript locale order와 SQLite binary order가 다르다.
 - control: 같은 row 수와 phase에서 소문자·숫자 ID만 사용하면 structured delete가 성공한다.
 
+### Live count pagination 보정
+
+위 OAuth state 19는 Stage 1 synthetic fixture가 고정한 재현 입력이다. 당시 Sites table
+viewer의 첫 25행만 확인해 target owner row 19개를 live count로 해석했지만, Stage 5 Gate
+5A에서 `next_offset`까지 순회한 결과 다음 page에 같은 owner의 기존 3행이 더 있어 실제 live
+count는 22다. 22행 모두 active operation 생성 전부터 존재하므로 새 유입이나 operation 이후
+state drift가 아니다. comparator 원인은 row 수가 아니라 mixed-case device 정렬 계약이므로
+19행 fixture의 재현·회귀 의미는 유지하되, 원격 Gate baseline에는 full-pagination 22를 쓴다.
+
 ## 원인
 
 원인은 `buildOwnerDeleteGuard`의 submitted-device fingerprint 정렬 계약 불일치다.
@@ -101,23 +110,26 @@ Stage 2에서는 확정 원인만 다음 원칙으로 보정했다.
   full rollback을 확인한다.
 - live delete 전에는 atomic claim 잔존, active operation, media 0과 backup checksum을 read-only로
   다시 확인한다.
-- 실제 Stage5 resume는 Task #122 exact-main Gate 전에는 실행하지 않는다.
+- 실제 Stage5 resume는 안전한 credential handoff와 별도 파괴적 승인을 갖춘 #125에서만
+  실행한다.
 
-## Stage5 재개 checklist — 미실행
+## Stage5 exact-main 검증과 후속 이관
 
-- source fix가 integration checkpoint와 release PR을 거쳐 exact `main`에 포함됐는지 확인한다.
-- Stage5 saved version의 source SHA, project·origin, D1/R2 binding과 migration `1..6`을
-  read-only로 확인한다.
-- owner-only access, maintenance disabled, service normal과 production read-only baseline을
-  다시 고정한다.
-- repository 밖 mode `0600` backup checksum, 기존 operation ID, 최초 승인 digest/count,
-  phase `structured`, lease 없음, R2 revision 0과 non-public stable state가 모두 기존
-  승인값과 같은지 확인한다.
-- 하나라도 다르면 mutation 전에 중단한다. 모두 같을 때만 maintenance token을 일시
-  설정하고 같은 operation을 직렬 재개한다.
-- 완료 뒤 owner 관련 D1/R2 참조 0, public/profile/card 비열거, maintenance disabled,
-  service normal, owner-only access와 production 무변경을 확인한다.
-- 위 항목은 Stage 4 provenance와 별도 Stage 5 preflight 승인을 받기 전에는 실행하지 않는다.
+- source fix는 integration checkpoint와 release PR을 거쳐 exact `main`에 포함됐고 Stage5
+  version 36으로 owner-only 배포됐다.
+- saved version source·archive, D1/R2 binding, migration `1..6`, repository 밖 mode `0600`
+  backup checksum과 production read-only baseline이 Gate 5A 기준과 일치했다.
+- full-pagination live count는 OAuth state 22이며 기존 operation ID, 최초 승인 digest/count 77,
+  phase `structured`, lease 없음, R2 revision 0과 non-public stable state가 유지됐다.
+- owner-only 우회 token과 maintenance token을 함께 사용하는 live readiness/plan 전에 현재
+  실행 채널이 secret을 transcript·오류 출력·명령행·process argument에 남길 수 있음을
+  확인해 request 전 중단했다. raw D1/R2 삭제나 `delete-account --apply`는 실행하지 않았다.
+- Stage5는 environment revision 119에서 maintenance disabled, service normal, operator token
+  absent로 재배포했고 owner-only access를 유지했다. 노출 가능성이 있던 우회 token은 회전했고
+  production version/access/environment는 변경되지 않았다.
+- 안전한 operator credential handoff와 기존 operation live resume는 #125로 이관한다.
+  이는 #108 production exact-main 배포·migration·사용자 흐름 smoke와 공개·마케팅 release
+  gate를 차단하지 않는다.
 
 ## 검증
 
@@ -150,11 +162,13 @@ git diff --check
   operation 완료, 67 routes, canonical update 2회를 검증했다.
 - OK — 전체 Node suite 868 tests 중 862 pass, 환경 조건부 6 skip, 0 fail이며 Sites
   full-stack/production artifact 검증과 public release scan도 통과했다.
-- OK — Stage5 확인은 read-only table overview/row projection만 사용했고 mutation은 0건이다.
+- OK — Stage5 D1/R2 확인은 read-only projection만 사용했고 delete mutation은 0건이다.
+  승인된 Sites exact-main 배포와 maintenance 안전 종료 뒤 operation authority는 불변이다.
 
 ## 참고
 
 - [Task #122 수행계획서](../plans/task_m100_122.md)
 - [Task #122 구현계획서](../plans/task_m100_122_impl.md)
 - [Task #119 최종 보고서](../report/task_m100_119_report.md)
+- [후속 Task #125](https://github.com/postmelee/codex-usage-profile/issues/125)
 - [`buildOwnerDeleteGuard`](../../src/profile-backend/d1/maintenance.js)
