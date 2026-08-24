@@ -16,6 +16,9 @@ GitHub Issue: [#90](https://github.com/postmelee/codex-usage-profile/issues/90)
   바꾸지 않는다. 운영/architecture/legacy 문서는 삭제하지 않고 사용자 README에서만 분리한다.
 - root README의 `Development` 명령은 제거한다. 개발 setup과 검증 진실 원천은
   `CONTRIBUTING.md`, 전체 문서 navigation은 `docs/README.md`가 담당한다.
+- `publish-npm.yml`은 `devel` pull request/push와 release tag를 검증하며 `main` push를 검증하지
+  않는다. 따라서 root README의 `branch=devel` CI badge를 `main`으로 바꾸지 않고 제거한다.
+  Website, npm version, license badge는 유지하고 contributor 검증 경로는 `CONTRIBUTING.md`가 설명한다.
 - root README는 endpoint/implementation/version 이력 대신 사용자가 얻는 결과, 3단계 시작,
   publish/share, privacy와 도움말을 설명한다. 실제로 검증되지 않은 SNS refresh SLA, 자동 게시,
   OpenAI endorsement는 약속하지 않는다.
@@ -101,7 +104,7 @@ docs 목록은 root README에서 제거하거나 사용자 의사결정에 필�
 - GitHub rendered README는 source raw만 보지 않고 checkpoint PR 또는 `main` repository 화면에서
   desktop 폭 기준 screenshot으로 카드 크기, badge, heading과 code block을 수동 확인한다.
 - `npm run scan:public-release`의 historical Git object review finding은 현재 tree 수정으로 없어지지
-  않을 수 있다. blocker 0과 current-tree `/Users/melee` literal 0을 별도 판정한다.
+  않을 수 있다. blocker 0과 current-tree 개인 home literal 0을 별도 판정한다.
 - package version, lockfile, Sites manifest와 product source에 diff가 생기면 즉시 중단한다.
 
 ## Stage 1 — 공개 표면 audit와 정보구조·언어 계약 확정
@@ -149,7 +152,8 @@ git rev-list --count origin/main..origin/devel
 git rev-list --count origin/devel..origin/main
 rg -n '^#|^##|https?://|<img|\]\(' README.md packages/codex-usage-profile-cli/README.md
 rg -n '[가-힣]' README.md packages/codex-usage-profile-cli/README.md docs
-rg -n 'PROFILE_CARD_EMBED_PLACEHOLDER|not yet live|Next deployment|/Users/melee' README.md docs mydocs
+rg -n 'PROFILE_CARD_EMBED_PLACEHOLDER|not yet live|Next deployment' README.md packages/codex-usage-profile-cli/README.md docs
+rg -n "$(printf '/Users/%s' melee)" README.md docs mydocs
 rg -n '^on:|branches:|pull_request:|push:' .github/workflows/publish-npm.yml
 npm run scan:public-release
 git diff --check
@@ -261,7 +265,7 @@ Task #90 Stage 2: 사용자 중심 README와 공개 가이드 보정
 - CONTRIBUTING은 Node requirement, local dev, standard/release validation, PR target과 docs index를
   기여자 흐름으로 연결한다. root README에서 제거한 Development 내용의 진실 원천이 된다.
 - root README의 help/documentation은 두 사용자 가이드와 CONTRIBUTING만 직접 노출하는지 확인한다.
-- historical 보고서의 `/Users/melee/...` literal은 의미를 유지하는 `$HOME`, `<workspace>`,
+- historical 보고서의 개인 macOS home literal은 의미를 유지하는 `$HOME`, `<workspace>`,
   `<runtime>` 명령으로만 바꾼다. 결과·시간·판정·path 역할은 삭제하지 않는다.
 - current tree와 Git history review finding을 구분해 scan 결과를 기록한다.
 
@@ -271,7 +275,7 @@ Task #90 Stage 2: 사용자 중심 README와 공개 가이드 보정
 node -e 'const fs=require("node:fs"); for (const file of ["README.md","CONTRIBUTING.md","docs/README.md","docs/cli-submit.md","docs/readme-card.md"]) { if (!fs.existsSync(file)) process.exitCode=1; }'
 rg -n 'npm (install|ci)|npm run (dev|dev:runtime|test|build)' CONTRIBUTING.md package.json
 rg -n 'production-hosting|sites-operations|npm-release|usage-snapshot-v2|codex-usage-analyzer' README.md
-rg -n '/Users/melee' README.md docs mydocs
+rg -n "$(printf '/Users/%s' melee)" README.md docs mydocs
 npm run scan:public-release
 npm run verify:npm-release
 git diff --check
@@ -390,7 +394,9 @@ git rev-parse origin/main origin/devel HEAD
 npm view codex-usage-profile dist-tags version --json
 npm run verify:npm-release
 npm run scan:public-release
-rg -n 'codex-usage-profile-stage5|branch=devel|PROFILE_CARD_EMBED_PLACEHOLDER|not yet live|Next deployment|/Users/melee' README.md CONTRIBUTING.md docs mydocs
+rg -n 'codex-usage-profile-stage5|PROFILE_CARD_EMBED_PLACEHOLDER|not yet live|Next deployment' README.md packages/codex-usage-profile-cli/README.md docs/cli-submit.md docs/readme-card.md
+rg -n 'branch=devel' README.md packages/codex-usage-profile-cli/README.md
+rg -n "$(printf '/Users/%s' melee)" README.md docs mydocs
 git diff --check
 git status --short
 ```
