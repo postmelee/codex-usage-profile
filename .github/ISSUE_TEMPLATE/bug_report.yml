@@ -1,0 +1,105 @@
+name: Bug Report
+description: Report a reproducible problem with Codex Usage Profile.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Codex Usage Profile.
+
+        Please do not include credentials, private profile previews, private usage data, or security vulnerability details. Report security vulnerabilities through [GitHub Private Vulnerability Reporting](https://github.com/postmelee/codex-usage-profile/security/advisories/new).
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem and its impact.
+      placeholder: What happened, and what could you not do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_area
+    attributes:
+      label: Affected area
+      description: Select the primary area where the problem occurs.
+      options:
+        - Website or authentication
+        - CLI submission
+        - README card
+        - Public profile or social sharing
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or URL
+      description: Provide the npm package version, commit, or affected public URL.
+      placeholder: codex-usage-profile@x.y.z or https://...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include relevant operating system, Node.js version, browser, and Codex installation details.
+      placeholder: |
+        - OS:
+        - Node.js:
+        - Browser:
+        - Codex installation:
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include the exact error text if it is safe to share.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional evidence
+      description: Add sanitized logs, screenshots, or links that help explain the problem.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I removed credentials, tokens, private profile previews, and private account or usage information.
+          required: true
+        - label: This report does not disclose a security vulnerability.
+          required: true
