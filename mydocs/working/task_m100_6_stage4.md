@@ -30,7 +30,7 @@ npm run build
 npm run test:e2e -- --grep "Home|card|Share"
 npm run test:e2e
 git diff --check
-file /Users/melee/Downloads/codex-profile-card.png public/assets/codex-card-sample.png
+file $HOME/Downloads/codex-profile-card.png public/assets/codex-card-sample.png
 ```
 
 결과:

@@ -82,7 +82,7 @@ git diff --check
 추가 검증:
 
 ```bash
-/Users/melee/.codex/plugins/cache/openai-bundled/sites/0.1.31/scripts/package-site.sh \
+$HOME/.codex/plugins/cache/openai-bundled/sites/0.1.31/scripts/package-site.sh \
   /private/tmp/codex-usage-profile-task51 <temporary-archive>
 rg -n "maintenance-secret|local-maintenance-secret|secret-token-digest|secret-device-digest" dist
 rg -n "PROFILE_MAINTENANCE_(MODE|TOKEN)|/__ops/profile-maintenance" dist/client
