@@ -182,8 +182,8 @@ test("operator CLI migrate sends no identity or SQL and validates bounded output
       return jsonResponse({
         ok: true,
         summary: {
-          appliedVersions: [1, 2, 3, 4, 5],
-          newlyAppliedVersions: [3, 4, 5],
+          appliedVersions: [1, 2, 3, 4, 5, 6],
+          newlyAppliedVersions: [3, 4, 5, 6],
           operation: "migrate"
         }
       });
@@ -193,8 +193,8 @@ test("operator CLI migrate sends no identity or SQL and validates bounded output
 
   assert.deepEqual(JSON.parse(requests[0].body), { operation: "migrate" });
   assert.deepEqual(result.summary, {
-    appliedVersions: [1, 2, 3, 4, 5],
-    newlyAppliedVersions: [3, 4, 5],
+    appliedVersions: [1, 2, 3, 4, 5, 6],
+    newlyAppliedVersions: [3, 4, 5, 6],
     operation: "migrate"
   });
   assert.deepEqual(JSON.parse(output[0]), result.summary);

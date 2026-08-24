@@ -330,11 +330,11 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
-3. Task #74·#78 누적 candidate readiness는 D1 migration `1..5`가 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column으로 유지한다.
+3. Task #119 누적 candidate readiness는 D1 migration `1..6`이 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column이며, `0006_account_deletion_operations`는 owner cascade를 가진 additive operation table로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
 5. public stable card는 application ETag 재검증을 사용한다. immutable media revision은 장기 보존할 수 있지만 stable URL은 최신 publication 또는 unpublished tombstone만 나타낸다. share revision path는 별도 snapshot 보존을 뜻하지 않으며 stale 요청도 현재 metadata로 수렴한다.
 6. R2 publish/unpublish 실패는 이전 public object를 잘못 교체하지 않는다. D1/R2 일관성을 증명할 수 없으면 성공으로 응답하지 않고 fail closed한다.
-7. application rollback은 이전 saved version deployment로 수행한다. Task #100의 canonical pair는 v4 authority의 additive metadata이므로 이전 v4 reader는 이를 무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
+7. application rollback은 이전 saved version deployment로 수행한다. Task #100의 canonical pair는 v4 authority의 additive metadata이므로 이전 v4 reader는 이를 무시하고 queryless authority를 기존 dark/en으로 읽을 수 있다. migration 6 table도 기존 application read/write 경로가 참조하지 않지만 active 계정 삭제 operation이 있으면 application rollback을 금지하고 maintenance를 닫은 채 같은 operation을 완료하거나 복구 절차를 별도 승인한다. data/schema rollback이 필요한 변경은 별도 migration/backup 절차를 먼저 검증한다.
 8. Site access 변경은 deployment와 별도다. test/staging은 owner-only를 기본값으로 하고 public 전환은 정확한 URL·OAuth callback·data 범위를 승인받은 뒤에만 수행한다.
 9. fallback 전환 시 기존 Cloud Run artifact를 배포하고 Neon/S3-compatible R2 설정을 연결한다. fallback 때문에 Sites 또는 Cloud Run의 CORS/cookie scope를 확대하지 않는다.
 
@@ -375,6 +375,12 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 - self-service 계정 삭제 UI는 아직 제품 기능이 아니다. owner 요청은
   operator가 export와 exact owner/handle/digest/count를 확인한 뒤
   `delete-account --apply`로 처리한다.
+- 계정 삭제 operation은 최초 승인 digest/count, `prepare -> media -> structured`
+  phase와 120초 lease를 D1 migration 6의 owner-scoped row에 보존한다. R2 revision은
+  기본 8개 bounded batch로 직렬 삭제하고, live lease의 Retry-After 또는
+  network-unknown 이후에는 read-only plan으로 같은 operation을 확인한 뒤 재개한다.
+  R2 revision이 남아 있으면 owner를 삭제하지 않으며 최종 owner delete의 cascade가
+  operation row도 제거한다.
 - dark authority, light stable과 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 authority metadata가 참조하는 모든 key, owner+theme+locale별 최근 5개, 생성 후 90일 이내를 보호한다. authority가 없는 light stable과 나머지만 orphan candidate다.
 - `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
 - 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.
