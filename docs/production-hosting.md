@@ -135,8 +135,16 @@ canonical Sites adapter는 [`src/profile-backend/d1/`](../src/profile-backend/d1
 | Account Usage submit | `owner.id` | `capturedAt`과 `contentDigest`로 stale/conflict/idempotent/new를 원자적으로 판정하고 device touch와 함께 commit |
 | visibility 변경 | `owner.id` | owner와 latest usage/snapshot이 같은 공개 상태를 노출 |
 | 카드 설정 변경 | `owner.id` | immutable media 준비 뒤 canonical `cardStyle`과 `cardLocale`을 한 번에 갱신하고, 성공한 owner revision만 stable card/social authority를 같은 publication id로 storage ETag 조건부 commit |
+| account deletion structured phase | `owner.id` | exact owner·row count·usage/snapshot·submitted-device fingerprint guard 뒤 dependent row, operation과 owner를 하나의 batch로 삭제하거나 모두 rollback |
 
 부분 commit은 허용하지 않는다. unique constraint는 provider identity, handle, token digest, device/user code, owner+device key와 owner/handle latest record를 보호한다. 읽기와 목록 API는 owner scope를 우회할 수 없다. shared Account Usage rate limit도 D1 row의 atomic window update를 사용하며 raw token을 key나 record로 저장하지 않는다.
+
+submitted-device deletion guard는 safe key segment의 ASCII/code-unit 순서를 SQLite
+`BINARY ORDER BY id`와 동일하게 canonicalize하고 `id`, `updatedAt`,
+`lastSubmittedAt`을 모두 fingerprint에 포함한다. locale-dependent 정렬, count-only
+guard와 transaction 분할은 허용하지 않는다. confirmed state drift만 기존
+`maintenance_conflict`에 `structured_state_changed`, `retryable: false`를 선택적으로
+추가하며, provider·constraint failure와 알 수 없는 reason은 generic conflict로 닫는다.
 
 위 연산은 real-workerd D1에서 duplicate callback/exchange, competing submit/visibility/settings와 rollback을 검증한다. 기존 hosted 검증에서는 duplicate submit/exchange도 한 결과만 commit했다.
 
@@ -380,7 +388,9 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
   기본 8개 bounded batch로 직렬 삭제하고, live lease의 Retry-After 또는
   network-unknown 이후에는 read-only plan으로 같은 operation을 확인한 뒤 재개한다.
   R2 revision이 남아 있으면 owner를 삭제하지 않으며 최종 owner delete의 cascade가
-  operation row도 제거한다.
+  operation row도 제거한다. terminal `structured_state_changed`는 read-only plan 한 번
+  뒤 추가 mutation 없이 중단하고, reason 없는 legacy conflict는 기존 bounded
+  reconciliation을 유지한다.
 - dark authority, light stable과 unpublished tombstone은 cleanup 대상이 아니다. immutable revision은 authority metadata가 참조하는 모든 key, owner+theme+locale별 최근 5개, 생성 후 90일 이내를 보호한다. authority가 없는 light stable과 나머지만 orphan candidate다.
 - `npm run cleanup:card-media`는 기본 dry-run이며 paginated stable scan을 revision scan보다 먼저 수행한다. 출력은 candidate key, reason, age와 summary로 제한한다.
 - 실제 삭제에는 `npm run cleanup:card-media -- --apply`가 필요하다. 각 candidate 삭제 직전에 stable metadata를 다시 전수 확인하고 새 publication이 참조하면 skip한다. 삭제는 R2에서 복구할 수 없으므로 dry-run 결과와 bucket backup/복구 정책을 확인한 뒤에만 실행한다.

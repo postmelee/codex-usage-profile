@@ -489,7 +489,7 @@ test("delete-account reconciles network-unknown state before another apply", asy
   assert.equal(result.progress.status, "completed");
 });
 
-test("delete-account retries an unchanged original plan only once", async () => {
+test("delete-account preserves the legacy conflict retry boundary", async () => {
   const operations = [];
   let requestNumber = 0;
   await assert.rejects(
@@ -509,6 +509,114 @@ test("delete-account retries an unchanged original plan only once", async () => 
     }),
     (error) => error.code === "maintenance_conflict"
   );
+  assert.deepEqual(operations, [
+    "plan",
+    "delete-account",
+    "plan",
+    "delete-account",
+    "plan"
+  ]);
+});
+
+test("delete-account re-plans once and stops a terminal structured conflict", async () => {
+  const operations = [];
+  const output = [];
+  let applyCalls = 0;
+  await assert.rejects(
+    runSitesProfileMaintenanceCli(deleteAccountArgs("10"), {
+      createOperationId: () => OPERATION_ID,
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async (_url, init) => {
+        const operation = JSON.parse(init.body).operation;
+        operations.push(operation);
+        if (operations.length === 1) {
+          return jsonResponse({
+            ok: true,
+            summary: summary("plan", 10)
+          });
+        }
+        if (operation === "delete-account") {
+          applyCalls += 1;
+          return jsonResponse({
+            ok: false,
+            error: {
+              code: "maintenance_conflict",
+              message:
+                "provider SQL failed for private-owner token row bytes",
+              reason: "structured_state_changed",
+              retryable: false
+            }
+          }, 409);
+        }
+        return jsonResponse({
+          ok: true,
+          progress: deletionProgress({
+            phase: "structured",
+            remainingRevisionCount: 0
+          }),
+          summary: summary("plan", 10)
+        });
+      },
+      stdout: (line) => output.push(line)
+    }),
+    (error) => {
+      assert.equal(error.code, "maintenance_conflict");
+      assert.equal(error.reason, "structured_state_changed");
+      assert.equal(error.retryable, false);
+      assert.doesNotMatch(
+        error.message,
+        /provider|SQL|private-owner|token|row bytes/i
+      );
+      return true;
+    }
+  );
+
+  assert.deepEqual(operations, ["plan", "delete-account", "plan"]);
+  assert.equal(applyCalls, 1);
+  assert.deepEqual(output.map(JSON.parse), [deletionProgress({
+    phase: "structured",
+    remainingRevisionCount: 0
+  })]);
+  assert.doesNotMatch(
+    output.join("\n"),
+    /provider|SQL|private-owner|token|row bytes/i
+  );
+});
+
+test("delete-account ignores untrusted terminal fields as a legacy conflict", async () => {
+  const operations = [];
+  let applyCalls = 0;
+  await assert.rejects(
+    runSitesProfileMaintenanceCli(deleteAccountArgs("10"), {
+      createOperationId: () => OPERATION_ID,
+      environment: { PROFILE_MAINTENANCE_TOKEN: SECRET },
+      fetchImpl: async (_url, init) => {
+        const operation = JSON.parse(init.body).operation;
+        operations.push(operation);
+        if (operation === "plan") {
+          return jsonResponse({ ok: true, summary: summary("plan", 10) });
+        }
+        applyCalls += 1;
+        return jsonResponse({
+          ok: false,
+          error: {
+            code: "maintenance_conflict",
+            reason: "provider_sql_failure",
+            retryable: false
+          }
+        }, 409);
+      },
+      stdout: () => {}
+    }),
+    (error) => {
+      assert.equal(error.code, "maintenance_conflict");
+      assert.equal(error.reason, undefined);
+      assert.equal(error.retryable, undefined);
+      return true;
+    }
+  );
+
+  assert.equal(applyCalls, 2);
   assert.deepEqual(operations, [
     "plan",
     "delete-account",
