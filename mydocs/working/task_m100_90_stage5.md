@@ -17,6 +17,7 @@ Stage 4에서 승인된 `main` 공개 문서를 GitHub 저장소의 실제 기�
 | 파일/원격 상태 | 변경 요약 |
 |---|---|
 | GitHub repository metadata | homepage를 canonical production으로, default branch를 `main`으로 변경 |
+| `scripts/__tests__/public-readme-contract.test.js` | 승인된 npm README의 star prompt 문구와 contract expectation 정합화 |
 | `mydocs/plans/task_m100_90_impl.md` | 원격 preflight에서 확인한 실제 description 보존 기준값 기록 |
 | `mydocs/orders/20260824.md` | Stage 5 완료와 최종 보고 승인 대기 상태 반영 |
 | `mydocs/working/task_m100_90_stage5.md` | metadata 전환과 최종 공개 검증 결과 기록 |
@@ -38,7 +39,9 @@ homepage와 default branch는 한 번의 GitHub API PATCH로 함께 변경했다
 README, npm README, 공개 사용자 문서, 제품 소스와 production Site는 변경하지 않았다.
 GitHub 기본 진입면이 이미 승인된 `origin/main` merge commit
 `4d1252f9988f39bdbe07f148c93ce4e9d620e35a`를 가리키도록 metadata만 전환했다.
-description도 작업지시자 요청대로 한 글자도 변경하지 않았다.
+description도 작업지시자 요청대로 한 글자도 변경하지 않았다. 최종 통합 검증에서 npm README의
+승인 문구와 기존 contract test expectation 차이를 발견해 테스트의 문구 expectation만 현재 공개
+본문에 맞췄다.
 
 ## 검증 결과
 
@@ -60,6 +63,9 @@ curl -sS -o /dev/null -w '%{http_code} %{content_type}' \
   https://codex-usage-profile.meleeisdeveloping.chatgpt.site/__ops/profile-maintenance
 npm run verify:npm-release
 npm run scan:public-release
+node --test scripts/__tests__/public-readme-contract.test.js \
+  src/profile-backend/__tests__/account-usage-submit.test.js
+npm run build
 rg -n 'codex-usage-profile-stage5|PROFILE_CARD_EMBED_PLACEHOLDER|not yet live|Next deployment' \
   README.md packages/codex-usage-profile-cli/README.md docs/cli-submit.md docs/readme-card.md
 rg -n 'branch=devel' README.md packages/codex-usage-profile-cli/README.md
@@ -85,6 +91,8 @@ git status --short
 - OK — `npm run verify:npm-release`는 `codex-usage-profile@0.1.3`, entry 14,
   integrity 검증 성공이다.
 - OK — `npm run scan:public-release`는 blocker 0, review 71로 승인 기준과 동일하다.
+- OK — README contract와 submit 이후 card ETag 대상 테스트 8개가 모두 통과했다.
+- OK — `npm run build`는 1,834 modules를 변환하고 production bundle 생성을 완료했다.
 - OK — stage5/placeholder/전환기 표현, `branch=devel`, 공개 tree 개인 절대 경로 검사는
   대상 파일에서 0건이다.
 - OK — `git diff --check` 통과. 단계 보고서 작성 전에는 plan baseline 보정 파일만 변경
@@ -96,6 +104,9 @@ git status --short
   전환의 source, metadata, production origin에는 drift가 없다.
 - repository description은 작업지시자 요청에 따라 현재 문구를 그대로 유지했다. 이후 문구
   변경이 필요하면 별도 승인 범위에서 다룬다.
+- 추가로 시도한 전체 `node --test`는 Node 24 환경의 `d1-concurrency.test.js` 구간에서 완료되지
+  않아 중단했다. Task #90이 변경한 README contract와 관련 ETag 테스트, build 및 계획서의 모든
+  수용 기준 검증은 별도로 통과했다.
 
 ## 다음 단계 영향
 
