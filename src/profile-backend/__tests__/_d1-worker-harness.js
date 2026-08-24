@@ -110,6 +110,16 @@ async function inspect(database, name) {
       ).results
     };
   }
+  if (name === "deletionOperations") {
+    return (
+      await database.prepare(
+        "SELECT owner_id, handle, operation_id, approved_content_digest, " +
+        "approved_object_count, phase, lease_nonce, lease_expires_at, " +
+        "created_at, updated_at FROM account_deletion_operations " +
+        "ORDER BY owner_id"
+      ).all()
+    ).results;
+  }
   throw new TypeError("unknown inspection");
 }
 

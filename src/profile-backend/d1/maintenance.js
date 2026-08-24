@@ -14,8 +14,18 @@ import {
 
 export const DEFAULT_PROFILE_RETENTION_DAYS = 30;
 export const MAX_PROFILE_RETENTION_ROWS_PER_TABLE = 100;
+export const DEFAULT_OWNER_DELETION_LEASE_SECONDS = 120;
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000;
+const OWNER_DELETION_PHASES = Object.freeze([
+  "prepare",
+  "media",
+  "structured"
+]);
+const OWNER_DELETION_PREVIOUS_PHASE = Object.freeze({
+  media: "prepare",
+  structured: "media"
+});
 const OWNER_COUNT_KEYS = Object.freeze([
   "cliLoginChallenges",
   "cliTokens",
@@ -39,14 +49,328 @@ export function createD1ProfileMaintenance(options = {}) {
   const prepare = (sql, params = []) => database.prepare(sql).bind(...params);
 
   return Object.freeze({
+    acquireOwnerDeletionLease,
+    advanceOwnerDeletionPhase,
     applyRetention,
+    beginOwnerDeletionOperation,
     deleteOwner,
     exportOwner,
+    getOwnerDeletionOperation,
     planOwnerDeletion,
     planRetention,
     quiesceOwner,
+    releaseOwnerDeletionLease,
     restoreOwner
   });
+
+  async function getOwnerDeletionOperation(operationOptions = {}) {
+    const ownerId = requireKeySegment(operationOptions.ownerId, "ownerId");
+    const handle = requireHandle(operationOptions.handle);
+    const row = await prepare(
+      "SELECT owner_id, handle, operation_id, approved_content_digest, " +
+      "approved_object_count, phase, lease_nonce, lease_expires_at, " +
+      "created_at, updated_at FROM account_deletion_operations " +
+      "WHERE owner_id = ? LIMIT 1",
+      [ownerId]
+    ).first();
+    if (!row) return null;
+    const operation = normalizeOwnerDeletionOperation(row);
+    if (operation.handle !== handle) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation scope does not match"
+      );
+    }
+    return operation;
+  }
+
+  async function beginOwnerDeletionOperation(operationOptions = {}) {
+    const ownerId = requireKeySegment(operationOptions.ownerId, "ownerId");
+    const handle = requireHandle(operationOptions.handle);
+    const operationId = requireKeySegment(
+      operationOptions.operationId,
+      "operationId"
+    );
+    const expectedContentDigest = requireDigest(
+      operationOptions.expectedContentDigest
+    );
+    const expectedObjectCount = requireNonNegativeInteger(
+      operationOptions.expectedObjectCount,
+      "expectedObjectCount"
+    );
+    const existing = await getOwnerDeletionOperation({ ownerId, handle });
+    if (existing) {
+      assertOwnerDeletionApproval(existing, {
+        operationId,
+        expectedContentDigest,
+        expectedObjectCount
+      });
+      return deepFreeze({ idempotent: true, operation: existing });
+    }
+
+    const owner = await store.getOwnerById(ownerId);
+    if (!owner || owner.handle !== handle) {
+      throw maintenanceError("not_found", "owner scope was not found");
+    }
+    const timestamp = normalizeIsoDate(operationOptions.createdAt ?? now());
+    try {
+      const results = await database.batch([
+        prepare(
+          "INSERT INTO account_deletion_operations (" +
+          "owner_id, handle, operation_id, approved_content_digest, " +
+          "approved_object_count, phase, lease_nonce, lease_expires_at, " +
+          "created_at, updated_at) " +
+          "SELECT id, handle, ?, ?, ?, 'prepare', NULL, NULL, ?, ? " +
+          "FROM owners WHERE id = ? AND handle = ?",
+          [
+            operationId,
+            expectedContentDigest,
+            expectedObjectCount,
+            timestamp,
+            timestamp,
+            ownerId,
+            handle
+          ]
+        )
+      ]);
+      if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+        throw new Error("operation insert did not affect exactly one row");
+      }
+    } catch (error) {
+      const concurrent = await getOwnerDeletionOperation({ ownerId, handle });
+      if (concurrent) {
+        assertOwnerDeletionApproval(concurrent, {
+          operationId,
+          expectedContentDigest,
+          expectedObjectCount
+        });
+        return deepFreeze({ idempotent: true, operation: concurrent });
+      }
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation could not be created",
+        error
+      );
+    }
+    return deepFreeze({
+      idempotent: false,
+      operation: await getOwnerDeletionOperation({ ownerId, handle })
+    });
+  }
+
+  async function acquireOwnerDeletionLease(operationOptions = {}) {
+    const ownerId = requireKeySegment(operationOptions.ownerId, "ownerId");
+    const handle = requireHandle(operationOptions.handle);
+    const operationId = requireKeySegment(
+      operationOptions.operationId,
+      "operationId"
+    );
+    const acquiredAt = normalizeIsoDate(operationOptions.acquiredAt ?? now());
+    const leaseNonce = createNonce();
+    const leaseExpiresAt = new Date(
+      new Date(acquiredAt).getTime() +
+        DEFAULT_OWNER_DELETION_LEASE_SECONDS * 1_000
+    ).toISOString();
+    const claimOperation = "maintenanceAcquireOwnerDeletionLease";
+    try {
+      await database.batch([
+        prepare(
+          "INSERT INTO atomic_operation_claims " +
+          "(operation, claim_key, nonce, outcome, created_at) " +
+          "SELECT ?, owner_id, ?, 'ok', ? " +
+          "FROM account_deletion_operations " +
+          "WHERE owner_id = ? AND handle = ? AND operation_id = ? " +
+          "AND (lease_nonce IS NULL OR lease_expires_at <= ?)",
+          [
+            claimOperation,
+            leaseNonce,
+            acquiredAt,
+            ownerId,
+            handle,
+            operationId,
+            acquiredAt
+          ]
+        ),
+        claimAssertion(prepare, claimOperation, ownerId, leaseNonce),
+        prepare(
+          "UPDATE account_deletion_operations " +
+          "SET lease_nonce = ?, lease_expires_at = ?, updated_at = ? " +
+          "WHERE owner_id = ? AND handle = ? AND operation_id = ? " +
+          "AND (lease_nonce IS NULL OR lease_expires_at <= ?)",
+          [
+            leaseNonce,
+            leaseExpiresAt,
+            acquiredAt,
+            ownerId,
+            handle,
+            operationId,
+            acquiredAt
+          ]
+        ),
+        ...claimCleanup(prepare, claimOperation, ownerId, leaseNonce)
+      ]);
+    } catch (error) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation lease is unavailable",
+        error
+      );
+    }
+    const operation = await requireOwnerDeletionOperation({
+      ownerId,
+      handle,
+      operationId
+    });
+    if (operation.leaseNonce !== leaseNonce) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation lease was not acquired"
+      );
+    }
+    return deepFreeze({ leaseNonce, operation });
+  }
+
+  async function advanceOwnerDeletionPhase(operationOptions = {}) {
+    const ownerId = requireKeySegment(operationOptions.ownerId, "ownerId");
+    const handle = requireHandle(operationOptions.handle);
+    const operationId = requireKeySegment(
+      operationOptions.operationId,
+      "operationId"
+    );
+    const leaseNonce = requireKeySegment(
+      operationOptions.leaseNonce,
+      "leaseNonce"
+    );
+    const phase = requireOwnerDeletionPhase(operationOptions.phase);
+    const advancedAt = normalizeIsoDate(operationOptions.advancedAt ?? now());
+    const current = await requireOwnerDeletionOperation({
+      ownerId,
+      handle,
+      operationId
+    });
+    if (current.phase === phase) {
+      assertLiveOwnerDeletionLease(current, leaseNonce, advancedAt);
+      return current;
+    }
+    const previousPhase = OWNER_DELETION_PREVIOUS_PHASE[phase];
+    if (!previousPhase || current.phase !== previousPhase) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation phase transition is invalid"
+      );
+    }
+    const claimOperation = "maintenanceAdvanceOwnerDeletionPhase";
+    const claimNonce = createNonce();
+    try {
+      await database.batch([
+        prepare(
+          "INSERT INTO atomic_operation_claims " +
+          "(operation, claim_key, nonce, outcome, created_at) " +
+          "SELECT ?, owner_id, ?, 'ok', ? " +
+          "FROM account_deletion_operations " +
+          "WHERE owner_id = ? AND handle = ? AND operation_id = ? " +
+          "AND phase = ? AND lease_nonce = ? AND lease_expires_at > ?",
+          [
+            claimOperation,
+            claimNonce,
+            advancedAt,
+            ownerId,
+            handle,
+            operationId,
+            previousPhase,
+            leaseNonce,
+            advancedAt
+          ]
+        ),
+        claimAssertion(prepare, claimOperation, ownerId, claimNonce),
+        prepare(
+          "UPDATE account_deletion_operations SET phase = ?, updated_at = ? " +
+          "WHERE owner_id = ? AND handle = ? AND operation_id = ? " +
+          "AND phase = ? AND lease_nonce = ? AND lease_expires_at > ?",
+          [
+            phase,
+            advancedAt,
+            ownerId,
+            handle,
+            operationId,
+            previousPhase,
+            leaseNonce,
+            advancedAt
+          ]
+        ),
+        ...claimCleanup(prepare, claimOperation, ownerId, claimNonce)
+      ]);
+    } catch (error) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation phase could not advance",
+        error
+      );
+    }
+    return requireOwnerDeletionOperation({ ownerId, handle, operationId });
+  }
+
+  async function releaseOwnerDeletionLease(operationOptions = {}) {
+    const ownerId = requireKeySegment(operationOptions.ownerId, "ownerId");
+    const handle = requireHandle(operationOptions.handle);
+    const operationId = requireKeySegment(
+      operationOptions.operationId,
+      "operationId"
+    );
+    const leaseNonce = requireKeySegment(
+      operationOptions.leaseNonce,
+      "leaseNonce"
+    );
+    const releasedAt = normalizeIsoDate(operationOptions.releasedAt ?? now());
+    const current = await requireOwnerDeletionOperation({
+      ownerId,
+      handle,
+      operationId
+    });
+    if (current.leaseNonce === null) {
+      return deepFreeze({ idempotent: true, operation: current });
+    }
+    if (current.leaseNonce !== leaseNonce) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation lease does not match"
+      );
+    }
+    const results = await database.batch([
+      prepare(
+        "UPDATE account_deletion_operations " +
+        "SET lease_nonce = NULL, lease_expires_at = NULL, updated_at = ? " +
+        "WHERE owner_id = ? AND handle = ? AND operation_id = ? " +
+        "AND lease_nonce = ?",
+        [releasedAt, ownerId, handle, operationId, leaseNonce]
+      )
+    ]);
+    if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation lease could not be released"
+      );
+    }
+    return deepFreeze({
+      idempotent: false,
+      operation: await requireOwnerDeletionOperation({
+        ownerId,
+        handle,
+        operationId
+      })
+    });
+  }
+
+  async function requireOwnerDeletionOperation(operationOptions) {
+    const operation = await getOwnerDeletionOperation(operationOptions);
+    if (!operation || operation.operationId !== operationOptions.operationId) {
+      throw maintenanceError(
+        "conflict",
+        "account deletion operation does not match"
+      );
+    }
+    return operation;
+  }
 
   async function exportOwner(exportOptions = {}) {
     const ownerId = requireKeySegment(exportOptions.ownerId, "ownerId");
@@ -100,6 +424,9 @@ export function createD1ProfileMaintenance(options = {}) {
 
   async function quiesceOwner(quiesceOptions = {}) {
     const plan = await planOwnerDeletion(quiesceOptions);
+    if (isOwnerProfileQuiesced(plan.profile)) {
+      return plan.profile;
+    }
     const currentUpdatedAt = plan.profile.owner.updatedAt ?? null;
     const updatedAt = nextIsoTimestamp(currentUpdatedAt, now());
     const nonce = createNonce();
@@ -219,6 +546,10 @@ export function createD1ProfileMaintenance(options = {}) {
         prepare("DELETE FROM latest_usages WHERE owner_id = ?", [
           plan.profile.owner.id
         ]),
+        prepare(
+          "DELETE FROM account_deletion_operations WHERE owner_id = ?",
+          [plan.profile.owner.id]
+        ),
         prepare("DELETE FROM owners WHERE id = ? AND handle = ?", [
           plan.profile.owner.id,
           plan.profile.owner.handle
@@ -725,6 +1056,74 @@ function assertExpectedPlan(summary, expected) {
       "maintenance plan no longer matches expected digest and count"
     );
   }
+}
+
+function normalizeOwnerDeletionOperation(row) {
+  const operation = {
+    approvedContentDigest: requireDigest(row.approved_content_digest),
+    approvedObjectCount: requireNonNegativeInteger(
+      Number(row.approved_object_count),
+      "approvedObjectCount"
+    ),
+    createdAt: normalizeIsoDate(row.created_at),
+    handle: requireHandle(row.handle),
+    leaseExpiresAt: row.lease_expires_at === null
+      ? null
+      : normalizeIsoDate(row.lease_expires_at),
+    leaseNonce: row.lease_nonce === null
+      ? null
+      : requireKeySegment(row.lease_nonce, "leaseNonce"),
+    operationId: requireKeySegment(row.operation_id, "operationId"),
+    ownerId: requireKeySegment(row.owner_id, "ownerId"),
+    phase: requireOwnerDeletionPhase(row.phase),
+    updatedAt: normalizeIsoDate(row.updated_at)
+  };
+  if ((operation.leaseNonce === null) !== (operation.leaseExpiresAt === null)) {
+    throw new TypeError("account deletion operation lease is incomplete");
+  }
+  return deepFreeze(operation);
+}
+
+function assertOwnerDeletionApproval(operation, expected) {
+  if (
+    operation.operationId !== expected.operationId ||
+    !safeEqualText(
+      operation.approvedContentDigest,
+      expected.expectedContentDigest
+    ) ||
+    operation.approvedObjectCount !== expected.expectedObjectCount
+  ) {
+    throw maintenanceError(
+      "conflict",
+      "account deletion operation approval does not match"
+    );
+  }
+}
+
+function assertLiveOwnerDeletionLease(operation, leaseNonce, timestamp) {
+  if (
+    operation.leaseNonce !== leaseNonce ||
+    operation.leaseExpiresAt === null ||
+    operation.leaseExpiresAt <= timestamp
+  ) {
+    throw maintenanceError(
+      "conflict",
+      "account deletion operation lease is not active"
+    );
+  }
+}
+
+function requireOwnerDeletionPhase(value) {
+  if (!OWNER_DELETION_PHASES.includes(value)) {
+    throw new TypeError("account deletion operation phase is invalid");
+  }
+  return value;
+}
+
+function isOwnerProfileQuiesced(profile) {
+  return profile.owner.visibility === "private" &&
+    (!profile.latestUsage || profile.latestUsage.visibility === "private") &&
+    (!profile.latestSnapshot || profile.latestSnapshot.visibility === "private");
 }
 
 function sumCounts(counts) {

@@ -109,6 +109,197 @@ test("D1 account deletion requires an exact plan and removes owner-dependent row
   assert.deepEqual(await fixture.inspect("rateLimits"), []);
 });
 
+test("D1 account deletion operation preserves approval and serializes phase leases", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await seedCompleteOwner(fixture);
+
+  const plan = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
+  const approval = {
+    ...OWNER_SCOPE,
+    operationId: "delete_1",
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  };
+  const first = await fixture.maintenance(
+    "beginOwnerDeletionOperation",
+    approval
+  );
+  assert.equal(first.idempotent, false);
+  assert.deepEqual(first.operation, {
+    approvedContentDigest: plan.summary.contentDigest,
+    approvedObjectCount: plan.summary.objectCount,
+    createdAt: NOW,
+    handle: OWNER_SCOPE.handle,
+    leaseExpiresAt: null,
+    leaseNonce: null,
+    operationId: "delete_1",
+    ownerId: OWNER_SCOPE.ownerId,
+    phase: "prepare",
+    updatedAt: NOW
+  });
+  const repeated = await fixture.maintenance(
+    "beginOwnerDeletionOperation",
+    approval
+  );
+  assert.equal(repeated.idempotent, true);
+  await assert.rejects(
+    fixture.maintenance("beginOwnerDeletionOperation", {
+      ...approval,
+      operationId: "delete_2"
+    }),
+    /approval does not match/
+  );
+
+  const concurrentLeases = await Promise.allSettled([1, 2].map(() =>
+    fixture.maintenance("acquireOwnerDeletionLease", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      acquiredAt: NOW
+    })
+  ));
+  assert.equal(
+    concurrentLeases.filter(({ status }) => status === "fulfilled").length,
+    1
+  );
+  assert.equal(
+    concurrentLeases.filter(({ status }) => status === "rejected").length,
+    1
+  );
+  assert.match(
+    concurrentLeases.find(({ status }) => status === "rejected").reason.message,
+    /lease is unavailable/
+  );
+  const lease = concurrentLeases.find(
+    ({ status }) => status === "fulfilled"
+  ).value;
+  assert.match(lease.leaseNonce, /^[A-Za-z0-9._-]+$/u);
+  assert.equal(lease.operation.leaseExpiresAt, "2026-07-23T00:02:00.000Z");
+  await assert.rejects(
+    fixture.maintenance("acquireOwnerDeletionLease", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      acquiredAt: "2026-07-23T00:01:59.999Z"
+    }),
+    /lease is unavailable/
+  );
+  await assert.rejects(
+    fixture.maintenance("advanceOwnerDeletionPhase", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      leaseNonce: lease.leaseNonce,
+      phase: "structured",
+      advancedAt: "2026-07-23T00:00:30.000Z"
+    }),
+    /phase transition is invalid/
+  );
+  const media = await fixture.maintenance("advanceOwnerDeletionPhase", {
+    ...OWNER_SCOPE,
+    operationId: "delete_1",
+    leaseNonce: lease.leaseNonce,
+    phase: "media",
+    advancedAt: "2026-07-23T00:00:30.000Z"
+  });
+  assert.equal(media.phase, "media");
+  assert.equal(
+    (await fixture.maintenance("advanceOwnerDeletionPhase", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      leaseNonce: lease.leaseNonce,
+      phase: "media",
+      advancedAt: "2026-07-23T00:00:31.000Z"
+    })).phase,
+    "media"
+  );
+  await assert.rejects(
+    fixture.maintenance("releaseOwnerDeletionLease", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      leaseNonce: "other_nonce",
+      releasedAt: "2026-07-23T00:00:40.000Z"
+    }),
+    /lease does not match/
+  );
+  const released = await fixture.maintenance("releaseOwnerDeletionLease", {
+    ...OWNER_SCOPE,
+    operationId: "delete_1",
+    leaseNonce: lease.leaseNonce,
+    releasedAt: "2026-07-23T00:00:40.000Z"
+  });
+  assert.equal(released.idempotent, false);
+  assert.equal(released.operation.leaseNonce, null);
+  assert.equal(
+    (await fixture.maintenance("releaseOwnerDeletionLease", {
+      ...OWNER_SCOPE,
+      operationId: "delete_1",
+      leaseNonce: lease.leaseNonce,
+      releasedAt: "2026-07-23T00:00:41.000Z"
+    })).idempotent,
+    true
+  );
+});
+
+test("D1 account deletion lease can be recovered after expiry and cascades with its owner", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await seedCompleteOwner(fixture);
+  const plan = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
+  const approval = {
+    ...OWNER_SCOPE,
+    operationId: "delete_expiry",
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  };
+  await fixture.maintenance("beginOwnerDeletionOperation", approval);
+  const firstLease = await fixture.maintenance("acquireOwnerDeletionLease", {
+    ...OWNER_SCOPE,
+    operationId: approval.operationId,
+    acquiredAt: NOW
+  });
+  const recovered = await fixture.maintenance("acquireOwnerDeletionLease", {
+    ...OWNER_SCOPE,
+    operationId: approval.operationId,
+    acquiredAt: "2026-07-23T00:02:00.000Z"
+  });
+  assert.notEqual(recovered.leaseNonce, firstLease.leaseNonce);
+  assert.equal(recovered.operation.leaseNonce, recovered.leaseNonce);
+
+  await fixture.maintenance("deleteOwner", {
+    ...OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  });
+  assert.equal(await fixture.rpc("getOwnerById", OWNER_SCOPE.ownerId), null);
+  assert.deepEqual(await fixture.inspect("deletionOperations"), []);
+});
+
+test("D1 owner quiesce is idempotent once every durable profile row is private", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await seedCompleteOwner(fixture);
+
+  const first = await fixture.maintenance("quiesceOwner", {
+    ...OWNER_SCOPE,
+    now: "2026-07-23T00:00:10.000Z"
+  });
+  const firstPlan = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
+  const repeated = await fixture.maintenance("quiesceOwner", {
+    ...OWNER_SCOPE,
+    now: "2026-07-23T00:10:00.000Z"
+  });
+  const repeatedPlan = await fixture.maintenance(
+    "planOwnerDeletion",
+    OWNER_SCOPE
+  );
+
+  assert.equal(repeated.owner.updatedAt, first.owner.updatedAt);
+  assert.equal(repeatedPlan.summary.contentDigest, firstPlan.summary.contentDigest);
+  assert.equal(repeatedPlan.summary.objectCount, firstPlan.summary.objectCount);
+});
+
 test("D1 retention deletes only exact expired or revoked transient rows", async (t) => {
   const fixture = await createD1TestFixture();
   t.after(() => fixture.dispose());

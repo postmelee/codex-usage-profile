@@ -90,6 +90,11 @@ const HOSTED_D1_MIGRATION_COLUMNS = Object.freeze({
       "CHECK (card_locale IN ('en', 'ko'))"
   })
 });
+const HOSTED_D1_MIGRATION_TABLES = Object.freeze({
+  6: Object.freeze({
+    table: "account_deletion_operations"
+  })
+});
 
 export function createProfileSitesMaintenanceHandler(options = {}) {
   const config = options.config ?? {};
@@ -675,6 +680,16 @@ async function reconcileHostedD1Migrations(
       ));
       continue;
     }
+    const tableSpecification =
+      HOSTED_D1_MIGRATION_TABLES[migration.version];
+    if (tableSpecification) {
+      runnable.push(await reconcileHostedD1TableMigration(
+        database,
+        migration,
+        tableSpecification
+      ));
+      continue;
+    }
     const specification = HOSTED_D1_MIGRATION_COLUMNS[migration.version];
     if (!specification) {
       runnable.push(migration);
@@ -722,6 +737,46 @@ async function reconcileHostedD1Migrations(
     }));
   }
   return Object.freeze(runnable);
+}
+
+async function reconcileHostedD1TableMigration(
+  database,
+  migration,
+  specification
+) {
+  const statements = splitSqlStatements(migration.sql);
+  if (statements.length !== 1) {
+    throw new TypeError(
+      "Hosted D1 table migration must contain exactly one statement"
+    );
+  }
+  const expectedSql = statements[0];
+  const match = /^CREATE TABLE ([a-z][a-z0-9_]*)\b/iu.exec(expectedSql);
+  if (!match || match[1] !== specification.table) {
+    throw new TypeError(
+      "Hosted D1 table migration does not match its specification"
+    );
+  }
+  const result = await database.prepare(
+    "SELECT sql FROM sqlite_master " +
+      "WHERE type = 'table' AND name = ? LIMIT 1"
+  ).bind(specification.table).all();
+  const actualSql = result.results?.[0]?.sql;
+  if (actualSql === undefined) return migration;
+  if (
+    typeof actualSql !== "string" ||
+    normalizeSql(actualSql) !== normalizeSql(expectedSql)
+  ) {
+    throw maintenanceError(
+      "conflict",
+      "Hosted D1 schema does not match the candidate migration"
+    );
+  }
+  return Object.freeze({
+    name: migration.name,
+    sql: "",
+    version: migration.version
+  });
 }
 
 async function reconcileHostedD1BaseMigration(database, migration) {

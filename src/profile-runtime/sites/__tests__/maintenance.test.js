@@ -122,7 +122,7 @@ test("bad maintenance tokens of different lengths produce the same safe response
 
 test("maintenance readiness returns only exact version state without mutations", async () => {
   const calls = [];
-  const database = readinessDatabase([1, 2, 3, 4, 5]);
+  const database = readinessDatabase([1, 2, 3, 4, 5, 6]);
   const fixture = await createServiceFixture({ calls, database });
   const handler = createProfileSitesMaintenanceHandler({
     config: enabledConfig(),
@@ -138,8 +138,8 @@ test("maintenance readiness returns only exact version state without mutations",
   assert.deepEqual(await response.json(), {
     ok: true,
     summary: {
-      appliedVersions: [1, 2, 3, 4, 5],
-      expectedVersions: [1, 2, 3, 4, 5],
+      appliedVersions: [1, 2, 3, 4, 5, 6],
+      expectedVersions: [1, 2, 3, 4, 5, 6],
       operation: "readiness",
       ready: true
     }
@@ -264,7 +264,7 @@ test("maintenance migration applies only the exact manifest and is idempotent", 
     ok: true,
     summary: {
       appliedVersions: expectedVersions,
-      newlyAppliedVersions: [3, 4, 5],
+      newlyAppliedVersions: [3, 4, 5, 6],
       operation: "migrate"
     }
   });
@@ -372,7 +372,7 @@ test("maintenance migration reports only bounded stage failures", async () => {
         reconcileHostedD1Migrations: async (_database, migrations) =>
           migrations,
         migrateD1Database: async () => ({
-          newlyApplied: [3, 4, 5]
+          newlyApplied: [3, 4, 5, 6]
         })
       }
     }
@@ -487,10 +487,11 @@ test("hosted migration specifications match the candidate SQL fragments", async 
         [
           { version: 3, sql: "" },
           { version: 4, sql: "" },
-          { version: 5, sql: "" }
+          { version: 5, sql: "" },
+          { version: 6, sql: "" }
         ]
       );
-      return { newlyApplied: [3, 4, 5] };
+      return { newlyApplied: [3, 4, 5, 6] };
     }
   });
   const response = await createProfileSitesMaintenanceHandler({
@@ -502,9 +503,98 @@ test("hosted migration specifications match the candidate SQL fragments", async 
   assert.equal(response.status, 200, JSON.stringify(responseBody));
   assert.deepEqual(responseBody.summary, {
     appliedVersions: expectedVersions,
-    newlyAppliedVersions: [3, 4, 5],
+    newlyAppliedVersions: [3, 4, 5, 6],
     operation: "migrate"
   });
+});
+
+test("hosted migration runs migration 6 SQL when its operation table is absent", async () => {
+  const migrations = candidateMigrationsFromSqlFiles();
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  let readinessCalls = 0;
+  let appliedSql = null;
+  const database = {
+    batch() {},
+    prepare(sql) {
+      assert.match(sql, /^SELECT sql FROM sqlite_master/u);
+      return {
+        bind(table) {
+          assert.equal(table, "account_deletion_operations");
+          return { async all() { return { results: [] }; } };
+        }
+      };
+    }
+  };
+  const fixture = await createServiceFixture({
+    database,
+    migrations,
+    inspectD1MigrationReadiness: async () => {
+      readinessCalls += 1;
+      return migrationState(
+        readinessCalls === 1 ? [1, 2, 3, 4, 5] : expectedVersions,
+        expectedVersions
+      );
+    },
+    migrateD1Database: async (_database, options) => {
+      assert.equal(options.migrations.length, 1);
+      assert.equal(options.migrations[0].version, 6);
+      appliedSql = options.migrations[0].sql;
+      return { newlyApplied: [6] };
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  assert.equal(response.status, 200);
+  assert.match(appliedSql, /CREATE TABLE account_deletion_operations/u);
+  assert.deepEqual((await response.json()).summary.newlyAppliedVersions, [6]);
+});
+
+test("hosted migration rejects migration 6 operation table drift", async () => {
+  const expectedVersions = D1_MIGRATION_MANIFEST.map(({ version }) => version);
+  let applyCalls = 0;
+  const database = {
+    batch() {},
+    prepare(sql) {
+      assert.match(sql, /^SELECT sql FROM sqlite_master/u);
+      return {
+        bind(table) {
+          assert.equal(table, "account_deletion_operations");
+          return {
+            async all() {
+              return {
+                results: [{
+                  sql: "CREATE TABLE account_deletion_operations " +
+                    "(owner_id TEXT PRIMARY KEY, phase INTEGER)"
+                }]
+              };
+            }
+          };
+        }
+      };
+    }
+  };
+  const fixture = await createServiceFixture({
+    database,
+    migrations: candidateMigrationsFromSqlFiles(),
+    inspectD1MigrationReadiness: async () => migrationState(
+      [1, 2, 3, 4, 5],
+      expectedVersions
+    ),
+    migrateD1Database: async () => {
+      applyCalls += 1;
+    }
+  });
+  const response = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: fixture.service
+  })(maintenanceRequest({ operation: "migrate" }));
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, "maintenance_conflict");
+  assert.equal(applyCalls, 0);
 });
 
 test("maintenance migration rejects a partially hosted base schema", async () => {
@@ -949,19 +1039,39 @@ function candidateMigrationsFromSqlFiles() {
 
 function hostedTableSqlFromMigrations(migrations) {
   const columns = new Map();
+  const tables = new Map();
   for (const migration of migrations) {
     const withoutComments = migration.sql.replace(/^--.*$/gmu, "");
     const match = /ALTER\s+TABLE\s+([a-z][a-z0-9_]*)\s+ADD\s+COLUMN\s+([\s\S]*?);/iu
       .exec(withoutComments);
-    assert.ok(match, `migration ${migration.version} must add one column`);
-    const tableColumns = columns.get(match[1]) ?? [];
-    tableColumns.push(match[2].trim());
-    columns.set(match[1], tableColumns);
+    if (match) {
+      const tableColumns = columns.get(match[1]) ?? [];
+      tableColumns.push(match[2].trim());
+      columns.set(match[1], tableColumns);
+      continue;
+    }
+    const statements = withoutComments
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+    assert.equal(
+      statements.length,
+      1,
+      `migration ${migration.version} must create one table`
+    );
+    const tableMatch = /^CREATE TABLE ([a-z][a-z0-9_]*)\b/iu.exec(
+      statements[0]
+    );
+    assert.ok(tableMatch, `migration ${migration.version} must create one table`);
+    tables.set(tableMatch[1], statements[0]);
   }
-  return new Map([...columns].map(([table, tableColumns]) => [
-    table,
-    `CREATE TABLE ${table} (id TEXT, ${tableColumns.join(", ")})`
-  ]));
+  for (const [table, tableColumns] of columns) {
+    tables.set(
+      table,
+      `CREATE TABLE ${table} (id TEXT, ${tableColumns.join(", ")})`
+    );
+  }
+  return tables;
 }
 
 function migrationState(appliedVersions, expectedVersions) {
