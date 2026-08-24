@@ -120,6 +120,68 @@ test("bad maintenance tokens of different lengths produce the same safe response
   assert.doesNotMatch(responses[0].body, /maintenance-secret|Bearer/);
 });
 
+test("maintenance exposes only an allowlisted terminal conflict classification", async () => {
+  const providerDetail =
+    "SQL failed for private-owner with usage, token, and row bytes";
+  const classified = new Error("structured state changed", {
+    cause: new Error(providerDetail)
+  });
+  classified.code = "conflict";
+  classified.reason = "structured_state_changed";
+  classified.retryable = false;
+  const classifiedResponse = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: {
+      async deleteAccount() {
+        throw classified;
+      }
+    }
+  })(maintenanceRequest({ operation: "delete-account" }));
+  const classifiedBody = await classifiedResponse.text();
+
+  assert.equal(classifiedResponse.status, 409);
+  assert.deepEqual(JSON.parse(classifiedBody), {
+    ok: false,
+    error: {
+      code: "maintenance_conflict",
+      message: "Maintenance plan is stale or conflicts",
+      reason: "structured_state_changed",
+      retryable: false
+    }
+  });
+  assert.doesNotMatch(
+    classifiedBody,
+    /SQL|private-owner|usage|token|row bytes/i
+  );
+
+  const untrusted = new Error(providerDetail);
+  untrusted.code = "conflict";
+  untrusted.reason = "provider_sql_failure";
+  untrusted.retryable = true;
+  const untrustedResponse = await createProfileSitesMaintenanceHandler({
+    config: enabledConfig(),
+    service: {
+      async deleteAccount() {
+        throw untrusted;
+      }
+    }
+  })(maintenanceRequest({ operation: "delete-account" }));
+  const untrustedBody = await untrustedResponse.text();
+
+  assert.equal(untrustedResponse.status, 409);
+  assert.deepEqual(JSON.parse(untrustedBody), {
+    ok: false,
+    error: {
+      code: "maintenance_conflict",
+      message: "Maintenance plan is stale or conflicts"
+    }
+  });
+  assert.doesNotMatch(
+    untrustedBody,
+    /provider|SQL|private-owner|usage|token|row bytes/i
+  );
+});
+
 test("maintenance readiness returns only exact version state without mutations", async () => {
   const calls = [];
   const database = readinessDatabase([1, 2, 3, 4, 5, 6]);

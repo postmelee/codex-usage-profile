@@ -38,6 +38,9 @@ export default {
       if (pathname === "/atomic") {
         return json(await store.atomic[payload.operation](payload.command));
       }
+      if (pathname === "/exec") {
+        return json(await environment.DB.exec(payload.sql));
+      }
       if (pathname === "/maintenance") {
         const maintenance = createD1ProfileMaintenance({
           database: environment.DB,
@@ -73,6 +76,8 @@ export default {
         __error: true,
         code: error?.code ?? null,
         message: error instanceof Error ? error.message : String(error),
+        reason: error?.reason ?? null,
+        retryable: error?.retryable ?? null,
         status: error?.status ?? 500,
         headers: error?.headers ?? null
       });
