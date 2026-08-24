@@ -275,6 +275,102 @@ test("D1 account deletion lease can be recovered after expiry and cascades with 
   assert.deepEqual(await fixture.inspect("deletionOperations"), []);
 });
 
+test("D1 account deletion rolls back when locale and binary device orders disagree", async (t) => {
+  const fixture = await createD1TestFixture();
+  t.after(() => fixture.dispose());
+  await fixture.migrate();
+  await seedLiveEquivalentOwner(fixture);
+
+  const initial = await fixture.maintenance("planOwnerDeletion", OWNER_SCOPE);
+  assert.deepEqual(initial.counts, {
+    cliLoginChallenges: 11,
+    cliTokens: 8,
+    latestSnapshots: 0,
+    latestUsages: 1,
+    oauthStates: 19,
+    owners: 1,
+    rateLimits: 2,
+    sessions: 22,
+    submittedDevices: 7
+  });
+  assert.equal(initial.summary.objectCount, 71);
+  const deviceIds = initial.profile.submittedDevices.map(({ id }) => id);
+  assert.deepEqual(deviceIds, [...deviceIds].sort((left, right) =>
+    left.localeCompare(right)
+  ));
+  assert.notDeepEqual(deviceIds, [...deviceIds].sort());
+
+  const operationId = "delete_live_equivalent";
+  const combinedApproval = {
+    ...OWNER_SCOPE,
+    operationId,
+    expectedContentDigest: "A".repeat(43),
+    expectedObjectCount: initial.summary.objectCount + 6
+  };
+  await fixture.maintenance(
+    "beginOwnerDeletionOperation",
+    combinedApproval
+  );
+  const lease = await fixture.maintenance("acquireOwnerDeletionLease", {
+    ...OWNER_SCOPE,
+    operationId,
+    acquiredAt: NOW
+  });
+  await fixture.maintenance("advanceOwnerDeletionPhase", {
+    ...OWNER_SCOPE,
+    operationId,
+    leaseNonce: lease.leaseNonce,
+    phase: "media",
+    advancedAt: "2026-07-23T00:00:10.000Z"
+  });
+  await fixture.maintenance("advanceOwnerDeletionPhase", {
+    ...OWNER_SCOPE,
+    operationId,
+    leaseNonce: lease.leaseNonce,
+    phase: "structured",
+    advancedAt: "2026-07-23T00:00:20.000Z"
+  });
+
+  await assert.rejects(
+    fixture.maintenance("deleteOwner", {
+      ...OWNER_SCOPE,
+      expectedContentDigest: initial.summary.contentDigest,
+      expectedObjectCount: initial.summary.objectCount
+    }),
+    /owner changed before account deletion committed/
+  );
+
+  const afterFailure = await fixture.maintenance(
+    "planOwnerDeletion",
+    OWNER_SCOPE
+  );
+  assert.deepEqual(afterFailure.counts, initial.counts);
+  assert.equal(
+    afterFailure.summary.contentDigest,
+    initial.summary.contentDigest
+  );
+  assert.equal(
+    afterFailure.summary.objectCount,
+    initial.summary.objectCount
+  );
+  assert.deepEqual(await fixture.inspect("atomicClaims"), {
+    assertions: [],
+    claims: []
+  });
+  assert.deepEqual(
+    (await fixture.inspect("deletionOperations")).map((operation) => ({
+      approvedObjectCount: operation.approved_object_count,
+      operationId: operation.operation_id,
+      phase: operation.phase
+    })),
+    [{
+      approvedObjectCount: 77,
+      operationId,
+      phase: "structured"
+    }]
+  );
+});
+
 test("D1 owner quiesce is idempotent once every durable profile row is private", async (t) => {
   const fixture = await createD1TestFixture();
   t.after(() => fixture.dispose());
@@ -455,6 +551,72 @@ async function seedCompleteOwner(fixture) {
     lastUsedAt: null
   });
   await fixture.rate("token_1", "2026-05-01T00:00:00.000Z", {
+    burstLimit: 10,
+    burstWindowMs: 60_000,
+    sustainedLimit: 10,
+    sustainedWindowMs: 3_600_000
+  });
+}
+
+async function seedLiveEquivalentOwner(fixture) {
+  await fixture.rpc("saveOwner", ownerFixture({ visibility: "private" }));
+  await fixture.rpc("saveLatestUsage", usageFixture({ visibility: "private" }));
+
+  for (let index = 0; index < 19; index += 1) {
+    await fixture.rpc("saveOAuthState", {
+      id: `oauth_${index}`,
+      status: "consumed",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      ownerId: OWNER_SCOPE.ownerId
+    });
+  }
+  for (let index = 0; index < 22; index += 1) {
+    await fixture.rpc("saveSession", {
+      id: `session_${index}`,
+      ownerId: OWNER_SCOPE.ownerId,
+      expiresAt: "2026-09-01T00:00:00.000Z"
+    });
+  }
+  for (let index = 0; index < 11; index += 1) {
+    await fixture.rpc("saveCliLoginChallenge", {
+      id: `challenge_${index}`,
+      status: "exchanged",
+      deviceCodeDigest: `device-digest-${index}`,
+      userCode: `CODE-${String(index).padStart(4, "0")}`,
+      expiresAt: "2026-09-01T00:00:00.000Z",
+      ownerId: OWNER_SCOPE.ownerId
+    });
+  }
+  for (let index = 0; index < 8; index += 1) {
+    await fixture.rpc("saveCliToken", {
+      id: `token_${index}`,
+      ownerId: OWNER_SCOPE.ownerId,
+      tokenDigest: `token-digest-${index}`,
+      scopes: ["profile:submit"],
+      expiresAt: "2026-09-01T00:00:00.000Z"
+    });
+  }
+  const deviceIds = [
+    "device_g",
+    "device_F",
+    "device_e",
+    "device_D",
+    "device_c",
+    "device_B",
+    "device_a"
+  ];
+  for (const [index, id] of deviceIds.entries()) {
+    const day = String(index + 1).padStart(2, "0");
+    await fixture.rpc("saveSubmittedDevice", {
+      id,
+      ownerId: OWNER_SCOPE.ownerId,
+      deviceKey: `device-key-${index}`,
+      createdAt: `2026-07-${day}T00:00:00.000Z`,
+      updatedAt: `2026-07-${day}T00:01:00.000Z`,
+      lastSubmittedAt: `2026-07-${day}T00:02:00.000Z`
+    });
+  }
+  await fixture.rate("token_0", NOW, {
     burstLimit: 10,
     burstWindowMs: 60_000,
     sustainedLimit: 10,
