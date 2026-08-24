@@ -61,6 +61,9 @@ const PROFILE_SITES_MIGRATION_APPLY_STAGE_CODES = Object.freeze(
     `migration_apply_sql_v${version}_unavailable`
   ])
 );
+const PROFILE_SITES_CONFLICT_DETAILS = Object.freeze({
+  structured_state_changed: Object.freeze({ retryable: false })
+});
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -144,7 +147,11 @@ export function createProfileSitesMaintenanceHandler(options = {}) {
         return maintenanceResponse(404, "not_found");
       }
       if (error?.code === "conflict") {
-        return maintenanceResponse(409, "maintenance_conflict");
+        return maintenanceResponse(
+          409,
+          "maintenance_conflict",
+          safeMaintenanceConflictDetails(error)
+        );
       }
       if (error?.code === PROFILE_SITES_MIGRATION_NOT_READY_CODE) {
         return maintenanceResponse(
@@ -1368,14 +1375,23 @@ function maintenanceNotFoundResponse() {
   return maintenanceResponse(404, "not_found");
 }
 
-function maintenanceResponse(status, code) {
+function maintenanceResponse(status, code, details = {}) {
   return new Response(JSON.stringify({
     ok: false,
-    error: { code, message: maintenanceMessage(code) }
+    error: { code, message: maintenanceMessage(code), ...details }
   }), {
     status,
     headers: JSON_HEADERS
   });
+}
+
+function safeMaintenanceConflictDetails(error) {
+  const details = PROFILE_SITES_CONFLICT_DETAILS[error?.reason];
+  if (!details || error?.retryable !== details.retryable) return {};
+  return {
+    reason: error.reason,
+    retryable: details.retryable
+  };
 }
 
 function maintenanceMessage(code) {

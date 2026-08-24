@@ -54,6 +54,24 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_TIMEOUT_MS = 60_000;
 const DEFAULT_DELETE_ACCOUNT_MAX_ITERATIONS = 128;
 const MAX_DELETE_ACCOUNT_MAX_ITERATIONS = 256;
+const TERMINAL_STRUCTURED_CONFLICT = Object.freeze({
+  code: "maintenance_conflict",
+  reason: "structured_state_changed",
+  retryable: false
+});
+const SAFE_MAINTENANCE_ERROR_CODES = new Set([
+  "invalid_request",
+  "maintenance_conflict",
+  "maintenance_unavailable",
+  "method_not_allowed",
+  "migration_apply_unavailable",
+  "migration_inspection_unavailable",
+  "migration_not_ready",
+  "migration_reconciliation_unavailable",
+  "migration_verification_unavailable",
+  "not_found",
+  "unsupported_media_type"
+]);
 
 export async function runSitesProfileMaintenanceCli(args = [], options = {}) {
   const parsed = parseSitesProfileMaintenanceArgs(args);
@@ -460,7 +478,7 @@ async function sendMaintenanceRequest(payload, options) {
   }
   const result = await readSafeResponse(response);
   if (!response.ok || result?.ok !== true) {
-    throw cliError(result?.error?.code ?? "maintenance_failed");
+    throw maintenanceResponseError(result?.error);
   }
   return result;
 }
@@ -491,7 +509,7 @@ async function runDeleteAccount(request, payload, options) {
     lastProgress = progress;
   };
 
-  const reconcile = async () => {
+  const reconcile = async (reconcileOptions = {}) => {
     let result;
     try {
       result = await request(planPayload);
@@ -519,6 +537,7 @@ async function runDeleteAccount(request, payload, options) {
     }
     assertDeleteApproval(summary, approval);
     if (!applyAttempted) return { unchanged: true };
+    if (reconcileOptions.terminal === true) return { unchanged: true };
     if (unchangedRetryAvailable) {
       unchangedRetryAvailable = false;
       return { unchanged: true };
@@ -571,7 +590,8 @@ async function runDeleteAccount(request, payload, options) {
       ) {
         throw error;
       }
-      const reconciled = await reconcile();
+      const terminal = isTerminalStructuredConflict(error);
+      const reconciled = await reconcile({ terminal });
       if (reconciled.completed) {
         return completeDeleteAccount({
           approval,
@@ -581,6 +601,7 @@ async function runDeleteAccount(request, payload, options) {
           stdout: options.stdout
         });
       }
+      if (terminal) throw error;
       continue;
     }
 
@@ -801,6 +822,37 @@ function sleep(milliseconds) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
+function maintenanceResponseError(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return cliError("maintenance_failed");
+  }
+  const code = normalizeMaintenanceErrorCode(value.code);
+  if (
+    code === TERMINAL_STRUCTURED_CONFLICT.code &&
+    value.reason === TERMINAL_STRUCTURED_CONFLICT.reason &&
+    value.retryable === TERMINAL_STRUCTURED_CONFLICT.retryable
+  ) {
+    return cliError(code, TERMINAL_STRUCTURED_CONFLICT);
+  }
+  return cliError(code);
+}
+
+function normalizeMaintenanceErrorCode(value) {
+  if (SAFE_MAINTENANCE_ERROR_CODES.has(value)) return value;
+  if (/^migration_apply_(?:metadata|sql)_v[1-9][0-9]*_unavailable$/u.test(
+    value ?? ""
+  )) {
+    return value;
+  }
+  return "maintenance_failed";
+}
+
+function isTerminalStructuredConflict(error) {
+  return error?.code === TERMINAL_STRUCTURED_CONFLICT.code &&
+    error?.reason === TERMINAL_STRUCTURED_CONFLICT.reason &&
+    error?.retryable === TERMINAL_STRUCTURED_CONFLICT.retryable;
+}
+
 async function readSafeResponse(response) {
   try {
     return await response.json();
@@ -948,10 +1000,14 @@ function requireNonEmptyString(value, label) {
   return value.trim();
 }
 
-function cliError(code) {
+function cliError(code, details = {}) {
   const error = new Error(`Sites profile maintenance failed (${code})`);
   error.name = "SitesProfileMaintenanceCliError";
   error.code = code;
+  if (details === TERMINAL_STRUCTURED_CONFLICT) {
+    error.reason = TERMINAL_STRUCTURED_CONFLICT.reason;
+    error.retryable = TERMINAL_STRUCTURED_CONFLICT.retryable;
+  }
   return error;
 }
 

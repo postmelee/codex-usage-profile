@@ -819,6 +819,12 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.equal(maintenanceForLifecycle.response.status, 200);
     assert.equal(maintenanceForLifecycle.body.maintenanceEnabled, true);
 
+    await seedLiveEquivalentStructuredRows(database, localOwnerId);
+    assert.deepEqual(
+      await readOwnerStructuredCounts(database, localOwnerId),
+      LIVE_EQUIVALENT_STRUCTURED_COUNTS
+    );
+
     const exported = await requestMaintenance(origin, {
       operation: "export",
       ownerId: localOwnerId,
@@ -838,10 +844,11 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       handle: "local-owner"
     });
     assert.equal(deletionPlan.response.status, 200);
-    const deleted = await requestMaintenance(origin, {
+    const deletePayload = {
       operation: "delete-account",
       ownerId: localOwnerId,
       handle: "local-owner",
+      operationId: "maintenance_delete_local_mixed_case",
       apply: true,
       confirmOwner: {
         ownerId: localOwnerId,
@@ -849,9 +856,64 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       },
       expectedContentDigest: deletionPlan.body.summary.contentDigest,
       expectedObjectCount: deletionPlan.body.summary.objectCount
+    };
+    await database.exec(
+      "CREATE TRIGGER abort_smoke_owner_delete BEFORE DELETE ON owners " +
+      "BEGIN SELECT RAISE(ABORT, 'injected owner delete failure'); END"
+    );
+    let injectedFailure = null;
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const response = await requestMaintenance(origin, deletePayload);
+      if (response.response.status === 409) {
+        injectedFailure = response;
+        break;
+      }
+      assert.equal(response.response.status, 200);
+      assert.equal(response.body.progress.status, "in_progress");
+    }
+    assert.deepEqual(injectedFailure?.body, {
+      ok: false,
+      error: {
+        code: "maintenance_conflict",
+        message: "Maintenance plan is stale or conflicts"
+      }
     });
+    assert.deepEqual(
+      await readOwnerStructuredCounts(database, localOwnerId),
+      LIVE_EQUIVALENT_STRUCTURED_COUNTS
+    );
+    const failedOperation = await database.prepare(
+      "SELECT operation_id, approved_content_digest, " +
+        "approved_object_count, phase, lease_nonce, lease_expires_at " +
+      "FROM account_deletion_operations WHERE owner_id = ?"
+    ).bind(localOwnerId).first();
+    assert.deepEqual(failedOperation, {
+      operation_id: deletePayload.operationId,
+      approved_content_digest: deletionPlan.body.summary.contentDigest,
+      approved_object_count: deletionPlan.body.summary.objectCount,
+      phase: "structured",
+      lease_nonce: null,
+      lease_expires_at: null
+    });
+    assert.deepEqual(await readAtomicClaimCounts(database), {
+      assertions: 0,
+      claims: 0
+    });
+    await database.exec("DROP TRIGGER abort_smoke_owner_delete");
+
+    let deleted = null;
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const response = await requestMaintenance(origin, deletePayload);
+      assert.equal(response.response.status, 200);
+      if (response.body.progress.status === "completed") {
+        deleted = response;
+        break;
+      }
+    }
+    assert.ok(deleted);
     assert.equal(deleted.response.status, 200);
     assert.equal(deleted.body.progress.status, "completed");
+    assert.equal(deleted.body.progress.operationId, deletePayload.operationId);
     assert.equal(deleted.body.progress.remainingRevisionCount, 0);
     assert.equal(
       (await fetch(new URL("/u/local-owner/card.png", origin))).status,
@@ -979,6 +1041,129 @@ async function readHostedSchema(database) {
       "ORDER BY name"
   ).all();
   return result.results.map(({ name, sql }) => ({ name, sql }));
+}
+
+async function seedLiveEquivalentStructuredRows(database, ownerId) {
+  const statements = [
+    database.prepare("DELETE FROM account_usage_rate_limits"),
+    database.prepare("DELETE FROM oauth_states WHERE owner_id = ?").bind(ownerId),
+    database.prepare("DELETE FROM sessions WHERE owner_id = ?").bind(ownerId),
+    database.prepare(
+      "DELETE FROM cli_login_challenges WHERE owner_id = ?"
+    ).bind(ownerId),
+    database.prepare("DELETE FROM cli_tokens WHERE owner_id = ?").bind(ownerId),
+    database.prepare("DELETE FROM submitted_devices WHERE owner_id = ?").bind(ownerId)
+  ];
+  for (let index = 0; index < 19; index += 1) {
+    statements.push(database.prepare(
+      "INSERT INTO oauth_states (id, status, expires_at, owner_id) " +
+      "VALUES (?, 'consumed', ?, ?)"
+    ).bind(
+      `smoke_oauth_${index}`,
+      "2026-09-01T00:00:00.000Z",
+      ownerId
+    ));
+  }
+  for (let index = 0; index < 22; index += 1) {
+    statements.push(database.prepare(
+      "INSERT INTO sessions (id, owner_id, expires_at) VALUES (?, ?, ?)"
+    ).bind(
+      `smoke_session_${index}`,
+      ownerId,
+      "2026-09-01T00:00:00.000Z"
+    ));
+  }
+  for (let index = 0; index < 11; index += 1) {
+    statements.push(database.prepare(
+      "INSERT INTO cli_login_challenges " +
+        "(id, status, device_code_digest, user_code, expires_at, owner_id) " +
+      "VALUES (?, 'exchanged', ?, ?, ?, ?)"
+    ).bind(
+      `smoke_challenge_${index}`,
+      `smoke-device-digest-${index}`,
+      `SMOKE-${String(index).padStart(4, "0")}`,
+      "2026-09-01T00:00:00.000Z",
+      ownerId
+    ));
+  }
+  for (let index = 0; index < 8; index += 1) {
+    statements.push(database.prepare(
+      "INSERT INTO cli_tokens " +
+        "(id, owner_id, token_digest, scopes, expires_at) " +
+      "VALUES (?, ?, ?, '[]', ?)"
+    ).bind(
+      `smoke_token_${index}`,
+      ownerId,
+      `smoke-token-digest-${index}`,
+      "2026-09-01T00:00:00.000Z"
+    ));
+  }
+  const deviceIds = [
+    "smoke_device_g",
+    "smoke_device_F",
+    "smoke_device_e",
+    "smoke_device_D",
+    "smoke_device_c",
+    "smoke_device_B",
+    "smoke_device_a"
+  ];
+  for (const [index, deviceId] of deviceIds.entries()) {
+    const day = String(index + 1).padStart(2, "0");
+    statements.push(database.prepare(
+      "INSERT INTO submitted_devices " +
+        "(id, owner_id, device_key, created_at, updated_at, last_submitted_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(
+      deviceId,
+      ownerId,
+      `smoke-device-key-${index}`,
+      `2026-07-${day}T00:00:00.000Z`,
+      `2026-07-${day}T00:01:00.000Z`,
+      `2026-07-${day}T00:02:00.000Z`
+    ));
+  }
+  for (const [index, windowKind] of ["burst", "sustained"].entries()) {
+    statements.push(database.prepare(
+      "INSERT INTO account_usage_rate_limits " +
+        "(rate_key, window_kind, window_start_ms, window_end_ms, request_count) " +
+      "VALUES ('smoke_token_0', ?, ?, ?, 1)"
+    ).bind(windowKind, index * 1_000, (index + 1) * 1_000));
+  }
+  await database.batch(statements);
+}
+
+async function readOwnerStructuredCounts(database, ownerId) {
+  const row = await database.prepare(
+    "SELECT " +
+      "(SELECT COUNT(*) FROM owners WHERE id = ?) AS owners, " +
+      "(SELECT COUNT(*) FROM oauth_states WHERE owner_id = ?) AS oauthStates, " +
+      "(SELECT COUNT(*) FROM sessions WHERE owner_id = ?) AS sessions, " +
+      "(SELECT COUNT(*) FROM cli_login_challenges WHERE owner_id = ?) " +
+        "AS cliLoginChallenges, " +
+      "(SELECT COUNT(*) FROM cli_tokens WHERE owner_id = ?) AS cliTokens, " +
+      "(SELECT COUNT(*) FROM latest_snapshots WHERE owner_id = ?) " +
+        "AS latestSnapshots, " +
+      "(SELECT COUNT(*) FROM latest_usages WHERE owner_id = ?) AS latestUsages, " +
+      "(SELECT COUNT(*) FROM submitted_devices WHERE owner_id = ?) " +
+        "AS submittedDevices, " +
+      "(SELECT COUNT(*) FROM account_usage_rate_limits WHERE rate_key IN " +
+        "(SELECT id FROM cli_tokens WHERE owner_id = ?)) AS rateLimits"
+  ).bind(...Array(9).fill(ownerId)).first();
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key, Number(value)])
+  );
+}
+
+async function readAtomicClaimCounts(database) {
+  const row = await database.prepare(
+    "SELECT " +
+      "(SELECT COUNT(*) FROM atomic_operation_claims) AS claims, " +
+      "(SELECT COUNT(*) FROM atomic_operation_assertions) AS assertions"
+  ).first();
+  return {
+    assertions: Number(row.assertions),
+    claims: Number(row.claims)
+  };
 }
 
 async function buildLocalSmokeArtifact() {
@@ -1131,6 +1316,18 @@ function contentTypeFor(path) {
 function roundMilliseconds(value) {
   return Number(value.toFixed(2));
 }
+
+const LIVE_EQUIVALENT_STRUCTURED_COUNTS = Object.freeze({
+  cliLoginChallenges: 11,
+  cliTokens: 8,
+  latestSnapshots: 0,
+  latestUsages: 1,
+  oauthStates: 19,
+  owners: 1,
+  rateLimits: 2,
+  sessions: 22,
+  submittedDevices: 7
+});
 
 const invokedPath = process.argv[1]
   ? pathToFileURL(resolve(process.argv[1])).href
