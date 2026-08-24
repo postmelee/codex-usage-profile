@@ -549,7 +549,7 @@ npm run verify:sites-fullstack
 npm run verify:sites-production
 npm run verify:npm-release
 npm run scan:public-release
-npm run sites:profile-maintenance -- readiness --origin https://codex-usage-profile.meleeisdeveloping.chatgpt.site
+node -e 'Promise.all([fetch("https://codex-usage-profile.meleeisdeveloping.chatgpt.site/healthz").then((response) => { if (response.status !== 200) throw new Error("health"); }), fetch("https://codex-usage-profile.meleeisdeveloping.chatgpt.site/__ops/profile-maintenance", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((response) => { if (response.status !== 404) throw new Error("maintenance boundary"); })]).catch(() => process.exit(1))'
 npm view codex-usage-profile@0.1.3 --json
 npm view codex-usage-profile dist-tags --json
 gh run list --workflow publish-npm.yml
@@ -558,7 +558,11 @@ git status --short
 ```
 
 Sites connector로 saved source, deployment success, access/environment revision과 worker log redaction을
-확인한다. SNS 검증은 URL·revision·시각·결과만 기록한다.
+확인한다. `get_environment_variables`에서 final safe baseline의 maintenance mode가 disabled이고
+maintenance token key가 absent인지 확인하며, `read_database_overview`에서 exact `DB` binding과
+migration이 적용된 table set을 확인한다. 인증된 maintenance readiness는 private Gate에서 secret이
+활성화된 동안만 사용하며, public final 검증을 위해 제거한 maintenance secret을 다시 만들지 않는다.
+SNS 검증은 URL·revision·시각·결과만 기록한다.
 
 ### 완료·중단·원복 조건
 

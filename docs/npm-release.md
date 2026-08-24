@@ -18,16 +18,16 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 ## 현재 운영 상태
 
-- `codex-usage-profile@0.1.2`는 public이며 `latest`가 이 버전을 가리킨다.
-- `0.1.2`는 canonical production origin을 기본값으로 사용한다. production의
+- `codex-usage-profile@0.1.3`은 public이며 `latest`가 이 버전을 가리킨다.
+- `0.1.3`은 canonical production origin을 기본값으로 사용한다. production의
   일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,
   stage5·local 같은 대체 환경만 explicit `--server {origin}`을 사용한다.
-- `0.1.2` artifact와 tag는 immutable이다. 공개 뒤 문서나 UI 보정은 기존 package를
-  덮어쓰지 않는다.
 - `0.1.3`은 사용자-facing package README를 공식 공개 기준으로 고정하고 공개 README에서
-  internal transition·test origin 설명을 제거하는 documentation patch다. exact source,
-  public Site와 registry package를 다시 검증한 별도 승인 뒤에만 tag와 staged publish를
-  시작한다.
+  internal transition·test origin 설명을 제거한 documentation patch다. exact main source,
+  production Site와 registry package 검증, trusted publisher stage와 maintainer 2FA 승인을
+  모두 거쳐 공개됐다.
+- `0.1.2`와 `0.1.3` artifact·tag는 immutable이다. 공개 뒤 문서나 UI 보정은 기존 package를
+  덮어쓰지 않는다.
 - 기존 `0.1.0` artifact와 canonical/recovery tag는 immutable 상태로
   보존한다.
 - exact `0.1.0` install의 production device login, status, Account Usage
@@ -54,6 +54,34 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   bundle 자동 탐색을 담는다. approved Stage 3 commit과 annotated tag,
   trusted publisher stage, maintainer 2FA를 거쳐 공개됐고 prefix 없는
   production submit/status smoke가 통과했다.
+
+## `0.1.3` documentation patch release 결과
+
+| 항목 | 검증 값 |
+|---|---|
+| package | `codex-usage-profile@0.1.3` |
+| dependency | exact `codex-usage-analyzer@0.4.1` |
+| source commit | `fae45095ddfe24a3fb03c4ec91a6e2a20900e005` |
+| annotated tag | `codex-usage-profile-v0.1.3` |
+| workflow | `.github/workflows/publish-npm.yml` |
+| trusted publisher | `postmelee/codex-usage-profile`, workflow `publish-npm.yml`, environment `npm-publish` |
+| Actions run | [`32601426789`](https://github.com/postmelee/codex-usage-profile/actions/runs/32601426789), Node 20/22/24 verify와 staged publish 성공 |
+| tarball | 14 files, packed 17,237 bytes, unpacked 60,466 bytes |
+| SHA-1 | `479154381ba784d755ece8fb7672b4fbbf9d4d4d` |
+| SHA-512 | `sha512-+2RyWZMiGwSs2XM22f5aca0MU2+c41G7/xoaoREn0WgulqdOZXUFCcjGrk3Uyk0SrXS8faszQZE80noaYqFurA==` |
+| dist-tag | `latest=0.1.3` |
+| production smoke | clean `npx codex-usage-profile@latest` 기본 origin login/status/submit accepted, README 불변·공유 revision 갱신, revoke/logout 성공 |
+
+npm attestation은 SLSA provenance를 제공하며 package subject, registry integrity와 exact
+source commit이 일치한다. production Device Approval은
+`npx codex-usage-profile@latest submit`을 안내하고, clean `@latest` 실행은 별도
+`--server` 없이 canonical production에 연결됐다. submit 전후 README Markdown은 byte 단위로
+같고, 공유 링크와 X·LinkedIn·Threads·Facebook·Reddit target만 새 revision으로 바뀌었다.
+검증용 submit token은 웹 Settings에서 revoke했고 격리된 local credential도 logout으로
+제거했다.
+
+`0.1.3`은 immutable이다. 결함이나 추가 문서 변경은 같은 version이나 tag를 덮어쓰지 않고
+별도 patch version과 provenance를 준비한다.
 
 ## `0.1.2` production release 결과
 
