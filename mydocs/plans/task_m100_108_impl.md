@@ -631,15 +631,20 @@ Task #108 Stage 4: production cutover와 CLI 0.1.3 release 검증
 
 ### Stage 5C — Gate F2 production full smoke와 공개 승인
 
+> 2026-08-24 작업지시자 risk acceptance: disposable production owner 없이 기존 공개
+> `@postmelee`를 삭제하는 위험이 더 크다고 판단해 production account deletion E2E를 공개 차단
+> 조건에서 제외한다. Stage5의 Task #122 live deletion/recovery 검증과 비차단 #125 handoff를
+> 근거로 수용하며, production deletion 성공을 실행·추정한 것으로 기록하지 않는다.
+
 1. root·health·anonymous public profile/card/share, OAuth login/session/logout와 owner profile을
    production origin에서 확인한다.
 2. clean environment의 `@latest=0.1.3`으로 default-origin login/status/submit, card publication,
    fixed README와 revision share, 다섯 SNS target을 검증한다. SNS는 게시하지 않고 preview까지만
    확인한다.
 3. account deletion end-to-end는 disposable production test owner와 repository 밖 mode `0600`
-   export, exact plan digest/count가 있을 때만 별도 파괴적 승인을 받아 실행한다. disposable
-   identity를 확정할 수 없으면 기존 owner를 삭제하거나 성공으로 추정하지 않고 release Gate를
-   미완료로 보고한다.
+   export, exact plan digest/count가 있을 때만 별도 파괴적 승인을 받아 실행한다. 이번 Stage는
+   disposable identity가 없어 기존 owner를 삭제하지 않았고, 작업지시자의 명시적 risk acceptance로
+   비차단 처리한다. 삭제 성공을 실행·추정하지 않으며 live recovery는 #125에서 계속 추적한다.
 4. 삭제 승인 시 동일 operation으로 R2→structured D1을 직렬 완료하고 owner/session/token/media
    비열거를 확인한다. retention·orphan cleanup apply는 범위 밖이다.
 5. 최종 production public, maintenance disabled·service normal·operator token absent,
@@ -675,7 +680,8 @@ git status --short
 ### 완료·중단 조건
 
 - 완료: production은 public exact `main`, migration `1..6`, 별도 D1/R2/OAuth/secret과 final safe
-  environment를 사용한다. production full smoke가 통과하고 Stage5는 owner-only·operation 불변이다.
+  environment를 사용한다. production 비파괴 full smoke가 통과하고 Stage5는 owner-only·operation
+  불변이다. production account deletion E2E는 위 risk acceptance와 #125 handoff를 필수 기록한다.
 - 중단: target/source/archive mismatch, public deployment 미승인, maintenance/operator credential
   비노출 실패, migration drift, disposable account 부재, auth/privacy/media/share 실패, production
   data 손실 또는 Stage5 영향.

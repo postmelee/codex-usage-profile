@@ -129,14 +129,11 @@ git status --short
 - **미실행 — production account deletion E2E**: disposable production owner가 없고 repository 밖
   mode `0600` export·exact plan digest/count도 만들지 않았으므로 기존 `@postmelee` owner를
   삭제하지 않았다. 계정 삭제 성공을 추정하거나 주장하지 않는다.
-- 구현계획서의 엄격한 Stage 5 완료 조건을 그대로 적용하면 destructive deletion smoke가 남아
-  Stage 5는 아직 완료가 아니다. 다음 단계에서는 disposable identity를 마련해 별도 파괴적 승인을
-  받거나, Stage5 #122 검증을 근거로 production deletion E2E를 공개 차단 조건에서 제외하는
-  명시적 risk acceptance가 필요하다.
+- 작업지시자는 2026-08-24 Stage5 #122 검증과 #125 handoff를 근거로 production deletion E2E를
+  공개 차단 조건에서 제외하는 risk acceptance를 명시 승인했다. production 삭제 성공을 수행·추정한
+  것으로 기록하지 않으며, disposable identity가 생기면 별도 파괴적 승인 절차를 다시 적용한다.
 
 ## 다음 단계 영향
 
-Stage 5 최종 보고와 Stage 6에는 아직 진입하지 않는다. 작업지시자가 destructive production
-account deletion smoke의 실행 방법 또는 비차단 risk acceptance를 결정하기 전까지 production
-계정·D1/R2와 Stage5를 더 변경하지 않는다.
-
+승인된 risk acceptance를 구현계획서와 Stage 5 최종 보고서에 반영하고 Stage 6 진입 승인을
+요청한다. production 계정·D1/R2와 Stage5에는 추가 변경을 만들지 않는다.
