@@ -103,24 +103,53 @@ Stage 2에서는 확정 원인만 다음 원칙으로 보정했다.
   다시 확인한다.
 - 실제 Stage5 resume는 Task #122 exact-main Gate 전에는 실행하지 않는다.
 
+## Stage5 재개 checklist — 미실행
+
+- source fix가 integration checkpoint와 release PR을 거쳐 exact `main`에 포함됐는지 확인한다.
+- Stage5 saved version의 source SHA, project·origin, D1/R2 binding과 migration `1..6`을
+  read-only로 확인한다.
+- owner-only access, maintenance disabled, service normal과 production read-only baseline을
+  다시 고정한다.
+- repository 밖 mode `0600` backup checksum, 기존 operation ID, 최초 승인 digest/count,
+  phase `structured`, lease 없음, R2 revision 0과 non-public stable state가 모두 기존
+  승인값과 같은지 확인한다.
+- 하나라도 다르면 mutation 전에 중단한다. 모두 같을 때만 maintenance token을 일시
+  설정하고 같은 operation을 직렬 재개한다.
+- 완료 뒤 owner 관련 D1/R2 참조 0, public/profile/card 비열거, maintenance disabled,
+  service normal, owner-only access와 production 무변경을 확인한다.
+- 위 항목은 Stage 4 provenance와 별도 Stage 5 preflight 승인을 받기 전에는 실행하지 않는다.
+
 ## 검증
 
 ```bash
 node --test \
   src/profile-backend/__tests__/d1-maintenance.test.js \
-  src/profile-runtime/sites/__tests__/maintenance.test.js
+  src/profile-runtime/sites/__tests__/maintenance.test.js \
+  scripts/__tests__/sites-profile-maintenance.test.js \
+  scripts/__tests__/smoke-sites-production-local.test.js
+npm test
+npm run build:sites-fullstack
+npm run verify:sites-fullstack
+npm run verify:sites-production
 npm run smoke:sites-fullstack:local
+npm run scan:public-release
 git diff --check
 ```
 
 결과:
 
-- OK — D1 maintenance 9 tests와 Sites maintenance 23 tests, 합계 32 pass, 0 fail.
+- OK — D1 maintenance 9, Sites maintenance 23, maintenance CLI 22,
+  production-local smoke unit 2 tests, 합계 56 pass, 0 fail.
 - OK — mixed-case live-equivalent fixture가 동일 operation·approval 경계에서 원자 완료됐다.
 - OK — injected owner-delete failure가 structured row와 operation을 full rollback했다.
 - OK — allowlist된 terminal conflict만 reason·retryability를 제공하며 provider detail은
   외부 응답에 노출되지 않는다.
-- OK — 기존 full-stack smoke 67 routes, canonical update 2회 검증.
+- OK — CLI는 terminal structured conflict에서 read-only plan 한 번 뒤 중단하고,
+  reason 없는 legacy conflict·network unknown·not-found completion 경계를 유지한다.
+- OK — full-stack smoke가 mixed-case 71개 structured 객체의 injected rollback과 같은
+  operation 완료, 67 routes, canonical update 2회를 검증했다.
+- OK — 전체 Node suite 868 tests 중 862 pass, 환경 조건부 6 skip, 0 fail이며 Sites
+  full-stack/production artifact 검증과 public release scan도 통과했다.
 - OK — Stage5 확인은 read-only table overview/row projection만 사용했고 mutation은 0건이다.
 
 ## 참고

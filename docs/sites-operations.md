@@ -320,6 +320,12 @@ contract/schema version, digest와 count만 남긴다.
   때만 재개하고, active operation 없이 original plan이 그대로인 경우 initial
   apply를 한 번만 재시도한다. apply를 보낸 뒤 plan이 `not_found`인 경우에만
   최종 D1 삭제 완료로 판정하며 최초 plan의 `not_found`는 완료가 아니다.
+- `maintenance_conflict`에 allowlist된 `reason=structured_state_changed`와
+  `retryable=false`가 함께 있으면 terminal structured drift다. CLI는 완료 여부를
+  놓치지 않도록 read-only plan을 정확히 한 번 확인한 뒤 추가 apply 없이 중단한다.
+  reason이 없거나 알 수 없는 구버전·provider 응답은 terminal로 추측하지 않고 위의
+  기존 conflict 경계를 따른다. 임의 reason, SQL, provider 원문과 row payload는
+  출력하지 않는다.
 - operation ID·승인값 불일치, phase·남은 revision 수 역행, 진행 정체, 반복 상한,
   stale ETag/digest/count에서는 다음 mutation을 중단한다.
   같은 backup으로 일관성을 복구하거나 `repair-publication`을 exact ETag
@@ -346,8 +352,11 @@ npm run sites:profile-maintenance -- delete-account \
   --apply
 ```
 
-부분 삭제 뒤 application rollback은 진행하지 않는다. maintenance를 계속 닫아 둔
-채 active plan과 lease 만료를 확인하고 같은 operation으로 재개한다. 복구가 필요하면
+structured D1 batch가 실패하면 owner, dependent row, operation과 temporary claim은
+모두 원상태여야 한다. 이 상태에서 application rollback은 진행하지 않는다.
+maintenance를 계속 닫아 둔 채 active plan과 lease 만료를 확인하고, retryable
+경계일 때만 같은 operation으로 재개한다. terminal structured drift면 backup과
+exact plan 차이를 확인한 뒤 별도 보정 승인을 받는다. 복구가 필요하면
 삭제 전에 만든 backup을 disposable target에서 검증한 뒤 restore하고, publication은
 별도 exact repair 절차로 복원한다. operation은 owner와 함께 cascade 삭제되므로 별도
 완료 ledger나 장기 PII 기록을 만들지 않는다.
