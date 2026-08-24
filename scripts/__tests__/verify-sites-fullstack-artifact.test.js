@@ -29,6 +29,10 @@ const DEFAULT_MIGRATIONS = Object.freeze([
   Object.freeze([
     "0005_card_locale.sql",
     "ALTER TABLE owners ADD COLUMN card_locale TEXT;"
+  ]),
+  Object.freeze([
+    "0006_account_deletion_operations.sql",
+    "CREATE TABLE account_deletion_operations (owner_id TEXT PRIMARY KEY);"
   ])
 ]);
 
@@ -38,7 +42,7 @@ test("full-stack artifact verifier accepts the production Sites shape", async ()
 
   assert.equal(result.clientFileCount, 2);
   assert.equal(result.hostingMode, "pre-hosted");
-  assert.equal(result.migrationFileCount, 5);
+  assert.equal(result.migrationFileCount, 6);
   assert.equal(result.workerFileCount, 1);
 });
 
@@ -109,7 +113,7 @@ test("full-stack artifact verifier rejects an unexpected packaged migration", as
   const outputDirectory = await createArtifact({
     migrations: [
       ...DEFAULT_MIGRATIONS,
-      ["0006_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
+      ["0007_future.sql", "CREATE TABLE future (id TEXT PRIMARY KEY);"]
     ]
   });
 
@@ -153,7 +157,8 @@ test("full-stack artifact verifier rejects migration order drift", () => {
       DEFAULT_MIGRATIONS[0][0],
       DEFAULT_MIGRATIONS[2][0],
       DEFAULT_MIGRATIONS[3][0],
-      DEFAULT_MIGRATIONS[4][0]
+      DEFAULT_MIGRATIONS[4][0],
+      DEFAULT_MIGRATIONS[5][0]
     ]),
     /manifest order/
   );

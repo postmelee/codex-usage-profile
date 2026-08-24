@@ -113,6 +113,124 @@ test("R2 owner deletion requires a tombstone and exact revision manifest", async
   assert.equal(bucket.deleteCalls, 2);
 });
 
+test("R2 owner revision deletion is bounded and resumes from the actual manifest", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisionSets = Array.from({ length: 5 }, (_, index) =>
+    createRepresentations(`batch-${index + 1}`)
+  );
+  for (const revisions of revisionSets) {
+    await putRepresentations(store, revisions);
+  }
+  const published = await store.publishRevision(publicationInput(
+    revisionSets[0],
+    { expectedStorageEtag: null }
+  ));
+  const maintenance = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store,
+    now: () => NOW
+  });
+  await maintenance.tombstoneOwnerPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: published.storageEtag,
+    tombstoneId: "maintenance_batch",
+    unpublishedAt: NOW
+  });
+
+  const initial = await maintenance.planOwnerDeletion(OWNER_SCOPE);
+  assert.equal(initial.manifest.revisions.length, 10);
+  const first = await maintenance.deleteOwnerRevisionBatch({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedContentDigest: initial.summary.contentDigest,
+    expectedObjectCount: initial.summary.objectCount
+  });
+  assert.equal(first.deletedRevisionCount, 8);
+  assert.equal(first.remainingRevisionCount, 2);
+  assert.equal(first.plan.manifest.revisions.length, 2);
+  assert.equal(bucket.deleteCalls, 8);
+
+  const second = await maintenance.deleteOwnerRevisionBatch({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedContentDigest: first.plan.summary.contentDigest,
+    expectedObjectCount: first.plan.summary.objectCount
+  });
+  assert.equal(second.deletedRevisionCount, 2);
+  assert.equal(second.remainingRevisionCount, 0);
+  assert.equal(bucket.deleteCalls, 10);
+  await assert.rejects(
+    maintenance.deleteOwnerRevisionBatch({
+      ...OWNER_SCOPE,
+      apply: true,
+      batchSize: 33,
+      expectedContentDigest: second.plan.summary.contentDigest,
+      expectedObjectCount: second.plan.summary.objectCount
+    }),
+    /batchSize must be an integer from 1 to 32/
+  );
+});
+
+test("R2 owner revision deletion replans safely after a partial batch failure", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisionSets = Array.from({ length: 3 }, (_, index) =>
+    createRepresentations(`partial-${index + 1}`)
+  );
+  for (const revisions of revisionSets) {
+    await putRepresentations(store, revisions);
+  }
+  const published = await store.publishRevision(publicationInput(
+    revisionSets[0],
+    { expectedStorageEtag: null }
+  ));
+  let attempts = 0;
+  const interrupted = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store,
+    beforeDeleteRevision() {
+      attempts += 1;
+      if (attempts === 3) throw new Error("injected batch interruption");
+    }
+  });
+  await interrupted.tombstoneOwnerPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: published.storageEtag,
+    tombstoneId: "maintenance_partial",
+    unpublishedAt: NOW
+  });
+  const initial = await interrupted.planOwnerDeletion(OWNER_SCOPE);
+  await assert.rejects(
+    interrupted.deleteOwnerRevisionBatch({
+      ...OWNER_SCOPE,
+      apply: true,
+      expectedContentDigest: initial.summary.contentDigest,
+      expectedObjectCount: initial.summary.objectCount
+    }),
+    /injected batch interruption/
+  );
+
+  const resumed = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store
+  });
+  const current = await resumed.planOwnerDeletion(OWNER_SCOPE);
+  assert.equal(current.manifest.revisions.length, 4);
+  const result = await resumed.deleteOwnerRevisionBatch({
+    ...OWNER_SCOPE,
+    apply: true,
+    batchSize: 2,
+    expectedContentDigest: current.summary.contentDigest,
+    expectedObjectCount: current.summary.objectCount
+  });
+  assert.equal(result.deletedRevisionCount, 2);
+  assert.equal(result.remainingRevisionCount, 2);
+  assert.equal(bucket.deleteCalls, 4);
+});
+
 test("R2 revision deletion stops before mutation when a newer publication wins", async () => {
   const bucket = createFakeR2Bucket();
   const store = createR2BindingProfileMediaStore({ bucket });
@@ -157,6 +275,88 @@ test("R2 revision deletion stops before mutation when a newer publication wins",
   assert.equal(
     (await store.inspectStableCard({ handle: HANDLE })).publication.publicationId,
     "publication_newer"
+  );
+});
+
+test("R2 revision batch rejects an immutable object ETag change", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createRepresentations("immutable-change");
+  await putRepresentations(store, revisions);
+  const published = await store.publishRevision(publicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  let changed = false;
+  const maintenance = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store,
+    beforeDeleteRevision({ revision }) {
+      if (changed) return;
+      changed = true;
+      bucket.objects.get(revision.key).etag = "changed-storage-etag";
+    }
+  });
+  await maintenance.tombstoneOwnerPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: published.storageEtag,
+    tombstoneId: "maintenance_immutable_change",
+    unpublishedAt: NOW
+  });
+  const plan = await maintenance.planOwnerDeletion(OWNER_SCOPE);
+
+  await assert.rejects(
+    maintenance.deleteOwnerRevisionBatch({
+      ...OWNER_SCOPE,
+      apply: true,
+      expectedContentDigest: plan.summary.contentDigest,
+      expectedObjectCount: plan.summary.objectCount
+    }),
+    /immutable revision changed before deletion/
+  );
+  assert.equal(bucket.deleteCalls, 0);
+});
+
+test("R2 revision batch fails when a deleted object remains readable", async () => {
+  const bucket = createFakeR2Bucket();
+  const store = createR2BindingProfileMediaStore({ bucket });
+  const revisions = createRepresentations("delete-remains");
+  await putRepresentations(store, revisions);
+  const published = await store.publishRevision(publicationInput(revisions, {
+    expectedStorageEtag: null
+  }));
+  const nativeDelete = bucket.delete.bind(bucket);
+  bucket.delete = async (key) => {
+    const object = bucket.objects.get(key);
+    await nativeDelete(key);
+    bucket.objects.set(key, object);
+  };
+  const maintenance = createR2BindingProfileMediaMaintenance({
+    bucket,
+    mediaStore: store
+  });
+  await maintenance.tombstoneOwnerPublication({
+    ...OWNER_SCOPE,
+    apply: true,
+    expectedStorageEtag: published.storageEtag,
+    tombstoneId: "maintenance_delete_remains",
+    unpublishedAt: NOW
+  });
+  const plan = await maintenance.planOwnerDeletion(OWNER_SCOPE);
+
+  await assert.rejects(
+    maintenance.deleteOwnerRevisionBatch({
+      ...OWNER_SCOPE,
+      apply: true,
+      expectedContentDigest: plan.summary.contentDigest,
+      expectedObjectCount: plan.summary.objectCount
+    }),
+    /immutable revision remained after deletion/
+  );
+  assert.equal(bucket.deleteCalls, 1);
+  assert.equal(
+    (await maintenance.planOwnerDeletion(OWNER_SCOPE)).manifest.revisions.length,
+    2
   );
 });
 

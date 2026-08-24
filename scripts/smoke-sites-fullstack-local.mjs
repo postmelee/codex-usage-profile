@@ -164,8 +164,8 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.deepEqual(migrated.body, {
       ok: true,
       summary: {
-        appliedVersions: [1, 2, 3, 4, 5],
-        newlyAppliedVersions: [1, 2, 3, 4, 5],
+        appliedVersions: [1, 2, 3, 4, 5, 6],
+        newlyAppliedVersions: [1, 2, 3, 4, 5, 6],
         operation: "migrate"
       }
     });
@@ -186,8 +186,8 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
     assert.deepEqual(readiness.body, {
       ok: true,
       summary: {
-        appliedVersions: [1, 2, 3, 4, 5],
-        expectedVersions: [1, 2, 3, 4, 5],
+        appliedVersions: [1, 2, 3, 4, 5, 6],
+        expectedVersions: [1, 2, 3, 4, 5, 6],
         operation: "readiness",
         ready: true
       }
@@ -851,6 +851,8 @@ export async function runSitesFullStackLocalSmoke(options = {}) {
       expectedObjectCount: deletionPlan.body.summary.objectCount
     });
     assert.equal(deleted.response.status, 200);
+    assert.equal(deleted.body.progress.status, "completed");
+    assert.equal(deleted.body.progress.remainingRevisionCount, 0);
     assert.equal(
       (await fetch(new URL("/u/local-owner/card.png", origin))).status,
       404
