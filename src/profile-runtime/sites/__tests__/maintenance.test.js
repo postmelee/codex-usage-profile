@@ -743,12 +743,156 @@ test("account deletion uses exact confirmation and completes in safe order", asy
     calls.filter((call) => [
       "r2.tombstone",
       "d1.quiesce",
-      "r2.delete",
+      "r2.delete.batch",
       "d1.delete"
     ].includes(call)),
-    ["r2.tombstone", "d1.quiesce", "r2.delete", "d1.delete"]
+    ["r2.tombstone", "d1.quiesce", "r2.delete.batch", "d1.delete"]
   );
   assert.equal(deleted.summary.operation, "delete-account");
+  assert.equal(deleted.progress.status, "completed");
+  assert.equal(deleted.progress.phase, "completed");
+  assert.equal(deleted.progress.remainingRevisionCount, 0);
+});
+
+test("account deletion returns bounded progress and resumes the same operation", async () => {
+  const calls = [];
+  const fixture = await createServiceFixture({
+    calls,
+    initialRevisionCount: 10,
+    remainingRevisionSequence: [2, 0]
+  });
+  const plan = await fixture.service.planOwner(OWNER_SCOPE);
+  const input = {
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  };
+
+  const first = await fixture.service.deleteAccount(input);
+  assert.equal(first.summary.contentDigest, plan.summary.contentDigest);
+  assert.deepEqual(first.progress, {
+    contractVersion: 1,
+    status: "in_progress",
+    phase: "media",
+    operationId: first.progress.operationId,
+    deletedRevisionCount: 8,
+    remainingRevisionCount: 2,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  });
+  assert.equal(calls.includes("d1.delete"), false);
+  assert.doesNotMatch(
+    JSON.stringify(first.progress),
+    /owner_1|postmelee|leaseNonce|leaseExpiresAt|storageEtag|revisionKey/u
+  );
+
+  const activePlan = await fixture.service.planOwner(OWNER_SCOPE);
+  assert.equal(activePlan.progress.operationId, first.progress.operationId);
+  assert.equal(activePlan.progress.remainingRevisionCount, 2);
+  const completed = await fixture.service.deleteAccount({
+    ...input,
+    operationId: first.progress.operationId
+  });
+  assert.equal(completed.progress.status, "completed");
+  assert.equal(completed.progress.deletedRevisionCount, 2);
+  assert.equal(completed.progress.remainingRevisionCount, 0);
+  assert.equal(
+    calls.filter((call) => call === "r2.tombstone").length,
+    1
+  );
+  assert.equal(
+    calls.filter((call) => call === "d1.quiesce").length,
+    1
+  );
+  assert.equal(calls.at(-1), "d1.delete");
+});
+
+test("account deletion refuses changed approval while an operation is active", async () => {
+  const calls = [];
+  const fixture = await createServiceFixture({
+    calls,
+    initialRevisionCount: 10,
+    remainingRevisionSequence: [2]
+  });
+  const plan = await fixture.service.planOwner(OWNER_SCOPE);
+  const input = {
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  };
+  await fixture.service.deleteAccount(input);
+  const acquireCalls = calls.filter(
+    (call) => call === "d1.lease.acquire"
+  ).length;
+
+  await assert.rejects(
+    fixture.service.deleteAccount({
+      ...input,
+      expectedContentDigest: "Z".repeat(43)
+    }),
+    /confirmation no longer matches/
+  );
+  assert.equal(
+    calls.filter((call) => call === "d1.lease.acquire").length,
+    acquireCalls
+  );
+});
+
+test("account deletion reports a live lease without overlapping mutation", async () => {
+  const calls = [];
+  const fixture = await createServiceFixture({ calls, leaseConflict: true });
+  const plan = await fixture.service.planOwner(OWNER_SCOPE);
+  const result = await fixture.service.deleteAccount({
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  });
+
+  assert.equal(result.progress.status, "in_progress");
+  assert.equal(result.progress.phase, "prepare");
+  assert.equal(result.progress.retryAfterSeconds, 60);
+  assert.equal(result.progress.deletedRevisionCount, 0);
+  assert.equal(result.progress.remainingRevisionCount, 2);
+  assert.equal(calls.includes("r2.tombstone"), false);
+  assert.equal(calls.includes("d1.quiesce"), false);
+});
+
+test("account deletion resumes after a released media-phase failure", async () => {
+  const calls = [];
+  const fixture = await createServiceFixture({
+    calls,
+    failRevisionDeleteOnce: true
+  });
+  const plan = await fixture.service.planOwner(OWNER_SCOPE);
+  const input = {
+    ...OWNER_SCOPE,
+    apply: true,
+    confirmOwner: OWNER_SCOPE,
+    expectedContentDigest: plan.summary.contentDigest,
+    expectedObjectCount: plan.summary.objectCount
+  };
+
+  await assert.rejects(
+    fixture.service.deleteAccount(input),
+    /injected media delete failure/
+  );
+  assert.equal(calls.includes("d1.lease.release"), true);
+  const completed = await fixture.service.deleteAccount(input);
+  assert.equal(completed.progress.status, "completed");
+  assert.equal(
+    calls.filter((call) => call === "r2.tombstone").length,
+    1
+  );
+  assert.equal(
+    calls.filter((call) => call === "d1.quiesce").length,
+    1
+  );
 });
 
 test("public restore stages D1 privately before publication", async () => {
@@ -827,6 +971,14 @@ async function createServiceFixture(options = {}) {
   const digestB = "B".repeat(43);
   const calls = options.calls ?? [];
   let repairPublicationInput = null;
+  let deletionOperation = null;
+  let leaseSequence = 0;
+  let revisionDeleteFailures = 0;
+  let remainingRevisionCount = options.initialRevisionCount ?? 2;
+  let stableKind = "publication";
+  const remainingRevisionSequence = [
+    ...(options.remainingRevisionSequence ?? [])
+  ];
   const structuredPlan = {
     profile: durableProfile(),
     summary: createProfileMaintenanceSummary({
@@ -837,17 +989,85 @@ async function createServiceFixture(options = {}) {
       ownerCount: 1
     })
   };
-  const mediaPlan = {
-    manifest: mediaManifest(),
-    summary: createProfileMaintenanceSummary({
-      contentDigest: digestB,
-      createdAt: NOW,
-      objectCount: 3,
-      operation: "delete-account",
-      ownerCount: 1
-    })
+  const currentMediaPlan = () => {
+    const manifest = mediaManifest({
+      remainingRevisionCount,
+      stableKind
+    });
+    return {
+      manifest,
+      summary: createProfileMaintenanceSummary({
+        contentDigest: digestB,
+        createdAt: NOW,
+        objectCount:
+          manifest.revisions.length +
+          (manifest.stable.kind === "missing" ? 0 : 1),
+        operation: "delete-account",
+        ownerCount: 1
+      })
+    };
   };
   const d1Maintenance = {
+    async getOwnerDeletionOperation() {
+      calls.push("d1.operation.get");
+      return deletionOperation ? { ...deletionOperation } : null;
+    },
+    async beginOwnerDeletionOperation(input) {
+      calls.push("d1.operation.begin");
+      deletionOperation ??= {
+        approvedContentDigest: input.expectedContentDigest,
+        approvedObjectCount: input.expectedObjectCount,
+        createdAt: input.createdAt,
+        handle: input.handle,
+        leaseExpiresAt: null,
+        leaseNonce: null,
+        operationId: input.operationId,
+        ownerId: input.ownerId,
+        phase: "prepare",
+        updatedAt: input.createdAt
+      };
+      return { idempotent: false, operation: { ...deletionOperation } };
+    },
+    async acquireOwnerDeletionLease() {
+      calls.push("d1.lease.acquire");
+      if (options.leaseConflict) {
+        deletionOperation = {
+          ...deletionOperation,
+          leaseExpiresAt: "2026-07-24T00:01:00.000Z",
+          leaseNonce: "other_lease"
+        };
+        const error = new Error("lease is unavailable");
+        error.code = "conflict";
+        throw error;
+      }
+      leaseSequence += 1;
+      deletionOperation = {
+        ...deletionOperation,
+        leaseExpiresAt: "2026-07-24T00:02:00.000Z",
+        leaseNonce: `lease_${leaseSequence}`
+      };
+      return {
+        leaseNonce: deletionOperation.leaseNonce,
+        operation: { ...deletionOperation }
+      };
+    },
+    async advanceOwnerDeletionPhase(input) {
+      calls.push(`d1.phase.${input.phase}`);
+      deletionOperation = {
+        ...deletionOperation,
+        phase: input.phase
+      };
+      return { ...deletionOperation };
+    },
+    async releaseOwnerDeletionLease() {
+      calls.push("d1.lease.release");
+      deletionOperation = {
+        ...deletionOperation,
+        leaseExpiresAt: null,
+        leaseNonce: null
+      };
+      return { idempotent: false, operation: { ...deletionOperation } };
+    },
     async exportOwner() {
       calls.push("d1.export");
       return durableProfile();
@@ -862,6 +1082,7 @@ async function createServiceFixture(options = {}) {
     },
     async deleteOwner() {
       calls.push("d1.delete");
+      deletionOperation = null;
       return structuredPlan;
     },
     async restoreOwner() {
@@ -888,14 +1109,15 @@ async function createServiceFixture(options = {}) {
   const r2Maintenance = {
     async listOwnerManifest() {
       calls.push("r2.manifest");
-      return mediaManifest();
+      return currentMediaPlan().manifest;
     },
     async planOwnerDeletion() {
       calls.push("r2.plan");
-      return mediaPlan;
+      return currentMediaPlan();
     },
     async tombstoneOwnerPublication() {
       calls.push("r2.tombstone");
+      stableKind = "unpublished";
       return {
         stable: {
           kind: "unpublished",
@@ -904,12 +1126,24 @@ async function createServiceFixture(options = {}) {
         }
       };
     },
-    async deleteOwnerRevisions() {
-      calls.push("r2.delete");
-      if (options.failRevisionDelete) {
+    async deleteOwnerRevisionBatch() {
+      calls.push("r2.delete.batch");
+      if (
+        options.failRevisionDelete ||
+        (options.failRevisionDeleteOnce && revisionDeleteFailures === 0)
+      ) {
+        revisionDeleteFailures += 1;
         throw new Error("injected media delete failure");
       }
-      return mediaPlan;
+      const previous = remainingRevisionCount;
+      remainingRevisionCount = remainingRevisionSequence.length > 0
+        ? remainingRevisionSequence.shift()
+        : 0;
+      return {
+        deletedRevisionCount: Math.max(previous - remainingRevisionCount, 0),
+        plan: currentMediaPlan(),
+        remainingRevisionCount
+      };
     },
     async planRetention() {
       return {
@@ -1156,16 +1390,13 @@ function durableProfile() {
   };
 }
 
-function mediaManifest() {
+function mediaManifest(options = {}) {
   const revision = "C".repeat(43);
-  return {
-    ownerId: OWNER.id,
-    handle: OWNER.handle,
-    revisions: [
-      { key: `cards/v2/owners/${OWNER.id}/revisions/en/${revision}.png` },
-      { key: `cards/v2/owners/${OWNER.id}/revisions/ko/${revision}.png` }
-    ],
-    stable: {
+  const remainingRevisionCount = options.remainingRevisionCount ?? 2;
+  const stableKind = options.stableKind ?? "publication";
+  const stableKey = "cards/v2/public/postmelee/card.png";
+  const stable = stableKind === "publication"
+    ? {
       kind: "publication",
       publication: {
         handle: OWNER.handle,
@@ -1177,9 +1408,27 @@ function mediaManifest() {
           ko: { etag: `"${revision}"`, revision }
         }
       },
-      stableKey: "cards/v2/public/postmelee/card.png",
+      stableKey,
       storageEtag: "stable-etag"
     }
+    : {
+      kind: stableKind,
+      stableKey,
+      storageEtag: stableKind === "missing" ? null : "tombstone-etag",
+      ...(stableKind === "unpublished" ? {
+        tombstoneId: "maintenance_tombstone",
+        unpublishedAt: NOW
+      } : {})
+    };
+  return {
+    ownerId: OWNER.id,
+    handle: OWNER.handle,
+    revisions: Array.from({ length: remainingRevisionCount }, (_, index) => ({
+      key:
+        `cards/v2/owners/${OWNER.id}/revisions/` +
+        `${index % 2 === 0 ? "en" : "ko"}/${revision}-${index}.png`
+    })),
+    stable
   };
 }
 

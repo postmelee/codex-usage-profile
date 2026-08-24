@@ -314,11 +314,27 @@ export function createProfileSitesMaintenanceService(options = {}) {
 
   async function planOwner(operationOptions = {}) {
     const scope = requireOwnerScope(operationOptions);
-    const [structured, media] = await Promise.all([
+    const [structured, media, deletionOperation] = await Promise.all([
       d1.planOwnerDeletion(scope),
-      r2.planOwnerDeletion(scope)
+      r2.planOwnerDeletion(scope),
+      d1.getOwnerDeletionOperation(scope)
     ]);
-    return combinePlans("plan", structured, media, scope, now());
+    const combined = await combinePlans(
+      "plan",
+      structured,
+      media,
+      scope,
+      now()
+    );
+    if (!deletionOperation) return combined;
+    return {
+      ...combined,
+      progress: createOwnerDeletionProgress({
+        operation: deletionOperation,
+        remainingRevisionCount: media.manifest.revisions.length,
+        now: now()
+      })
+    };
   }
 
   async function exportOwner(operationOptions = {}) {
@@ -425,45 +441,167 @@ export function createProfileSitesMaintenanceService(options = {}) {
 
   async function deleteAccount(operationOptions = {}) {
     const scope = requireOwnerScope(operationOptions);
-    const combined = await planOwner(scope);
-    assertApplyConfirmation(operationOptions, {
-      contentDigest: combined.summary.contentDigest,
-      objectCount: combined.summary.objectCount,
-      scope
-    });
-
-    const currentMedia = await r2.planOwnerDeletion(scope);
-    await r2.tombstoneOwnerPublication({
-      ...scope,
-      apply: true,
-      expectedStorageEtag: currentMedia.manifest.stable.storageEtag,
-      tombstoneId: createId("profile_media_tombstone"),
-      unpublishedAt: now()
-    });
-    await d1.quiesceOwner(scope);
-
-    const privateMedia = await r2.planOwnerDeletion(scope);
-    await r2.deleteOwnerRevisions({
-      ...scope,
-      apply: true,
-      expectedContentDigest: privateMedia.summary.contentDigest,
-      expectedObjectCount: privateMedia.summary.objectCount
-    });
-    const privateStructured = await d1.planOwnerDeletion(scope);
-    await d1.deleteOwner({
-      ...scope,
-      expectedContentDigest: privateStructured.summary.contentDigest,
-      expectedObjectCount: privateStructured.summary.objectCount
-    });
-    return {
-      summary: createProfileMaintenanceSummary({
+    let operation = await d1.getOwnerDeletionOperation(scope);
+    if (!operation) {
+      const combined = await planOwner(scope);
+      assertApplyConfirmation(operationOptions, {
         contentDigest: combined.summary.contentDigest,
-        createdAt: now(),
         objectCount: combined.summary.objectCount,
-        operation: "delete-account",
-        ownerCount: 1
-      })
-    };
+        scope
+      });
+      const operationId = operationOptions.operationId === undefined
+        ? createId("profile_account_delete")
+        : requireKeySegment(operationOptions.operationId, "operationId");
+      operation = (await d1.beginOwnerDeletionOperation({
+        ...scope,
+        createdAt: combined.summary.createdAt,
+        expectedContentDigest: combined.summary.contentDigest,
+        expectedObjectCount: combined.summary.objectCount,
+        operationId
+      })).operation;
+    } else {
+      assertApplyConfirmation(operationOptions, {
+        contentDigest: operation.approvedContentDigest,
+        objectCount: operation.approvedObjectCount,
+        scope
+      });
+      if (
+        operationOptions.operationId !== undefined &&
+        requireKeySegment(operationOptions.operationId, "operationId") !==
+          operation.operationId
+      ) {
+        throw maintenanceError(
+          "conflict",
+          "account deletion operation does not match"
+        );
+      }
+    }
+
+    const summary = createOwnerDeletionSummary(operation);
+    let lease;
+    try {
+      lease = await d1.acquireOwnerDeletionLease({
+        ...scope,
+        operationId: operation.operationId
+      });
+    } catch (error) {
+      if (error?.code !== "conflict") throw error;
+      const current = await d1.getOwnerDeletionOperation(scope);
+      if (
+        !current ||
+        current.operationId !== operation.operationId ||
+        !hasLiveOwnerDeletionLease(current, now())
+      ) {
+        throw error;
+      }
+      const media = await r2.planOwnerDeletion(scope);
+      return {
+        progress: createOwnerDeletionProgress({
+          operation: current,
+          remainingRevisionCount: media.manifest.revisions.length,
+          now: now()
+        }),
+        summary
+      };
+    }
+
+    let completed = false;
+    let deletedRevisionCount = 0;
+    operation = lease.operation;
+    try {
+      if (operation.phase === "prepare") {
+        const currentMedia = await r2.planOwnerDeletion(scope);
+        await r2.tombstoneOwnerPublication({
+          ...scope,
+          apply: true,
+          expectedStorageEtag: currentMedia.manifest.stable.storageEtag,
+          tombstoneId: createId("profile_media_tombstone"),
+          unpublishedAt: now()
+        });
+        await d1.quiesceOwner(scope);
+        operation = await d1.advanceOwnerDeletionPhase({
+          ...scope,
+          leaseNonce: lease.leaseNonce,
+          operationId: operation.operationId,
+          phase: "media"
+        });
+      }
+
+      let remainingRevisionCount;
+      if (operation.phase === "media") {
+        const media = await r2.planOwnerDeletion(scope);
+        const batch = await r2.deleteOwnerRevisionBatch({
+          ...scope,
+          apply: true,
+          expectedContentDigest: media.summary.contentDigest,
+          expectedObjectCount: media.summary.objectCount
+        });
+        deletedRevisionCount = batch.deletedRevisionCount;
+        remainingRevisionCount = batch.remainingRevisionCount;
+        if (remainingRevisionCount > 0) {
+          return {
+            progress: createOwnerDeletionProgress({
+              deletedRevisionCount,
+              operation,
+              remainingRevisionCount
+            }),
+            summary
+          };
+        }
+        operation = await d1.advanceOwnerDeletionPhase({
+          ...scope,
+          leaseNonce: lease.leaseNonce,
+          operationId: operation.operationId,
+          phase: "structured"
+        });
+      }
+
+      if (operation.phase !== "structured") {
+        throw maintenanceError(
+          "conflict",
+          "account deletion operation phase is invalid"
+        );
+      }
+      const finalMedia = await r2.planOwnerDeletion(scope);
+      if (
+        finalMedia.manifest.revisions.length !== 0 ||
+        finalMedia.manifest.stable.kind ===
+          PROFILE_MEDIA_STABLE_STATE_KINDS.PUBLICATION
+      ) {
+        throw maintenanceError(
+          "conflict",
+          "account deletion media is not fully quiesced"
+        );
+      }
+      const privateStructured = await d1.planOwnerDeletion(scope);
+      await d1.deleteOwner({
+        ...scope,
+        expectedContentDigest: privateStructured.summary.contentDigest,
+        expectedObjectCount: privateStructured.summary.objectCount
+      });
+      completed = true;
+      return {
+        progress: createOwnerDeletionProgress({
+          deletedRevisionCount,
+          operation,
+          remainingRevisionCount: 0,
+          status: "completed"
+        }),
+        summary
+      };
+    } finally {
+      if (!completed) {
+        try {
+          await d1.releaseOwnerDeletionLease({
+            ...scope,
+            leaseNonce: lease.leaseNonce,
+            operationId: operation.operationId
+          });
+        } catch {
+          // TTL recovery remains available when a release cannot be confirmed.
+        }
+      }
+    }
   }
 
   async function repairPublication(operationOptions = {}) {
@@ -976,6 +1114,74 @@ async function combinePlans(operation, structured, media, scope, createdAt) {
       ownerCount: scope ? 1 : 0
     })
   };
+}
+
+function createOwnerDeletionSummary(operation) {
+  return createProfileMaintenanceSummary({
+    contentDigest: operation.approvedContentDigest,
+    createdAt: operation.createdAt,
+    objectCount: operation.approvedObjectCount,
+    operation: "delete-account",
+    ownerCount: 1
+  });
+}
+
+function createOwnerDeletionProgress(options) {
+  const status = options.status ?? "in_progress";
+  if (!["in_progress", "completed"].includes(status)) {
+    throw new TypeError("account deletion progress status is invalid");
+  }
+  const deletedRevisionCount = requireNonNegativeInteger(
+    options.deletedRevisionCount ?? 0,
+    "deletedRevisionCount"
+  );
+  const remainingRevisionCount = requireNonNegativeInteger(
+    options.remainingRevisionCount,
+    "remainingRevisionCount"
+  );
+  if (status === "completed") {
+    return Object.freeze({
+      contractVersion: 1,
+      status,
+      phase: "completed",
+      operationId: options.operation.operationId,
+      deletedRevisionCount,
+      remainingRevisionCount
+    });
+  }
+  const progress = {
+    contractVersion: 1,
+    status,
+    phase: options.operation.phase,
+    operationId: options.operation.operationId,
+    deletedRevisionCount,
+    remainingRevisionCount,
+    expectedContentDigest: options.operation.approvedContentDigest,
+    expectedObjectCount: options.operation.approvedObjectCount
+  };
+  const retryAfterSeconds = ownerDeletionRetryAfterSeconds(
+    options.operation,
+    options.now
+  );
+  if (retryAfterSeconds !== null) {
+    progress.retryAfterSeconds = retryAfterSeconds;
+  }
+  return Object.freeze(progress);
+}
+
+function hasLiveOwnerDeletionLease(operation, value) {
+  if (!operation.leaseNonce || !operation.leaseExpiresAt) return false;
+  return new Date(operation.leaseExpiresAt).getTime() > new Date(value).getTime();
+}
+
+function ownerDeletionRetryAfterSeconds(operation, value) {
+  if (value === undefined) return null;
+  if (!hasLiveOwnerDeletionLease(operation, value)) return null;
+  const remaining = Math.ceil(
+    (new Date(operation.leaseExpiresAt).getTime() - new Date(value).getTime()) /
+      1_000
+  );
+  return Math.max(1, Math.min(120, remaining));
 }
 
 function countBackupObjects(profile) {
