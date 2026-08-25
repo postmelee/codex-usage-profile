@@ -10,7 +10,7 @@ Run this on the machine where Codex is signed in:
 npx codex-usage-profile@latest submit
 ```
 
-If a service credential is not stored yet, `submit` opens browser approval and continues in the same terminal after approval. npm may first ask you to confirm the package and version before installation.
+If a service credential is not stored yet or is no longer valid, `submit` guides you through browser approval and continues in the same terminal after approval. npm may first ask you to confirm the package and version before installation.
 
 After submission:
 
@@ -31,15 +31,16 @@ API-key-only and Bedrock authentication do not provide the account usage method 
 
 ## Commands
 
-```bash
-npx codex-usage-profile@latest status
-npx codex-usage-profile@latest submit
-npx codex-usage-profile@latest logout
-```
+| Command | What it does |
+|---|---|
+| `npx codex-usage-profile@latest submit` | Sign in through browser approval when needed, then read and submit current Codex usage |
+| `npx codex-usage-profile@latest login` | Check the saved service login and start browser approval when needed |
+| `npx codex-usage-profile@latest status` | Show the connected account and latest submission metadata |
+| `npx codex-usage-profile@latest logout` | Remove the locally stored service credential |
+| `npx codex-usage-profile@latest --help` (`-h`) | Show all commands; add `--help` after a command for its supported options |
+| `npx codex-usage-profile@latest --version` (`-v`) | Show the installed CLI version |
 
-- `status` shows authentication, token metadata, the latest submission time, and profile links.
-- `submit` signs in when necessary, reads account usage, and submits it.
-- `logout` removes only the local credential file. Revoke the server token from web **Settings** when a machine is no longer trusted.
+`logout` removes only the local credential file. Revoke the server token from web **Settings** when a machine is no longer trusted.
 
 An account can have up to three active CLI/API tokens. If the limit is reached, revoke an older **Device login** token in web **Settings**, then retry with a new code.
 
@@ -80,7 +81,7 @@ For trusted non-interactive automation, inject a pre-issued token through a secr
 
 ```bash
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.3 submit --json
+npx --yes codex-usage-profile@0.1.4 submit --json
 ```
 
 Do not put the token in command arguments, URLs, repository variables, logs, or shell history.

@@ -18,13 +18,115 @@ test("prints help and version without loading credentials", async () => {
   const help = createIo();
   const version = createIo();
 
-  assert.equal(CLI_VERSION, "0.1.3");
+  assert.equal(CLI_VERSION, "0.1.4");
   assert.equal(await runCli([], help), 0);
   assert.equal(await runCli(["--version"], version), 0);
   assert.match(help.stdout.value, /login/);
   assert.match(help.stdout.value, /submit/);
   assert.match(help.stdout.value, new RegExp(DEFAULT_SERVICE_ORIGIN));
   assert.equal(version.stdout.value, `${CLI_VERSION}\n`);
+});
+
+test("prints command-specific help without loading credentials or creating clients", async () => {
+  const commands = {
+    login: { json: false, network: true },
+    status: { json: true, network: true },
+    submit: { json: true, network: true },
+    logout: { json: false, network: false }
+  };
+
+  for (const [command, expected] of Object.entries(commands)) {
+    for (const flag of ["-h", "--help"]) {
+      let credentialLoads = 0;
+      let clientCreations = 0;
+      let analyzerCalls = 0;
+      const io = createIo({
+        credentialStore: {
+          async load() {
+            credentialLoads += 1;
+            throw new Error("credentials must not be loaded for help");
+          }
+        },
+        createClient: () => {
+          clientCreations += 1;
+          throw new Error("clients must not be created for help");
+        },
+        readAccountUsage: async () => {
+          analyzerCalls += 1;
+          throw new Error("analyzer must not run for help");
+        }
+      });
+
+      assert.equal(await runCli([command, flag], io), 0);
+      assert.match(io.stdout.value, new RegExp(`^Usage: codex-usage-profile ${command} \\[options\\]`));
+      assert.match(io.stdout.value, /-h, --help/);
+      assert.equal(io.stdout.value.includes("--json"), expected.json);
+      assert.equal(io.stdout.value.includes("--server <origin>"), expected.network);
+      assert.equal(io.stdout.value.includes("--timeout <ms>"), expected.network);
+      assert.equal(io.stdout.value.includes(DEFAULT_SERVICE_ORIGIN), expected.network);
+      assert.equal(io.stderr.value, "");
+      assert.equal(credentialLoads, 0);
+      assert.equal(clientCreations, 0);
+      assert.equal(analyzerCalls, 0);
+    }
+  }
+});
+
+test("adds actionable help hints to invalid commands and options", async () => {
+  const cases = [
+    {
+      argv: ["unknown"],
+      message: /Unknown command: unknown/,
+      hint: /npx codex-usage-profile@latest --help/
+    },
+    {
+      argv: ["submit", "-help"],
+      message: /Unknown option: -help/,
+      hint: /npx codex-usage-profile@latest submit --help/
+    },
+    {
+      argv: ["status", "--timeout"],
+      message: /--timeout requires a value/,
+      hint: /npx codex-usage-profile@latest status --help/
+    },
+    {
+      argv: ["login", "--json"],
+      message: /--json is not supported by login/,
+      hint: /npx codex-usage-profile@latest login --help/
+    },
+    {
+      argv: ["logout", "--server", "https://profiles.example.test"],
+      message: /logout does not use network options/,
+      hint: /npx codex-usage-profile@latest logout --help/
+    }
+  ];
+
+  for (const scenario of cases) {
+    let credentialLoads = 0;
+    let clientCreations = 0;
+    const io = createIo({
+      credentialStore: {
+        async load() { credentialLoads += 1; }
+      },
+      createClient: () => {
+        clientCreations += 1;
+        return {};
+      }
+    });
+
+    assert.equal(await runCli(scenario.argv, io), 1);
+    assert.match(io.stderr.value, scenario.message);
+    assert.match(io.stderr.value, scenario.hint);
+    assert.equal(io.stdout.value, "");
+    assert.equal(credentialLoads, 0);
+    assert.equal(clientCreations, 0);
+  }
+
+  const secret = createIo();
+  assert.equal(await runCli(["submit", "cup_secret_option"], secret), 1);
+  assert.match(secret.stderr.value, /Unknown option: \[redacted\]/);
+  assert.match(secret.stderr.value, /submit --help/);
+  assert.equal(secret.stderr.value.includes("cup_secret_option"), false);
 });
 
 test("uses the production service by default without weakening overrides", async () => {
@@ -92,6 +194,16 @@ test("parses supported commands and rejects unknown or misplaced options", () =>
     timeout: "5000"
   });
   assert.throws(() => parseCliArgs(["unknown"]), /Unknown command/);
+  assert.throws(() => parseCliArgs(["unknown", "--help"]), /Unknown command/);
+  assert.deepEqual(parseCliArgs(["submit", "-h"]), {
+    action: "help",
+    command: "submit"
+  });
+  assert.deepEqual(parseCliArgs(["logout", "--help"]), {
+    action: "help",
+    command: "logout"
+  });
+  assert.deepEqual(parseCliArgs(["login", "--version"]), { action: "version" });
   assert.throws(() => parseCliArgs(["login", "--json"]), /not supported/);
   assert.throws(() => parseCliArgs(["logout", "--server", "https://example.test"]), /does not use/);
 });
@@ -348,6 +460,241 @@ test("runs analyzer submit with the bound credential and device", async () => {
   assert.match(io.stdout.value, /"accepted"/);
   assert.equal(io.stdout.value.includes("cup_file_secret"), false);
   assert.equal(io.stdout.value.includes("usage_private_revision"), false);
+});
+
+test("reconnects revoked file credentials once and resubmits the same usage document", async () => {
+  const scenarios = [
+    { json: false, status: 401 },
+    { json: true, status: 410 }
+  ];
+
+  for (const scenario of scenarios) {
+    const document = createAccountUsageDocument();
+    const oldCredential = {
+      token: `cup_old_${scenario.status}`,
+      serviceOrigin: "https://profiles.example.test",
+      tokenRecordId: "cli_token_old",
+      deviceId: "device_preserved"
+    };
+    const store = createMemoryCredentialStore(oldCredential);
+    const requests = [];
+    let analyzerCalls = 0;
+    let loginCalls = 0;
+    let loginOutput;
+    const io = createIo({
+      env: {},
+      credentialStore: store,
+      readAccountUsage: async () => {
+        analyzerCalls += 1;
+        return document;
+      },
+      createClient: () => ({
+        async submitAccountUsage(request) {
+          requests.push(request);
+          if (requests.length === 1) {
+            throw new ServiceClientError("auth_failed", "revoked", {
+              status: scenario.status
+            });
+          }
+          return createSubmitResponse();
+        }
+      }),
+      loginWithDeviceCode: async (options) => {
+        loginCalls += 1;
+        loginOutput = options.stdout;
+        options.stdout.write("Open browser approval for SAFE-CODE.\n");
+        await options.credentialStore.save({
+          token: `cup_new_${scenario.status}`,
+          serviceOrigin: options.serviceOrigin,
+          tokenRecordId: "cli_token_new",
+          deviceId: "device_preserved"
+        });
+      }
+    });
+
+    const argv = scenario.json ? ["submit", "--json"] : ["submit"];
+    assert.equal(await runCli(argv, io), 0);
+    assert.equal(analyzerCalls, 1);
+    assert.equal(loginCalls, 1);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].token, oldCredential.token);
+    assert.equal(requests[1].token, `cup_new_${scenario.status}`);
+    assert.equal(requests[0].deviceId, "device_preserved");
+    assert.equal(requests[1].deviceId, "device_preserved");
+    assert.equal(requests[0].document, document);
+    assert.equal(requests[1].document, document);
+    assert.equal(requests[0].document, requests[1].document);
+    assert.equal((await store.load()).token, `cup_new_${scenario.status}`);
+    assert.equal(io.stdout.value.includes(oldCredential.token), false);
+    assert.equal(io.stdout.value.includes(`cup_new_${scenario.status}`), false);
+    assert.equal(io.stderr.value.includes(oldCredential.token), false);
+    assert.equal(io.stderr.value.includes(`cup_new_${scenario.status}`), false);
+
+    if (scenario.json) {
+      assert.equal(loginOutput, io.stderr);
+      assert.equal(JSON.parse(io.stdout.value).submission.status, "accepted");
+      assert.match(io.stderr.value, /Saved login is no longer valid/);
+      assert.match(io.stderr.value, /SAFE-CODE/);
+      assert.equal(io.stdout.value.includes("SAFE-CODE"), false);
+    } else {
+      assert.equal(loginOutput, io.stdout);
+      assert.match(io.stdout.value, /Saved login is no longer valid/);
+      assert.match(io.stdout.value, /SAFE-CODE/);
+      assert.match(io.stdout.value, /Usage submitted successfully/);
+      assert.equal(io.stderr.value, "");
+    }
+  }
+});
+
+test("keeps the previous file credential when submit reauthentication fails", async () => {
+  const initialCredential = {
+    token: "cup_previous_secret",
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: "cli_token_previous",
+    deviceId: "device_previous"
+  };
+  const store = createMemoryCredentialStore(initialCredential);
+  let analyzerCalls = 0;
+  let loginCalls = 0;
+  let submitCalls = 0;
+  const io = createIo({
+    env: {},
+    credentialStore: store,
+    readAccountUsage: async () => {
+      analyzerCalls += 1;
+      return createAccountUsageDocument();
+    },
+    createClient: () => ({
+      async submitAccountUsage() {
+        submitCalls += 1;
+        throw new ServiceClientError("gone", "revoked", { status: 410 });
+      }
+    }),
+    loginWithDeviceCode: async () => {
+      loginCalls += 1;
+      throw new Error("cup_reauthentication_failure");
+    }
+  });
+
+  assert.equal(await runCli(["submit"], io), 1);
+  assert.equal(analyzerCalls, 1);
+  assert.equal(loginCalls, 1);
+  assert.equal(submitCalls, 1);
+  assert.deepEqual(await store.load(), initialCredential);
+  assert.match(io.stdout.value, /Saved login is no longer valid/);
+  assert.equal(io.stdout.value.includes(initialCredential.token), false);
+  assert.equal(io.stderr.value, "The command failed unexpectedly.\n");
+  assert.equal(io.stderr.value.includes("cup_reauthentication_failure"), false);
+});
+
+test("does not loop when the replacement file credential is also rejected", async () => {
+  const store = createMemoryCredentialStore({
+    token: "cup_old_secret",
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: "cli_token_old",
+    deviceId: "device_1"
+  });
+  const submittedTokens = [];
+  let analyzerCalls = 0;
+  let loginCalls = 0;
+  const io = createIo({
+    env: {},
+    credentialStore: store,
+    readAccountUsage: async () => {
+      analyzerCalls += 1;
+      return createAccountUsageDocument();
+    },
+    createClient: () => ({
+      async submitAccountUsage({ token }) {
+        submittedTokens.push(token);
+        throw new ServiceClientError("unauthorized", "revoked", {
+          status: submittedTokens.length === 1 ? 401 : 410
+        });
+      }
+    }),
+    loginWithDeviceCode: async ({ credentialStore, serviceOrigin }) => {
+      loginCalls += 1;
+      await credentialStore.save({
+        token: "cup_replacement_secret",
+        serviceOrigin,
+        tokenRecordId: "cli_token_replacement",
+        deviceId: "device_1"
+      });
+    }
+  });
+
+  assert.equal(await runCli(["submit"], io), 1);
+  assert.equal(analyzerCalls, 1);
+  assert.equal(loginCalls, 1);
+  assert.deepEqual(submittedTokens, ["cup_old_secret", "cup_replacement_secret"]);
+  assert.match(io.stderr.value, /Login expired or was revoked/);
+  assert.equal(io.stdout.value.includes("cup_old_secret"), false);
+  assert.equal(io.stdout.value.includes("cup_replacement_secret"), false);
+});
+
+test("does not replace an invalid environment credential during submit", async () => {
+  const deviceMetadata = {
+    token: null,
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: null,
+    deviceId: "device_environment"
+  };
+  const store = createMemoryCredentialStore(deviceMetadata);
+  let loginCalls = 0;
+  let submitCalls = 0;
+  const io = createIo({
+    env: {
+      CODEX_USAGE_PROFILE_TOKEN: "cup_environment_secret",
+      CODEX_USAGE_PROFILE_URL: "https://profiles.example.test"
+    },
+    credentialStore: store,
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() {
+        submitCalls += 1;
+        throw new ServiceClientError("unauthorized", "revoked", { status: 401 });
+      }
+    }),
+    loginWithDeviceCode: async () => { loginCalls += 1; }
+  });
+
+  assert.equal(await runCli(["submit"], io), 1);
+  assert.equal(loginCalls, 0);
+  assert.equal(submitCalls, 1);
+  assert.deepEqual(await store.load(), deviceMetadata);
+  assert.match(io.stderr.value, /CODEX_USAGE_PROFILE_TOKEN/);
+  assert.match(io.stderr.value, /Unset it and run submit again/);
+  assert.equal(io.stderr.value.includes("cup_environment_secret"), false);
+});
+
+test("does not reauthenticate deterministic non-authentication submit failures", async () => {
+  const initialCredential = {
+    token: "cup_file_secret",
+    serviceOrigin: "https://profiles.example.test",
+    tokenRecordId: "cli_token_1",
+    deviceId: "device_1"
+  };
+  const store = createMemoryCredentialStore(initialCredential);
+  let loginCalls = 0;
+  let submitCalls = 0;
+  const io = createIo({
+    env: {},
+    credentialStore: store,
+    readAccountUsage: async () => createAccountUsageDocument(),
+    createClient: () => ({
+      async submitAccountUsage() {
+        submitCalls += 1;
+        throw new ServiceClientError("conflict", "conflict", { status: 409 });
+      }
+    }),
+    loginWithDeviceCode: async () => { loginCalls += 1; }
+  });
+
+  assert.equal(await runCli(["submit"], io), 1);
+  assert.equal(loginCalls, 0);
+  assert.equal(submitCalls, 1);
+  assert.deepEqual(await store.load(), initialCredential);
+  assert.match(io.stderr.value, /older than or conflicts/);
 });
 
 test("waits for the star prompt before printing a human submit result", async () => {
@@ -625,6 +972,7 @@ test("disables terminal hyperlinks while JSON submit performs automatic login", 
     credentialStore: store,
     loginWithDeviceCode: async (options) => {
       loginOptions = options;
+      options.stdout.write("Open browser approval for FIRST-CODE.\n");
       await options.credentialStore.save({
         token: "cup_login_secret",
         serviceOrigin: options.serviceOrigin,
@@ -642,7 +990,10 @@ test("disables terminal hyperlinks while JSON submit performs automatic login", 
   assert.equal(loginOptions.hyperlinks, false);
   assert.equal(loginOptions.env, env);
   assert.equal(loginOptions.intent, "submit");
+  assert.equal(loginOptions.stdout, io.stderr);
   assert.equal(io.stdout.value.includes("\u001B"), false);
+  assert.equal(io.stdout.value.includes("FIRST-CODE"), false);
+  assert.match(io.stderr.value, /FIRST-CODE/);
   assert.equal(JSON.parse(io.stdout.value).submission.status, "accepted");
 });
 
