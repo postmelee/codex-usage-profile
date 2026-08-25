@@ -221,6 +221,7 @@ Task #134 Stage 2: 명령별 help와 오류 안내 추가
 
 수정:
 
+- `src/profile-ui/DeviceApprovalPage.jsx`
 - `src/profile-ui/messages.js`
 - `tests/profile-ui.spec.js`
 - `README.md`
@@ -238,21 +239,23 @@ Task #134 Stage 2: 명령별 help와 오류 안내 추가
    - 터미널에서 표시된 `submit` 명령 하나를 실행한다.
    - 필요하면 CLI가 browser approval을 안내한다.
    - 승인 뒤 제출을 이어가며 이후 업데이트에도 같은 명령을 사용한다.
-2. command box, copy feedback, setup guide link, aggregated-data privacy notice, loading/error state와
-   desktop/mobile geometry는 변경하지 않는다.
-3. 기존 Profile E2E의 exact copy를 영어 새 문구로 갱신하고 locale 전환 경로에서 한국어 제목·설명과
+2. command box, copy feedback, aggregated-data privacy notice, loading/error state와 desktop/mobile
+   geometry는 변경하지 않는다.
+3. 기기 승인 전에는 setup guide link를 유지하고 승인 성공 뒤에는 완료 안내의 `Home`·`Profile` 후속
+   탐색 링크와 같은 위계로 혼동되지 않도록 setup guide link를 숨긴다.
+4. 기존 Profile E2E의 exact copy를 영어 새 문구로 갱신하고 locale 전환 경로에서 한국어 제목·설명과
    동일 submit command를 검증한다. heading 수, copy, 링크, privacy, 72/48px offset과 overflow 회귀를
    유지한다.
-4. 루트 README와 npm README의 `Commands` code block을 `Command | What it does` 표로 통일한다.
+5. 루트 README와 npm README의 `Commands` code block을 `Command | What it does` 표로 통일한다.
    `submit`, `login`, `status`, `logout`, `--help`/`-h`, `--version`/`-v`를 실제 역할과 one-command
    submit 계약에 맞게 설명한다.
-5. 공개 README 표에는 `--server`, 환경 변수, credential 저장 경로와 release/production 전환 표현을
+6. 공개 README 표에는 `--server`, 환경 변수, credential 저장 경로와 release/production 전환 표현을
    넣지 않는다. npm README는 루트 README와 같은 command 명칭·순서를 사용한다.
-6. `docs/cli-submit.md` command/option 표에 command별 help 예를 반영하고 stale file credential의
+7. `docs/cli-submit.md` command/option 표에 command별 help 예를 반영하고 stale file credential의
    401/410은 submit이 한 번 재인증한 뒤 계속한다는 동작을 기록한다. environment token 401/410은
    자동 교체되지 않으며 `CODEX_USAGE_PROFILE_TOKEN`을 unset한 뒤 다시 실행해야 함을 구분한다.
-7. 문서의 `--help`·`--version` 표기는 실제 `-h`·`-v` alias와 맞추고 비표준 `-help`를 추가하지 않는다.
-8. 집중 Node/E2E와 README command 계약 대조가 통과하면 `task-stage-report`로 source·공식 문서·
+8. 문서의 `--help`·`--version` 표기는 실제 `-h`·`-v` alias와 맞추고 비표준 `-help`를 추가하지 않는다.
+9. 집중 Node/E2E와 README command 계약 대조가 통과하면 `task-stage-report`로 source·공식 문서·
    보고서·오늘할일을 commit하고 Stage 4 승인을 요청한다.
 
 ### 검증
@@ -266,8 +269,8 @@ git diff --check
 
 ### 완료·중단 조건
 
-- 완료: EN/KO 빈 상태, 두 공개 README 표와 상세 가이드가 Stage 1~2 실제 동작과 일치하고 공개
-  README에 `--server`가 새로 노출되지 않는다.
+- 완료: EN/KO 빈 상태, 승인 전/후 setup guide 위계, 두 공개 README 표와 상세 가이드가 Stage 1~2
+  실제 동작과 일치하고 공개 README에 `--server`가 새로 노출되지 않는다.
 - 중단: 웹에서 local credential을 탐지하거나 새 API/UI interaction을 추가해야 문구를 성립시킬 수
   있다면 범위를 확장하지 않고 계획 보정 승인을 요청한다.
 

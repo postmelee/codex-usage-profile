@@ -280,9 +280,11 @@ export function DeviceApprovalPage({
               ) : null}
             </div>
 
-            <a className="device-help-link" href="/#quickstart">
-              {t("device.viewSetupGuide")}
-            </a>
+            {!isApproved ? (
+              <a className="device-help-link" href="/#quickstart">
+                {t("device.viewSetupGuide")}
+              </a>
+            ) : null}
           </form>
         </section>
       </section>
