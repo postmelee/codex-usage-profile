@@ -19,7 +19,7 @@ Turn Codex account usage into a private-by-default profile and a stable GitHub R
    npx codex-usage-profile@latest submit
    ```
 
-   On first use, approve the browser device flow. npm may also ask you to confirm the package and version before installation.
+   When no service login is stored, or a saved login is no longer valid, the CLI guides you through browser approval and continues the same submission. npm may also ask you to confirm the package and version before installation.
 3. Review the private card preview, select **Publish card**, then open **Share** to copy your README Markdown or share to a social network.
 
 Future submits and saved card appearance changes update the same README image URL. You do not need to replace the Markdown.
@@ -55,16 +55,14 @@ See [README card and social sharing](docs/readme-card.md) for themes, languages,
 
 ## Commands
 
-```bash
-# Show authentication and submit status
-npx codex-usage-profile@latest status
-
-# Read and submit current account usage
-npx codex-usage-profile@latest submit
-
-# Remove the locally stored service credential
-npx codex-usage-profile@latest logout
-```
+| Command | What it does |
+|---|---|
+| `npx codex-usage-profile@latest submit` | Sign in through browser approval when needed, then read and submit current Codex usage |
+| `npx codex-usage-profile@latest login` | Check the saved service login and start browser approval when needed |
+| `npx codex-usage-profile@latest status` | Show the connected account and latest submission metadata |
+| `npx codex-usage-profile@latest logout` | Remove the locally stored service credential |
+| `npx codex-usage-profile@latest --help` (`-h`) | Show all commands; add `--help` after a command for its supported options |
+| `npx codex-usage-profile@latest --version` (`-v`) | Show the installed CLI version |
 
 Requirements:
 

@@ -3966,11 +3966,11 @@ test.describe("Profile and Settings canvases", () => {
     releaseProfile();
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "No usage submitted yet"
+      name: "Create your first Codex card"
     })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.getByText(
-      "Submit your local Codex usage once to create your card. Run the same command whenever you want to update it."
+      "Run the command below in your terminal. If approval is needed, the CLI guides you through it in your browser and then submits your usage. Use the same command for future updates."
     )).toBeVisible();
     await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "View setup guide" }))
@@ -4014,6 +4014,27 @@ test.describe("Profile and Settings canvases", () => {
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "languages", {
+        configurable: true,
+        get: () => ["ko-KR"]
+      });
+      Object.defineProperty(navigator, "language", {
+        configurable: true,
+        get: () => "ko-KR"
+      });
+      globalThis.dispatchEvent(new Event("languagechange"));
+    });
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "첫 Codex 카드를 만들어 보세요"
+    })).toBeVisible();
+    await expect(page.getByText(
+      "아래 명령어를 터미널에서 실행하세요. 승인이 필요하면 CLI가 브라우저 승인 과정을 안내한 뒤 사용량을 제출합니다. 이후 업데이트할 때도 같은 명령어를 사용하세요."
+    )).toBeVisible();
+    await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
 
     await page.unroute("**/api/profile");
     await page.route("**/api/profile", (route) => fulfillJson(route, {

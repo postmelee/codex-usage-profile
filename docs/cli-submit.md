@@ -60,24 +60,35 @@ The product's GitHub OAuth token and service submit credential are never used fo
 
 | Command | Purpose |
 |---|---|
-| `login` | Check the local credential and start browser approval when needed |
 | `submit` | Sign in when needed, read account usage, and submit it |
+| `login` | Check the local credential and start browser approval when needed |
 | `status` | Show the connected handle, token metadata, latest submission time, and profile URL |
 | `logout` | Remove the local credential file |
 
 ```bash
-npx codex-usage-profile@latest login
 npx codex-usage-profile@latest submit
+npx codex-usage-profile@latest login
 npx codex-usage-profile@latest status
 npx codex-usage-profile@latest logout
 ```
 
 | Option | Commands | Purpose |
 |---|---|---|
+| `--server <origin>` | `login`, `submit`, `status` | Advanced: override the service origin, or use `CODEX_USAGE_PROFILE_URL` |
 | `--timeout <ms>` | `login`, `submit`, `status` | Set a request/analyzer timeout from 1 to 120000 milliseconds |
 | `--json` | `submit`, `status` | Print allowlisted machine-readable output |
-| `--help` | all | Print help without starting Codex App Server |
-| `--version` | all | Print the CLI version |
+| `-h`, `--help` | global and every command | Print global or command-specific help without loading credentials or starting Codex App Server |
+| `-v`, `--version` | global | Print the CLI version |
+
+Use global help to list commands, then place `--help` after a command to see only its supported options:
+
+```bash
+npx codex-usage-profile@latest --help
+npx codex-usage-profile@latest submit --help
+```
+
+The supported short form is `-h`; `-help` is not an alias. Invalid commands and options exit with an error and
+print the appropriate global or command-specific help command to run next.
 
 The CLI does not provide an option that accepts a raw token in a command argument or URL.
 
@@ -154,6 +165,19 @@ On macOS and Linux, directories use `0700` and files use `0600`. Atomic replacem
 
 `CODEX_USAGE_PROFILE_TOKEN` takes precedence over a file credential and is not written to disk. `logout` removes only the local file; it cannot unset an environment variable or revoke a server token.
 
+### Expired or revoked credentials
+
+When `submit` receives HTTP `401` or `410` with a saved file credential, it keeps the existing file, prints a
+reconnection message, and starts browser approval once. After approval is stored atomically, the same captured
+Account Usage Contract document is submitted once with the replacement credential. If approval fails or expires,
+the previous file remains in place. If the replacement credential is also rejected, the command exits instead of
+starting another approval loop.
+
+An environment-provided `CODEX_USAGE_PROFILE_TOKEN` is never replaced automatically. If it is rejected, remove or
+unset the value in the current shell, CI environment, or secret manager, then run
+`npx codex-usage-profile@latest submit` again to use browser approval. The CLI does not overwrite or delete the
+environment value.
+
 Revoke a token immediately from web **Settings → API Tokens** when a machine or token is no longer trusted.
 
 An account can have up to three active CLI/API tokens. Local `logout` does not revoke a server token. If browser approval reaches the limit, the CLI reports:
@@ -176,6 +200,8 @@ npx --yes codex-usage-profile@0.1.3 submit --json
 `--yes` skips npm's package installation confirmation. Do not combine unattended `--yes` with `@latest`. Review version updates separately.
 
 JSON output, non-TTY execution, and `CI` skip the optional star prompt, so standard output remains one JSON document.
+If browser approval is required during a JSON submit, the verification URL, code, and progress are written to
+standard error; standard output remains the final JSON document only.
 
 ## Errors and recovery
 
@@ -186,7 +212,8 @@ JSON output, non-TTY execution, and `CI` skip the optional star prompt, so stand
 | `APP_SERVER_TIMEOUT` | Check connectivity and retry within the allowed timeout |
 | `APP_SERVER_RPC_ERROR` | Update Codex and confirm a ChatGPT-backed sign-in |
 | `APP_SERVER_PROTOCOL_ERROR`, `INVALID_ACCOUNT_USAGE_RESPONSE` | Update Codex and the CLI package |
-| HTTP `401`, `410` | The credential is invalid, expired, or revoked; run `login` again |
+| HTTP `401`, `410` with a saved file credential during `submit` | Complete the one browser reapproval started by the CLI; it then retries the same captured usage once |
+| HTTP `401`, `410` with `CODEX_USAGE_PROFILE_TOKEN` | Remove or unset the rejected environment value, then run `submit` again to use browser approval |
 | HTTP `409` during device approval | Revoke an older token if the three-token limit was reached |
 | HTTP `409` during submit | The document is older than the stored revision or conflicts at the same capture time |
 | HTTP `429` | Wait for the reported retry delay |
