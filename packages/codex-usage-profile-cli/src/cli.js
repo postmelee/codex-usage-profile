@@ -22,24 +22,56 @@ import {
 import { submitAccountUsage } from "./submit.js";
 
 export const CLI_VERSION = "0.1.3";
-export const CLI_USAGE = `Usage: codex-usage-profile <command> [options]
+const OPTION_DEFINITIONS = Object.freeze({
+  server: {
+    syntax: "--server <origin>",
+    description: "Override service origin (or CODEX_USAGE_PROFILE_URL)"
+  },
+  timeout: {
+    syntax: "--timeout <ms>",
+    description: "Request timeout in milliseconds"
+  },
+  json: {
+    syntax: "--json",
+    description: "Machine-readable output"
+  },
+  help: {
+    syntax: "-h, --help",
+    description: "Show help"
+  },
+  version: {
+    syntax: "-v, --version",
+    description: "Show version"
+  }
+});
+const COMMAND_DEFINITIONS = Object.freeze({
+  login: {
+    description: "Sign in through GitHub device authorization",
+    options: ["server", "timeout", "help"]
+  },
+  status: {
+    description: "Check the linked account and latest submit metadata",
+    options: ["server", "timeout", "json", "help"]
+  },
+  logout: {
+    description: "Remove locally stored credentials",
+    options: ["help"]
+  },
+  submit: {
+    description: "Analyze and submit Codex usage",
+    options: ["server", "timeout", "json", "help"]
+  }
+});
 
-Commands:
-  login                 Sign in through GitHub device authorization
-  status                Check the linked account and latest submit metadata
-  logout                Remove locally stored credentials
-  submit                Analyze and submit Codex usage
+export const CLI_USAGE = renderGlobalUsage();
+export const CLI_COMMAND_USAGE = Object.freeze(Object.fromEntries(
+  Object.entries(COMMAND_DEFINITIONS).map(([command, definition]) => [
+    command,
+    renderCommandUsage(command, definition)
+  ])
+));
 
-Options:
-  --server <origin>      Override service origin (or CODEX_USAGE_PROFILE_URL)
-  --timeout <ms>        Request timeout in milliseconds
-  --json                 Machine-readable status or submit output
-  -h, --help             Show help
-  -v, --version          Show version
-
-Default service: ${DEFAULT_SERVICE_ORIGIN}`;
-
-const COMMANDS = new Set(["login", "status", "logout", "submit"]);
+const COMMANDS = new Set(Object.keys(COMMAND_DEFINITIONS));
 
 export async function runCli(argv, options = {}) {
   const stdin = options.stdin ?? process.stdin;
@@ -49,7 +81,7 @@ export async function runCli(argv, options = {}) {
   try {
     const parsed = parseCliArgs(argv);
     if (parsed.action === "help") {
-      stdout.write(`${CLI_USAGE}\n`);
+      stdout.write(`${parsed.command ? CLI_COMMAND_USAGE[parsed.command] : CLI_USAGE}\n`);
       return 0;
     }
     if (parsed.action === "version") {
@@ -123,6 +155,7 @@ export async function runCli(argv, options = {}) {
       serviceOrigin,
       stdin,
       stdout,
+      loginOutput: parsed.json ? stderr : stdout,
       json: parsed.json,
       timeoutMs,
       readAccountUsage: options.readAccountUsage ?? defaultReadAccountUsage,
@@ -145,7 +178,7 @@ export function parseCliArgs(argv) {
   if (!Array.isArray(argv)) {
     throw new TypeError("argv must be an array");
   }
-  if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
+  if (argv.length === 0 || ["--help", "-h"].includes(argv[0])) {
     return { action: "help" };
   }
   if (argv.includes("--version") || argv.includes("-v")) {
@@ -154,7 +187,13 @@ export function parseCliArgs(argv) {
 
   const [command, ...args] = argv;
   if (!COMMANDS.has(command)) {
-    throw new CliError("unknown_command", `Unknown command: ${safeArgument(command)}`);
+    throw new CliError(
+      "unknown_command",
+      withHelpHint(`Unknown command: ${safeArgument(command)}`)
+    );
+  }
+  if (args.includes("--help") || args.includes("-h")) {
+    return { action: "help", command };
   }
 
   const parsed = {
@@ -174,20 +213,32 @@ export function parseCliArgs(argv) {
     if (argument === "--server" || argument === "--timeout") {
       const value = args[index + 1];
       if (!value || value.startsWith("--")) {
-        throw new CliError("missing_option_value", `${argument} requires a value.`);
+        throw new CliError(
+          "missing_option_value",
+          withHelpHint(`${argument} requires a value.`, command)
+        );
       }
       parsed[argument === "--server" ? "server" : "timeout"] = value;
       index += 1;
       continue;
     }
-    throw new CliError("unknown_option", `Unknown option: ${safeArgument(argument)}`);
+    throw new CliError(
+      "unknown_option",
+      withHelpHint(`Unknown option: ${safeArgument(argument)}`, command)
+    );
   }
 
   if (parsed.json && !["status", "submit"].includes(command)) {
-    throw new CliError("unsupported_option", `--json is not supported by ${command}.`);
+    throw new CliError(
+      "unsupported_option",
+      withHelpHint(`--json is not supported by ${command}.`, command)
+    );
   }
   if (command === "logout" && (parsed.server || parsed.timeout)) {
-    throw new CliError("unsupported_option", "logout does not use network options.");
+    throw new CliError(
+      "unsupported_option",
+      withHelpHint("logout does not use network options.", command)
+    );
   }
 
   return parsed;
@@ -307,47 +358,43 @@ async function runLogout({ credentialStore, env, stdout }) {
 async function runSubmit(options) {
   let credentialSource = options.credentialSource;
   if (!credentialSource) {
-    await options.login({
-      client: options.client,
-      credentialStore: options.credentialStore,
-      serviceOrigin: options.serviceOrigin,
-      stdout: options.stdout,
-      ...withoutUndefined({
-        label: options.deviceName,
-        now: options.now,
-        sleep: options.sleep,
-        openBrowser: options.openBrowser,
-        randomBytes: options.randomBytes,
-        env: options.env,
-        hyperlinks: options.json ? false : options.hyperlinks,
-        intent: "submit"
-      })
-    });
-    credentialSource = resolveCredentialSource({
-      env: options.env,
-      storedCredential: await options.credentialStore.load()
-    });
+    credentialSource = await loginForSubmit(options);
   }
 
   if (!credentialSource) {
     throw new CliError("login_required", "Login did not create a usable credential.");
   }
 
-  const deviceId = await ensureDeviceId({
-    credentialSource,
-    credentialStore: options.credentialStore,
-    serviceOrigin: options.serviceOrigin,
-    randomBytes: options.randomBytes
-  });
-  const result = await submitAccountUsage({
-    readAccountUsage: options.readAccountUsage,
-    client: options.client,
-    token: credentialSource.token,
-    timeoutMs: options.timeoutMs,
-    deviceId,
-    deviceName: options.deviceName,
-    sleep: options.sleep
-  });
+  const readAccountUsage = memoizeAsync(options.readAccountUsage);
+  let result;
+  try {
+    result = await submitWithCredential({
+      ...options,
+      credentialSource,
+      readAccountUsage
+    });
+  } catch (error) {
+    if (error?.code !== "submit_auth_failed") throw error;
+    if (credentialSource.source === "environment") {
+      throw new CliError(
+        "environment_token_invalid",
+        `The ${TOKEN_ENV} credential is invalid. Unset it and run submit again to sign in.`
+      );
+    }
+    if (credentialSource.source !== "file") throw error;
+
+    options.loginOutput.write("Saved login is no longer valid. Reconnecting...\n");
+    credentialSource = await loginForSubmit(options);
+    if (credentialSource?.source !== "file") {
+      throw new CliError("login_required", "Login did not create a usable credential.");
+    }
+    result = await submitWithCredential({
+      ...options,
+      credentialSource,
+      readAccountUsage
+    });
+  }
+
   await runGithubStarPrompt(options);
   writeSubmitOutput(result, {
     env: options.env,
@@ -357,6 +404,59 @@ async function runSubmit(options) {
     stdout: options.stdout
   });
   return 0;
+}
+
+async function loginForSubmit(options) {
+  await options.login({
+    client: options.client,
+    credentialStore: options.credentialStore,
+    serviceOrigin: options.serviceOrigin,
+    stdout: options.loginOutput,
+    ...withoutUndefined({
+      label: options.deviceName,
+      now: options.now,
+      sleep: options.sleep,
+      openBrowser: options.openBrowser,
+      randomBytes: options.randomBytes,
+      env: options.env,
+      hyperlinks: options.json ? false : options.hyperlinks,
+      intent: "submit"
+    })
+  });
+  return bindCredentialToService({
+    command: "submit",
+    credentialSource: resolveCredentialSource({
+      env: options.env,
+      storedCredential: await options.credentialStore.load()
+    }),
+    serviceOrigin: options.serviceOrigin
+  });
+}
+
+async function submitWithCredential(options) {
+  const deviceId = await ensureDeviceId({
+    credentialSource: options.credentialSource,
+    credentialStore: options.credentialStore,
+    serviceOrigin: options.serviceOrigin,
+    randomBytes: options.randomBytes
+  });
+  return submitAccountUsage({
+    readAccountUsage: options.readAccountUsage,
+    client: options.client,
+    token: options.credentialSource.token,
+    timeoutMs: options.timeoutMs,
+    deviceId,
+    deviceName: options.deviceName,
+    sleep: options.sleep
+  });
+}
+
+function memoizeAsync(fn) {
+  let promise;
+  return (...args) => {
+    promise ??= Promise.resolve().then(() => fn(...args));
+    return promise;
+  };
 }
 
 async function runGithubStarPrompt(options) {
@@ -405,6 +505,54 @@ function formatCliError(error) {
 function safeArgument(value) {
   const text = String(value ?? "");
   return text.startsWith("cup_") ? "[redacted]" : text.slice(0, 120);
+}
+
+function withHelpHint(message, command = null) {
+  const commandSegment = command ? ` ${command}` : "";
+  return `${message} Run npx codex-usage-profile@latest${commandSegment} --help.`;
+}
+
+function renderGlobalUsage() {
+  const commands = Object.entries(COMMAND_DEFINITIONS)
+    .map(([command, definition]) => formatUsageLine(command, definition.description))
+    .join("\n");
+  const options = ["server", "timeout", "json", "help", "version"]
+    .map((name) => formatUsageLine(
+      OPTION_DEFINITIONS[name].syntax,
+      OPTION_DEFINITIONS[name].description
+    ))
+    .join("\n");
+  return `Usage: codex-usage-profile <command> [options]
+
+Commands:
+${commands}
+
+Options:
+${options}
+
+Default service: ${DEFAULT_SERVICE_ORIGIN}`;
+}
+
+function renderCommandUsage(command, definition) {
+  const options = definition.options
+    .map((name) => formatUsageLine(
+      OPTION_DEFINITIONS[name].syntax,
+      OPTION_DEFINITIONS[name].description
+    ))
+    .join("\n");
+  const defaultService = definition.options.includes("server")
+    ? `\n\nDefault service: ${DEFAULT_SERVICE_ORIGIN}`
+    : "";
+  return `Usage: codex-usage-profile ${command} [options]
+
+${definition.description}
+
+Options:
+${options}${defaultService}`;
+}
+
+function formatUsageLine(syntax, description) {
+  return `  ${syntax.padEnd(22)}${description}`;
 }
 
 function bindCredentialToService({ command, credentialSource, serviceOrigin }) {

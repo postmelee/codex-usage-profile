@@ -515,12 +515,16 @@ test.describe("Stage 2 locale surfaces", () => {
     await expect(page.getByRole("heading", { level: 1, name: "기기 승인" }))
       .toBeVisible();
     await expect(page.getByLabel("사용자 코드")).toHaveValue("ABCD-1234");
+    await expect(page.getByRole("link", { name: "설정 가이드 보기" }))
+      .toHaveAttribute("href", "/#quickstart");
     await page.getByRole("button", { name: "기기 승인", exact: true }).click();
     await expect(page.getByRole("button", { name: "기기 승인 완료" })).toBeDisabled();
     await expect(page.getByText(
       "인증이 완료되었습니다. 터미널로 돌아가 계속 진행하고 최종 제출 결과를 확인하세요.",
       { exact: true }
     )).toBeVisible();
+    await expect(page.getByRole("link", { name: "설정 가이드 보기" }))
+      .toHaveCount(0);
   });
 
   test("locale settings localizes account and empty management states", async ({ page }) => {
@@ -2126,6 +2130,8 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
     await expect(page.getByRole("link", { name: "Profile", exact: true }))
       .toHaveAttribute("href", OWNER_PROFILE_ROUTE);
+    await expect(page.getByRole("link", { name: "View setup guide" }))
+      .toHaveCount(0);
     await expect(page.locator(".device-success")).toHaveCSS(
       "animation-name",
       "device-success-enter"
@@ -3966,11 +3972,11 @@ test.describe("Profile and Settings canvases", () => {
     releaseProfile();
     await expect(page.getByRole("heading", {
       level: 1,
-      name: "No usage submitted yet"
+      name: "Create your first Codex card"
     })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.getByText(
-      "Submit your local Codex usage once to create your card. Run the same command whenever you want to update it."
+      "Run the command below in your terminal. If approval is needed, the CLI guides you through it in your browser and then submits your usage. Use the same command for future updates."
     )).toBeVisible();
     await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "View setup guide" }))
@@ -4014,6 +4020,27 @@ test.describe("Profile and Settings canvases", () => {
     expect(await page.evaluate(
       () => document.body.scrollWidth > document.documentElement.clientWidth
     )).toBe(false);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "languages", {
+        configurable: true,
+        get: () => ["ko-KR"]
+      });
+      Object.defineProperty(navigator, "language", {
+        configurable: true,
+        get: () => "ko-KR"
+      });
+      globalThis.dispatchEvent(new Event("languagechange"));
+    });
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: "첫 Codex 카드를 만들어 보세요"
+    })).toBeVisible();
+    await expect(page.getByText(
+      "아래 명령어를 터미널에서 실행하세요. 승인이 필요하면 CLI가 브라우저 승인 과정을 안내한 뒤 사용량을 제출합니다. 이후 업데이트할 때도 같은 명령어를 사용하세요."
+    )).toBeVisible();
+    await expect(page.getByText(SUBMIT_COMMAND, { exact: true })).toBeVisible();
 
     await page.unroute("**/api/profile");
     await page.route("**/api/profile", (route) => fulfillJson(route, {
