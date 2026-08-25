@@ -27,6 +27,108 @@ test("prints help and version without loading credentials", async () => {
   assert.equal(version.stdout.value, `${CLI_VERSION}\n`);
 });
 
+test("prints command-specific help without loading credentials or creating clients", async () => {
+  const commands = {
+    login: { json: false, network: true },
+    status: { json: true, network: true },
+    submit: { json: true, network: true },
+    logout: { json: false, network: false }
+  };
+
+  for (const [command, expected] of Object.entries(commands)) {
+    for (const flag of ["-h", "--help"]) {
+      let credentialLoads = 0;
+      let clientCreations = 0;
+      let analyzerCalls = 0;
+      const io = createIo({
+        credentialStore: {
+          async load() {
+            credentialLoads += 1;
+            throw new Error("credentials must not be loaded for help");
+          }
+        },
+        createClient: () => {
+          clientCreations += 1;
+          throw new Error("clients must not be created for help");
+        },
+        readAccountUsage: async () => {
+          analyzerCalls += 1;
+          throw new Error("analyzer must not run for help");
+        }
+      });
+
+      assert.equal(await runCli([command, flag], io), 0);
+      assert.match(io.stdout.value, new RegExp(`^Usage: codex-usage-profile ${command} \\[options\\]`));
+      assert.match(io.stdout.value, /-h, --help/);
+      assert.equal(io.stdout.value.includes("--json"), expected.json);
+      assert.equal(io.stdout.value.includes("--server <origin>"), expected.network);
+      assert.equal(io.stdout.value.includes("--timeout <ms>"), expected.network);
+      assert.equal(io.stdout.value.includes(DEFAULT_SERVICE_ORIGIN), expected.network);
+      assert.equal(io.stderr.value, "");
+      assert.equal(credentialLoads, 0);
+      assert.equal(clientCreations, 0);
+      assert.equal(analyzerCalls, 0);
+    }
+  }
+});
+
+test("adds actionable help hints to invalid commands and options", async () => {
+  const cases = [
+    {
+      argv: ["unknown"],
+      message: /Unknown command: unknown/,
+      hint: /npx codex-usage-profile@latest --help/
+    },
+    {
+      argv: ["submit", "-help"],
+      message: /Unknown option: -help/,
+      hint: /npx codex-usage-profile@latest submit --help/
+    },
+    {
+      argv: ["status", "--timeout"],
+      message: /--timeout requires a value/,
+      hint: /npx codex-usage-profile@latest status --help/
+    },
+    {
+      argv: ["login", "--json"],
+      message: /--json is not supported by login/,
+      hint: /npx codex-usage-profile@latest login --help/
+    },
+    {
+      argv: ["logout", "--server", "https://profiles.example.test"],
+      message: /logout does not use network options/,
+      hint: /npx codex-usage-profile@latest logout --help/
+    }
+  ];
+
+  for (const scenario of cases) {
+    let credentialLoads = 0;
+    let clientCreations = 0;
+    const io = createIo({
+      credentialStore: {
+        async load() { credentialLoads += 1; }
+      },
+      createClient: () => {
+        clientCreations += 1;
+        return {};
+      }
+    });
+
+    assert.equal(await runCli(scenario.argv, io), 1);
+    assert.match(io.stderr.value, scenario.message);
+    assert.match(io.stderr.value, scenario.hint);
+    assert.equal(io.stdout.value, "");
+    assert.equal(credentialLoads, 0);
+    assert.equal(clientCreations, 0);
+  }
+
+  const secret = createIo();
+  assert.equal(await runCli(["submit", "cup_secret_option"], secret), 1);
+  assert.match(secret.stderr.value, /Unknown option: \[redacted\]/);
+  assert.match(secret.stderr.value, /submit --help/);
+  assert.equal(secret.stderr.value.includes("cup_secret_option"), false);
+});
+
 test("uses the production service by default without weakening overrides", async () => {
   const observedOrigins = [];
   const createClient = ({ serviceOrigin }) => {
@@ -92,6 +194,16 @@ test("parses supported commands and rejects unknown or misplaced options", () =>
     timeout: "5000"
   });
   assert.throws(() => parseCliArgs(["unknown"]), /Unknown command/);
+  assert.throws(() => parseCliArgs(["unknown", "--help"]), /Unknown command/);
+  assert.deepEqual(parseCliArgs(["submit", "-h"]), {
+    action: "help",
+    command: "submit"
+  });
+  assert.deepEqual(parseCliArgs(["logout", "--help"]), {
+    action: "help",
+    command: "logout"
+  });
+  assert.deepEqual(parseCliArgs(["login", "--version"]), { action: "version" });
   assert.throws(() => parseCliArgs(["login", "--json"]), /not supported/);
   assert.throws(() => parseCliArgs(["logout", "--server", "https://example.test"]), /does not use/);
 });
