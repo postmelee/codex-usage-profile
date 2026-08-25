@@ -49,7 +49,7 @@ test("npm README discloses the optional star prompt without an implementation se
   const markdown = await readFile(PUBLIC_READMES[1].url, "utf8");
   assert.match(
     markdown,
-    /Declining does not affect login or\s+submission, and the prompt is skipped in CI and non-interactive runs\./
+    /Declining does not affect submission, and the prompt is skipped in CI and non-interactive runs\./
   );
   assert.equal(markdown.includes("## Optional GitHub Star Prompt"), false);
 });
