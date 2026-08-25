@@ -29,8 +29,8 @@ GitHub Issue: [#90](https://github.com/postmelee/codex-usage-profile/issues/90)
   그 exact tree를 별도 `devel → main` release PR로 승격한 뒤에만 GitHub metadata를 변경한다.
 - GitHub metadata remote mutation은 Stage 5의 별도 승인 Gate다. desired homepage는
   `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`, desired default branch는 `main`이다.
-  description exact copy는 Stage 1 audit에서 GitHub 글자 수와 README value proposition을 대조해
-  확정한다.
+  2026-08-24 작업지시자 승인에 따라 repository description은 현재 관찰값을 그대로 보존하고 PATCH
+  payload에서 제외한다.
 - checkpoint/release PR merge는 작업지시자가 수행한다. Stage 5 final report PR만 `Closes #90`을
   사용한다.
 
@@ -42,7 +42,7 @@ GitHub Issue: [#90](https://github.com/postmelee/codex-usage-profile/issues/90)
 | 2 | 사용자 중심 README와 user guide 보정 | `README.md`, package README, 영어 CLI/card guides | link·copy·canonical URL·render·live card/share |
 | 3 | contributor/maintainer navigation과 공개 tree 위생 | `docs/README.md`, `CONTRIBUTING.md`, 절대경로 일반화 | docs link graph·scripts·audience separation·public scan |
 | 4 | source integration과 exact-main 승격 | non-closing checkpoint PR, `devel → main` release PR, provenance 보고 | PR checks·tree equality·main README render |
-| 5 | GitHub metadata cutover와 최종 공개 검증 | description/homepage/default branch, final audit | metadata·badge·README/docs/live endpoints·rollback readiness |
+| 5 | GitHub metadata cutover와 최종 공개 검증 | homepage/default branch, description 보존, final audit | metadata·badge·README/docs/live endpoints·rollback readiness |
 
 ## 문서 위치 확인
 
@@ -353,7 +353,8 @@ Task #90 Stage 4: 공개 문서 exact-main 승격 검증
 ### 진입 조건
 
 - Stage 4 보고서와 `main` render 결과가 승인됐다.
-- 아래 desired/rollback payload의 exact description과 현재 metadata가 read-only preflight로 일치한다.
+- 아래 baseline의 homepage/default branch와 현재 metadata가 read-only preflight로 일치하고 description
+  관찰값을 기록한다.
 - homepage/default branch 변경에 대한 별도 작업지시자 승인이 있다.
 
 ### 원격 mutation Gate
@@ -362,13 +363,14 @@ Task #90 Stage 4: 공개 문서 exact-main 승격 검증
 
 | 필드 | 현재 rollback 값 | desired 값 |
 |---|---|---|
-| `description` | `Turn your Codex account usage into a shareable profile and stable GitHub README card.` | Stage 1에서 승인한 README value proposition 한 문장 |
+| `description` | `Turn your Codex account usage into a shareable rich link previews and stable GitHub README card.` | 변경하지 않음; PATCH payload 제외 |
 | `homepage` | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | `default_branch` | `devel` | `main` |
 
-preflight의 현재 값이 표와 다르면 PATCH를 실행하지 않고 보고한다. mutation은 exact 3개 필드를 한 번에
-PATCH하고 즉시 GET으로 확인한다. 일부 값만 반영되거나 README/render/check가 깨지면 같은 호출에서
-rollback 3개 필드를 복구한다.
+preflight의 homepage/default branch가 표와 다르거나 description 관찰값이 예상과 다르면 PATCH를 실행하지
+않고 보고한다. mutation은 homepage/default branch 두 필드만 한 번에 PATCH하고 즉시 GET으로 확인한다.
+description은 모든 mutation과 rollback payload에서 제외한다. 일부 값만 반영되거나 README/render/check가
+깨지면 같은 호출에서 homepage/default branch 두 필드를 rollback한다.
 
 ### 산출물
 
@@ -379,7 +381,7 @@ rollback 3개 필드를 복구한다.
 ### 실행 순서
 
 1. repository metadata, exact main SHA, workflow badge와 production URL을 read-only preflight한다.
-2. 별도 승인 뒤 description/homepage/default branch를 exact desired payload로 PATCH한다.
+2. 별도 승인 뒤 homepage/default branch만 exact desired payload로 PATCH한다. description은 변경하지 않는다.
 3. metadata GET, repository root/README render, CI badge, live card/share와 docs link를 확인한다.
 4. public scan, npm release verifier와 git diff를 재검증한다.
 5. production Site version/access/environment, npm dist-tag와 package version이 변하지 않았음을 read-only로
@@ -405,10 +407,10 @@ GitHub repository root, badge와 production root/share/card GET/HEAD는 live rea
 
 ### 완료·중단 조건
 
-- 완료: GitHub description/homepage/default branch, README badge/card/link와 exact `main`이 일치하고
-  production/npm remote state는 불변이다.
+- 완료: GitHub description이 preflight 관찰값으로 보존되고 homepage/default branch,
+  README badge/card/link와 exact `main`이 일치하며 production/npm remote state는 불변이다.
 - 중단/rollback: unexpected preflight, partial PATCH, default branch 뒤 README/CI/link 문제 또는 main
-  tree drift가 있으면 metadata를 rollback payload로 복구하고 Stage를 완료 처리하지 않는다.
+  tree drift가 있으면 homepage/default branch만 rollback payload로 복구하고 Stage를 완료 처리하지 않는다.
 
 ### 커밋
 
