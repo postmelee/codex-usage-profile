@@ -57,9 +57,21 @@ test("selects the owner only after a ready profile supplies usage and preview", 
   });
 });
 
-test("selects the sample for ready no-usage and profile error outcomes", () => {
+test("selects the operator for an authenticated ready no-usage profile", () => {
+  const target = resolveTarget({
+    authStatus: "authenticated",
+    hasUsage: false,
+    profileStatus: "ready"
+  });
+
+  assert.equal(target.status, HOME_CARD_TARGET_STATUSES.SELECTED);
+  assert.deepEqual(target.source, OPERATOR_SOURCE);
+  assert.equal(Object.isFrozen(target), true);
+  assert.equal(Object.isFrozen(target.source), true);
+});
+
+test("selects the sample for profile and owner preview error outcomes", () => {
   for (const input of [
-    { authStatus: "authenticated", hasUsage: false, profileStatus: "ready" },
     { authStatus: "authenticated", hasUsage: true, profileStatus: "error" },
     {
       authStatus: "authenticated",

@@ -31,6 +31,10 @@ export function resolveHomeCardTarget({
     return UNRESOLVED_TARGET;
   }
 
+  if (profileStatus === "ready" && hasUsage === false) {
+    return createSelectedTarget(operatorSource);
+  }
+
   if (
     profileStatus === "ready" &&
     hasUsage === true &&
