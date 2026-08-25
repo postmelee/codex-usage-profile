@@ -23,7 +23,7 @@ test("local npm smoke isolates install and verifies the installed CLI boundaries
     }
   });
 
-  assert.equal(result.packageId, "codex-usage-profile@0.1.3");
+  assert.equal(result.packageId, "codex-usage-profile@0.1.4");
   assert.equal(result.entryCount, 13);
   assert.equal(result.checksVerified, 6);
   assert.equal(commands.length, 7);
@@ -96,9 +96,9 @@ function createFakeCandidate({ candidateDirectory }) {
     tarballPath: join(
       candidateDirectory,
       "artifact",
-      "codex-usage-profile-0.1.3.tgz"
+      "codex-usage-profile-0.1.4.tgz"
     ),
-    packageId: "codex-usage-profile@0.1.3",
+    packageId: "codex-usage-profile@0.1.4",
     entryCount: 13,
     packedBytes: 1000,
     unpackedBytes: 5000,

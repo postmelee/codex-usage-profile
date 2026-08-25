@@ -18,6 +18,9 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 ## 현재 운영 상태
 
+- `codex-usage-profile@0.1.4`는 Task #137의 로컬 릴리스 후보이며 아직 npm version, dist-tag,
+  Git tag 또는 production 배포로 게시되지 않았다. 후보는 Task #134의 CLI 재인증·온보딩 개선을
+  포함하며 exact main, stage5, trusted publisher와 production Gate를 모두 통과한 뒤에만 공개한다.
 - `codex-usage-profile@0.1.3`은 public이며 `latest`가 이 버전을 가리킨다.
 - `0.1.3`은 canonical production origin을 기본값으로 사용한다. production의
   일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,

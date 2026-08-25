@@ -194,7 +194,7 @@ Use automation only on a trusted machine where Codex and a ChatGPT-backed sign-i
 
 ```bash
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.3 submit --json
+npx --yes codex-usage-profile@0.1.4 submit --json
 ```
 
 `--yes` skips npm's package installation confirmation. Do not combine unattended `--yes` with `@latest`. Review version updates separately.
