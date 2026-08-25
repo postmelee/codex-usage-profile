@@ -81,7 +81,7 @@ For trusted non-interactive automation, inject a pre-issued token through a secr
 
 ```bash
 CODEX_USAGE_PROFILE_TOKEN='<service-submit-token>' \
-npx --yes codex-usage-profile@0.1.3 submit --json
+npx --yes codex-usage-profile@0.1.4 submit --json
 ```
 
 Do not put the token in command arguments, URLs, repository variables, logs, or shell history.

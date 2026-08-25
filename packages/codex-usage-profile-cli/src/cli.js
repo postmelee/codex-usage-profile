@@ -21,7 +21,7 @@ import {
 } from "./service-client.js";
 import { submitAccountUsage } from "./submit.js";
 
-export const CLI_VERSION = "0.1.3";
+export const CLI_VERSION = "0.1.4";
 const OPTION_DEFINITIONS = Object.freeze({
   server: {
     syntax: "--server <origin>",

@@ -25,8 +25,8 @@ const DEFAULT_REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, "..");
 
 export const EXPECTED_NPM_PACKAGE = Object.freeze({
   name: "codex-usage-profile",
-  version: "0.1.3",
-  id: "codex-usage-profile@0.1.3",
+  version: "0.1.4",
+  id: "codex-usage-profile@0.1.4",
   license: "MIT",
   registry: "https://registry.npmjs.org/"
 });
