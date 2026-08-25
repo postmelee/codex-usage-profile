@@ -18,10 +18,10 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 ## 현재 운영 상태
 
-- `codex-usage-profile@0.1.4`는 Task #137의 로컬 릴리스 후보이며 아직 npm version, dist-tag,
-  Git tag 또는 production 배포로 게시되지 않았다. 후보는 Task #134의 CLI 재인증·온보딩 개선을
-  포함하며 exact main, stage5, trusted publisher와 production Gate를 모두 통과한 뒤에만 공개한다.
-- `codex-usage-profile@0.1.3`은 public이며 `latest`가 이 버전을 가리킨다.
+- `codex-usage-profile@0.1.4`는 public이며 `latest`가 이 버전을 가리킨다. Task #134의 CLI
+  재인증·온보딩 개선을 포함하고 exact main, Stage5, trusted publisher, maintainer 2FA와 registry
+  artifact 검증을 통과했다. production Site 배포와 smoke는 Task #137 Stage 5에서 별도 진행한다.
+- `codex-usage-profile@0.1.3`은 immutable public version으로 보존한다.
 - `0.1.3`은 canonical production origin을 기본값으로 사용한다. production의
   일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,
   stage5·local 같은 대체 환경만 explicit `--server {origin}`을 사용한다.
@@ -57,6 +57,32 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
   bundle 자동 탐색을 담는다. approved Stage 3 commit과 annotated tag,
   trusted publisher stage, maintainer 2FA를 거쳐 공개됐고 prefix 없는
   production submit/status smoke가 통과했다.
+
+## `0.1.4` CLI recovery·onboarding patch release 결과
+
+| 항목 | 검증 값 |
+|---|---|
+| package | `codex-usage-profile@0.1.4` |
+| dependency | exact `codex-usage-analyzer@0.4.1` |
+| source commit | `27e8705fdc152534a4e4b726cac32f625a3c7763` |
+| annotated tag | `codex-usage-profile-v0.1.4` |
+| workflow | `.github/workflows/publish-npm.yml` |
+| trusted publisher | `postmelee/codex-usage-profile`, workflow `publish-npm.yml`, environment `npm-publish` |
+| Actions run | [`32864371385`](https://github.com/postmelee/codex-usage-profile/actions/runs/32864371385), Node 20/22/24 verify와 staged publish 성공 |
+| tarball | 14 files, packed 17,614 bytes, unpacked 63,363 bytes |
+| SHA-1 | `5bf1d4918ab362d7a33a2fcb04c48df356535ed3` |
+| SHA-512 | `sha512-uYnMSdVTUm+srtIAWlCiLVk9TpRInGb3LTfn6R82uZXoSUMuHA6uEpd+jRtT/T1zmA7U+iyEKCaFjMcc7zRxsg==` |
+| dist-tag | `latest=0.1.4` |
+| registry smoke | 격리 XDG/npm cache에서 exact `@0.1.4`와 `@latest` version/help/credential-free status 통과 |
+
+npm attestation은 package subject와 registry SHA-512가 일치하는 SLSA provenance를 제공한다.
+provenance는 repository `postmelee/codex-usage-profile`, tag
+`codex-usage-profile-v0.1.4`, exact source `27e8705`, workflow
+`.github/workflows/publish-npm.yml`과 Actions run `32864371385`를 가리킨다. clean exact/latest
+실행은 모두 version `0.1.4`, canonical production 기본 origin과 동일한 도움말을 제공했다.
+
+`0.1.4`는 immutable이다. production 배포 전 registry package를 다시 게시하거나 tag를 이동하지
+않으며, 결함은 별도 patch/deprecate Gate로 처리한다.
 
 ## `0.1.3` documentation patch release 결과
 
