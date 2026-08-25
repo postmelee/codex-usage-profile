@@ -41,8 +41,8 @@ state를 사용하는 custom owner-only 테스트 환경이다.
 
 | 역할 | origin | manifest·resource 상태 |
 |---|---|---|
-| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 3, access revision 10, environment revision 4 |
-| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 36, access revision 62, environment revision 119 |
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 5, access revision 10, environment revision 8 |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 38, access revision 62, environment revision 121 |
 
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access

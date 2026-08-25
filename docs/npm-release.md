@@ -20,7 +20,8 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 
 - `codex-usage-profile@0.1.4`는 public이며 `latest`가 이 버전을 가리킨다. Task #134의 CLI
   재인증·온보딩 개선을 포함하고 exact main, Stage5, trusted publisher, maintainer 2FA와 registry
-  artifact 검증을 통과했다. production Site 배포와 smoke는 Task #137 Stage 5에서 별도 진행한다.
+  artifact 검증을 통과했다. Task #137 Stage 5에서 같은 exact main을 production saved version 5로
+  배포했고 migration 1–6, maintenance 종료와 최소 사용자 smoke까지 통과했다.
 - `codex-usage-profile@0.1.3`은 immutable public version으로 보존한다.
 - `0.1.3`은 canonical production origin을 기본값으로 사용한다. production의
   일반 사용자 명령과 Device Approval 안내는 `--server` 없는 짧은 명령을 사용하고,
@@ -74,6 +75,8 @@ secret 값은 소스, 이 문서, 이슈, PR, Actions 로그에 기록하지 않
 | SHA-512 | `sha512-uYnMSdVTUm+srtIAWlCiLVk9TpRInGb3LTfn6R82uZXoSUMuHA6uEpd+jRtT/T1zmA7U+iyEKCaFjMcc7zRxsg==` |
 | dist-tag | `latest=0.1.4` |
 | registry smoke | 격리 XDG/npm cache에서 exact `@0.1.4`와 `@latest` version/help/credential-free status 통과 |
+| production | saved version 5, exact source 일치, migration `[1,2,3,4,5,6]`, public·maintenance disabled |
+| production smoke | stale credential 자동 재승인 뒤 같은 `submit` process에서 Contract v1 accepted, private 유지, 검증 credential 제거 |
 
 npm attestation은 package subject와 registry SHA-512가 일치하는 SLSA provenance를 제공한다.
 provenance는 repository `postmelee/codex-usage-profile`, tag
@@ -81,8 +84,9 @@ provenance는 repository `postmelee/codex-usage-profile`, tag
 `.github/workflows/publish-npm.yml`과 Actions run `32864371385`를 가리킨다. clean exact/latest
 실행은 모두 version `0.1.4`, canonical production 기본 origin과 동일한 도움말을 제공했다.
 
-`0.1.4`는 immutable이다. production 배포 전 registry package를 다시 게시하거나 tag를 이동하지
-않으며, 결함은 별도 patch/deprecate Gate로 처리한다.
+`0.1.4`는 immutable이다. Task #137 Stage 6에서 tag, Actions provenance, registry integrity와
+Stage5·production saved source를 exact main에 다시 대조했고 전체 package·Node·E2E·Sites artifact
+회귀를 통과했다. 결함은 같은 package나 tag를 덮어쓰지 않고 별도 patch/deprecate Gate로 처리한다.
 
 ## `0.1.3` documentation patch release 결과
 
