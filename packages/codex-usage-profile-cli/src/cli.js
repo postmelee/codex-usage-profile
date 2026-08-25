@@ -123,6 +123,7 @@ export async function runCli(argv, options = {}) {
       serviceOrigin,
       stdin,
       stdout,
+      loginOutput: parsed.json ? stderr : stdout,
       json: parsed.json,
       timeoutMs,
       readAccountUsage: options.readAccountUsage ?? defaultReadAccountUsage,
@@ -307,47 +308,43 @@ async function runLogout({ credentialStore, env, stdout }) {
 async function runSubmit(options) {
   let credentialSource = options.credentialSource;
   if (!credentialSource) {
-    await options.login({
-      client: options.client,
-      credentialStore: options.credentialStore,
-      serviceOrigin: options.serviceOrigin,
-      stdout: options.stdout,
-      ...withoutUndefined({
-        label: options.deviceName,
-        now: options.now,
-        sleep: options.sleep,
-        openBrowser: options.openBrowser,
-        randomBytes: options.randomBytes,
-        env: options.env,
-        hyperlinks: options.json ? false : options.hyperlinks,
-        intent: "submit"
-      })
-    });
-    credentialSource = resolveCredentialSource({
-      env: options.env,
-      storedCredential: await options.credentialStore.load()
-    });
+    credentialSource = await loginForSubmit(options);
   }
 
   if (!credentialSource) {
     throw new CliError("login_required", "Login did not create a usable credential.");
   }
 
-  const deviceId = await ensureDeviceId({
-    credentialSource,
-    credentialStore: options.credentialStore,
-    serviceOrigin: options.serviceOrigin,
-    randomBytes: options.randomBytes
-  });
-  const result = await submitAccountUsage({
-    readAccountUsage: options.readAccountUsage,
-    client: options.client,
-    token: credentialSource.token,
-    timeoutMs: options.timeoutMs,
-    deviceId,
-    deviceName: options.deviceName,
-    sleep: options.sleep
-  });
+  const readAccountUsage = memoizeAsync(options.readAccountUsage);
+  let result;
+  try {
+    result = await submitWithCredential({
+      ...options,
+      credentialSource,
+      readAccountUsage
+    });
+  } catch (error) {
+    if (error?.code !== "submit_auth_failed") throw error;
+    if (credentialSource.source === "environment") {
+      throw new CliError(
+        "environment_token_invalid",
+        `The ${TOKEN_ENV} credential is invalid. Unset it and run submit again to sign in.`
+      );
+    }
+    if (credentialSource.source !== "file") throw error;
+
+    options.loginOutput.write("Saved login is no longer valid. Reconnecting...\n");
+    credentialSource = await loginForSubmit(options);
+    if (credentialSource?.source !== "file") {
+      throw new CliError("login_required", "Login did not create a usable credential.");
+    }
+    result = await submitWithCredential({
+      ...options,
+      credentialSource,
+      readAccountUsage
+    });
+  }
+
   await runGithubStarPrompt(options);
   writeSubmitOutput(result, {
     env: options.env,
@@ -357,6 +354,59 @@ async function runSubmit(options) {
     stdout: options.stdout
   });
   return 0;
+}
+
+async function loginForSubmit(options) {
+  await options.login({
+    client: options.client,
+    credentialStore: options.credentialStore,
+    serviceOrigin: options.serviceOrigin,
+    stdout: options.loginOutput,
+    ...withoutUndefined({
+      label: options.deviceName,
+      now: options.now,
+      sleep: options.sleep,
+      openBrowser: options.openBrowser,
+      randomBytes: options.randomBytes,
+      env: options.env,
+      hyperlinks: options.json ? false : options.hyperlinks,
+      intent: "submit"
+    })
+  });
+  return bindCredentialToService({
+    command: "submit",
+    credentialSource: resolveCredentialSource({
+      env: options.env,
+      storedCredential: await options.credentialStore.load()
+    }),
+    serviceOrigin: options.serviceOrigin
+  });
+}
+
+async function submitWithCredential(options) {
+  const deviceId = await ensureDeviceId({
+    credentialSource: options.credentialSource,
+    credentialStore: options.credentialStore,
+    serviceOrigin: options.serviceOrigin,
+    randomBytes: options.randomBytes
+  });
+  return submitAccountUsage({
+    readAccountUsage: options.readAccountUsage,
+    client: options.client,
+    token: options.credentialSource.token,
+    timeoutMs: options.timeoutMs,
+    deviceId,
+    deviceName: options.deviceName,
+    sleep: options.sleep
+  });
+}
+
+function memoizeAsync(fn) {
+  let promise;
+  return (...args) => {
+    promise ??= Promise.resolve().then(() => fn(...args));
+    return promise;
+  };
 }
 
 async function runGithubStarPrompt(options) {
