@@ -254,6 +254,7 @@ export function HomePage({
   const showPersonalizedSample = (
     isAuthenticated &&
     profileState.status === "ready" &&
+    hasUsage === true &&
     visibleCardSource?.kind === HOME_CARD_SOURCE_KINDS.SAMPLE &&
     cardReady
   );

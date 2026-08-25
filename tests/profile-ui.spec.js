@@ -2832,40 +2832,115 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({ path: testInfo.outputPath("share-wide-desktop.png") });
   });
 
-  test("Home keeps card actions disabled until usage is submitted", async ({ page }, testInfo) => {
+  test("Home keeps card actions disabled until usage is submitted", async ({ page }) => {
+    let releaseProfile;
+    let ownerPreviewRequests = 0;
+    const profileGate = new Promise((resolve) => {
+      releaseProfile = resolve;
+    });
+
     await page.emulateMedia({ reducedMotion: "reduce" });
     await mockAuthenticatedAccount(page);
-    await page.route("**/api/profile", (route) => fulfillJson(route, {
-      data: { ...ownerProfile("private"), usage: null },
-      ok: true
-    }));
+    await page.route("**/api/profile", async (route) => {
+      await profileGate;
+      await fulfillJson(route, {
+        data: { ...ownerProfile("private"), usage: null },
+        ok: true
+      });
+    });
     await mockCardImages(page);
     await page.route("**/api/profile/card.png*", (route) => route.fulfill({
-      body: JSON.stringify({
-        error: { code: "not_found", message: "Card not found" },
-        ok: false
-      }),
-      contentType: "application/json",
-      status: 404
+      body: CARD_PNG,
+      contentType: "image/png",
+      status: 200
     }));
-    await page.goto("/");
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/profile/card.png") {
+        ownerPreviewRequests += 1;
+      }
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const media = page.locator(".home-card-media");
+    await expect(media).toHaveAttribute("data-card-status", "loading");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(media).toHaveAttribute(
+      "data-card-source-url",
+      "/u/postmelee/card.png?locale=en"
+    );
+    await expect(media.locator(".home-card-skeleton")).toHaveAttribute(
+      "data-active",
+      "true"
+    );
+    await expect(page.locator(".home-card-sample-identity")).toHaveCount(0);
+    expect(ownerPreviewRequests).toBe(0);
+
+    releaseProfile();
+
+    const operatorCard = page.getByRole("img", {
+      name: "Codex usage card for @postmelee"
+    });
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("data-card-source-kind", "operator");
+    await expect(operatorCard).toHaveAttribute("src", /^blob:/);
+    await expect.poll(() => operatorCard.evaluate((image) => image.naturalWidth))
+      .toBe(1497);
+    await expect(media.locator(".home-card-sample-identity")).toHaveCount(0);
+    await expect(media.locator(`img[src="${AUTH_OWNER.avatarUrl}"]`)).toHaveCount(0);
+    expect(ownerPreviewRequests).toBe(0);
 
     await expect(page.getByRole("button", { name: "Submit usage first" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Publish card" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Share", exact: true })).toHaveCount(0);
-    await expect(page.locator(".home-card-sample-identity")).toBeVisible();
-    await expect(page.locator(".home-card-sample-avatar")).toHaveAttribute(
-      "src",
-      AUTH_OWNER.avatarUrl
-    );
-    await expect(page.locator(".home-card-sample-copy strong")).toHaveText(
-      AUTH_OWNER.displayName
-    );
-    await expect(page.locator(".home-card-sample-copy span")).toHaveText(
-      `@${AUTH_OWNER.githubLogin}`
-    );
-    await page.screenshot({ path: testInfo.outputPath("home-no-usage.png") });
   });
+
+  for (const failureStatus of [404, 503]) {
+    test(`Task #130 no-usage Home omits identity when the operator card returns ${failureStatus}`, async ({ page }) => {
+      let ownerPreviewRequests = 0;
+
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: { ...ownerProfile("private"), usage: null },
+        ok: true
+      }));
+      await page.route("**/u/postmelee/card.png*", (route) => route.fulfill({
+        body: "operator card unavailable",
+        contentType: "text/plain",
+        status: failureStatus
+      }));
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname === "/api/profile/card.png") {
+          ownerPreviewRequests += 1;
+        }
+      });
+
+      await page.goto("/");
+
+      const media = page.locator(".home-card-media");
+      const sampleCard = page.getByRole("img", {
+        name: "Sample Codex usage card"
+      });
+      await expect(media).toHaveAttribute("data-card-status", "fallback");
+      await expect(media).toHaveAttribute("data-card-source-kind", "sample");
+      await expect(media).toHaveAttribute(
+        "data-card-source-url",
+        "/assets/codex-card-sample.png"
+      );
+      await expect(sampleCard).toHaveAttribute("src", /^blob:/);
+      await expect.poll(() => sampleCard.evaluate((image) => image.naturalWidth))
+        .toBe(1497);
+      await expect(media.locator(".home-card-sample-identity")).toHaveCount(0);
+      await expect(media.locator(`img[src="${AUTH_OWNER.avatarUrl}"]`)).toHaveCount(0);
+      expect(ownerPreviewRequests).toBe(0);
+
+      await expect(page.getByRole("button", { name: "Submit usage first" }))
+        .toBeDisabled();
+      await expect(page.getByRole("button", { name: "Publish card" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Share", exact: true }))
+        .toHaveCount(0);
+    });
+  }
 
   test("Task #92 mobile Share Studio rejects an unsafe source scale", async ({
     browser
