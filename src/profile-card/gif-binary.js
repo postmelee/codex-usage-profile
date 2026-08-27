@@ -158,6 +158,21 @@ export function assertProfileGifContract(input) {
   return metadata;
 }
 
+export function createProfileGifTransferMetadata(metadata) {
+  if (!metadata || !Array.isArray(metadata.frames) || metadata.frames.length === 0) {
+    throw new TypeError("GIF metadata must contain inspected frames");
+  }
+  return Object.freeze({
+    byteLength: metadata.byteLength,
+    frameCount: metadata.frameCount,
+    frameDelayCentiseconds: metadata.frames[0].delayCentiseconds,
+    globalColorTableSize: metadata.globalColorTableSize,
+    height: metadata.height,
+    loopCount: metadata.loopCount,
+    width: metadata.width
+  });
+}
+
 function readGraphicControl(reader) {
   const blockSize = reader.readByte();
   if (blockSize !== 4) {
