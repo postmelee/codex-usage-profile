@@ -28,14 +28,63 @@ export const PROFILE_GIF_PRESET = Object.freeze({
   width: 998
 });
 
-const BEAM_START_PHASE = 0.796;
-const BEAM_ARC_SIGMA = 0.06;
-const BEAM_CORE_SIGMA = 0.044;
-const BEAM_GLOW_DEPTH = 24;
-const BEAM_GLOW_SIGMA = 10;
-const BEAM_CORE_SIGMA_PX = 1.45;
-const OCEAN_BLUE = Object.freeze([62, 124, 255]);
-const OCEAN_VIOLET = Object.freeze([126, 75, 255]);
+const BEAM_EDGE_FADE_DEPTH = 56;
+const BEAM_STROKE_WIDTH = 2;
+const BEAM_BLOOM_SIGMA = 9;
+const BEAM_INNER_SHADOW_SIGMA = 10;
+const OCEAN_GRADIENTS = Object.freeze([
+  Object.freeze({ color: [100, 80, 220], position: [0.33, -0.074], size: [70, 40] }),
+  Object.freeze({ color: [60, 120, 255], position: [0.12, -0.05], size: [60, 35] }),
+  Object.freeze({ color: [80, 100, 200], position: [0.021, 0.683], size: [40, 70] }),
+  Object.freeze({ color: [50, 140, 220], position: [0.021, 0.683], size: [20, 35] }),
+  Object.freeze({ color: [120, 80, 255], position: [0.744, 1], size: [180, 32] }),
+  Object.freeze({ color: [70, 130, 255], position: [0.55, 1], size: [85, 26] }),
+  Object.freeze({ color: [140, 100, 240], position: [0.939, 0], size: [74, 32] }),
+  Object.freeze({ color: [90, 110, 230], position: [1, 0.271], size: [26, 42] }),
+  Object.freeze({ color: [130, 70, 255], position: [1, 0.271], size: [52, 48] })
+]);
+const BEAM_MASK_PROFILE = Object.freeze([
+  [0, 0], [0.3, 0], [0.36, 0.1], [0.44, 0.35], [0.52, 1],
+  [0.8, 1], [0.86, 0.35], [0.92, 0.1], [0.95, 0], [1, 0]
+]);
+const DARK_STROKE_PROFILE = Object.freeze([
+  [0, 0], [0.54, 0], [0.57, 0.1], [0.6, 0.3], [0.63, 0.6],
+  [0.66, 0.75], [0.69, 0.6], [0.72, 0.3], [0.75, 0.1],
+  [0.78, 0], [1, 0]
+]);
+const LIGHT_STROKE_PROFILE = Object.freeze([
+  [0, 0], [0.54, 0], [0.57, 0.08], [0.6, 0.2], [0.63, 0.4],
+  [0.66, 0.55], [0.69, 0.4], [0.72, 0.2], [0.75, 0.08],
+  [0.78, 0], [1, 0]
+]);
+const DARK_BLOOM_PROFILE = Object.freeze([
+  [0, 0], [0.58, 0], [0.62, 0.03], [0.65, 0.08], [0.67, 0.2],
+  [0.69, 0.45], [0.7, 0.85], [0.705, 0.85], [0.715, 0.45],
+  [0.73, 0.2], [0.75, 0.08], [0.78, 0.03], [0.82, 0], [1, 0]
+]);
+const LIGHT_BLOOM_PROFILE = Object.freeze([
+  [0, 0], [0.58, 0], [0.62, 0.02], [0.65, 0.08], [0.67, 0.2],
+  [0.69, 0.4], [0.7, 0.6], [0.705, 0.6], [0.715, 0.4],
+  [0.73, 0.2], [0.75, 0.08], [0.78, 0.02], [0.82, 0], [1, 0]
+]);
+const DARK_BEAM_THEME = Object.freeze({
+  bloomOpacity: 0.24,
+  conicColor: [255, 255, 255],
+  innerOpacity: 0.42,
+  innerShadowColor: [255, 255, 255],
+  innerShadowOpacity: 0.03,
+  saturation: 1.2,
+  strokeOpacity: 0.26
+});
+const LIGHT_BEAM_THEME = Object.freeze({
+  bloomOpacity: 0.34,
+  conicColor: [0, 0, 0],
+  innerOpacity: 0.26,
+  innerShadowColor: [0, 0, 0],
+  innerShadowOpacity: 0.02,
+  saturation: 1.5,
+  strokeOpacity: 0.12
+});
 
 export function getProfileGifFramePhase(frameIndex) {
   assertFrameIndex(frameIndex);
@@ -51,7 +100,7 @@ export function createProfileGifFrameRenderer(baseRgba, options = {}) {
 
   const base = new Uint8ClampedArray(baseRgba);
   const geometry = createBeamGeometry(base);
-  const themeFactor = options.theme === "light" ? 0.74 : 1;
+  const theme = options.theme === "light" ? LIGHT_BEAM_THEME : DARK_BEAM_THEME;
 
   return Object.freeze({
     effectPixelCount: geometry.pixelOffsets.length,
@@ -59,7 +108,7 @@ export function createProfileGifFrameRenderer(baseRgba, options = {}) {
       const phase = getProfileGifFramePhase(frameIndex);
       const output = normalizeTarget(target, base.length);
       output.set(base);
-      compositeBeam(output, base, geometry, phase, themeFactor);
+      compositeBeam(output, base, geometry, phase, theme);
       return output;
     }
   });
@@ -72,8 +121,10 @@ export function renderProfileGifFrame(baseRgba, frameIndex, options = {}) {
 function createBeamGeometry(base) {
   const { width, height, borderRadius: radius } = PROFILE_GIF_PRESET;
   const pixelOffsets = [];
-  const pathPhases = [];
+  const conicPhases = [];
   const inwardDistances = [];
+  const outerColors = [];
+  const innerColors = [];
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -82,67 +133,187 @@ function createBeamGeometry(base) {
         continue;
       }
 
+      const pointX = x + 0.5;
+      const pointY = y + 0.5;
       const inwardDistance = getRoundedRectInwardDistance(
-        x + 0.5,
-        y + 0.5,
+        pointX,
+        pointY,
         width,
         height,
         radius
       );
-      if (inwardDistance < 0 || inwardDistance > BEAM_GLOW_DEPTH) {
+      if (inwardDistance < 0 || inwardDistance > BEAM_EDGE_FADE_DEPTH) {
         continue;
       }
 
       pixelOffsets.push(pixelOffset);
-      pathPhases.push(getRoundedRectPathPhase(
-        x + 0.5,
-        y + 0.5,
-        width,
-        height,
-        radius
-      ));
+      conicPhases.push(getConicPhase(pointX, pointY, width, height));
       inwardDistances.push(inwardDistance);
+      outerColors.push(...sampleOceanGradient(pointX, pointY, 1, 1));
+      innerColors.push(...sampleOceanGradient(pointX, pointY, 0.9, 0.45));
     }
   }
 
   return Object.freeze({
+    conicPhases: Float32Array.from(conicPhases),
+    innerColors: Float32Array.from(innerColors),
     inwardDistances: Float32Array.from(inwardDistances),
-    pathPhases: Float32Array.from(pathPhases),
+    outerColors: Float32Array.from(outerColors),
     pixelOffsets: Uint32Array.from(pixelOffsets)
   });
 }
 
-function compositeBeam(output, base, geometry, framePhase, themeFactor) {
-  const beamPhase = wrapPhase(BEAM_START_PHASE + framePhase);
+function compositeBeam(output, base, geometry, framePhase, theme) {
   const { brightness, strength } = PROFILE_CARD_BORDER_BEAM_PRESET;
+  const strokeProfile = theme === LIGHT_BEAM_THEME
+    ? LIGHT_STROKE_PROFILE
+    : DARK_STROKE_PROFILE;
+  const bloomProfile = theme === LIGHT_BEAM_THEME
+    ? LIGHT_BLOOM_PROFILE
+    : DARK_BLOOM_PROFILE;
 
   for (let index = 0; index < geometry.pixelOffsets.length; index += 1) {
     const pixelOffset = geometry.pixelOffsets[index];
-    const arcDelta = circularDelta(geometry.pathPhases[index], beamPhase);
+    const colorOffset = index * 4;
     const inwardDistance = geometry.inwardDistances[index];
-    const arcGlow = gaussian(arcDelta, BEAM_ARC_SIGMA);
+    const conicPosition = wrapPhase(geometry.conicPhases[index] - framePhase);
+    const mask = sampleProfile(BEAM_MASK_PROFILE, conicPosition);
 
-    if (arcGlow < 0.003) {
+    if (mask <= 0) {
       continue;
     }
 
-    const distanceGlow = gaussian(inwardDistance, BEAM_GLOW_SIGMA);
-    const core = gaussian(arcDelta, BEAM_CORE_SIGMA) *
-      gaussian(inwardDistance, BEAM_CORE_SIGMA_PX);
-    const opacity = Math.min(
-      0.92,
-      (arcGlow * distanceGlow * 0.22 + core * 0.42) *
-        strength * brightness * themeFactor
+    const edgeFade = clamp01(1 - inwardDistance / BEAM_EDGE_FADE_DEPTH);
+    const innerShadowAlpha = gaussian(inwardDistance, BEAM_INNER_SHADOW_SIGMA) *
+      theme.innerShadowOpacity;
+    const innerLayer = overlayColor(
+      geometry.innerColors.subarray(colorOffset, colorOffset + 4),
+      theme.innerShadowColor,
+      innerShadowAlpha
     );
-    const colorMix = Math.max(0, Math.min(1, 0.5 + arcDelta / 0.16));
-    const red = mix(OCEAN_VIOLET[0], OCEAN_BLUE[0], colorMix);
-    const green = mix(OCEAN_VIOLET[1], OCEAN_BLUE[1], colorMix);
-    const blue = mix(OCEAN_VIOLET[2], OCEAN_BLUE[2], colorMix);
+    blendLayer(
+      output,
+      base,
+      pixelOffset,
+      filteredColor(innerLayer, brightness, theme.saturation),
+      innerLayer[3] * mask * edgeFade * theme.innerOpacity * strength
+    );
 
-    output[pixelOffset] = blend(base[pixelOffset], red, opacity);
-    output[pixelOffset + 1] = blend(base[pixelOffset + 1], green, opacity);
-    output[pixelOffset + 2] = blend(base[pixelOffset + 2], blue, opacity);
+    const strokeAlpha = sampleProfile(strokeProfile, conicPosition);
+    const outerLayer = overlayColor(
+      geometry.outerColors.subarray(colorOffset, colorOffset + 4),
+      theme.conicColor,
+      strokeAlpha
+    );
+    const strokeCoverage = clamp01(BEAM_STROKE_WIDTH + 0.5 - inwardDistance);
+    blendLayer(
+      output,
+      output,
+      pixelOffset,
+      filteredColor(outerLayer, brightness, theme.saturation),
+      outerLayer[3] * mask * strokeCoverage * theme.strokeOpacity * strength
+    );
+
+    const bloomAlpha = sampleProfile(bloomProfile, conicPosition) *
+      gaussian(inwardDistance, BEAM_BLOOM_SIGMA) *
+      theme.bloomOpacity * strength;
+    blendLayer(
+      output,
+      output,
+      pixelOffset,
+      filteredColor([...theme.conicColor, 1], brightness, theme.saturation),
+      bloomAlpha
+    );
   }
+}
+
+function sampleOceanGradient(x, y, sizeScale, alphaScale) {
+  const { width, height, scale } = PROFILE_GIF_PRESET;
+  let alpha = 0;
+  let premultipliedRed = 0;
+  let premultipliedGreen = 0;
+  let premultipliedBlue = 0;
+
+  for (let index = OCEAN_GRADIENTS.length - 1; index >= 0; index -= 1) {
+    const gradient = OCEAN_GRADIENTS[index];
+    const radiusX = gradient.size[0] * scale * sizeScale;
+    const radiusY = gradient.size[1] * scale * sizeScale;
+    const normalizedX = (x - gradient.position[0] * width) / radiusX;
+    const normalizedY = (y - gradient.position[1] * height) / radiusY;
+    const distance = Math.hypot(normalizedX, normalizedY);
+    if (distance >= 1) {
+      continue;
+    }
+
+    const layerAlpha = (1 - distance) * alphaScale;
+    const retainedAlpha = 1 - layerAlpha;
+    premultipliedRed = gradient.color[0] * layerAlpha +
+      premultipliedRed * retainedAlpha;
+    premultipliedGreen = gradient.color[1] * layerAlpha +
+      premultipliedGreen * retainedAlpha;
+    premultipliedBlue = gradient.color[2] * layerAlpha +
+      premultipliedBlue * retainedAlpha;
+    alpha = layerAlpha + alpha * retainedAlpha;
+  }
+
+  if (alpha <= 0) {
+    return [0, 0, 0, 0];
+  }
+  return [
+    premultipliedRed / alpha,
+    premultipliedGreen / alpha,
+    premultipliedBlue / alpha,
+    alpha
+  ];
+}
+
+function overlayColor(background, foreground, foregroundAlpha) {
+  const backgroundAlpha = background[3];
+  const retainedAlpha = 1 - foregroundAlpha;
+  const alpha = foregroundAlpha + backgroundAlpha * retainedAlpha;
+  if (alpha <= 0) {
+    return [0, 0, 0, 0];
+  }
+  return [
+    (foreground[0] * foregroundAlpha + background[0] * backgroundAlpha * retainedAlpha) / alpha,
+    (foreground[1] * foregroundAlpha + background[1] * backgroundAlpha * retainedAlpha) / alpha,
+    (foreground[2] * foregroundAlpha + background[2] * backgroundAlpha * retainedAlpha) / alpha,
+    alpha
+  ];
+}
+
+function filteredColor(color, brightness, saturation) {
+  const luminance = color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
+  return [
+    clampByte((luminance + (color[0] - luminance) * saturation) * brightness),
+    clampByte((luminance + (color[1] - luminance) * saturation) * brightness),
+    clampByte((luminance + (color[2] - luminance) * saturation) * brightness),
+    color[3]
+  ];
+}
+
+function blendLayer(output, background, pixelOffset, color, opacity) {
+  const amount = clamp01(opacity);
+  if (amount <= 0) {
+    return;
+  }
+  output[pixelOffset] = blend(background[pixelOffset], color[0], amount);
+  output[pixelOffset + 1] = blend(background[pixelOffset + 1], color[1], amount);
+  output[pixelOffset + 2] = blend(background[pixelOffset + 2], color[2], amount);
+}
+
+function sampleProfile(profile, position) {
+  for (let index = 1; index < profile.length; index += 1) {
+    const right = profile[index];
+    if (position > right[0]) {
+      continue;
+    }
+    const left = profile[index - 1];
+    const span = right[0] - left[0];
+    const amount = span <= 0 ? 0 : (position - left[0]) / span;
+    return mix(left[1], right[1], amount);
+  }
+  return profile[profile.length - 1][1];
 }
 
 function getRoundedRectInwardDistance(x, y, width, height, radius) {
@@ -155,61 +326,8 @@ function getRoundedRectInwardDistance(x, y, width, height, radius) {
   return -(outside + inside - radius);
 }
 
-function getRoundedRectPathPhase(x, y, width, height, radius) {
-  const horizontalLength = width - radius * 2;
-  const verticalLength = height - radius * 2;
-  const arcLength = Math.PI * radius / 2;
-  const perimeter = horizontalLength * 2 + verticalLength * 2 + arcLength * 4;
-  let distance;
-
-  if (y < radius) {
-    if (x < radius) {
-      const angle = normalizeAngle(Math.atan2(y - radius, x - radius));
-      distance = horizontalLength * 2 + verticalLength * 2 + arcLength * 3 +
-        (angle - Math.PI) * radius;
-    } else if (x > width - radius) {
-      const angle = Math.atan2(y - radius, x - (width - radius));
-      distance = horizontalLength + (angle + Math.PI / 2) * radius;
-    } else {
-      distance = x - radius;
-    }
-  } else if (y > height - radius) {
-    if (x > width - radius) {
-      const angle = Math.atan2(y - (height - radius), x - (width - radius));
-      distance = horizontalLength + arcLength + verticalLength + angle * radius;
-    } else if (x < radius) {
-      const angle = Math.atan2(y - (height - radius), x - radius);
-      distance = horizontalLength * 2 + verticalLength + arcLength * 2 +
-        (angle - Math.PI / 2) * radius;
-    } else {
-      distance = horizontalLength + verticalLength + arcLength * 2 +
-        (width - radius - x);
-    }
-  } else if (x > width - radius) {
-    distance = horizontalLength + arcLength + (y - radius);
-  } else if (x < radius) {
-    distance = horizontalLength * 2 + verticalLength + arcLength * 3 +
-      (height - radius - y);
-  } else {
-    const topDistance = y;
-    const bottomDistance = height - y;
-    distance = topDistance <= bottomDistance
-      ? x - radius
-      : horizontalLength + verticalLength + arcLength * 2 +
-        (width - radius - x);
-  }
-
-  return wrapPhase(distance / perimeter);
-}
-
-function circularDelta(value, center) {
-  let delta = value - center;
-  if (delta > 0.5) {
-    delta -= 1;
-  } else if (delta < -0.5) {
-    delta += 1;
-  }
-  return delta;
+function getConicPhase(x, y, width, height) {
+  return wrapPhase(Math.atan2(x - width / 2, height / 2 - y) / (Math.PI * 2));
 }
 
 function gaussian(value, sigma) {
@@ -217,12 +335,16 @@ function gaussian(value, sigma) {
   return Math.exp(-0.5 * normalized * normalized);
 }
 
-function normalizeAngle(angle) {
-  return angle < 0 ? angle + Math.PI * 2 : angle;
-}
-
 function wrapPhase(phase) {
   return ((phase % 1) + 1) % 1;
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, value));
 }
 
 function mix(start, end, amount) {

@@ -5,11 +5,15 @@ import { buildReadmeCardSnippet } from "../cardShare.js";
 import {
   buildPublicProfileShareUrl,
   buildShareTargets,
+  formatShareStudioGifProgress,
   formatShareStudioPlatformMessage,
   getShareStudioCopy,
+  getShareStudioGifErrorCopy,
   isMobileShareEnvironment,
   resolveShareStudioCardUrls,
-  resolveShareStudioProfileUrls
+  resolveShareStudioGifSourceUrl,
+  resolveShareStudioProfileUrls,
+  shouldShowAnimatedGifPreview
 } from "../shareStudio.js";
 
 test("resolves Korean and English Share Studio copy", () => {
@@ -24,6 +28,74 @@ test("resolves Korean and English Share Studio copy", () => {
     "Card preview is unavailable. Sharing options are still available."
   );
   assert.equal(getShareStudioCopy("ja-JP").title, "Share activity");
+  assert.equal(getShareStudioCopy("en-US").retryGif, "Retry");
+  assert.equal(getShareStudioCopy("ko-KR").saveGif, "GIF 저장");
+});
+
+test("formats bounded GIF progress and maps every typed export error", () => {
+  assert.equal(formatShareStudioGifProgress("en", 0.426), "Generating GIF… 43%");
+  assert.equal(formatShareStudioGifProgress("ko", 3), "GIF 생성 중… 100%");
+  assert.equal(formatShareStudioGifProgress("en", Number.NaN), "Generating GIF… 0%");
+
+  const copy = getShareStudioCopy("en");
+  const expected = {
+    encode_failed: copy.gifEncodeFailed,
+    invalid_output: copy.gifInvalidOutput,
+    source_failed: copy.gifSourceFailed,
+    timed_out: copy.gifTimedOut,
+    too_large: copy.gifTooLarge,
+    unsupported: copy.gifUnsupported
+  };
+  for (const [errorCode, message] of Object.entries(expected)) {
+    assert.equal(getShareStudioGifErrorCopy(copy, errorCode), message);
+  }
+  assert.equal(
+    getShareStudioGifErrorCopy(copy, "unexpected"),
+    copy.gifEncodeFailed
+  );
+});
+
+test("shows a ready GIF preview unless reduced motion is requested", () => {
+  const readyGif = {
+    blobUrl: "blob:https://profiles.example.test/generated-gif",
+    format: "gif",
+    status: "ready"
+  };
+
+  assert.equal(shouldShowAnimatedGifPreview(readyGif), true);
+  assert.equal(shouldShowAnimatedGifPreview({
+    ...readyGif,
+    prefersReducedMotion: true
+  }), false);
+  assert.equal(shouldShowAnimatedGifPreview({
+    ...readyGif,
+    format: "png"
+  }), false);
+  assert.equal(shouldShowAnimatedGifPreview({
+    ...readyGif,
+    status: "generating"
+  }), false);
+  assert.equal(shouldShowAnimatedGifPreview({
+    ...readyGif,
+    blobUrl: "https://profiles.example.test/generated.gif"
+  }), false);
+});
+
+test("prefers the warm owner card as the GIF generation source", () => {
+  assert.equal(resolveShareStudioGifSourceUrl({
+    previewImageUrl: "/u/postmelee/card.png?theme=dark",
+    selectedImageUrl: "https://profiles.example.test/u/postmelee/card.png",
+    warmSourceUrl: "/api/profile/card.png"
+  }), "/api/profile/card.png");
+  assert.equal(resolveShareStudioGifSourceUrl({
+    previewImageUrl: "/u/postmelee/card.png?theme=dark",
+    selectedImageUrl: "https://profiles.example.test/u/postmelee/card.png"
+  }), "/u/postmelee/card.png?theme=dark");
+  assert.equal(resolveShareStudioGifSourceUrl({
+    previewImageUrl: " ",
+    selectedImageUrl: null,
+    warmSourceUrl: ""
+  }), null);
 });
 
 test("formats platform messages once for every locale and share target", () => {
@@ -374,6 +446,21 @@ test("limits mobile share targets without changing narrow desktop defaults", () 
   );
   assert.deepEqual(
     buildShareTargets({ locale: "en", profileUrl }).map(({ id }) => id),
+    ["x", "threads", "linkedin", "facebook", "reddit"]
+  );
+});
+
+test("limits GIF share targets to X and Reddit while PNG keeps every target", () => {
+  const profileUrl = "https://profiles.example.test/u/postmelee";
+
+  assert.deepEqual(
+    buildShareTargets({ format: "gif", locale: "en", profileUrl })
+      .map(({ id }) => id),
+    ["x", "reddit"]
+  );
+  assert.deepEqual(
+    buildShareTargets({ format: "png", locale: "en", profileUrl })
+      .map(({ id }) => id),
     ["x", "threads", "linkedin", "facebook", "reddit"]
   );
 });

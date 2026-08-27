@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 import {
   GIF_EXPORT_PRESET_VERSION,
@@ -85,6 +88,57 @@ test("keeps the card fixed while the beam visits each perimeter quadrant", () =>
   }
 });
 
+test("matches the approved conic beam golden signature and loop seam", async () => {
+  const png = await readFile(new URL(
+    "../../../public/assets/codex-card-sample.png",
+    import.meta.url
+  ));
+  const image = await loadImage(png);
+  const canvas = createCanvas(PROFILE_GIF_PRESET.width, PROFILE_GIF_PRESET.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(
+    image,
+    0,
+    0,
+    PROFILE_GIF_PRESET.width,
+    PROFILE_GIF_PRESET.height
+  );
+  const base = context.getImageData(
+    0,
+    0,
+    PROFILE_GIF_PRESET.width,
+    PROFILE_GIF_PRESET.height
+  ).data;
+  const renderer = createProfileGifFrameRenderer(base);
+  const reference = [
+    { changed: 52_892, frameIndex: 0, p95: 54, x: 222.4, y: 469.3 },
+    { changed: 43_635, frameIndex: 24, p95: 39, x: 233, y: 137.5 },
+    { changed: 51_550, frameIndex: 48, p95: 56, x: 870, y: 180.8 },
+    { changed: 53_470, frameIndex: 72, p95: 64, x: 737.8, y: 512.5 },
+    { changed: 53_128, frameIndex: 95, p95: 56, x: 241.6, y: 483.4 }
+  ];
+  const { frames, signatures } = measureGoldenSignatures(renderer, reference);
+
+  for (const [index, expected] of reference.entries()) {
+    const actual = signatures[index];
+    assertClose(actual.changed, expected.changed, 12_000, `frame ${expected.frameIndex} footprint`);
+    assertClose(actual.p95, expected.p95, 25, `frame ${expected.frameIndex} falloff`);
+    assertClose(actual.x, expected.x, 55, `frame ${expected.frameIndex} horizontal center`);
+    assertClose(actual.y, expected.y, 28, `frame ${expected.frameIndex} vertical center`);
+  }
+
+  const changedCounts = signatures.map(({ changed }) => changed);
+  assert.ok(
+    Math.max(...changedCounts) - Math.min(...changedCounts) >= 5_000,
+    "fixed ocean gradients must vary the visible beam footprint"
+  );
+
+  const loopSeamDelta = frameRgbDelta(frames.get(95), frames.get(0));
+  const adjacentDelta = frameRgbDelta(frames.get(0), frames.get(1));
+  assert.ok(loopSeamDelta > adjacentDelta * 0.75);
+  assert.ok(loopSeamDelta < adjacentDelta * 1.25);
+});
+
 test("reuses a caller-provided frame buffer", () => {
   const base = createBaseFrame();
   const renderer = createProfileGifFrameRenderer(base);
@@ -153,4 +207,93 @@ function changedPixelCentroid(base, frame) {
 function readPixel(rgba, x, y) {
   const offset = (y * PROFILE_GIF_PRESET.width + x) * 4;
   return Array.from(rgba.subarray(offset, offset + 4));
+}
+
+function measureGoldenSignatures(renderer, reference) {
+  const temporalMinimum = new Uint8ClampedArray(
+    PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height * 4
+  );
+  const reusableFrame = new Uint8ClampedArray(temporalMinimum.length);
+  const frames = new Map();
+  temporalMinimum.fill(255);
+
+  for (let frameIndex = 0; frameIndex < PROFILE_GIF_PRESET.frameCount; frameIndex += 1) {
+    renderer.renderFrame(frameIndex, reusableFrame);
+    if (
+      frameIndex === 1 ||
+      reference.some((entry) => entry.frameIndex === frameIndex)
+    ) {
+      frames.set(frameIndex, new Uint8ClampedArray(reusableFrame));
+    }
+    for (let offset = 0; offset < reusableFrame.length; offset += 4) {
+      temporalMinimum[offset] = Math.min(
+        temporalMinimum[offset],
+        reusableFrame[offset]
+      );
+      temporalMinimum[offset + 1] = Math.min(
+        temporalMinimum[offset + 1],
+        reusableFrame[offset + 1]
+      );
+      temporalMinimum[offset + 2] = Math.min(
+        temporalMinimum[offset + 2],
+        reusableFrame[offset + 2]
+      );
+    }
+  }
+
+  return {
+    frames,
+    signatures: reference.map(({ frameIndex }) =>
+      measureFrameSignature(frames.get(frameIndex), temporalMinimum, frameIndex)
+    )
+  };
+}
+
+function measureFrameSignature(frame, temporalMinimum, frameIndex) {
+  const deltas = [];
+  let changed = 0;
+  let totalDelta = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+
+  for (let offset = 0; offset < frame.length; offset += 4) {
+    const delta = Math.abs(frame[offset] - temporalMinimum[offset]) +
+      Math.abs(frame[offset + 1] - temporalMinimum[offset + 1]) +
+      Math.abs(frame[offset + 2] - temporalMinimum[offset + 2]);
+    if (delta <= 0) {
+      continue;
+    }
+    const pixelIndex = offset / 4;
+    changed += 1;
+    totalDelta += delta;
+    weightedX += (pixelIndex % PROFILE_GIF_PRESET.width) * delta;
+    weightedY += Math.floor(pixelIndex / PROFILE_GIF_PRESET.width) * delta;
+    deltas.push(delta);
+  }
+
+  deltas.sort((left, right) => left - right);
+  return {
+    changed,
+    frameIndex,
+    p95: deltas[Math.floor((deltas.length - 1) * 0.95)] ?? 0,
+    x: weightedX / totalDelta,
+    y: weightedY / totalDelta
+  };
+}
+
+function frameRgbDelta(first, second) {
+  let delta = 0;
+  for (let offset = 0; offset < first.length; offset += 4) {
+    delta += Math.abs(first[offset] - second[offset]) +
+      Math.abs(first[offset + 1] - second[offset + 1]) +
+      Math.abs(first[offset + 2] - second[offset + 2]);
+  }
+  return delta;
+}
+
+function assertClose(actual, expected, tolerance, label) {
+  assert.ok(
+    Math.abs(actual - expected) <= tolerance,
+    `${label}: expected ${actual} to stay within ${tolerance} of ${expected}`
+  );
 }

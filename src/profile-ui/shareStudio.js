@@ -19,6 +19,17 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   destinations: "share.destinations",
   dismissInstructions: "share.dismissInstructions",
   dismissToast: "share.dismissToast",
+  format: "share.format",
+  formatGif: "share.formatGif",
+  formatPng: "share.formatPng",
+  gifAttachmentHint: "share.gifAttachmentHint",
+  gifEncodeFailed: "share.gifEncodeFailed",
+  gifInvalidOutput: "share.gifInvalidOutput",
+  gifSaved: "share.gifSaved",
+  gifSourceFailed: "share.gifSourceFailed",
+  gifTimedOut: "share.gifTimedOut",
+  gifTooLarge: "share.gifTooLarge",
+  gifUnsupported: "share.gifUnsupported",
   imageCopied: "share.imageCopied",
   imageCopyFailed: "share.imageCopyFailed",
   imageSaved: "share.imageSaved",
@@ -33,8 +44,11 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   readme: "share.readme",
   readmeCopied: "share.readmeCopied",
   readmeCopyFailed: "share.readmeCopyFailed",
+  retryGif: "share.retryGif",
   save: "share.save",
   saveAriaLabel: "share.saveAriaLabel",
+  saveGif: "share.saveGif",
+  saveGifAriaLabel: "share.saveGifAriaLabel",
   shareFacebook: "share.shareFacebook",
   shareLinkedIn: "share.shareLinkedIn",
   shareLink: "share.shareLink",
@@ -48,9 +62,21 @@ const SHARE_MESSAGE_IDS = Object.freeze({
 });
 
 const SHARE_PLATFORM_MESSAGE_IDS = Object.freeze({
+  generatingGif: "share.generatingGif",
   openComposer: "share.openComposer",
   shareInstructionsTitle: "share.shareInstructionsTitle"
 });
+
+const GIF_EXPORT_ERROR_COPY_KEYS = Object.freeze({
+  encode_failed: "gifEncodeFailed",
+  invalid_output: "gifInvalidOutput",
+  source_failed: "gifSourceFailed",
+  timed_out: "gifTimedOut",
+  too_large: "gifTooLarge",
+  unsupported: "gifUnsupported"
+});
+
+const GIF_SHARE_TARGET_IDS = new Set(["x", "reddit"]);
 
 export function getShareStudioCopy(locale = "en") {
   const normalizedLocale = resolveShareLocale(locale);
@@ -78,6 +104,43 @@ export function formatShareStudioPlatformMessage(locale, key, platform) {
   return formatMessage(resolveShareLocale(locale), messageId, {
     platform: platform.trim()
   });
+}
+
+export function formatShareStudioGifProgress(locale, progress) {
+  const normalizedProgress = Number.isFinite(progress)
+    ? Math.min(1, Math.max(0, progress))
+    : 0;
+  return formatMessage(
+    resolveShareLocale(locale),
+    SHARE_PLATFORM_MESSAGE_IDS.generatingGif,
+    { percent: Math.round(normalizedProgress * 100) }
+  );
+}
+
+export function getShareStudioGifErrorCopy(copy, errorCode) {
+  const key = GIF_EXPORT_ERROR_COPY_KEYS[errorCode] ?? "gifEncodeFailed";
+  return copy?.[key] ?? "";
+}
+
+export function shouldShowAnimatedGifPreview(options = {}) {
+  return options.format === "gif"
+    && options.status === "ready"
+    && typeof options.blobUrl === "string"
+    && options.blobUrl.startsWith("blob:")
+    && options.prefersReducedMotion !== true;
+}
+
+export function resolveShareStudioGifSourceUrl(options = {}) {
+  for (const value of [
+    options.warmSourceUrl,
+    options.previewImageUrl,
+    options.selectedImageUrl
+  ]) {
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+  return null;
 }
 
 export function resolveShareStudioCardUrls(options = {}) {
@@ -217,9 +280,13 @@ export function buildShareTargets(options = {}) {
     })
   ];
 
-  return options.mobile === true
-    ? targets.filter(({ id }) => id !== "linkedin" && id !== "facebook")
+  const formatTargets = options.format === "gif"
+    ? targets.filter(({ id }) => GIF_SHARE_TARGET_IDS.has(id))
     : targets;
+
+  return options.mobile === true
+    ? formatTargets.filter(({ id }) => id !== "linkedin" && id !== "facebook")
+    : formatTargets;
 }
 
 function createTarget({

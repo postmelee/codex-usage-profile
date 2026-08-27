@@ -16,10 +16,10 @@ invariant를 독립적으로 검증할 수 있는 기반을 마련했다.
 
 | 파일 | 변경 요약 |
 |---|---|
-| `src/profile-card/gif-animation.js` | preset version 1, 998×612·96 frame 출력 계약, 웹 공통 Border Beam preset, 결정적 rounded-perimeter frame renderer 구현 |
+| `src/profile-card/gif-animation.js` | preset version 1, 998×612·96 frame 출력 계약, 웹 공통 Border Beam preset, center-angle conic stop·Ocean radial gradient·rounded edge mask renderer 구현 |
 | `src/profile-card/gif-encoder.js` | `gifenc@1.0.3` quantizer, 1-bit alpha, 단일 global palette, full-frame encoder와 결정적 palette mapper 구현 |
 | `src/profile-card/gif-binary.js` | bounded cursor 기반 GIF89a·loop·frame·delay·transparency·palette·size inspector 구현 |
-| `src/profile-card/__tests__/gif-animation.test.js` | preset, 0/90/180/270/356.25° phase, 고정 카드와 beam 사분면, 투명 모서리 검증 |
+| `src/profile-card/__tests__/gif-animation.test.js` | preset, 0/90/180/270/356.25° phase, 고정 카드와 beam 사분면, 승인 시제품 5-frame golden signature와 95→0 seam 검증 |
 | `src/profile-card/__tests__/gif-encoder.test.js` | 96 frame encoder, 전역 palette 안정성, 투명 source 거부, 대표 public card 15MB 상한 검증 |
 | `src/profile-card/__tests__/gif-binary.test.js` | 정상 GIF metadata와 malformed/contract failure 검증 |
 | `src/profile-marketing/MarketingLanding.jsx` | 기존 `<BorderBeam>` 값을 공통 preset으로 교체 |
@@ -54,16 +54,18 @@ git diff --check
 
 결과:
 
-- OK — GIF 관련 10개 단위 테스트 통과, 실패·skip 없음.
+- OK — GIF 관련 11개 단위 테스트 통과, 실패·skip 없음.
 - OK — server 63 modules, client 1,835 modules production build 통과.
 - OK — `git diff --check` 출력 없음.
-- OK — 대표 public card 출력은 3,811,436 bytes로 15,000,000 bytes 미만이다.
+- OK — 대표 public card 출력은 3,912,240 bytes로 15,000,000 bytes 미만이다.
 - OK — binary inspector 기준 998×612, 96 frames, frame delay 5cs, repeat 0,
   global palette 256색, local palette 0개, 모든 frame transparency/disposal 1이다.
-- OK — frame 0→1, 94→95, 95→0 변화량은 각각 73,439, 73,354,
-  73,476으로 loop seam이 인접 frame과 같은 수준이다.
-- OK — final prototype의 0/24/48/72/95 frame과 비교해 카드 고정, 투명
-  tight canvas, Ocean beam 위치·폭·강도·falloff를 확인했다.
+- OK — frame 95→0 변화량이 frame 0→1의 75~125% 안에 있어 loop seam이 인접
+  frame과 같은 수준이다.
+- OK — Stage 3 통합 시각 QA에서 초기 rounded-perimeter 번역이 final prototype과
+  다름을 확인했다. CSS와 같은 center-angle conic phase·Ocean radial gradient·edge
+  fade로 교정하고, final prototype의 0/24/48/72/95 frame에서 추출한 footprint·p95
+  falloff·중심 golden signature와 카드 고정·투명 tight canvas를 자동 검증한다.
 - OK — `gifenc@1.0.3` exact 설치, MIT license, runtime dependency 0개,
   production vulnerability 0개와 browser ESM bundle 가능 여부를 확인했다.
 

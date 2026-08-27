@@ -2199,12 +2199,14 @@ button {
 
 .share-studio-backdrop.is-closing .share-studio-title,
 .share-studio-backdrop.is-closing .share-studio-close,
+.share-studio-backdrop.is-closing .share-studio-format,
 .share-studio-backdrop.is-closing .share-studio-primary-action,
 .share-studio-backdrop.is-closing .share-studio-instructions,
 .share-studio-backdrop.is-closing .share-studio-secondary,
 .share-studio-backdrop.is-closing .share-studio-toast,
 .share-studio-backdrop.is-handoff .share-studio-title,
 .share-studio-backdrop.is-handoff .share-studio-close,
+.share-studio-backdrop.is-handoff .share-studio-format,
 .share-studio-backdrop.is-handoff .share-studio-primary-action,
 .share-studio-backdrop.is-handoff .share-studio-instructions,
 .share-studio-backdrop.is-handoff .share-studio-secondary,
@@ -2262,6 +2264,10 @@ button {
   width: 100%;
 }
 
+.share-studio-card.is-gif-preview {
+  animation: share-studio-gif-preview-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
 .share-studio-card.is-handoff-source,
 .share-studio-card.is-warm-handoff-target {
   animation: none;
@@ -2279,11 +2285,117 @@ button {
   color: var(--share-toast-danger-text);
 }
 
+.share-studio-format {
+  animation: share-studio-support-in 240ms cubic-bezier(0.2, 0, 0, 1) 190ms both;
+  display: grid;
+  justify-items: center;
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.share-studio-format-control {
+  background: var(--surface-hover-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(64px, 1fr));
+  padding: 3px;
+}
+
+.share-studio-format-option {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  min-height: 28px;
+  padding: 5px 14px;
+}
+
+.share-studio-format-option[aria-checked="true"] {
+  background: var(--share-action-background);
+  box-shadow: 0 1px 3px var(--card-filter-shadow);
+  color: var(--share-action-text);
+}
+
+.share-studio-format-option:not([aria-checked="true"]):hover {
+  color: var(--text-primary);
+}
+
+.share-studio-format-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.share-studio-gif-feedback {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 5px 0 -7px;
+  min-height: 16px;
+}
+
+.share-studio-gif-status {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  margin: 0;
+  text-align: center;
+}
+
+.share-studio-gif-status.is-error {
+  color: var(--share-toast-danger-text);
+}
+
+.share-studio-gif-retry {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.share-studio-gif-retry:hover,
+.share-studio-gif-retry:focus-visible {
+  color: var(--text-primary);
+}
+
+.share-studio-gif-retry:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .share-studio-primary-actions {
   display: grid;
   gap: 20px;
   grid-auto-flow: column;
   margin-top: 30px;
+}
+
+.share-studio-format + .share-studio-primary-actions {
+  margin-top: 18px;
+}
+
+.share-studio-primary-actions.is-format-transition {
+  animation: share-studio-actions-format-in 180ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.share-studio-primary-actions.is-format-transition .share-studio-primary-action {
+  animation: none;
 }
 
 .share-studio-primary-action {
@@ -2336,6 +2448,20 @@ button {
   opacity: 1;
   outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
+  transform: none;
+}
+
+.share-studio-primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.share-studio-primary-action[data-gif-export-status="generating"]:disabled {
+  cursor: wait;
+}
+
+.share-studio-primary-action:disabled .share-studio-action-icon {
+  background: var(--share-action-background);
   transform: none;
 }
 
@@ -2604,6 +2730,18 @@ button {
   }
 }
 
+@keyframes share-studio-gif-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes share-studio-support-in {
   from {
     opacity: 0;
@@ -2620,6 +2758,18 @@ button {
   from {
     opacity: 0;
     transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes share-studio-actions-format-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.99);
   }
 
   to {
@@ -4055,6 +4205,8 @@ button {
   }
 
   .share-studio-close,
+  .share-studio-format,
+  .share-studio-primary-actions.is-format-transition,
   .share-studio-primary-action,
   .share-studio-secondary,
   .share-studio-title,
@@ -4064,6 +4216,10 @@ button {
   }
 
   .share-studio-card {
+    animation: none;
+  }
+
+  .share-studio-card.is-gif-preview {
     animation: none;
   }
 
@@ -4083,12 +4239,14 @@ button {
 
   .share-studio-backdrop.is-closing .share-studio-title,
   .share-studio-backdrop.is-closing .share-studio-close,
+  .share-studio-backdrop.is-closing .share-studio-format,
   .share-studio-backdrop.is-closing .share-studio-primary-action,
   .share-studio-backdrop.is-closing .share-studio-instructions,
   .share-studio-backdrop.is-closing .share-studio-secondary,
   .share-studio-backdrop.is-closing .share-studio-toast,
   .share-studio-backdrop.is-handoff .share-studio-title,
   .share-studio-backdrop.is-handoff .share-studio-close,
+  .share-studio-backdrop.is-handoff .share-studio-format,
   .share-studio-backdrop.is-handoff .share-studio-primary-action,
   .share-studio-backdrop.is-handoff .share-studio-instructions,
   .share-studio-backdrop.is-handoff .share-studio-secondary,
@@ -4168,6 +4326,14 @@ button {
   .share-studio-primary-actions {
     gap: 14px;
     margin-top: 14px;
+  }
+
+  .share-studio-format {
+    margin-top: 10px;
+  }
+
+  .share-studio-format + .share-studio-primary-actions {
+    margin-top: 8px;
   }
 
   .share-studio-primary-action {

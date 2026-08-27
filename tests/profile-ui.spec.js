@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { devices, expect, test } from "@playwright/test";
 
 import { resolveE2eOrigin } from "./e2eOrigin.js";
+import { assertProfileGifContract } from "../src/profile-card/gif-binary.js";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
@@ -2562,6 +2563,317 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
   });
 
+  test("Share Studio generates and downloads one contract-valid GIF", async ({
+    page
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    const gifSourceFetches = [];
+    page.on("request", (request) => {
+      if (
+        request.resourceType() === "fetch" &&
+        new URL(request.url()).pathname.endsWith("/card.png")
+      ) {
+        gifSourceFetches.push(new URL(request.url()).pathname);
+      }
+    });
+    await expect(page.getByTestId("share-studio-backdrop"))
+      .toHaveClass(/\bis-open\b/);
+    const format = dialog.getByRole("radiogroup", { name: "Download format" });
+    await expect(format).toBeVisible();
+    await expect(format.getByRole("radio", { name: "PNG" }))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+
+    const pngOption = format.getByRole("radio", { name: "PNG" });
+    await pngOption.focus();
+    await page.keyboard.press("ArrowRight");
+    const gifOption = format.getByRole("radio", { name: "GIF" });
+    await expect(gifOption).toBeFocused();
+    await expect(gifOption).toHaveAttribute("aria-checked", "true");
+    const motionCard = dialog.getByTestId("share-studio-card-motion");
+    await expect(motionCard).toHaveAttribute("data-share-preview-format", "png");
+    await expect(motionCard).toHaveAttribute("data-share-preview-state", "generating");
+    await expect(dialog.getByRole("button", { name: "Save GIF" })).toBeDisabled();
+    await expect(dialog.locator('.home-card-skeleton[data-active="true"]'))
+      .toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("share-studio-gif-loading.png")
+    });
+    await expect(dialog.getByRole("link", { name: "Share on X" })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "Share on Threads" }))
+      .toHaveCount(0);
+    await expect(dialog.getByRole("link", { name: "Share on LinkedIn" }))
+      .toHaveCount(0);
+    await expect(dialog.getByRole("link", { name: "Share on Facebook" }))
+      .toHaveCount(0);
+    const formatTransition = await dialog
+      .locator(".share-studio-primary-actions")
+      .evaluate((element) => {
+        const animation = element.getAnimations().find(
+          (candidate) => candidate.animationName === "share-studio-actions-format-in"
+        );
+        return {
+          childAnimationNames: Array.from(
+            element.querySelectorAll(".share-studio-primary-action")
+          ).map((action) => getComputedStyle(action).animationName),
+          duration: animation?.effect?.getTiming().duration ?? null,
+          rowAnimationNames: element.getAnimations().map(
+            (candidate) => candidate.animationName
+          )
+        };
+      });
+    expect(formatTransition.rowAnimationNames)
+      .toContain("share-studio-actions-format-in");
+    expect(formatTransition.duration).toBe(180);
+    expect(formatTransition.childAnimationNames.every((name) => name === "none"))
+      .toBe(true);
+
+    await pngOption.click();
+    for (const name of [
+      "Share on Threads",
+      "Share on LinkedIn",
+      "Share on Facebook"
+    ]) {
+      await expect(dialog.getByRole("link", { name })).toBeVisible();
+    }
+    await gifOption.click();
+    await expect(dialog.getByRole("link", { name: "Share on Threads" }))
+      .toHaveCount(0);
+
+    let generationState = "waiting";
+    await expect.poll(async () => {
+      generationState = await dialog.getByRole("link", { name: "Save GIF" })
+        .isVisible()
+        ? "ready"
+        : await dialog.isVisible()
+          ? "waiting"
+          : "dev-reload";
+      return generationState;
+    }, { timeout: 60_000 }).not.toBe("waiting");
+    if (generationState === "dev-reload") {
+      // Vite can optimize the Worker-only gifenc dependency on its first dev
+      // request and reload the page once. Re-enter the same product flow after
+      // that development-only warmup; production emits the Worker eagerly.
+      await page.getByRole("button", { name: "Share", exact: true }).click();
+      await dialog.getByRole("radio", { name: "GIF" }).click();
+    }
+    await expect(dialog.getByRole("link", { name: "Save GIF" }))
+      .toBeVisible({ timeout: 60_000 });
+    await expect(dialog.locator(".share-studio-gif-status"))
+      .toContainText("X or Reddit post");
+    await expect(dialog.getByRole("link", { name: "Save GIF" }))
+      .toHaveAttribute("href", /^blob:/);
+    await expect(motionCard).toHaveAttribute("data-share-preview-format", "gif");
+    await expect(motionCard).toHaveAttribute("data-share-preview-source", "gif");
+    await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
+    await expect(motionCard).toHaveAttribute("data-share-preview-state", "ready");
+    expect(gifSourceFetches).toContain("/api/profile/card.png");
+    const generatedBlobUrl = await dialog
+      .getByRole("link", { name: "Save GIF" })
+      .getAttribute("href");
+    await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
+      .toHaveAttribute("src", generatedBlobUrl);
+    await page.screenshot({
+      path: testInfo.outputPath("share-studio-gif-ready.png")
+    });
+
+    await pngOption.click();
+    await expect(motionCard).toHaveAttribute("data-share-preview-format", "png");
+    await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
+      .not.toHaveAttribute("src", generatedBlobUrl);
+    await gifOption.click();
+    await expect(motionCard).toHaveAttribute("data-share-preview-format", "gif");
+
+    const downloadPromise = page.waitForEvent("download");
+    await dialog.getByRole("link", { name: "Save GIF" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("codex-usage-profile.gif");
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+    const metadata = assertProfileGifContract(
+      new Uint8Array(readFileSync(downloadPath))
+    );
+    expect(metadata).toMatchObject({
+      frameCount: 96,
+      height: 612,
+      loopCount: 0,
+      width: 998
+    });
+    await expect(page.getByText("GIF saved", { exact: true })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => page.evaluate(async (blobUrl) => {
+      try {
+        await fetch(blobUrl);
+        return false;
+      } catch {
+        return true;
+      }
+    }, generatedBlobUrl)).toBe(true);
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(format.getByRole("radio", { name: "PNG" }))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+  });
+
+  test("Share Studio surfaces a GIF source error and retries the same card", async ({
+    page
+  }) => {
+    test.setTimeout(90_000);
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
+      .toBeVisible();
+
+    const failWorkerSource = (route) => {
+      if (route.request().resourceType() === "fetch") {
+        return route.fulfill({ body: "unavailable", status: 503 });
+      }
+      return route.fallback();
+    };
+    await page.route("**/api/profile/card.png*", failWorkerSource);
+    await dialog.getByRole("radio", { name: "GIF" }).click();
+    await expect(dialog.locator(".share-studio-gif-status")).toContainText(
+      "The card image couldn’t be loaded for GIF generation."
+    );
+    await expect(dialog.getByRole("button", { name: "Save GIF" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Retry" })).toBeEnabled();
+
+    await page.unroute("**/api/profile/card.png*", failWorkerSource);
+    await dialog.getByRole("button", { name: "Retry" }).click();
+    await expect(dialog.getByRole("link", { name: "Save GIF" }))
+      .toBeVisible({ timeout: 60_000 });
+    await expect(dialog.getByRole("button", { name: "Generate GIF" }))
+      .toHaveCount(0);
+  });
+
+  test("Share Studio cancels one in-flight GIF Worker on Escape and reopens PNG", async ({
+    page
+  }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+    await page.goto("/");
+    const shareButton = page.getByRole("button", { name: "Share", exact: true });
+    await shareButton.click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
+      .toBeVisible();
+
+    let releaseWorkerSource;
+    let signalWorkerSourceStarted;
+    let workerCount = 0;
+    let workerCloseCount = 0;
+    const workerSourceGate = new Promise((resolve) => {
+      releaseWorkerSource = resolve;
+    });
+    const workerSourceStarted = new Promise((resolve) => {
+      signalWorkerSourceStarted = resolve;
+    });
+    page.on("worker", (worker) => {
+      workerCount += 1;
+      worker.on("close", () => {
+        workerCloseCount += 1;
+      });
+    });
+    const holdWorkerSource = async (route) => {
+      if (route.request().resourceType() !== "fetch") {
+        await route.fallback();
+        return;
+      }
+      signalWorkerSourceStarted();
+      await workerSourceGate;
+      await route.fulfill({
+        body: CARD_PNG,
+        contentType: "image/png",
+        status: 200
+      }).catch(() => {});
+    };
+    await page.route("**/api/profile/card.png*", holdWorkerSource);
+
+    await dialog.getByRole("radio", { name: "GIF" }).click();
+    await workerSourceStarted;
+    const generating = dialog.getByRole("button", { name: "Save GIF" });
+    await expect(generating).toBeDisabled();
+    await expect(dialog.locator(".share-studio-gif-status"))
+      .toContainText("Generating GIF");
+    await generating.evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    expect(workerCount).toBe(1);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => workerCloseCount).toBe(1);
+    releaseWorkerSource();
+    await page.unroute("**/api/profile/card.png*", holdWorkerSource);
+
+    await shareButton.click();
+    await expect(dialog.getByRole("radio", { name: "PNG" }))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+    expect(workerCount).toBe(1);
+  });
+
+  test("mobile Share Studio keeps GIF controls and Workers out of the DOM", async ({
+    browser
+  }) => {
+    const context = await browser.newContext({
+      ...devices["iPhone 13"],
+      baseURL: E2E_ORIGIN
+    });
+    const page = await context.newPage();
+    let workerCount = 0;
+    page.on("worker", () => {
+      workerCount += 1;
+    });
+
+    try {
+      await mockAuthenticatedAccount(page);
+      await page.route("**/api/profile", (route) => fulfillJson(route, {
+        data: ownerProfile("public"),
+        ok: true
+      }));
+      await mockCardImages(page);
+      await page.goto("/");
+      await page.getByRole("button", { name: "Share", exact: true }).tap();
+      const dialog = page.getByRole("dialog", { name: "Share activity" });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("radiogroup", { name: "Download format" }))
+        .toHaveCount(0);
+      await expect(dialog.getByText("GIF", { exact: true })).toHaveCount(0);
+      await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+      expect(workerCount).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("Share Studio advances submit share targets while README Markdown stays fixed", async ({
     context,
     page
@@ -3589,6 +3901,9 @@ test.describe("Home and share card flow", () => {
 
     const backdrop = page.getByTestId("share-studio-backdrop");
     const motionCard = page.getByTestId("share-studio-card-motion");
+    await page.getByRole("radio", { name: "GIF" }).click();
+    await expect(page.locator(".share-studio-primary-actions"))
+      .toHaveAttribute("data-share-action-transition", "format");
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     await expect(motionCard).toHaveAttribute("data-motion-origin", "target");
     await expect(backdrop).toHaveCSS("backdrop-filter", "none");

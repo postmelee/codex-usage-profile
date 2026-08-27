@@ -19,8 +19,8 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   - `image/gif`, 15,000,000 bytes 미만
 - GIF는 same-origin public PNG를 source로 데스크톱 브라우저의 module Worker에서
   생성한다. 서버·Cloudflare Worker·D1·R2·외부 API에는 GIF bytes를 보내지 않는다.
-- mobile은 PNG-only로 유지하고, GIF autoplay preview·Web Share·GIF clipboard·X
-  자동 첨부는 구현하지 않는다.
+- mobile은 PNG-only로 유지하고, GIF 선택 시 자동 생성·Web Share·GIF clipboard·X
+  자동 첨부는 구현하지 않는다. desktop ready 상태만 GIF preview를 제공한다.
 - production 배포와 원격 Site saved version 변경은 이 task 범위가 아니다.
 
 ## 단계 개요
@@ -36,7 +36,7 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
-| `docs/readme-card.md` | 기존 공식 사용자 문서 최소 수정 | `docs/readme-card.md` | OK | 웹 생성·저장과 X 수동 첨부 경계만 추가 |
+| `docs/readme-card.md` | 기존 공식 사용자 문서 최소 수정 | `docs/readme-card.md` | OK | 웹 생성·저장과 X·Reddit 수동 첨부 경계만 추가 |
 | GIF UI copy·상태 | 제품 UI | `src/profile-ui/` | OK | 실제 capability와 상태의 진실 원천 |
 | GIF 출력 preset·encoder 계약 | 제품 코드 | `src/profile-card/` | OK | 제품 고유 animation/export 계약 |
 | 수행·구현계획서 | 작업 산출물 | `mydocs/plans/` | OK | 승인 범위와 단계 고정 |
@@ -73,9 +73,10 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   356.25°이고 360° 중복 frame은 없다.
 - card radius는 PNG renderer의 logical `32`를 2배한 `64px`를 기준으로 한다.
   canvas는 998×612 자체가 card bounds이며, rounded corner 바깥 alpha는 0이다.
-- beam geometry·색·falloff는 final prototype의 0/24/48/72/95 frame과 비교해
-  Stage 1에서 고정한다. runtime random, wall-clock time과 devicePixelRatio를
-  사용하지 않는다.
+- beam geometry·색·falloff는 final prototype의 0/24/48/72/95 frame에서 추출한
+  footprint·falloff·중심 signature로 고정한다. 카드 중심 기준 conic phase,
+  dark/light stop profile, Ocean radial gradient와 2배 edge fade를 사용하고 runtime
+  random, wall-clock time과 devicePixelRatio는 사용하지 않는다.
 
 ### encoder 선택과 palette
 
@@ -169,22 +170,24 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
 
 ### Share Studio UX·접근성
 
-- desktop에서 static preview와 primary action row 사이에 `PNG | GIF` segmented
+- desktop에서 card preview와 primary action row 사이에 `PNG | GIF` segmented
   control을 둔다. mobile 환경에서는 control을 렌더링하지 않고 format을 `png`로
   고정한다.
 - PNG 선택 시 현재 `Save PNG` link와 모든 동작을 유지한다.
-- GIF 선택 시 기존 save slot 하나만 다음 상태로 바꾼다.
-  - idle/error: `Generate GIF` button
-  - generating: disabled `Generating {percent}%` button과 `role="status"`
+- GIF 선택 즉시 생성을 시작하고 기존 save slot 하나는 다음 상태로 바꾼다.
+  - idle/generating/error: disabled `Save GIF` button
+  - generating: 카드 경계와 같은 skeleton, `role="status"` progress
+  - error: typed error와 별도 `Retry` button
   - ready: object URL을 가리키는 `Save GIF` download link
-- GIF format으로 바꿔도 preview는 static PNG다. animated `<img>`나 autoplay
-  preview를 추가하지 않으며 `prefers-reduced-motion`에서도 동일하다.
+- GIF format으로 바꾼 직후에는 skeleton을 표시한다. 생성이 ready가 되면 상단
+  `<img>`를 session GIF Blob으로 교체하고 PNG 복귀 시 static PNG로 되돌린다.
+  `prefers-reduced-motion`에서는 생성·저장은 유지하되 ready 뒤에도 static PNG다.
 - format selector와 generation status를 tab order에 포함하고 visible focus,
   `aria-pressed`/radio semantics, live status와 ko/en copy를 제공한다.
 - close·Escape·source 변경 시 generation을 cancel하되 기존 Share Studio close
   handoff와 focus restore를 기다리게 하지 않는다.
-- `Save GIF` filename은 `codex-usage-profile.gif`다. 완료 문구는 저장 후 X 웹에
-  사용자가 직접 첨부해야 하며 social button이 파일을 붙이지 않는다는 경계를
+- `Save GIF` filename은 `codex-usage-profile.gif`다. 완료 문구는 저장 후 X 또는
+  Reddit에 사용자가 직접 첨부해야 하며 social button이 파일을 붙이지 않는다는 경계를
   짧게 안내한다.
 
 ## Stage 1 — GIF 출력 계약과 encoder 고정
@@ -210,8 +213,8 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
 ### 변경 내용
 
 - 공통 GIF/export·Border Beam preset과 결정적 frame phase를 구현한다.
-- base RGBA를 고정한 채 rounded perimeter Ocean beam만 합성하는 순수 renderer를
-  구현하고 card 외부 alpha를 0으로 유지한다.
+- base RGBA를 고정한 채 center-angle conic phase와 rounded edge mask로 Ocean
+  beam만 합성하는 순수 renderer를 구현하고 card 외부 alpha를 0으로 유지한다.
 - `gifenc@1.0.3`을 exact dependency로 추가하고 global palette·transparency·loop
   options를 고정한 encoder를 구현한다.
 - bounded GIF inspector로 생성 결과의 binary invariant를 검증한다.
@@ -315,15 +318,24 @@ Task #39 Stage 2: browser Worker 생성 pipeline
 
 ### 변경 내용
 
-- desktop-only `PNG | GIF` segmented control과 static preview를 배치한다.
-- save slot을 PNG link 또는 GIF Generate/Generating/Save state로 전환하고
-  progress·error·retry·수동 X 첨부 안내를 ko/en으로 연결한다.
+- desktop-only `PNG | GIF` segmented control과 선택 즉시 생성되는 GIF preview를
+  배치한다.
+- save slot을 PNG link 또는 비활성/활성 `Save GIF`로 전환하고 생성 중 skeleton,
+  progress·error·retry·수동 X·Reddit 첨부 안내를 ko/en으로 연결한다.
+- GIF 원본은 이미 로드한 owner card source URL을 우선해 public preview가 아직
+  materialize되지 않은 로컬·초기 상태에서도 생성 가능하게 한다.
+- PNG 모드는 기존 X·Threads·LinkedIn·Facebook·Reddit을 유지하고 GIF 모드는
+  X·Reddit만 노출하며, PNG로 돌아오면 5개 대상을 즉시 복원한다.
+- 형식 전환 action row는 180ms 단일 opacity·position·scale 모션으로 교체하고
+  유지·신규 child의 기존 stagger를 재실행하지 않아 X만 정적으로 남는 회귀를 막는다.
+- ready 뒤 상단 preview를 생성된 GIF Blob으로 교체하고 PNG 복귀 시 static PNG를
+  복원한다. reduced motion에서는 GIF ready 뒤에도 static PNG를 유지한다.
 - mobile에서는 GIF DOM과 Worker generation이 모두 없고 현재 PNG 저장을
   유지한다.
 - close/Escape/source change에서 즉시 job·object URL을 정리하면서 기존 handoff,
   focus trap/restore와 scroll lock을 보존한다.
 - short desktop에서 selector/status/action이 겹치거나 modal overflow를 만들지
-  않게 하고, reduced motion에서 기존 spatial motion 제거 계약과 GIF non-autoplay를
+  않게 하고, reduced motion에서 기존 spatial motion 제거와 static preview 계약을
   유지한다.
 - Playwright happy path는 실제 Worker/encoder로 생성·download하고 error branch는
   deterministic source/capability fixture로 검증한다.
@@ -340,17 +352,20 @@ git diff --check
 desktop E2E:
 
 - PNG default와 기존 `Save PNG`
-- GIF select → idle → generating progress → ready → `Save GIF`
+- GIF select → 자동 generating skeleton·비활성 `Save GIF` → ready·활성 `Save GIF`
+- GIF 선택 시 X·Reddit만 남고 PNG 복귀 시 기존 5개 SNS가 모두 복원됨
+- format 전환 row의 180ms 단일 모션과 child stagger 미재실행
+- 생성 중 skeleton, ready 뒤 GIF Blob, PNG 복귀와 reduced motion의 static PNG
 - download filename, MIME, 998×612/96-frame/size binary 확인
-- generating 중 중복 click, close, Escape, reopen과 source change
+- generating 중 비활성 저장, close, Escape, reopen과 source change
 - unsupported/source/encode/invalid/too-large/timed-out 오류와 retry
 - keyboard tab order, focus visible, live status와 ko/en copy
 - 1280×900, 1512×982, 1280×620 layout와 horizontal overflow 0
-- reduced motion에서도 Animated preview DOM 부재
+- reduced motion에서도 ready GIF Blob을 preview에 연결하지 않고 static PNG 유지
 
 mobile·회귀 E2E:
 
-- iPhone/Android 환경에 GIF selector·Generate/Save GIF DOM과 Worker 호출 부재
+- iPhone/Android 환경에 GIF selector·Save GIF DOM과 Worker 호출 부재
 - `Save PNG`, social intent, Copy share link/Image URL/README/Image와 Make private
 - Share Studio open/close handoff, focus restore와 preview failure 경로
 
@@ -375,14 +390,14 @@ Task #39 Stage 3: Share Studio GIF 생성과 저장 UX
 
 ### 변경 내용
 
-- 기존 Share Studio 사용자 문서에 desktop web GIF generation, Save GIF, X 웹
-  수동 첨부와 15MB 경계를 추가한다.
+- 기존 Share Studio 사용자 문서에 desktop web GIF generation, Save GIF,
+  X·Reddit 수동 첨부와 X 웹 15MB 경계를 추가한다.
 - mobile GIF, public GIF URL, Web Share, clipboard와 자동 업로드를 제공하지 않는
   범위를 짧고 명확하게 기록한다.
 - dark/light·ko/en representative GIF의 전체 loop를 확인하고 카드 고정,
   transparent tight bounds, beam motion과 seam을 final prototype과 비교한다.
 - 전체 Node/Playwright/production build/Sites artifact 회귀를 수행한다.
-- 실제 X 게시나 production 배포는 하지 않는다. X 웹 업로드 자체의 외부 수동
+- 실제 X·Reddit 게시나 production 배포는 하지 않는다. 외부 수동 업로드
   검증이 필요하면 저장된 파일을 작업지시자에게 전달해 별도 확인받는다.
 
 ### 검증
@@ -451,8 +466,9 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 ## 위험과 대응
 
 - **final prototype과 beam 차이**: library CSS를 browser Canvas가 그대로 capture할
-  수 없다. 공통 preset, deterministic perimeter renderer와 5개 reference frame
-  비교를 Stage 1 gate로 둔다.
+  수 없다. 공통 preset과 CSS의 center-angle conic stop·Ocean radial gradient·edge
+  fade를 옮긴 deterministic renderer를 사용하고 5개 reference frame의 수치 golden
+  signature를 회귀 gate로 둔다.
 - **avatar로 인한 palette 품질·용량 변화**: first composite global palette에 static
   card와 beam을 모두 포함하고 4개 theme/locale 및 representative avatar를
   검사한다. 15MB 초과 시 자동 품질 하향 없이 중단한다.
@@ -477,13 +493,13 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 
 - `gifenc@1.0.3` exact dependency와 `rgba4444` one-bit alpha, 단일 global 256색
   palette, dithering 없음의 encoder 계약
-- common Border Beam preset + deterministic perimeter renderer + 5개 reference
-  frame 비교 방식
+- common Border Beam preset + deterministic conic renderer + 5개 reference frame
+  golden signature 비교 방식
 - 단일 module Worker, sequential 96-frame 처리, 60초 timeout, no main-thread
   fallback과 source/output/resource 상한
 - output binary inspector와 15MB 초과 시 자동 품질 하향 없이 오류 처리하는 정책
-- desktop `PNG | GIF`, `Generate GIF` 후 `Save GIF`, static preview와 mobile
-  PNG-only UX
+- desktop `PNG | GIF`, 선택 즉시 생성·skeleton·비활성 `Save GIF`, ready 뒤 GIF Blob
+  preview와 활성 `Save GIF`, reduced-motion static preview와 mobile PNG-only UX
 - Stage 1~4의 산출물·검증·exact commit message와 단계별 승인 gate
 - `docs/readme-card.md`만 최소 수정하고 실제 X 업로드·production 배포를 제외하는
   문서·외부 작업 경계
