@@ -22,7 +22,7 @@ export const CARD_LOGICAL_HEIGHT = 306;
 export const CARD_OUTPUT_SCALE = 3;
 export const CARD_OUTPUT_WIDTH = CARD_LOGICAL_WIDTH * CARD_OUTPUT_SCALE;
 export const CARD_OUTPUT_HEIGHT = CARD_LOGICAL_HEIGHT * CARD_OUTPUT_SCALE;
-export const CARD_RENDERER_VERSION = "codex-share-card-2";
+export const CARD_RENDERER_VERSION = "codex-share-card-3";
 
 export const CARD_COLORS = CARD_THEME_PALETTES.dark;
 

@@ -109,7 +109,7 @@ The outer `<a href>` remains the fixed Codex Usage Profile share page even when 
 
 ## Social preview behavior
 
-The share page provides Open Graph and Twitter Card metadata. A personalized social image is 2400x1260 and uses the profile's current theme and language.
+The share page provides Open Graph and Twitter Card metadata. A personalized social image is 2400x1260 and uses the profile's current theme and language. The light social image uses an opaque neutral canvas and subtle outline so the white card remains distinct on white preview surfaces. This social-only treatment does not change the README `card.png` or the dark social image's transparent outer area.
 
 After a submit or card-setting change:
 

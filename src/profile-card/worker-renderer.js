@@ -8,7 +8,7 @@ import {
 import { getCardThemePalette } from "./theme.js";
 
 export const WORKER_CARD_RENDERER_VERSION =
-  "codex-share-card-2-resvg-wasm-1";
+  "codex-share-card-3-resvg-wasm-1";
 
 const CARD_LOGICAL_WIDTH = 499;
 const CARD_LOGICAL_HEIGHT = 306;

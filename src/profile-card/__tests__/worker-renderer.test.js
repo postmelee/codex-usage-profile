@@ -8,6 +8,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   CARD_OUTPUT_HEIGHT,
   CARD_OUTPUT_WIDTH,
+  CARD_RENDERER_VERSION,
   renderProfileCardPng
 } from "../renderer.js";
 import {
@@ -110,13 +111,22 @@ test("keeps native and Worker dimensions while selecting a distinct renderer dig
       uploadedAt: "2026-07-24T00:00:01.000Z"
     }
   };
-  assert.notEqual(
-    createProfileCardSourceDigest(baseDigestOptions),
-    createProfileCardSourceDigest({
-      ...baseDigestOptions,
-      rendererVersion: WORKER_CARD_RENDERER_VERSION
-    })
-  );
+  const previousDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: "codex-share-card-2-resvg-wasm-1"
+  });
+  const nativeDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: CARD_RENDERER_VERSION
+  });
+  const workerDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: WORKER_CARD_RENDERER_VERSION
+  });
+
+  assert.equal(WORKER_CARD_RENDERER_VERSION, "codex-share-card-3-resvg-wasm-1");
+  assert.notEqual(previousDigest, workerDigest);
+  assert.notEqual(nativeDigest, workerDigest);
 });
 
 test("embeds supported avatar bytes and falls back for invalid image bytes", () => {
