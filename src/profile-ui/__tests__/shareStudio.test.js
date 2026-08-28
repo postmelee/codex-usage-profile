@@ -30,6 +30,14 @@ test("resolves Korean and English Share Studio copy", () => {
   assert.equal(getShareStudioCopy("ja-JP").title, "Share activity");
   assert.equal(getShareStudioCopy("en-US").retryGif, "Retry");
   assert.equal(getShareStudioCopy("ko-KR").saveGif, "GIF 저장");
+  assert.equal(
+    getShareStudioCopy("en-US").attachGif,
+    "Attach the saved GIF to the post"
+  );
+  assert.equal(
+    getShareStudioCopy("ko-KR").attachGif,
+    "저장한 GIF를 게시물에 첨부하세요"
+  );
 });
 
 test("formats bounded GIF progress and maps every typed export error", () => {

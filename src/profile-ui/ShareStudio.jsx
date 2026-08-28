@@ -68,6 +68,7 @@ export function ShareStudio({
     false
   );
   const [gifExportState, setGifExportState] = useState(INITIAL_GIF_EXPORT_STATE);
+  const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
   const [toast, setToast] = useState(null);
   const mobileShareEnvironment = isMobileShareEnvironment(globalThis.navigator);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -138,6 +139,9 @@ export function ShareStudio({
     }),
     [downloadFormat, locale, mobileShareEnvironment, shareProfileUrl]
   );
+  const selectedShareTarget = downloadFormat === DOWNLOAD_FORMATS.GIF
+    ? shareTargets.find((target) => target.id === selectedSocialPlatform) ?? null
+    : null;
   const canRender = Boolean(
     open
     && copyImageUrl
@@ -185,6 +189,7 @@ export function ShareStudio({
     gifExportControllerRef.current?.reset();
     setDownloadFormat(DOWNLOAD_FORMATS.PNG);
     setHasChangedDownloadFormat(false);
+    setSelectedSocialPlatform(null);
     requestClose();
   }, [requestClose]);
   const {
@@ -259,6 +264,7 @@ export function ShareStudio({
     setPreviewFailed(false);
     setDownloadFormat(DOWNLOAD_FORMATS.PNG);
     setHasChangedDownloadFormat(false);
+    setSelectedSocialPlatform(null);
     setToast(null);
 
     const body = document.body;
@@ -283,6 +289,7 @@ export function ShareStudio({
         gifExportControllerRef.current?.reset();
         setDownloadFormat(DOWNLOAD_FORMATS.PNG);
         setHasChangedDownloadFormat(false);
+        setSelectedSocialPlatform(null);
         requestCloseRef.current?.();
         return;
       }
@@ -415,6 +422,7 @@ export function ShareStudio({
   function selectDownloadFormat(nextFormat) {
     if (nextFormat === downloadFormat) return;
     setHasChangedDownloadFormat(true);
+    setSelectedSocialPlatform(null);
     if (nextFormat === DOWNLOAD_FORMATS.PNG) {
       if (gifExportState.status === GIF_EXPORT_STATUSES.GENERATING) {
         gifExportController?.cancel();
@@ -579,7 +587,14 @@ export function ShareStudio({
           key={downloadFormat}
         >
           {shareTargets.map((target, index) => (
-            <ShareDestination index={index} key={target.id} target={target} />
+            <ShareDestination
+              active={selectedShareTarget?.id === target.id}
+              guided={downloadFormat === DOWNLOAD_FORMATS.GIF && !mobileShareEnvironment}
+              index={index}
+              key={target.id}
+              onSelect={() => setSelectedSocialPlatform(target.id)}
+              target={target}
+            />
           ))}
           {downloadFormat === DOWNLOAD_FORMATS.GIF && !mobileShareEnvironment ? (
             <GifExportAction
@@ -604,6 +619,17 @@ export function ShareStudio({
             </a>
           )}
         </div>
+
+        {selectedShareTarget ? (
+          <ShareInstructions
+            copy={copy}
+            gifExportState={gifExportState}
+            locale={locale}
+            onDismiss={() => setSelectedSocialPlatform(null)}
+            onSaved={() => showToast(copy.gifSaved)}
+            target={selectedShareTarget}
+          />
+        ) : null}
 
         <div className="share-studio-secondary">
           {shareProfileUrl ? (
@@ -662,7 +688,33 @@ export function ShareStudio({
   );
 }
 
-function ShareDestination({ index, target }) {
+function ShareDestination({ active, guided, index, onSelect, target }) {
+  const content = (
+    <>
+      <span className="share-studio-action-icon">
+        <BrandLogo name={target.id} />
+      </span>
+      <span>{target.label}</span>
+    </>
+  );
+
+  if (guided) {
+    return (
+      <button
+        aria-controls={SHARE_INSTRUCTIONS_ID}
+        aria-expanded={active}
+        aria-label={target.accessibleLabel}
+        aria-pressed={active}
+        className={`share-studio-primary-action${active ? " is-active" : ""}`}
+        onClick={onSelect}
+        style={{ "--share-action-index": index }}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
   return (
     <a
       aria-label={target.accessibleLabel}
@@ -672,10 +724,7 @@ function ShareDestination({ index, target }) {
       style={{ "--share-action-index": index }}
       target="_blank"
     >
-      <span className="share-studio-action-icon">
-        <BrandLogo name={target.id} />
-      </span>
-      <span>{target.label}</span>
+      {content}
     </a>
   );
 }
@@ -721,13 +770,14 @@ function GifExportAction({
   );
 }
 
-// Retained but intentionally unwired. This panel guided users through copying
-// the PNG and pasting it into a composer, which was the only way to share
-// before the Open Graph share link existed. Social buttons now open the
-// composer with the link prefilled. Kept for a future flow that needs the
-// image-attachment path (for example KakaoTalk, which does not accept a URL
-// preview for every surface).
-function ShareInstructions({ copy, locale, onCopy, onDismiss, target }) {
+function ShareInstructions({
+  copy,
+  gifExportState,
+  locale,
+  onDismiss,
+  onSaved,
+  target
+}) {
   const dismissTimerRef = useRef(null);
   const dismissedRef = useRef(false);
   const instructionsRef = useRef(null);
@@ -848,14 +898,27 @@ function ShareInstructions({ copy, locale, onCopy, onDismiss, target }) {
       <ol>
         <li>
           <ShareStepNumber value="1" />
-          <button
-            className="share-studio-step-action"
-            onClick={onCopy}
-            type="button"
-          >
-            <Icon name="copy" size={14} />
-            <span>{copy.copyImage}</span>
-          </button>
+          {gifExportState.status === GIF_EXPORT_STATUSES.READY ? (
+            <a
+              className="share-studio-step-action"
+              download="codex-usage-profile.gif"
+              href={gifExportState.blobUrl}
+              onClick={onSaved}
+            >
+              <Icon name="download" size={14} />
+              <span>{copy.saveGif}</span>
+            </a>
+          ) : (
+            <button
+              className="share-studio-step-action"
+              data-gif-export-status={gifExportState.status}
+              disabled
+              type="button"
+            >
+              <Icon name="download" size={14} />
+              <span>{copy.saveGif}</span>
+            </button>
+          )}
         </li>
         <li>
           <ShareStepNumber value="2" />
@@ -875,7 +938,7 @@ function ShareInstructions({ copy, locale, onCopy, onDismiss, target }) {
         </li>
         <li className="share-studio-step-copy">
           <ShareStepNumber value="3" />
-          <span>{copy.pasteImage}</span>
+          <span>{copy.attachGif}</span>
         </li>
       </ol>
     </div>

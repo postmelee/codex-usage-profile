@@ -2610,8 +2610,11 @@ test.describe("Home and share card flow", () => {
     await page.screenshot({
       path: testInfo.outputPath("share-studio-gif-loading.png")
     });
-    await expect(dialog.getByRole("link", { name: "Share on X" })).toBeVisible();
-    await expect(dialog.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
+    const gifActions = dialog.locator(".share-studio-primary-actions");
+    const xGuideButton = gifActions.getByRole("button", { name: "Share on X" });
+    await expect(xGuideButton).toBeVisible();
+    await expect(gifActions.getByRole("button", { name: "Share on Reddit" }))
+      .toBeVisible();
     await expect(dialog.getByRole("link", { name: "Share on Threads" }))
       .toHaveCount(0);
     await expect(dialog.getByRole("link", { name: "Share on LinkedIn" }))
@@ -2640,7 +2643,33 @@ test.describe("Home and share card flow", () => {
     expect(formatTransition.childAnimationNames.every((name) => name === "none"))
       .toBe(true);
 
+    await xGuideButton.click();
+    const instructions = dialog.locator(".share-studio-instructions");
+    await expect(xGuideButton).toHaveAttribute("aria-expanded", "true");
+    await expect(xGuideButton).toHaveAttribute("aria-pressed", "true");
+    await expect(instructions.getByRole("heading", { name: "Share to X" }))
+      .toBeVisible();
+    await expect(instructions.getByRole("button", { name: "Save GIF" }))
+      .toBeDisabled();
+    await expect(instructions.getByRole("link", { name: "Open X composer" }))
+      .toHaveAttribute("href", /^https:\/\/x\.com\/intent\/tweet\?/);
+    await expect(instructions)
+      .toContainText("Attach the saved GIF to the post");
+
+    const redditGuideButton = gifActions.getByRole("button", {
+      name: "Share on Reddit"
+    });
+    await redditGuideButton.click();
+    await expect(xGuideButton).toHaveAttribute("aria-expanded", "false");
+    await expect(redditGuideButton).toHaveAttribute("aria-expanded", "true");
+    await expect(instructions.getByRole("heading", { name: "Share to Reddit" }))
+      .toBeVisible();
+    await expect(instructions.getByRole("link", { name: "Open Reddit composer" }))
+      .toHaveAttribute("href", /^https:\/\/www\.reddit\.com\/submit\?/);
+
     await pngOption.click();
+    await expect(instructions).toHaveCount(0);
+    await expect(dialog.getByRole("link", { name: "Share on X" })).toBeVisible();
     for (const name of [
       "Share on Threads",
       "Share on LinkedIn",
@@ -2651,10 +2680,12 @@ test.describe("Home and share card flow", () => {
     await gifOption.click();
     await expect(dialog.getByRole("link", { name: "Share on Threads" }))
       .toHaveCount(0);
+    await expect(gifActions.getByRole("button", { name: "Share on X" }))
+      .toHaveAttribute("aria-expanded", "false");
 
     let generationState = "waiting";
     await expect.poll(async () => {
-      generationState = await dialog.getByRole("link", { name: "Save GIF" })
+      generationState = await gifActions.getByRole("link", { name: "Save GIF" })
         .isVisible()
         ? "ready"
         : await dialog.isVisible()
@@ -2669,18 +2700,18 @@ test.describe("Home and share card flow", () => {
       await page.getByRole("button", { name: "Share", exact: true }).click();
       await dialog.getByRole("radio", { name: "GIF" }).click();
     }
-    await expect(dialog.getByRole("link", { name: "Save GIF" }))
+    await expect(gifActions.getByRole("link", { name: "Save GIF" }))
       .toBeVisible({ timeout: 60_000 });
     await expect(dialog.locator(".share-studio-gif-status"))
       .toContainText("X or Reddit post");
-    await expect(dialog.getByRole("link", { name: "Save GIF" }))
+    await expect(gifActions.getByRole("link", { name: "Save GIF" }))
       .toHaveAttribute("href", /^blob:/);
     await expect(motionCard).toHaveAttribute("data-share-preview-format", "gif");
     await expect(motionCard).toHaveAttribute("data-share-preview-source", "gif");
     await expect(motionCard).toHaveAttribute("data-share-target-status", "ready");
     await expect(motionCard).toHaveAttribute("data-share-preview-state", "ready");
     expect(gifSourceFetches).toContain("/api/profile/card.png");
-    const generatedBlobUrl = await dialog
+    const generatedBlobUrl = await gifActions
       .getByRole("link", { name: "Save GIF" })
       .getAttribute("href");
     await expect(dialog.getByRole("img", { name: "Codex usage card preview" }))
@@ -2696,8 +2727,14 @@ test.describe("Home and share card flow", () => {
     await gifOption.click();
     await expect(motionCard).toHaveAttribute("data-share-preview-format", "gif");
 
+    await gifActions.getByRole("button", { name: "Share on X" }).click();
+    await expect(instructions.getByRole("link", { name: "Save GIF" }))
+      .toHaveAttribute("href", generatedBlobUrl);
+    await expect(instructions.getByRole("link", { name: "Open X composer" }))
+      .toBeVisible();
+
     const downloadPromise = page.waitForEvent("download");
-    await dialog.getByRole("link", { name: "Save GIF" }).click();
+    await instructions.getByRole("link", { name: "Save GIF" }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("codex-usage-profile.gif");
     const downloadPath = await download.path();

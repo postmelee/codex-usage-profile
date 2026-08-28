@@ -2577,6 +2577,15 @@ button {
   background: var(--surface-active);
 }
 
+.share-studio-step-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.share-studio-step-action[data-gif-export-status="generating"]:disabled {
+  cursor: wait;
+}
+
 .share-studio-step-action:focus-visible,
 .share-studio-instructions-close:focus-visible,
 .share-studio-toast-close:focus-visible {

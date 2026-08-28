@@ -330,6 +330,9 @@ Task #39 Stage 2: browser Worker 생성 pipeline
   materialize되지 않은 로컬·초기 상태에서도 생성 가능하게 한다.
 - PNG 모드는 기존 X·Threads·LinkedIn·Facebook·Reddit을 유지하고 GIF 모드는
   X·Reddit만 노출하며, PNG로 돌아오면 5개 대상을 즉시 복원한다.
+- PNG 대상은 기존처럼 작성 창을 바로 열고, GIF의 X·Reddit 대상은 모달 안에서
+  `GIF 저장 → 작성 창 열기 → 저장한 GIF 첨부` 3단계 안내를 연다. 생성 중에는
+  안내 안의 GIF 저장도 비활성화하고 ready 뒤 같은 Blob 다운로드로 활성화한다.
 - 형식 전환 action row는 180ms 단일 opacity·position·scale 모션으로 교체하고
   유지·신규 child의 기존 stagger를 재실행하지 않아 X만 정적으로 남는 회귀를 막는다.
 - ready 뒤 상단 preview를 생성된 GIF Blob으로 교체하고 PNG 복귀 시 static PNG를
@@ -360,6 +363,16 @@ Task #39 Stage 2: browser Worker 생성 pipeline
 - compressed asset SHA-256과 대표 frame SHA-256을 테스트로 고정하고 실제 browser
   Worker 생성·preview·download를 E2E로 검증한다.
 
+### Stage 3.3 보정 — GIF 첨부 안내 복원
+
+- Open Graph link만 공유하던 PNG 대상은 direct composer anchor를 유지한다.
+- 자동 파일 첨부가 불가능한 GIF 모드의 X·Reddit 대상은 기존 ShareInstructions를
+  다시 연결하되 PNG 복사·붙여넣기 문구를 GIF 저장·수동 첨부 흐름으로 교체한다.
+- 대상 버튼의 `aria-expanded`·`aria-pressed`와 안내 영역 `aria-controls`를 연결하고,
+  대상/형식 변경·닫기·Escape에서 선택 상태를 초기화한다.
+- 기존 panel open 160ms ease-out, close 120ms ease-in 전환을 그대로 사용하며 format
+  action row의 단일 180ms 전환과 child stagger 미재실행 계약은 변경하지 않는다.
+
 ### 검증
 
 ```bash
@@ -374,6 +387,8 @@ desktop E2E:
 - PNG default와 기존 `Save PNG`
 - GIF select → 자동 generating skeleton·비활성 `Save GIF` → ready·활성 `Save GIF`
 - GIF 선택 시 X·Reddit만 남고 PNG 복귀 시 기존 5개 SNS가 모두 복원됨
+- GIF X·Reddit 클릭 시 저장·작성 창·첨부 안내, generating 저장 비활성, ready 저장 활성
+- PNG 대상은 안내 없이 기존 direct composer link를 유지하고 형식 변경 시 안내 닫힘
 - format 전환 row의 180ms 단일 모션과 child stagger 미재실행
 - 생성 중 skeleton, ready 뒤 GIF Blob, PNG 복귀와 reduced motion의 static PNG
 - download filename, MIME, 998×612/96-frame/size binary 확인

@@ -11,6 +11,7 @@ import {
 import { formatMessage } from "./i18n.js";
 
 const SHARE_MESSAGE_IDS = Object.freeze({
+  attachGif: "share.attachGif",
   close: "share.close",
   copyImage: "share.copyImage",
   copyImageUrl: "share.copyImageUrl",
