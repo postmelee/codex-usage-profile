@@ -121,6 +121,35 @@ Social platforms control their own crawler queues and caches. A new revision URL
 
 Social actions open each provider's compose experience with a public link. They do not call a provider API to upload an image or publish a post automatically. A provider may ignore some prefilled text. If a button is unavailable on your device, copy the share link and paste it into the app manually.
 
+## Animated GIF download on desktop web
+
+Share Studio can generate an animated version of the current card entirely in a supported desktop browser. The card stays fixed while the Ocean Border Beam travels around its edge.
+
+1. Open **Share** and choose **GIF**.
+2. Wait while the preview shows its loading state. **Save GIF** remains disabled until encoding finishes.
+3. Choose **X** or **Reddit** to open the attachment guide.
+4. Select **Save GIF**, open the provider's composer, and attach the saved `codex-usage-profile.gif` file yourself.
+
+The generated file uses this fixed export contract:
+
+| Property | Value |
+|---|---|
+| Canvas | 998x612 with a transparent background outside the rounded card |
+| Motion | Fixed card; Ocean Border Beam only |
+| Timing | 20 fps, 4.8 seconds, 96 frames, infinite seamless loop |
+| Palette | One global palette with at most 256 colors; no dithering |
+| Size | Less than 15,000,000 bytes |
+
+[X accepts animated GIFs up to 15MB on the web and 5MB on mobile](https://help.x.com/en/using-x/posting-gifs-and-pictures). Use the desktop X composer for this export. X requires a looping GIF; the generated file loops indefinitely. Reddit availability can depend on whether the destination community allows image or media posts in its [community settings](https://support.reddithelp.com/hc/en-us/articles/15484546290068-Community-settings).
+
+GIF generation has deliberate boundaries:
+
+- It is available only in the desktop web Share Studio. Mobile Share Studio remains PNG-only.
+- X and Reddit are the only GIF attachment guides. PNG mode keeps the normal link-sharing targets.
+- The application does not upload the file, attach it to a composer, or publish a post automatically.
+- There is no public GIF URL, GIF clipboard copy, or Web Share upload. README Markdown, copied image URLs, and public cards continue to use the static PNG.
+- Closing Share Studio, changing the card source, or leaving GIF mode cancels or discards the in-progress GIF job.
+
 ## Privacy and failure behavior
 
 - New profiles are private.
@@ -140,6 +169,10 @@ The CLI sends usage statistics, not GitHub identity or credentials. See [CLI log
 | Direct card is new but GitHub is old | Wait for Camo revalidation, then consider a targeted purge |
 | A social compose screen shows an old preview | Use the newest link copied from **Share**, then allow the provider time to crawl it |
 | A social compose screen shows no image | Confirm that the public share link and social image return `200`, then retry later |
+| **Save GIF** stays disabled | Keep Share Studio open until encoding finishes; if an error appears, use the retry action |
+| X rejects the saved GIF | Use x.com on desktop and confirm the file is below the web 15MB limit |
+| A GIF appears static on X | Confirm that the saved file was attached as a GIF; X displays non-looping GIFs as static images |
+| Reddit does not offer an image attachment | Choose a community that allows image or media posts |
 | Card theme or language is old | Save the setting again, verify the direct queryless card, and reload the README |
 | CLI reports `media_unavailable` | Wait for `Retry-After` and repeat the same submit |
 

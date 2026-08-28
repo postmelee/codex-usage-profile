@@ -67,6 +67,37 @@ test("renders a deterministic source-over frame while preserving the card center
   assert.equal(renderer.effectPixelCount, 59_392);
 });
 
+test("keeps the approved Chrome beam seamless on a transparent fixed card", async () => {
+  const compressed = await readFile(PROFILE_GIF_BEAM_ASSET_URL);
+  const frames = parseProfileGifBeamFrames(gunzipSync(compressed));
+  const base = createRoundedBase();
+  const renderer = createProfileGifGoldenFrameRenderer(base, frames);
+  const last = new Uint8ClampedArray(renderer.renderFrame(95));
+  const first = new Uint8ClampedArray(renderer.renderFrame(0));
+  const second = new Uint8ClampedArray(renderer.renderFrame(1));
+  const seamDelta = frameRgbaDelta(last, first);
+  const adjacentDelta = frameRgbaDelta(first, second);
+  const center = (306 * PROFILE_GIF_PRESET.width + 499) * 4;
+
+  assert.ok(seamDelta > 0, "frame 95 must not duplicate frame 0");
+  assert.ok(seamDelta / adjacentDelta > 0.95);
+  assert.ok(seamDelta / adjacentDelta < 1.05);
+  for (const frame of [last, first, second]) {
+    assert.deepEqual(
+      Array.from(frame.subarray(center, center + 4)),
+      Array.from(base.subarray(center, center + 4))
+    );
+    for (const pixelIndex of [
+      0,
+      PROFILE_GIF_PRESET.width - 1,
+      (PROFILE_GIF_PRESET.height - 1) * PROFILE_GIF_PRESET.width,
+      PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height - 1
+    ]) {
+      assert.equal(frame[pixelIndex * 4 + 3], 0);
+    }
+  }
+});
+
 test("rejects truncated, trailing, and unsupported beam assets", () => {
   assert.throws(() => parseProfileGifBeamFrames(new Uint8Array(8)), /signature/);
 
@@ -86,4 +117,31 @@ function createBase() {
     rgba.set([24, 24, 24, 255], offset);
   }
   return rgba;
+}
+
+function createRoundedBase() {
+  const { borderRadius, height, width } = PROFILE_GIF_PRESET;
+  const rgba = new Uint8ClampedArray(width * height * 4);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const nearestX = Math.max(borderRadius, Math.min(width - borderRadius, x + 0.5));
+      const nearestY = Math.max(borderRadius, Math.min(height - borderRadius, y + 0.5));
+      const dx = x + 0.5 - nearestX;
+      const dy = y + 0.5 - nearestY;
+      if (dx * dx + dy * dy > borderRadius * borderRadius) continue;
+
+      const offset = (y * width + x) * 4;
+      rgba.set([24, 24, 24, 255], offset);
+    }
+  }
+  return rgba;
+}
+
+function frameRgbaDelta(left, right) {
+  let total = 0;
+  for (let offset = 0; offset < left.length; offset += 1) {
+    total += Math.abs(left[offset] - right[offset]);
+  }
+  return total;
 }
