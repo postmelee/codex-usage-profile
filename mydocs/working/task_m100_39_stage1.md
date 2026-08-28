@@ -1,0 +1,96 @@
+# Task #39 Stage 1 보고서 — GIF 출력 계약과 encoder 고정
+
+GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
+구현계획서: [`task_m100_39_impl.md`](../plans/task_m100_39_impl.md)
+Stage: 1
+
+## 단계 목적
+
+웹 전용 Animated GIF 생성 기능의 선행 계약을 코드로 고정했다. 카드 자체는
+회전·기울기·확대 없이 정지시키고, 기존 웹 카드와 같은 Ocean Border Beam만
+998×612 투명 캔버스에서 20fps·4.8초 동안 순환하도록 했다. 브라우저 Worker와
+Share Studio를 연결하기 전에 frame phase, encoder, 전역 palette와 GIF binary
+invariant를 독립적으로 검증할 수 있는 기반을 마련했다.
+
+## 산출물
+
+| 파일 | 변경 요약 |
+|---|---|
+| `src/profile-card/gif-animation.js` | preset version 1, 998×612·96 frame 출력 계약, 웹 공통 Border Beam preset, center-angle conic stop·Ocean radial gradient·rounded edge mask renderer 구현 |
+| `src/profile-card/gif-encoder.js` | static·edge exact RGB 보존, animation-wide `rgb565` sample, 1-bit alpha, 단일 global palette, full-frame encoder와 결정적 palette mapper 구현 |
+| `src/profile-card/gif-binary.js` | bounded cursor 기반 GIF89a·loop·frame·delay·transparency·palette·size inspector 구현 |
+| `src/profile-card/__tests__/gif-animation.test.js` | preset, 0/90/180/270/356.25° phase, 고정 카드와 beam 사분면, 승인 시제품 5-frame golden signature와 95→0 seam 검증 |
+| `src/profile-card/__tests__/gif-encoder.test.js` | 96 frame encoder, 전역 palette 안정성·exact pixel·전체/edge RMSE, 투명 source 거부, 대표 public card 15MB 상한 검증 |
+| `src/profile-card/__tests__/gif-binary.test.js` | 정상 GIF metadata와 malformed/contract failure 검증 |
+| `src/profile-marketing/MarketingLanding.jsx` | 기존 `<BorderBeam>` 값을 공통 preset으로 교체 |
+| `package.json` | production dependency `gifenc: 1.0.3` exact version 추가 |
+| `package-lock.json` | `gifenc@1.0.3` registry integrity와 MIT license 고정 |
+| `mydocs/orders/20260827.md` | Stage 1 완료와 Stage 2 승인 대기 상태 반영 |
+| `mydocs/working/task_m100_39_stage1.md` | Stage 1 산출물·검증·잔여 위험 기록 |
+
+총 신규 제품·테스트 코드 1,026줄을 추가했다.
+
+## 본문 변경 정도 / 본문 무손실 여부
+
+코드 작업이므로 문서 본문 무손실 여부는 해당 없다. 기존 웹 카드의 Border Beam
+동작 값(`ocean`, `4.8s`, `brightness 1.05`, `md`, `strength 0.82`)은 변경하지 않고
+공통 상수로 이동했다. 현재 사용자 UI와 PNG 생성·저장 동작도 변경하지 않았다.
+
+초기 첫 composite frame `rgba4444` palette는 256색·no-dither 계약은 충족했지만,
+승인 시제품보다 exact pixel 비율이 낮고 카드 경계 오차가 큰 품질 회귀가 확인됐다.
+최종 encoder는 첫 pass에서 static base 최빈 16색과 animation edge 최빈 48색을 exact
+RGB로 보존하고 96 frame 균등 sample을 `rgb565`로 quantize한다. 두 번째 pass는 이
+global palette와 exact RGB cache 기반 nearest-color mapper를 재사용해 카드 내용의
+frame 간 색상 고정과 승인 시제품 수준의 선명도를 함께 보장한다.
+
+## 검증 결과
+
+실행 명령:
+
+```bash
+node --test src/profile-card/__tests__/gif-animation.test.js src/profile-card/__tests__/gif-encoder.test.js src/profile-card/__tests__/gif-binary.test.js
+npm run build:production
+git diff --check
+```
+
+결과:
+
+- OK — GIF 관련 12개 단위 테스트 통과, 실패·skip 없음.
+- OK — server 63 modules, client 1,835 modules production build 통과.
+- OK — `git diff --check` 출력 없음.
+- OK — 대표 public card 출력은 5,766,830 bytes로 15,000,000 bytes 미만이다.
+- OK — binary inspector 기준 998×612, 96 frames, frame delay 5cs, repeat 0,
+  global palette 256색, local palette 0개, 모든 frame transparency/disposal 1이다.
+- OK — 대표 frame의 exact RGB pixel은 초기 73.32%에서 93.20%로 개선됐고 전체
+  RMSE 0.667, edge RMSE 0.587로 자동 회귀 상한 0.8/0.75를 통과했다.
+- OK — frame 95→0 변화량이 frame 0→1의 75~125% 안에 있어 loop seam이 인접
+  frame과 같은 수준이다.
+- OK — Stage 3 통합 시각 QA에서 초기 rounded-perimeter 번역이 final prototype과
+  다름을 확인했다. CSS와 같은 center-angle conic phase·Ocean radial gradient·edge
+  fade로 교정하고, final prototype의 0/24/48/72/95 frame에서 추출한 footprint·p95
+  falloff·중심 golden signature와 카드 고정·투명 tight canvas를 자동 검증한다.
+- OK — `gifenc@1.0.3` exact 설치, MIT license, runtime dependency 0개,
+  production vulnerability 0개와 browser ESM bundle 가능 여부를 확인했다.
+
+## 잔여 위험
+
+- Stage 1 encoder는 Node와 browser-target bundle까지 확인했지만 실제 module
+  Worker의 PNG fetch/decode·cancel·timeout·transfer lifecycle은 Stage 2 범위다.
+- dark 대표 카드의 실제 용량은 충분하지만 light·locale 조합과 서로 다른 avatar
+  source의 15MB 상한은 Stage 2 fixture에서 추가 확인해야 한다.
+- X 게시물 첨부 후 플랫폼 측 재처리 결과는 제품 코드가 통제할 수 없으며, 최종
+  통합 시 실제 저장 파일을 수동 첨부해 확인해야 한다.
+
+## 다음 단계 영향
+
+- Stage 2는 `GIF_EXPORT_PRESET_VERSION`, source 10MB 상한, 60초 timeout과
+  renderer/encoder/inspector를 그대로 module Worker에 연결한다.
+- Worker completion 전에 `assertProfileGifContract`를 통과시켜야 하며, bytes가
+  15MB 이상이면 adaptive downgrade 없이 `too_large`로 종료해야 한다.
+- palette mapping은 `createGifGlobalPaletteMapper` 인스턴스 하나를 96 frame 동안
+  재사용해야 정적 카드 색상이 흔들리지 않는다.
+
+## 승인 요청
+
+- Stage 1 산출물과 검증 결과를 승인하면 Stage 2 browser Worker 생성 pipeline으로
+  진행한다.

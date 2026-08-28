@@ -2125,8 +2125,9 @@ button {
   --share-ease-enter: cubic-bezier(0.2, 0, 0, 1);
   --share-motion-quick: 140ms;
   align-items: stretch;
+  animation: share-studio-scrim-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
   backdrop-filter: blur(16px);
-  background: transparent;
+  background-color: var(--overlay-scrim);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -2143,21 +2144,8 @@ button {
 
 .share-studio-backdrop.is-closing,
 .share-studio-backdrop.is-handoff {
-  backdrop-filter: none;
-}
-
-.share-studio-backdrop::before {
-  animation: share-studio-scrim-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
-  background: var(--overlay-scrim);
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: fixed;
-}
-
-.share-studio-backdrop.is-closing::before,
-.share-studio-backdrop.is-handoff::before {
   animation: share-studio-scrim-out 400ms cubic-bezier(0.3, 0, 1, 1) both;
+  backdrop-filter: none;
 }
 
 .share-studio {
@@ -2199,12 +2187,14 @@ button {
 
 .share-studio-backdrop.is-closing .share-studio-title,
 .share-studio-backdrop.is-closing .share-studio-close,
+.share-studio-backdrop.is-closing .share-studio-format,
 .share-studio-backdrop.is-closing .share-studio-primary-action,
 .share-studio-backdrop.is-closing .share-studio-instructions,
 .share-studio-backdrop.is-closing .share-studio-secondary,
 .share-studio-backdrop.is-closing .share-studio-toast,
 .share-studio-backdrop.is-handoff .share-studio-title,
 .share-studio-backdrop.is-handoff .share-studio-close,
+.share-studio-backdrop.is-handoff .share-studio-format,
 .share-studio-backdrop.is-handoff .share-studio-primary-action,
 .share-studio-backdrop.is-handoff .share-studio-instructions,
 .share-studio-backdrop.is-handoff .share-studio-secondary,
@@ -2262,6 +2252,10 @@ button {
   width: 100%;
 }
 
+.share-studio-card.is-gif-preview {
+  animation: share-studio-gif-preview-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
 .share-studio-card.is-handoff-source,
 .share-studio-card.is-warm-handoff-target {
   animation: none;
@@ -2279,11 +2273,117 @@ button {
   color: var(--share-toast-danger-text);
 }
 
+.share-studio-format {
+  animation: share-studio-support-in 240ms cubic-bezier(0.2, 0, 0, 1) 190ms both;
+  display: grid;
+  justify-items: center;
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.share-studio-format-control {
+  background: var(--surface-hover-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(64px, 1fr));
+  padding: 3px;
+}
+
+.share-studio-format-option {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  min-height: 28px;
+  padding: 5px 14px;
+}
+
+.share-studio-format-option[aria-checked="true"] {
+  background: var(--share-action-background);
+  box-shadow: 0 1px 3px var(--card-filter-shadow);
+  color: var(--share-action-text);
+}
+
+.share-studio-format-option:not([aria-checked="true"]):hover {
+  color: var(--text-primary);
+}
+
+.share-studio-format-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.share-studio-gif-feedback {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 5px 0 -7px;
+  min-height: 16px;
+}
+
+.share-studio-gif-status {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  margin: 0;
+  text-align: center;
+}
+
+.share-studio-gif-status.is-error {
+  color: var(--share-toast-danger-text);
+}
+
+.share-studio-gif-retry {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.share-studio-gif-retry:hover,
+.share-studio-gif-retry:focus-visible {
+  color: var(--text-primary);
+}
+
+.share-studio-gif-retry:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .share-studio-primary-actions {
   display: grid;
   gap: 20px;
   grid-auto-flow: column;
   margin-top: 30px;
+}
+
+.share-studio-format + .share-studio-primary-actions {
+  margin-top: 18px;
+}
+
+.share-studio-primary-actions.is-format-transition {
+  animation: share-studio-actions-format-in 180ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.share-studio-primary-actions.is-format-transition .share-studio-primary-action {
+  animation: none;
 }
 
 .share-studio-primary-action {
@@ -2336,6 +2436,20 @@ button {
   opacity: 1;
   outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
+  transform: none;
+}
+
+.share-studio-primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.share-studio-primary-action[data-gif-export-status="generating"]:disabled {
+  cursor: wait;
+}
+
+.share-studio-primary-action:disabled .share-studio-action-icon {
+  background: var(--share-action-background);
   transform: none;
 }
 
@@ -2449,6 +2563,15 @@ button {
 .share-studio-step-action:hover,
 .share-studio-step-action:focus-visible {
   background: var(--surface-active);
+}
+
+.share-studio-step-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.share-studio-step-action[data-gif-export-status="generating"]:disabled {
+  cursor: wait;
 }
 
 .share-studio-step-action:focus-visible,
@@ -2576,21 +2699,21 @@ button {
 
 @keyframes share-studio-scrim-in {
   from {
-    opacity: 0;
+    background-color: transparent;
   }
 
   to {
-    opacity: 1;
+    background-color: var(--overlay-scrim);
   }
 }
 
 @keyframes share-studio-scrim-out {
   from {
-    opacity: 1;
+    background-color: var(--overlay-scrim);
   }
 
   to {
-    opacity: 0;
+    background-color: transparent;
   }
 }
 
@@ -2601,6 +2724,18 @@ button {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes share-studio-gif-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -2620,6 +2755,18 @@ button {
   from {
     opacity: 0;
     transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes share-studio-actions-format-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.99);
   }
 
   to {
@@ -4042,19 +4189,18 @@ button {
   }
 
   .share-studio-backdrop {
+    animation: share-studio-scrim-in 140ms ease-out both;
     backdrop-filter: none;
   }
 
-  .share-studio-backdrop::before {
-    animation: share-studio-reduced-fade-in 140ms ease-out both;
-  }
-
-  .share-studio-backdrop.is-closing::before,
-  .share-studio-backdrop.is-handoff::before {
-    animation: share-studio-reduced-fade-out 110ms ease-in both;
+  .share-studio-backdrop.is-closing,
+  .share-studio-backdrop.is-handoff {
+    animation: share-studio-scrim-out 110ms ease-in both;
   }
 
   .share-studio-close,
+  .share-studio-format,
+  .share-studio-primary-actions.is-format-transition,
   .share-studio-primary-action,
   .share-studio-secondary,
   .share-studio-title,
@@ -4064,6 +4210,10 @@ button {
   }
 
   .share-studio-card {
+    animation: none;
+  }
+
+  .share-studio-card.is-gif-preview {
     animation: none;
   }
 
@@ -4083,12 +4233,14 @@ button {
 
   .share-studio-backdrop.is-closing .share-studio-title,
   .share-studio-backdrop.is-closing .share-studio-close,
+  .share-studio-backdrop.is-closing .share-studio-format,
   .share-studio-backdrop.is-closing .share-studio-primary-action,
   .share-studio-backdrop.is-closing .share-studio-instructions,
   .share-studio-backdrop.is-closing .share-studio-secondary,
   .share-studio-backdrop.is-closing .share-studio-toast,
   .share-studio-backdrop.is-handoff .share-studio-title,
   .share-studio-backdrop.is-handoff .share-studio-close,
+  .share-studio-backdrop.is-handoff .share-studio-format,
   .share-studio-backdrop.is-handoff .share-studio-primary-action,
   .share-studio-backdrop.is-handoff .share-studio-instructions,
   .share-studio-backdrop.is-handoff .share-studio-secondary,
@@ -4102,6 +4254,18 @@ button {
   .share-studio-primary-action:focus-visible .share-studio-action-icon {
     transform: none;
     transition: none;
+  }
+}
+
+@media (max-height: 900px) {
+  .share-studio.has-instructions .share-studio-card-motion {
+    width: min(520px, calc(100% - 24px));
+  }
+}
+
+@media (max-height: 760px) {
+  .share-studio.has-instructions .share-studio-card-motion {
+    width: min(420px, calc(100% - 24px));
   }
 }
 
@@ -4143,7 +4307,7 @@ button {
     padding:
       max(64px, env(safe-area-inset-top))
       max(24px, env(safe-area-inset-right))
-      max(20px, env(safe-area-inset-bottom))
+      max(40px, env(safe-area-inset-bottom))
       max(24px, env(safe-area-inset-left));
   }
 
@@ -4168,6 +4332,14 @@ button {
   .share-studio-primary-actions {
     gap: 14px;
     margin-top: 14px;
+  }
+
+  .share-studio-format {
+    margin-top: 10px;
+  }
+
+  .share-studio-format + .share-studio-primary-actions {
+    margin-top: 8px;
   }
 
   .share-studio-primary-action {
@@ -4370,8 +4542,12 @@ button {
     padding:
       max(64px, env(safe-area-inset-top))
       max(16px, env(safe-area-inset-right))
-      max(28px, env(safe-area-inset-bottom))
+      max(48px, env(safe-area-inset-bottom))
       max(16px, env(safe-area-inset-left));
+  }
+
+  .share-studio-backdrop.has-instructions {
+    padding-bottom: max(64px, env(safe-area-inset-bottom));
   }
 
   .share-studio {
@@ -4402,6 +4578,10 @@ button {
     width: auto;
   }
 
+  .share-studio-primary-actions[data-share-format="gif"] {
+    grid-template-columns: repeat(3, 60px);
+  }
+
   .share-studio-primary-action {
     font-size: 12px;
     min-width: 0;
@@ -4421,6 +4601,13 @@ button {
     min-height: 44px;
   }
 
+  .share-studio.has-instructions .share-studio-secondary-action,
+  .share-studio.has-instructions .share-studio-privacy-action {
+    font-size: 11px;
+    min-height: 36px;
+    padding: 4px 6px;
+  }
+
   .share-studio-instructions {
     padding: 10px;
     width: 100%;
@@ -4432,12 +4619,12 @@ button {
   }
 
   .share-studio-instructions ol {
-    gap: 12px;
+    gap: 8px;
     margin-top: 6px;
   }
 
   .share-studio-instructions li {
-    min-height: 32px;
+    min-height: 28px;
   }
 
   .share-studio-step-action {
@@ -4448,14 +4635,14 @@ button {
 
   .share-studio-step-action::before {
     content: "";
-    inset: -8px -4px;
+    inset: -4px;
     position: absolute;
   }
 
   .share-studio-instructions .share-studio-step-copy {
     font-size: 13px;
     line-height: 18px;
-    min-height: 32px;
+    min-height: 28px;
   }
 
   .share-studio-step-number {

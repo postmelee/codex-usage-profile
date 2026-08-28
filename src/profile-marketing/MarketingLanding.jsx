@@ -8,6 +8,7 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
 import { useCardFrameRadius } from "../profile-ui/useCardFrameRadius.js";
+import { PROFILE_CARD_BORDER_BEAM_PRESET } from "../profile-card/gif-animation.js";
 import { normalizeCardTheme } from "../profile-card/theme.js";
 import {
   createMarketingConfig,
@@ -134,12 +135,12 @@ export function MarketingCardPreview({
       <BorderBeam
         active={!busy && !prefersReducedMotion}
         borderRadius={measuredRadius ?? undefined}
-        brightness={1.05}
+        brightness={PROFILE_CARD_BORDER_BEAM_PRESET.brightness}
         className="home-card-beam"
-        colorVariant="ocean"
-        duration={4.8}
-        size="md"
-        strength={0.82}
+        colorVariant={PROFILE_CARD_BORDER_BEAM_PRESET.colorVariant}
+        duration={PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds}
+        size={PROFILE_CARD_BORDER_BEAM_PRESET.size}
+        strength={PROFILE_CARD_BORDER_BEAM_PRESET.strength}
       >
         <CardImageFrame
           alt={alt}
