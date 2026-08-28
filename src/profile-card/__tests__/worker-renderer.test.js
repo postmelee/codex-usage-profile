@@ -197,6 +197,41 @@ test("renders the Worker light social surface without changing dark padding", as
     readSocialPixel(darkContext, layout.cardX / 2, layout.canvasHeight / 2)[3],
     0
   );
+  const lightBounds = findBounds(lightContext, (data, offset) => !matchesRgba(
+    data,
+    offset,
+    rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+  ));
+  const darkBounds = findBounds(darkContext, (data, offset) => (
+    data[offset + 3] >= 128
+  ));
+
+  assert.deepEqual(lightBounds, darkBounds);
+  assert.deepEqual(
+    lightBounds,
+    { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+});
+
+test("keeps Worker standalone alpha geometry identical across themes", async () => {
+  const viewModel = createViewModel("ko");
+  const [lightPng, darkPng] = await Promise.all([
+    renderWorkerPng(viewModel, { avatarSource: avatar, theme: "light" }),
+    renderWorkerPng(viewModel, { avatarSource: avatar, theme: "dark" })
+  ]);
+  const [light, dark] = await Promise.all([
+    loadImage(lightPng),
+    loadImage(darkPng)
+  ]);
+  const lightContext = imageContext(light);
+  const darkContext = imageContext(dark);
+
+  assert.deepEqual([light.width, light.height], [dark.width, dark.height]);
+  assert.equal(countAlphaDifferences(lightContext, darkContext), 0);
+  assert.notDeepEqual(
+    readOutputPixel(lightContext, 748, 459),
+    readOutputPixel(darkContext, 748, 459)
+  );
 });
 
 function createViewModel(locale) {
@@ -227,6 +262,60 @@ function readSocialPixel(context, x, y) {
     1
   );
   return [data[0], data[1], data[2], data[3]];
+}
+
+function readOutputPixel(context, x, y) {
+  const { data } = context.getImageData(x, y, 1, 1);
+  return [data[0], data[1], data[2], data[3]];
+}
+
+function countAlphaDifferences(left, right) {
+  const leftData = left.getImageData(
+    0,
+    0,
+    left.canvas.width,
+    left.canvas.height
+  ).data;
+  const rightData = right.getImageData(
+    0,
+    0,
+    right.canvas.width,
+    right.canvas.height
+  ).data;
+  let differences = 0;
+
+  for (let offset = 3; offset < leftData.length; offset += 4) {
+    if (leftData[offset] !== rightData[offset]) differences += 1;
+  }
+  return differences;
+}
+
+function findBounds(context, includesPixel) {
+  const { height, width } = context.canvas;
+  const { data } = context.getImageData(0, 0, width, height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = ((y * width) + x) * 4;
+      if (!includesPixel(data, offset)) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return { maxX, maxY, minX, minY };
+}
+
+function matchesRgba(data, offset, expected) {
+  return data[offset] === expected[0] &&
+    data[offset + 1] === expected[1] &&
+    data[offset + 2] === expected[2] &&
+    data[offset + 3] === expected[3];
 }
 
 function rgba(hex) {

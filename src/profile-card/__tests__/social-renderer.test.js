@@ -128,6 +128,34 @@ test("keeps dark social padding and rounded corners transparent", async () => {
   );
 });
 
+test("keeps native light and dark social card placement identical", async () => {
+  const [lightPng, darkPng] = await Promise.all([
+    renderProfileSocialCardPng(createViewModel(), {
+      avatarSource: AVATAR_SOURCE,
+      theme: "light"
+    }),
+    renderProfileSocialCardPng(createViewModel(), {
+      avatarSource: AVATAR_SOURCE,
+      theme: "dark"
+    })
+  ]);
+  const [lightContext, darkContext] = await Promise.all([
+    drawToContext(lightPng),
+    drawToContext(darkPng)
+  ]);
+  const lightBounds = findChangedBounds(
+    lightContext,
+    rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+  );
+  const darkBounds = findAlphaCoverageBounds(darkContext, 128);
+
+  assert.deepEqual(lightBounds, darkBounds);
+  assert.deepEqual(
+    lightBounds,
+    { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+});
+
 test("draws card content inside the placed card area", async () => {
   const layout = computeSocialCanvasLayout();
   const png = await renderProfileSocialCardPng(createViewModel(), {
@@ -207,6 +235,33 @@ test("worker social svg reuses the card body markup unchanged", () => {
   }
 });
 
+test("worker light and dark card geometry differs only by palette and surface", () => {
+  const viewModel = createViewModel();
+  const lightCard = createWorkerProfileCardSvg(viewModel, { theme: "light" });
+  const darkCard = createWorkerProfileCardSvg(viewModel, { theme: "dark" });
+  const lightSocial = createWorkerProfileSocialCardSvg(viewModel, {
+    theme: "light"
+  });
+  const darkSocial = createWorkerProfileSocialCardSvg(viewModel, {
+    theme: "dark"
+  });
+
+  assert.equal(
+    normalizeThemeColors(lightCard, CARD_THEME_PALETTES.light),
+    normalizeThemeColors(darkCard, CARD_THEME_PALETTES.dark)
+  );
+  assert.equal(
+    normalizeThemeColors(
+      extractSocialCardGroup(lightSocial),
+      CARD_THEME_PALETTES.light
+    ),
+    normalizeThemeColors(
+      extractSocialCardGroup(darkSocial),
+      CARD_THEME_PALETTES.dark
+    )
+  );
+});
+
 test("worker card svg keeps its original dimensions", () => {
   const svg = createWorkerProfileCardSvg(createViewModel(), { theme: "dark" });
 
@@ -245,6 +300,21 @@ function rgba(hex) {
 }
 
 function findChangedBounds(context, background) {
+  return findBounds(context, (data, offset) => !(
+    data[offset] === background[0] &&
+    data[offset + 1] === background[1] &&
+    data[offset + 2] === background[2] &&
+    data[offset + 3] === background[3]
+  ));
+}
+
+function findAlphaCoverageBounds(context, minimumAlpha) {
+  return findBounds(context, (data, offset) => (
+    data[offset + 3] >= minimumAlpha
+  ));
+}
+
+function findBounds(context, includesPixel) {
   const { height, width } = context.canvas;
   const { data } = context.getImageData(0, 0, width, height);
   let minX = width;
@@ -255,14 +325,7 @@ function findChangedBounds(context, background) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const offset = ((y * width) + x) * 4;
-      if (
-        data[offset] === background[0] &&
-        data[offset + 1] === background[1] &&
-        data[offset + 2] === background[2] &&
-        data[offset + 3] === background[3]
-      ) {
-        continue;
-      }
+      if (!includesPixel(data, offset)) continue;
 
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
@@ -272,4 +335,30 @@ function findChangedBounds(context, background) {
   }
 
   return { maxX, maxY, minX, minY };
+}
+
+function normalizeThemeColors(markup, palette) {
+  const colors = new Set([
+    palette.avatarFallback,
+    palette.background,
+    palette.divider,
+    palette.primary,
+    palette.secondary,
+    ...palette.heatmap
+  ]);
+  let normalized = markup;
+
+  for (const color of colors) {
+    normalized = normalized.replaceAll(color, "{{theme-color}}");
+  }
+  return normalized;
+}
+
+function extractSocialCardGroup(svg) {
+  const start = svg.indexOf("<g transform=");
+  const end = svg.lastIndexOf("</g>");
+
+  assert.ok(start >= 0);
+  assert.ok(end > start);
+  return svg.slice(start, end + 4);
 }
