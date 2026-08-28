@@ -1,5 +1,8 @@
+import { normalizeCardTheme } from "./theme.js";
+
 export const SOCIAL_CARD_LOGICAL_WIDTH = 499;
 export const SOCIAL_CARD_LOGICAL_HEIGHT = 306;
+export const SOCIAL_CARD_LOGICAL_RADIUS = 32;
 export const SOCIAL_CANVAS_WIDTH = 1200;
 export const SOCIAL_CANVAS_HEIGHT = 630;
 export const SOCIAL_OUTPUT_SCALE = 2;
@@ -9,6 +12,9 @@ export const SOCIAL_CANVAS_MIN_HORIZONTAL_PADDING = 120;
 export const SOCIAL_CANVAS_MIN_VERTICAL_PADDING = 20;
 export const SOCIAL_CARD_ASPECT_RATIO =
   SOCIAL_CARD_LOGICAL_WIDTH / SOCIAL_CARD_LOGICAL_HEIGHT;
+export const SOCIAL_LIGHT_CANVAS_COLOR = "#F3F5F7";
+export const SOCIAL_LIGHT_BORDER_COLOR = "#D0D7DE";
+export const SOCIAL_LIGHT_BORDER_WIDTH = 1;
 
 export function computeSocialCanvasLayout(options = {}) {
   const canvasWidth = requirePositiveNumber(
@@ -56,6 +62,26 @@ export function computeSocialCanvasLayout(options = {}) {
     cardX: (canvasWidth - cardWidth) / 2,
     cardY: (canvasHeight - cardHeight) / 2,
     scale: cardWidth / SOCIAL_CARD_LOGICAL_WIDTH
+  });
+}
+
+export function getSocialCanvasSurface(theme, layout) {
+  if (normalizeCardTheme(theme) !== "light") return null;
+
+  const resolvedLayout = layout ?? computeSocialCanvasLayout();
+  const outlineInset = SOCIAL_LIGHT_BORDER_WIDTH / 2;
+
+  return Object.freeze({
+    backgroundColor: SOCIAL_LIGHT_CANVAS_COLOR,
+    borderColor: SOCIAL_LIGHT_BORDER_COLOR,
+    borderWidth: SOCIAL_LIGHT_BORDER_WIDTH,
+    outline: Object.freeze({
+      height: resolvedLayout.cardHeight - (outlineInset * 2),
+      radius: (SOCIAL_CARD_LOGICAL_RADIUS * resolvedLayout.scale) - outlineInset,
+      width: resolvedLayout.cardWidth - (outlineInset * 2),
+      x: resolvedLayout.cardX + outlineInset,
+      y: resolvedLayout.cardY + outlineInset
+    })
   });
 }
 

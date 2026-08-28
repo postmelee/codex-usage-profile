@@ -8,10 +8,13 @@ import { renderProfileSocialCardPng } from "../renderer.js";
 import {
   SOCIAL_CANVAS_HEIGHT,
   SOCIAL_CANVAS_WIDTH,
+  SOCIAL_LIGHT_BORDER_COLOR,
+  SOCIAL_LIGHT_CANVAS_COLOR,
   SOCIAL_OUTPUT_HEIGHT,
   SOCIAL_OUTPUT_SCALE,
   SOCIAL_OUTPUT_WIDTH,
-  computeSocialCanvasLayout
+  computeSocialCanvasLayout,
+  getSocialCanvasSurface
 } from "../social-canvas.js";
 import { CARD_THEME_PALETTES } from "../theme.js";
 import { buildCardViewModel } from "../view-model.js";
@@ -26,6 +29,8 @@ import {
 } from "../worker-renderer.js";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+// Transformed body and direct outline rasterization can differ by two RGB steps.
+const SURFACE_ANTIALIAS_CHANNEL_TOLERANCE = 2;
 const AVATAR_SOURCE = readFileSync(
   new URL("../../../public/assets/postmelee-avatar.png", import.meta.url)
 );
@@ -53,33 +58,67 @@ test("renders the social card at twice the 1200x630 layout", async () => {
   assert.equal(SOCIAL_OUTPUT_HEIGHT, SOCIAL_CANVAS_HEIGHT * SOCIAL_OUTPUT_SCALE);
 });
 
-test("leaves the padding around the card transparent", async () => {
+test("fills only the light social padding with the neutral canvas", async () => {
   const layout = computeSocialCanvasLayout();
   const png = await renderProfileSocialCardPng(createViewModel(), {
     avatarSource: AVATAR_SOURCE,
     theme: "light"
+  });
+  const context = await drawToContext(png);
+  const background = rgba(SOCIAL_LIGHT_CANVAS_COLOR);
+
+  assert.deepEqual(readPixel(context, 4, 4), background);
+  assert.deepEqual(
+    readPixel(context, layout.canvasWidth - 4, layout.canvasHeight - 4),
+    background
+  );
+  assert.deepEqual(
+    readPixel(context, Math.round(layout.cardX / 2), layout.canvasHeight / 2),
+    background
+  );
+});
+
+test("draws the light outline inside the unchanged card bounds", async () => {
+  const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface("light", layout);
+  const png = await renderProfileSocialCardPng(createViewModel(), {
+    avatarSource: AVATAR_SOURCE,
+    theme: "light"
+  });
+  const context = await drawToContext(png);
+
+  assert.deepEqual(
+    readPixel(context, layout.cardX + 1, layout.cardY + 1),
+    rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+  );
+  assert.deepEqual(
+    readPixel(
+      context,
+      surface.outline.x,
+      layout.canvasHeight / 2
+    ),
+    rgba(SOCIAL_LIGHT_BORDER_COLOR)
+  );
+  assert.deepEqual(
+    readPixel(context, layout.cardX + 2, layout.canvasHeight / 2),
+    rgba(CARD_THEME_PALETTES.light.background)
+  );
+  assert.deepEqual(
+    findChangedBounds(context, rgba(SOCIAL_LIGHT_CANVAS_COLOR)),
+    { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+});
+
+test("keeps dark social padding and rounded corners transparent", async () => {
+  const layout = computeSocialCanvasLayout();
+  const png = await renderProfileSocialCardPng(createViewModel(), {
+    avatarSource: AVATAR_SOURCE,
+    theme: "dark"
   });
   const context = await drawToContext(png);
 
   assert.equal(readPixel(context, 4, 4)[3], 0);
-  assert.equal(
-    readPixel(context, layout.canvasWidth - 4, layout.canvasHeight - 4)[3],
-    0
-  );
-  assert.equal(
-    readPixel(context, Math.round(layout.cardX / 2), layout.canvasHeight / 2)[3],
-    0
-  );
-});
-
-test("keeps the rounded card corners visible against the transparent padding", async () => {
-  const layout = computeSocialCanvasLayout();
-  const png = await renderProfileSocialCardPng(createViewModel(), {
-    avatarSource: AVATAR_SOURCE,
-    theme: "light"
-  });
-  const context = await drawToContext(png);
-
+  assert.equal(readPixel(context, layout.cardX / 2, layout.canvasHeight / 2)[3], 0);
   assert.equal(readPixel(context, layout.cardX + 1, layout.cardY + 1)[3], 0);
   assert.equal(
     readPixel(
@@ -89,13 +128,41 @@ test("keeps the rounded card corners visible against the transparent padding", a
     )[3],
     0
   );
+});
+
+test("keeps native light outline inside the shared dark card geometry", async () => {
+  const [lightPng, darkPng] = await Promise.all([
+    renderProfileSocialCardPng(createViewModel(), {
+      avatarSource: AVATAR_SOURCE,
+      theme: "light"
+    }),
+    renderProfileSocialCardPng(createViewModel(), {
+      avatarSource: AVATAR_SOURCE,
+      theme: "dark"
+    })
+  ]);
+  const [lightContext, darkContext] = await Promise.all([
+    drawToContext(lightPng),
+    drawToContext(darkPng)
+  ]);
+  const lightBounds = findChangedBounds(
+    lightContext,
+    rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+  );
+  const darkBounds = findAlphaCoverageBounds(darkContext, 128);
+
+  assert.deepEqual(lightBounds, darkBounds);
   assert.deepEqual(
-    readPixel(
-      context,
-      layout.cardX + (layout.cardWidth / 2),
-      layout.cardY + 6
+    lightBounds,
+    { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+  assert.equal(
+    countChangedPixelsOutsideAlphaGeometry(
+      lightContext,
+      darkContext,
+      rgba(SOCIAL_LIGHT_CANVAS_COLOR)
     ),
-    rgba(CARD_THEME_PALETTES.light.background)
+    0
   );
 });
 
@@ -144,15 +211,65 @@ test("worker social svg uses the shared canvas layout", () => {
   assert.ok(!/<svg[^>]*><rect/.test(svg));
 });
 
-test("worker social svg reuses the card body markup unchanged", () => {
-  const viewModel = createViewModel();
-  const card = createWorkerProfileCardSvg(viewModel, { theme: "dark" });
-  const social = createWorkerProfileSocialCardSvg(viewModel, { theme: "dark" });
-  const body = card
-    .replace(/^<svg[^>]*>/, "")
-    .replace(/<\/svg>$/, "");
+test("worker light social svg orders the surface, card, and outline", () => {
+  const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface("light", layout);
+  const svg = createWorkerProfileSocialCardSvg(createViewModel(), {
+    theme: "light"
+  });
+  const background = `<rect width="${layout.canvasWidth}"` +
+    ` height="${layout.canvasHeight}" fill="${SOCIAL_LIGHT_CANVAS_COLOR}"/>`;
+  const group = `<g transform="translate(${layout.cardX} ${layout.cardY})` +
+    ` scale(${layout.scale})">`;
+  const outline = `<rect x="${surface.outline.x}" y="${surface.outline.y}"` +
+    ` width="${surface.outline.width}" height="${surface.outline.height}"` +
+    ` rx="${surface.outline.radius}" fill="none"` +
+    ` stroke="${SOCIAL_LIGHT_BORDER_COLOR}" stroke-width="1"/>`;
 
-  assert.ok(social.includes(body));
+  assert.ok(svg.indexOf(background) > 0);
+  assert.ok(svg.indexOf(group) > svg.indexOf(background));
+  assert.ok(svg.indexOf(outline) > svg.indexOf(group));
+  assert.ok(svg.endsWith(`${outline}</svg>`));
+});
+
+test("worker social svg reuses the card body markup unchanged", () => {
+  for (const theme of ["dark", "light"]) {
+    const viewModel = createViewModel();
+    const card = createWorkerProfileCardSvg(viewModel, { theme });
+    const social = createWorkerProfileSocialCardSvg(viewModel, { theme });
+    const body = card
+      .replace(/^<svg[^>]*>/, "")
+      .replace(/<\/svg>$/, "");
+
+    assert.ok(social.includes(body));
+  }
+});
+
+test("worker light and dark card geometry differs only by palette and surface", () => {
+  const viewModel = createViewModel();
+  const lightCard = createWorkerProfileCardSvg(viewModel, { theme: "light" });
+  const darkCard = createWorkerProfileCardSvg(viewModel, { theme: "dark" });
+  const lightSocial = createWorkerProfileSocialCardSvg(viewModel, {
+    theme: "light"
+  });
+  const darkSocial = createWorkerProfileSocialCardSvg(viewModel, {
+    theme: "dark"
+  });
+
+  assert.equal(
+    normalizeThemeColors(lightCard, CARD_THEME_PALETTES.light),
+    normalizeThemeColors(darkCard, CARD_THEME_PALETTES.dark)
+  );
+  assert.equal(
+    normalizeThemeColors(
+      extractSocialCardGroup(lightSocial),
+      CARD_THEME_PALETTES.light
+    ),
+    normalizeThemeColors(
+      extractSocialCardGroup(darkSocial),
+      CARD_THEME_PALETTES.dark
+    )
+  );
 });
 
 test("worker card svg keeps its original dimensions", () => {
@@ -190,4 +307,99 @@ function rgba(hex) {
     Number.parseInt(hex.slice(5, 7), 16),
     255
   ];
+}
+
+function findChangedBounds(context, background) {
+  return findBounds(context, (data, offset) => !(
+    data[offset] === background[0] &&
+    data[offset + 1] === background[1] &&
+    data[offset + 2] === background[2] &&
+    data[offset + 3] === background[3]
+  ));
+}
+
+function findAlphaCoverageBounds(context, minimumAlpha) {
+  return findBounds(context, (data, offset) => (
+    data[offset + 3] >= minimumAlpha
+  ));
+}
+
+function countChangedPixelsOutsideAlphaGeometry(light, dark, background) {
+  const lightData = light.getImageData(
+    0,
+    0,
+    light.canvas.width,
+    light.canvas.height
+  ).data;
+  const darkData = dark.getImageData(
+    0,
+    0,
+    dark.canvas.width,
+    dark.canvas.height
+  ).data;
+  let outside = 0;
+
+  for (let offset = 0; offset < lightData.length; offset += 4) {
+    const channelDelta = Math.max(
+      Math.abs(lightData[offset] - background[0]),
+      Math.abs(lightData[offset + 1] - background[1]),
+      Math.abs(lightData[offset + 2] - background[2])
+    );
+    if (
+      channelDelta > SURFACE_ANTIALIAS_CHANNEL_TOLERANCE &&
+      darkData[offset + 3] === 0
+    ) {
+      outside += 1;
+    }
+  }
+  return outside;
+}
+
+function findBounds(context, includesPixel) {
+  const { height, width } = context.canvas;
+  const { data } = context.getImageData(0, 0, width, height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = ((y * width) + x) * 4;
+      if (!includesPixel(data, offset)) continue;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  return { maxX, maxY, minX, minY };
+}
+
+function normalizeThemeColors(markup, palette) {
+  const colors = new Set([
+    palette.avatarFallback,
+    palette.background,
+    palette.divider,
+    palette.primary,
+    palette.secondary,
+    ...palette.heatmap
+  ]);
+  let normalized = markup;
+
+  for (const color of colors) {
+    normalized = normalized.replaceAll(color, "{{theme-color}}");
+  }
+  return normalized;
+}
+
+function extractSocialCardGroup(svg) {
+  const start = svg.indexOf("<g transform=");
+  const end = svg.lastIndexOf("</g>");
+
+  assert.ok(start >= 0);
+  assert.ok(end > start);
+  return svg.slice(start, end + 4);
 }
