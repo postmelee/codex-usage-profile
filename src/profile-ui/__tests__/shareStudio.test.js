@@ -10,6 +10,7 @@ import {
   getShareStudioCopy,
   getShareStudioGifErrorCopy,
   isMobileShareEnvironment,
+  quantizeShareStudioGifAnnouncementProgress,
   resolveShareStudioCardUrls,
   resolveShareStudioGifSourceUrl,
   resolveShareStudioProfileUrls,
@@ -44,6 +45,12 @@ test("formats bounded GIF progress and maps every typed export error", () => {
   assert.equal(formatShareStudioGifProgress("en", 0.426), "Generating GIF… 43%");
   assert.equal(formatShareStudioGifProgress("ko", 3), "GIF 생성 중… 100%");
   assert.equal(formatShareStudioGifProgress("en", Number.NaN), "Generating GIF… 0%");
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(Number.NaN), 0);
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(0.249), 0);
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(0.25), 0.25);
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(0.749), 0.5);
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(0.999), 0.75);
+  assert.equal(quantizeShareStudioGifAnnouncementProgress(1), 1);
 
   const copy = getShareStudioCopy("en");
   const expected = {

@@ -1,13 +1,15 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
 import {
+  SOCIAL_CARD_LOGICAL_RADIUS,
   SOCIAL_OUTPUT_SCALE,
-  computeSocialCanvasLayout
+  computeSocialCanvasLayout,
+  getSocialCanvasSurface
 } from "./social-canvas.js";
 import { getCardThemePalette } from "./theme.js";
 
 export const WORKER_CARD_RENDERER_VERSION =
-  "codex-share-card-2-resvg-wasm-1";
+  "codex-share-card-3-resvg-wasm-1";
 
 const CARD_LOGICAL_WIDTH = 499;
 const CARD_LOGICAL_HEIGHT = 306;
@@ -96,18 +98,36 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
 
 export function createWorkerProfileSocialCardSvg(viewModel, options = {}) {
   assertViewModel(viewModel);
-  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
+  const theme = options.theme ?? viewModel.theme;
+  const palette = getCardThemePalette(theme);
   const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface(theme, layout);
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.canvasWidth}"`,
     ` height="${layout.canvasHeight}" viewBox="0 0 ${layout.canvasWidth}`,
     ` ${layout.canvasHeight}">`,
+    surface
+      ? `<rect width="${layout.canvasWidth}" height="${layout.canvasHeight}"` +
+        ` fill="${surface.backgroundColor}"/>`
+      : "",
     `<g transform="translate(${layout.cardX} ${layout.cardY})`,
     ` scale(${layout.scale})">`,
     createWorkerProfileCardBody(viewModel, options, palette),
     "</g>",
+    surface ? createWorkerSocialCardOutline(surface) : "",
     "</svg>"
+  ].join("");
+}
+
+function createWorkerSocialCardOutline(surface) {
+  const { outline } = surface;
+
+  return [
+    `<rect x="${outline.x}" y="${outline.y}"`,
+    ` width="${outline.width}" height="${outline.height}"`,
+    ` rx="${outline.radius}" fill="none"`,
+    ` stroke="${surface.borderColor}" stroke-width="${surface.borderWidth}"/>`
   ].join("");
 }
 
@@ -125,7 +145,7 @@ function createWorkerProfileCardBody(viewModel, options, palette) {
     '<clipPath id="avatar-clip"><circle cx="58" cy="58" r="22"/></clipPath>',
     "</defs>",
     `<rect width="${CARD_LOGICAL_WIDTH}" height="${CARD_LOGICAL_HEIGHT}"`,
-    ` rx="32" fill="${palette.background}"/>`,
+    ` rx="${SOCIAL_CARD_LOGICAL_RADIUS}" fill="${palette.background}"/>`,
     avatar,
     createFittedText(viewModel.header.displayName, {
       color: palette.primary,

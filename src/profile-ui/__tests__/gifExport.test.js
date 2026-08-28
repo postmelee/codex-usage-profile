@@ -59,13 +59,19 @@ test("builds a canonical versioned source key and checks browser capabilities", 
     selectedImageUrl: "/card.png",
     shareRevision: null
   }));
-  assert.throws(
-    () => buildGifExportSourceKey({
+  assert.equal(buildGifExportSourceKey({
+    selectedImageUrl: "/card.png",
+    shareRevision: "42"
+  }), buildGifExportSourceKey({
+    selectedImageUrl: "/card.png",
+    shareRevision: 42
+  }));
+  for (const shareRevision of [7.5, -1, "abc", {}, ""]) {
+    assert.equal(JSON.parse(buildGifExportSourceKey({
       selectedImageUrl: "/card.png",
-      shareRevision: "42"
-    }),
-    /shareRevision/
-  );
+      shareRevision
+    })).shareRevision, null);
+  }
 
   const supportedEnvironment = {
     Blob,

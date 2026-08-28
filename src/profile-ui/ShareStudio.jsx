@@ -22,6 +22,7 @@ import {
   getShareStudioCopy,
   getShareStudioGifErrorCopy,
   isMobileShareEnvironment,
+  quantizeShareStudioGifAnnouncementProgress,
   resolveShareStudioCardUrls,
   resolveShareStudioGifSourceUrl,
   resolveShareStudioProfileUrls,
@@ -368,6 +369,10 @@ export function ShareStudio({
     locale,
     gifExportState.progress
   );
+  const gifProgressAnnouncement = formatShareStudioGifProgress(
+    locale,
+    quantizeShareStudioGifAnnouncementProgress(gifExportState.progress)
+  );
   const gifErrorCopy = getShareStudioGifErrorCopy(
     copy,
     gifExportState.errorCode
@@ -553,13 +558,17 @@ export function ShareStudio({
             </div>
             <div className="share-studio-gif-feedback">
               <p
-                aria-live="polite"
                 className={`share-studio-gif-status${gifExportState.status === GIF_EXPORT_STATUSES.ERROR ? " is-error" : ""}`}
                 role="status"
               >
                 {downloadFormat === DOWNLOAD_FORMATS.GIF
                   ? gifExportState.status === GIF_EXPORT_STATUSES.GENERATING
-                    ? gifProgressCopy
+                    ? (
+                        <>
+                          <span aria-hidden="true">{gifProgressCopy}</span>
+                          <span className="sr-only">{gifProgressAnnouncement}</span>
+                        </>
+                      )
                     : gifExportState.status === GIF_EXPORT_STATUSES.ERROR
                       ? gifErrorCopy
                       : gifExportState.status === GIF_EXPORT_STATUSES.READY
@@ -593,7 +602,9 @@ export function ShareStudio({
               guided={downloadFormat === DOWNLOAD_FORMATS.GIF && !mobileShareEnvironment}
               index={index}
               key={target.id}
-              onSelect={() => setSelectedSocialPlatform(target.id)}
+              onSelect={() => setSelectedSocialPlatform((current) => (
+                current === target.id ? null : target.id
+              ))}
               target={target}
             />
           ))}
@@ -702,10 +713,9 @@ function ShareDestination({ active, guided, index, onSelect, target }) {
   if (guided) {
     return (
       <button
-        aria-controls={SHARE_INSTRUCTIONS_ID}
+        aria-controls={active ? SHARE_INSTRUCTIONS_ID : undefined}
         aria-expanded={active}
         aria-label={target.accessibleLabel}
-        aria-pressed={active}
         className={`share-studio-primary-action${active ? " is-active" : ""}`}
         onClick={onSelect}
         style={{ "--share-action-index": index }}

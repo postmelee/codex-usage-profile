@@ -1,4 +1,9 @@
 import { createProfileGifGoldenFrameRenderer } from "./gif-beam-frames.js";
+import {
+  SOCIAL_CARD_LOGICAL_HEIGHT,
+  SOCIAL_CARD_LOGICAL_RADIUS,
+  SOCIAL_CARD_LOGICAL_WIDTH
+} from "./social-canvas.js";
 
 export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
   brightness: 1.05,
@@ -9,25 +14,26 @@ export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
 });
 
 export const GIF_EXPORT_PRESET_VERSION = 1;
+const PROFILE_GIF_SCALE = 2;
 
 export const PROFILE_GIF_PRESET = Object.freeze({
-  borderRadius: 64,
+  borderRadius: SOCIAL_CARD_LOGICAL_RADIUS * PROFILE_GIF_SCALE,
   durationMs: 4_800,
   durationSeconds: PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds,
   fps: 20,
   frameCount: 96,
   frameDelayMs: 50,
-  height: 612,
+  height: SOCIAL_CARD_LOGICAL_HEIGHT * PROFILE_GIF_SCALE,
   jobTimeoutMs: 60_000,
-  logicalHeight: 306,
-  logicalWidth: 499,
+  logicalHeight: SOCIAL_CARD_LOGICAL_HEIGHT,
+  logicalWidth: SOCIAL_CARD_LOGICAL_WIDTH,
   loopCount: 0,
   maxBytes: 15_000_000,
   maxColors: 256,
-  scale: 2,
+  scale: PROFILE_GIF_SCALE,
   sourceMaxBytes: 10_000_000,
   version: GIF_EXPORT_PRESET_VERSION,
-  width: 998
+  width: SOCIAL_CARD_LOGICAL_WIDTH * PROFILE_GIF_SCALE
 });
 
 const BEAM_EDGE_FADE_DEPTH = 56;

@@ -3,6 +3,7 @@ import {
   PROFILE_GIF_PRESET
 } from "../profile-card/gif-animation.js";
 import { assertProfileGifContract } from "../profile-card/gif-binary.js";
+import { parsePublicShareRevision } from "../profile-shared/public-share-url.js";
 
 export const GIF_EXPORT_STATUSES = Object.freeze({
   ERROR: "error",
@@ -442,9 +443,5 @@ function normalizeKeyPart(value, name) {
 }
 
 function normalizeRevision(value) {
-  if (value === undefined || value === null || value === "") return null;
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError("GIF export shareRevision must be a non-negative safe integer");
-  }
-  return value;
+  return parsePublicShareRevision(value);
 }

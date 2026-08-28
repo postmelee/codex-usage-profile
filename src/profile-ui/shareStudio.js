@@ -118,6 +118,14 @@ export function formatShareStudioGifProgress(locale, progress) {
   );
 }
 
+export function quantizeShareStudioGifAnnouncementProgress(progress) {
+  const normalizedProgress = Number.isFinite(progress)
+    ? Math.min(1, Math.max(0, progress))
+    : 0;
+  if (normalizedProgress === 1) return 1;
+  return Math.floor(normalizedProgress * 4) / 4;
+}
+
 export function getShareStudioGifErrorCopy(copy, errorCode) {
   const key = GIF_EXPORT_ERROR_COPY_KEYS[errorCode] ?? "gifEncodeFailed";
   return copy?.[key] ?? "";

@@ -20,6 +20,9 @@ import {
 } from "../fixtures/sample-account-usage.js";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const AVATAR_SOURCE = readFileSync(
+  new URL("../../../public/assets/postmelee-avatar.png", import.meta.url)
+);
 
 test("renders the Codex share card as a 1497x918 PNG", async () => {
   const viewModel = buildCardViewModel({
@@ -29,7 +32,7 @@ test("renders the Codex share card as a 1497x918 PNG", async () => {
     usage: sampleAccountUsageReadResult
   });
   const png = await renderProfileCardPng(viewModel, {
-    avatarSource: readFileSync(new URL("../../../public/assets/postmelee-avatar.png", import.meta.url))
+    avatarSource: AVATAR_SOURCE
   });
 
   assert.equal(png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE), true);
@@ -102,6 +105,68 @@ test("renders the owner preview with the selected light palette", async () => {
     rgba(CARD_THEME_PALETTES.light.divider)
   );
 });
+
+test("keeps native standalone alpha geometry identical across themes", async () => {
+  const viewModel = buildCardViewModel({
+    locale: "ko",
+    owner: sampleCardOwner,
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+  const [lightPng, darkPng] = await Promise.all([
+    renderProfileCardPng(viewModel, {
+      avatarSource: AVATAR_SOURCE,
+      theme: "light"
+    }),
+    renderProfileCardPng(viewModel, {
+      avatarSource: AVATAR_SOURCE,
+      theme: "dark"
+    })
+  ]);
+  const [lightContext, darkContext] = await Promise.all([
+    drawToContext(lightPng),
+    drawToContext(darkPng)
+  ]);
+
+  assert.deepEqual(
+    [lightContext.canvas.width, lightContext.canvas.height],
+    [darkContext.canvas.width, darkContext.canvas.height]
+  );
+  assert.equal(countAlphaDifferences(lightContext, darkContext), 0);
+  assert.notDeepEqual(
+    readLogicalPixel(lightContext, 249.5, 153),
+    readLogicalPixel(darkContext, 249.5, 153)
+  );
+});
+
+async function drawToContext(png) {
+  const image = await loadImage(png);
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  return context;
+}
+
+function countAlphaDifferences(left, right) {
+  const leftData = left.getImageData(
+    0,
+    0,
+    left.canvas.width,
+    left.canvas.height
+  ).data;
+  const rightData = right.getImageData(
+    0,
+    0,
+    right.canvas.width,
+    right.canvas.height
+  ).data;
+  let differences = 0;
+
+  for (let offset = 3; offset < leftData.length; offset += 4) {
+    if (leftData[offset] !== rightData[offset]) differences += 1;
+  }
+  return differences;
+}
 
 function readPixel(context, x, y) {
   return Array.from(context.getImageData(x, y, 1, 1).data);

@@ -490,6 +490,45 @@ git diff --check
 Task #39 Stage 4: 통합 시각 QA와 사용자 문서
 ```
 
+## Stage 4.1 — PR 리뷰 차단 크래시와 접근성 보정
+
+### 진입 조건
+
+- PR #143 리뷰에서 문자열·malformed `shareRevision`이 닫힌 Share Studio 렌더 중
+  page subtree를 중단시키는 차단 문제가 확인됐다.
+- 작업지시자가 최신 `origin/devel` merge, `orders` 양쪽 행 보존, 차단 수정,
+  social card geometry 상수 결합과 진행률·disclosure a11y 보정을 승인했다.
+
+### 변경 내용
+
+- `origin/devel`을 merge하고 `mydocs/orders/20260828.md`의 #39·#141 행을 모두 보존한다.
+- GIF source key의 revision은 기존 `parsePublicShareRevision` 계약을 재사용해 canonical
+  숫자 문자열을 정수로 정규화하고 malformed 값은 `null`로 격리한다.
+- GIF logical width·height·radius는 최신 social card geometry 상수에서 파생한다.
+- 시각 progress는 유지하되 live status는 25% milestone만 갱신하고 `role="status"`의
+  중복 `aria-live`를 제거한다.
+- GIF X·Reddit 안내 버튼은 disclosure로 동작하게 해 재선택 시 닫고, active일 때만
+  `aria-controls`를 제공하며 `aria-pressed`를 제거한다.
+
+### 검증
+
+```bash
+node --test src/profile-ui/__tests__/gifExport.test.js src/profile-ui/__tests__/shareStudio.test.js src/profile-card/__tests__/gif-animation.test.js src/profile-card/__tests__/gif-encoder.test.js src/profile-card/__tests__/gif-beam-frames.test.js
+npm run test:e2e -- --grep "Share Studio"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run smoke:sites-fullstack:local
+git diff --check
+```
+
+### 커밋
+
+```text
+Task #39 [Stage 4.1]: PR 리뷰 차단 크래시와 접근성 보정
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 해당 단계 보고서 작성 전에 실행한다.
@@ -516,6 +555,7 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
   - `Task #39 Stage 2: browser Worker 생성 pipeline`
   - `Task #39 Stage 3: Share Studio GIF 생성과 저장 UX`
   - `Task #39 Stage 4: 통합 시각 QA와 사용자 문서`
+  - `Task #39 [Stage 4.1]: PR 리뷰 차단 크래시와 접근성 보정`
 
 ## 단계 의존성
 
@@ -524,6 +564,7 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 - Stage 3은 Stage 2의 real Worker happy path와 failure/lifecycle 검증 승인 후
   Share Studio에 연결한다.
 - Stage 4는 Stage 3 desktop/mobile UX 승인 후 공식 문서와 전체 회귀를 수행한다.
+- Stage 4.1은 PR #143 리뷰 승인 후 최신 `devel` 통합과 review correction을 수행한다.
 - 각 Stage는 `task-stage-report` 절차로 검증·보고·commit하고 작업지시자 승인을
   받은 뒤 다음 Stage로 이동한다.
 

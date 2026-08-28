@@ -2563,6 +2563,27 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByRole("button", { name: "Publish card" })).toBeEnabled();
   });
 
+  test("Share Studio accepts a canonical string revision before the dialog opens", async ({
+    page
+  }) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: {
+        ...ownerProfile("public"),
+        shareRevision: "1764300000000"
+      },
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.goto("/");
+
+    await expect(page.getByRole("button", { name: "Share", exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Share activity" }))
+      .toHaveCount(0);
+  });
+
   test("Share Studio generates and downloads one contract-valid GIF", async ({
     page
   }, testInfo) => {
@@ -2613,6 +2634,9 @@ test.describe("Home and share card flow", () => {
     const gifActions = dialog.locator(".share-studio-primary-actions");
     const xGuideButton = gifActions.getByRole("button", { name: "Share on X" });
     await expect(xGuideButton).toBeVisible();
+    await expect(xGuideButton).toHaveAttribute("aria-expanded", "false");
+    await expect(xGuideButton).not.toHaveAttribute("aria-controls", /.+/);
+    await expect(xGuideButton).not.toHaveAttribute("aria-pressed", /.+/);
     await expect(gifActions.getByRole("button", { name: "Share on Reddit" }))
       .toBeVisible();
     await expect(dialog.getByRole("link", { name: "Share on Threads" }))
@@ -2646,7 +2670,11 @@ test.describe("Home and share card flow", () => {
     await xGuideButton.click();
     const instructions = dialog.locator(".share-studio-instructions");
     await expect(xGuideButton).toHaveAttribute("aria-expanded", "true");
-    await expect(xGuideButton).toHaveAttribute("aria-pressed", "true");
+    await expect(xGuideButton).toHaveAttribute(
+      "aria-controls",
+      "share-studio-social-instructions"
+    );
+    await expect(xGuideButton).not.toHaveAttribute("aria-pressed", /.+/);
     await expect(instructions.getByRole("heading", { name: "Share to X" }))
       .toBeVisible();
     await expect(instructions.getByRole("button", { name: "Save GIF" }))
@@ -2656,12 +2684,25 @@ test.describe("Home and share card flow", () => {
     await expect(instructions)
       .toContainText("Attach the saved GIF to the post");
 
+    await xGuideButton.click();
+    await expect(instructions).toHaveCount(0);
+    await expect(xGuideButton).toHaveAttribute("aria-expanded", "false");
+    await expect(xGuideButton).not.toHaveAttribute("aria-controls", /.+/);
+    await xGuideButton.click();
+    await expect(instructions.getByRole("heading", { name: "Share to X" }))
+      .toBeVisible();
+
     const redditGuideButton = gifActions.getByRole("button", {
       name: "Share on Reddit"
     });
     await redditGuideButton.click();
     await expect(xGuideButton).toHaveAttribute("aria-expanded", "false");
+    await expect(xGuideButton).not.toHaveAttribute("aria-controls", /.+/);
     await expect(redditGuideButton).toHaveAttribute("aria-expanded", "true");
+    await expect(redditGuideButton).toHaveAttribute(
+      "aria-controls",
+      "share-studio-social-instructions"
+    );
     await expect(instructions.getByRole("heading", { name: "Share to Reddit" }))
       .toBeVisible();
     await expect(instructions.getByRole("link", { name: "Open Reddit composer" }))
@@ -2682,6 +2723,8 @@ test.describe("Home and share card flow", () => {
       .toHaveCount(0);
     await expect(gifActions.getByRole("button", { name: "Share on X" }))
       .toHaveAttribute("aria-expanded", "false");
+    await expect(dialog.locator(".share-studio-gif-status"))
+      .not.toHaveAttribute("aria-live", /.+/);
 
     let generationState = "waiting";
     await expect.poll(async () => {
