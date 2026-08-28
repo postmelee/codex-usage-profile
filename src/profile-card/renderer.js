@@ -8,7 +8,11 @@ import {
   loadImage
 } from "@napi-rs/canvas";
 
-import { computeSocialCanvasLayout } from "./social-canvas.js";
+import {
+  SOCIAL_CARD_LOGICAL_RADIUS,
+  computeSocialCanvasLayout,
+  getSocialCanvasSurface
+} from "./social-canvas.js";
 import {
   CARD_THEME_PALETTES,
   getCardThemePalette
@@ -19,7 +23,7 @@ export const CARD_LOGICAL_HEIGHT = 306;
 export const CARD_OUTPUT_SCALE = 3;
 export const CARD_OUTPUT_WIDTH = CARD_LOGICAL_WIDTH * CARD_OUTPUT_SCALE;
 export const CARD_OUTPUT_HEIGHT = CARD_LOGICAL_HEIGHT * CARD_OUTPUT_SCALE;
-export const CARD_RENDERER_VERSION = "codex-share-card-2";
+export const CARD_RENDERER_VERSION = "codex-share-card-3";
 
 export const CARD_COLORS = CARD_THEME_PALETTES.dark;
 
@@ -60,8 +64,10 @@ export async function renderProfileCardPng(viewModel, options = {}) {
 
 export async function renderProfileSocialCardPng(viewModel, options = {}) {
   registerCardFonts();
-  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
+  const theme = options.theme ?? viewModel.theme;
+  const palette = getCardThemePalette(theme);
   const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface(theme, layout);
 
   const canvas = createCanvas(layout.outputWidth, layout.outputHeight);
   const context = canvas.getContext("2d");
@@ -69,13 +75,38 @@ export async function renderProfileSocialCardPng(viewModel, options = {}) {
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
+  if (surface) {
+    context.fillStyle = surface.backgroundColor;
+    context.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight);
+  }
+
   context.save();
   context.translate(layout.cardX, layout.cardY);
   context.scale(layout.scale, layout.scale);
   await drawCard(context, viewModel, options, palette);
   context.restore();
 
+  if (surface) {
+    drawSocialCardOutline(context, surface);
+  }
+
   return canvas.encode("png");
+}
+
+function drawSocialCardOutline(context, surface) {
+  const { outline } = surface;
+
+  context.strokeStyle = surface.borderColor;
+  context.lineWidth = surface.borderWidth;
+  context.beginPath();
+  context.roundRect(
+    outline.x,
+    outline.y,
+    outline.width,
+    outline.height,
+    outline.radius
+  );
+  context.stroke();
 }
 
 async function drawCard(context, viewModel, options, palette) {
@@ -124,7 +155,13 @@ export function registerCardFonts() {
 function drawCardBackground(context, palette) {
   context.fillStyle = palette.background;
   context.beginPath();
-  context.roundRect(0, 0, CARD_LOGICAL_WIDTH, CARD_LOGICAL_HEIGHT, 32);
+  context.roundRect(
+    0,
+    0,
+    CARD_LOGICAL_WIDTH,
+    CARD_LOGICAL_HEIGHT,
+    SOCIAL_CARD_LOGICAL_RADIUS
+  );
   context.fill();
 }
 

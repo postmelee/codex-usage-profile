@@ -13,7 +13,7 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 migration 결과에 따른 **MVP production PASS**다. Task #108은
 `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 별도 GitHub OAuth
 app, D1/R2와 environment를 가진 canonical production으로 공개했다. production은
-2026-08-24 최종 audit 기준 public saved version 3이고 migration
+2026-08-26 Task #137 release 기준 public saved version 5이고 migration
 `[1,2,3,4,5,6]`이 적용돼 있다. 기존 stage5는 별도 durable resource와 identity
 state를 사용하는 custom owner-only 테스트 환경이다.
 
@@ -25,15 +25,15 @@ state를 사용하는 custom owner-only 테스트 환경이다.
 |---|---|
 | canonical origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 3 |
-| deployed source | `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd` |
-| artifact | 27 files, 5,437,440 bytes, `sha256:fb262880766b9543f39c97be44909f2dc1b94a5ce024783afe360cc282740f47` |
+| saved version | 5 |
+| deployed source | `27e8705fdc152534a4e4b726cac32f625a3c7763` |
+| artifact | 27 files, 5,437,440 bytes, `sha256:86b9960123ceb46975b0681212efcc2a7a8fe8fc302f7f4eee2ca0705e1db5d2` |
 | access | public revision 10 |
-| environment | revision 4, production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
+| environment | revision 8, production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
 | live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5,6]` |
-| CLI | public `latest=0.1.3`, production default origin |
+| CLI | public `latest=0.1.4`, production default origin |
 
-이 표는 desired state가 아니라 Task #108 Stage 5 종료 뒤 원격에서 다시 관찰한 live
+이 표는 desired state가 아니라 Task #137 Stage 5 종료 뒤 원격에서 다시 관찰한 live
 상태다. operator secret이 없는 안전 종료 상태에서는 protected readiness를 호출하지
 않고 Sites read-only D1 audit, health와 닫힌 operator route로 확인한다.
 
@@ -41,8 +41,8 @@ state를 사용하는 custom owner-only 테스트 환경이다.
 
 | 역할 | origin | manifest·resource 상태 |
 |---|---|---|
-| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 3, access revision 10, environment revision 4 |
-| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 36, access revision 62, environment revision 119 |
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 5, access revision 10, environment revision 8 |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 38, access revision 62, environment revision 121 |
 
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
@@ -417,6 +417,22 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 ## 검증 상태
 
 ### 실제 Sites에서 검증됨
+
+- Task #137 Stage 5에서 canonical production saved version 5/source
+  `27e8705fdc152534a4e4b726cac32f625a3c7763`, public access revision 10,
+  final environment revision 8과 migration exact `[1,2,3,4,5,6]`을 확인했다. version 4/source
+  `61f72fcf564585e6b74c6be748a3ed803c3cd507`는 application rollback 후보로 보존한다.
+- maintenance-on environment revision 7과 maintenance-off revision 8에서 같은 saved version 5를
+  차례로 public deploy했다. 두 deployment는 모두 `succeeded`이며 final 상태는 maintenance disabled,
+  service normal, operator secret absent, `/healthz` `200`, operator route `404`다.
+- public `latest=0.1.4`의 stale credential submit은 revoked token `410`을 감지해 같은 process에서
+  device 재승인을 요청했고 승인 뒤 Contract v1 submit `accepted`로 계속 완료됐다. profile은 private를
+  유지했고 검증용 token·local credential은 제거했다. device approval 완료 화면은 standalone login과
+  submit continuation의 다음 행동을 구분하고 홈·프로필을 보조 링크로 유지했다.
+- 기존 production owner에 제출 이력이 있어 fresh-owner 미제출 화면을 원격에서 만들기 위한 데이터
+  삭제는 수행하지 않았다. 해당 EN/KO empty-state는 local E2E 증거로 판정했고 카드 설정 조합·SNS
+  반복 회귀는 작업지시자와 합의한 변경 표면 밖으로 제외했다. 최근 error-only log에는 의도한
+  stale-token `410`, private/anonymous/operator 경계의 4xx만 있고 5xx/Worker failure는 없었다.
 
 - Task #108 Stage 5에서 canonical production saved version 3/source
   `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd`, public access revision 10,

@@ -21,7 +21,7 @@ import {
   resolveCardLocale
 } from "./view-model.js";
 
-export const DEFAULT_PROFILE_CARD_RENDERER_VERSION = "codex-share-card-2";
+export const DEFAULT_PROFILE_CARD_RENDERER_VERSION = "codex-share-card-3";
 export const DEFAULT_PROFILE_CARD_CACHE_ENTRIES = 32;
 export const DEFAULT_PROFILE_CARD_AVATAR_TIMEOUT_MS = 5_000;
 export const DEFAULT_PROFILE_CARD_AVATAR_MAX_BYTES = 2 * 1024 * 1024;

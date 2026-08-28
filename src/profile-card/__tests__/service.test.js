@@ -8,8 +8,13 @@ import {
   PROFILE_VISIBILITY,
   createMemoryProfileBackendStore
 } from "../../profile-backend/index.js";
-import { CARD_OUTPUT_HEIGHT, CARD_OUTPUT_WIDTH } from "../renderer.js";
 import {
+  CARD_OUTPUT_HEIGHT,
+  CARD_OUTPUT_WIDTH,
+  CARD_RENDERER_VERSION
+} from "../renderer.js";
+import {
+  DEFAULT_PROFILE_CARD_RENDERER_VERSION,
   createProfileCardEtag,
   createProfileCardRevision,
   createProfileCardService,
@@ -235,6 +240,32 @@ test("separates renderer source digests from final PNG revisions", async () => {
   assert.equal(english.revision, korean.revision);
   assert.equal(english.etag, identityChanged.etag);
   assert.equal(identityChanged.etag, usageChanged.etag);
+});
+
+test("separates the previous and current native renderer source contracts", () => {
+  const options = {
+    locale: "ko",
+    owner: OWNER,
+    theme: "light",
+    usage: sampleAccountUsageReadResult,
+    usageRecord: {
+      capturedAt: "2026-06-11T00:00:00.000Z",
+      uploadedAt: "2026-06-11T00:01:00.000Z"
+    }
+  };
+  const previous = createProfileCardSourceDigest({
+    ...options,
+    rendererVersion: "codex-share-card-2"
+  });
+  const current = createProfileCardSourceDigest({
+    ...options,
+    rendererVersion: CARD_RENDERER_VERSION
+  });
+
+  assert.equal(CARD_RENDERER_VERSION, "codex-share-card-3");
+  assert.equal(DEFAULT_PROFILE_CARD_RENDERER_VERSION, CARD_RENDERER_VERSION);
+  assert.equal(createProfileCardSourceDigest(options), current);
+  assert.notEqual(previous, current);
 });
 
 test("changes final revision when avatar bytes change at the same URL", async () => {

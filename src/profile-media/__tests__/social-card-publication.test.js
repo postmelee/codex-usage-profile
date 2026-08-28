@@ -60,9 +60,9 @@ function createFixture(options = {}) {
     ),
     renderSocialPng: options.disableSocial
       ? undefined
-      : async (viewModel) => Buffer.from(
+      : options.renderSocialPng ?? (async (viewModel) => Buffer.from(
         `social:${viewModel.theme}:${viewModel.locale}`
-      )
+      ))
   });
 
   let nextId = 1;
@@ -131,6 +131,50 @@ test("saving new card settings refreshes the same social object", async () => {
   assert.equal(after.socialKey, before.socialKey);
   assert.equal(Buffer.from(after.body).toString(), "social:light:en");
   assert.notEqual(after.etag, before.etag);
+});
+
+test("refreshing an existing light profile replaces social renderer bytes", async () => {
+  let rendererVersion = "codex-share-card-2";
+  const { mediaStore, service } = createFixture({
+    owner: {
+      cardLocale: "en",
+      cardStyle: {
+        schemaVersion: 1,
+        theme: "light",
+        effect: { preset: "none", version: 1 }
+      }
+    },
+    renderSocialPng: async (viewModel) => Buffer.from(
+      `social:${rendererVersion}:${viewModel.theme}:${viewModel.locale}`
+    )
+  });
+
+  await service.publishOwnerCard({ ownerId: OWNER.id });
+  const beforeSocial = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const beforePublication = await mediaStore.getPublishedCard({
+    handle: OWNER.handle
+  });
+
+  rendererVersion = "codex-share-card-3";
+  const refresh = await service.refreshPublishedCard({ ownerId: OWNER.id });
+  const afterSocial = await mediaStore.getSocialCard({ handle: OWNER.handle });
+  const afterPublication = await mediaStore.getPublishedCard({
+    handle: OWNER.handle
+  });
+
+  assert.equal(refresh.operation, "refresh");
+  assert.equal(refresh.idempotent, true);
+  assert.equal(afterSocial.socialKey, beforeSocial.socialKey);
+  assert.equal(afterSocial.publicationId, beforeSocial.publicationId);
+  assert.equal(afterPublication.publicationId, beforePublication.publicationId);
+  assert.equal(afterSocial.publicationId, afterPublication.publicationId);
+  assert.equal(
+    Buffer.from(afterSocial.body).toString(),
+    "social:codex-share-card-3:light:en"
+  );
+  assert.notDeepEqual(afterSocial.body, beforeSocial.body);
+  assert.notEqual(afterSocial.revision, beforeSocial.revision);
+  assert.notEqual(afterSocial.etag, beforeSocial.etag);
 });
 
 test("a failed card-settings CAS leaves the stable social object unchanged", async () => {

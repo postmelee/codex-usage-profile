@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 import {
   CARD_OUTPUT_HEIGHT,
   CARD_OUTPUT_WIDTH,
+  CARD_RENDERER_VERSION,
   renderProfileCardPng
 } from "../renderer.js";
 import {
@@ -18,6 +19,14 @@ import {
 import {
   createProfileCardSourceDigest
 } from "../service-core.js";
+import {
+  SOCIAL_LIGHT_BORDER_COLOR,
+  SOCIAL_LIGHT_CANVAS_COLOR,
+  SOCIAL_OUTPUT_HEIGHT,
+  SOCIAL_OUTPUT_SCALE,
+  SOCIAL_OUTPUT_WIDTH,
+  computeSocialCanvasLayout
+} from "../social-canvas.js";
 import { CARD_THEME_PALETTES } from "../theme.js";
 import { buildCardViewModel } from "../view-model.js";
 import {
@@ -27,6 +36,8 @@ import {
 } from "../fixtures/sample-account-usage.js";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+// Keep the same visible-overhang threshold as the native renderer regression.
+const SURFACE_ANTIALIAS_CHANNEL_TOLERANCE = 2;
 const avatar = readFileSync(new URL(
   "../../../public/assets/postmelee-avatar.png",
   import.meta.url
@@ -102,13 +113,22 @@ test("keeps native and Worker dimensions while selecting a distinct renderer dig
       uploadedAt: "2026-07-24T00:00:01.000Z"
     }
   };
-  assert.notEqual(
-    createProfileCardSourceDigest(baseDigestOptions),
-    createProfileCardSourceDigest({
-      ...baseDigestOptions,
-      rendererVersion: WORKER_CARD_RENDERER_VERSION
-    })
-  );
+  const previousDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: "codex-share-card-2-resvg-wasm-1"
+  });
+  const nativeDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: CARD_RENDERER_VERSION
+  });
+  const workerDigest = createProfileCardSourceDigest({
+    ...baseDigestOptions,
+    rendererVersion: WORKER_CARD_RENDERER_VERSION
+  });
+
+  assert.equal(WORKER_CARD_RENDERER_VERSION, "codex-share-card-3-resvg-wasm-1");
+  assert.notEqual(previousDigest, workerDigest);
+  assert.notEqual(nativeDigest, workerDigest);
 });
 
 test("embeds supported avatar bytes and falls back for invalid image bytes", () => {
@@ -147,6 +167,83 @@ test("uses the same semantic light palette in Worker SVG", () => {
   assert.doesNotMatch(svg, /#181818|#2f2f2f/);
 });
 
+test("renders the Worker light surface inside shared dark card geometry", async () => {
+  const viewModel = createViewModel("en");
+  const [lightPng, darkPng] = await Promise.all([
+    renderWorkerPng.renderSocial(viewModel, {
+      avatarSource: avatar,
+      theme: "light"
+    }),
+    renderWorkerPng.renderSocial(viewModel, {
+      avatarSource: avatar,
+      theme: "dark"
+    })
+  ]);
+  const [light, dark] = await Promise.all([
+    loadImage(lightPng),
+    loadImage(darkPng)
+  ]);
+  const layout = computeSocialCanvasLayout();
+  const lightContext = imageContext(light);
+  const darkContext = imageContext(dark);
+
+  assert.deepEqual([light.width, light.height], [SOCIAL_OUTPUT_WIDTH, SOCIAL_OUTPUT_HEIGHT]);
+  assert.deepEqual([dark.width, dark.height], [SOCIAL_OUTPUT_WIDTH, SOCIAL_OUTPUT_HEIGHT]);
+  assert.deepEqual(readSocialPixel(lightContext, 4, 4), rgba(SOCIAL_LIGHT_CANVAS_COLOR));
+  assert.deepEqual(
+    readSocialPixel(lightContext, layout.cardX + 0.5, layout.canvasHeight / 2),
+    rgba(SOCIAL_LIGHT_BORDER_COLOR)
+  );
+  assert.equal(readSocialPixel(darkContext, 4, 4)[3], 0);
+  assert.equal(
+    readSocialPixel(darkContext, layout.cardX / 2, layout.canvasHeight / 2)[3],
+    0
+  );
+  const lightBounds = findBounds(lightContext, (data, offset) => !matchesRgba(
+    data,
+    offset,
+    rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+  ));
+  const darkBounds = findBounds(darkContext, (data, offset) => (
+    data[offset + 3] >= 128
+  ));
+
+  assert.deepEqual(lightBounds, darkBounds);
+  assert.deepEqual(
+    lightBounds,
+    { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+  assert.equal(
+    countChangedPixelsOutsideAlphaGeometry(
+      lightContext,
+      darkContext,
+      rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+    ),
+    0
+  );
+});
+
+test("keeps Worker standalone alpha geometry identical across themes", async () => {
+  const viewModel = createViewModel("ko");
+  const [lightPng, darkPng] = await Promise.all([
+    renderWorkerPng(viewModel, { avatarSource: avatar, theme: "light" }),
+    renderWorkerPng(viewModel, { avatarSource: avatar, theme: "dark" })
+  ]);
+  const [light, dark] = await Promise.all([
+    loadImage(lightPng),
+    loadImage(darkPng)
+  ]);
+  const lightContext = imageContext(light);
+  const darkContext = imageContext(dark);
+
+  assert.deepEqual([light.width, light.height], [dark.width, dark.height]);
+  assert.equal(countAlphaDifferences(lightContext, darkContext), 0);
+  assert.notDeepEqual(
+    readOutputPixel(lightContext, 748, 459),
+    readOutputPixel(darkContext, 748, 459)
+  );
+});
+
 function createViewModel(locale) {
   return buildCardViewModel({
     locale,
@@ -158,6 +255,117 @@ function createViewModel(locale) {
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("base64url");
+}
+
+function imageContext(image) {
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  return context;
+}
+
+function readSocialPixel(context, x, y) {
+  const { data } = context.getImageData(
+    Math.round(x * SOCIAL_OUTPUT_SCALE),
+    Math.round(y * SOCIAL_OUTPUT_SCALE),
+    1,
+    1
+  );
+  return [data[0], data[1], data[2], data[3]];
+}
+
+function readOutputPixel(context, x, y) {
+  const { data } = context.getImageData(x, y, 1, 1);
+  return [data[0], data[1], data[2], data[3]];
+}
+
+function countAlphaDifferences(left, right) {
+  const leftData = left.getImageData(
+    0,
+    0,
+    left.canvas.width,
+    left.canvas.height
+  ).data;
+  const rightData = right.getImageData(
+    0,
+    0,
+    right.canvas.width,
+    right.canvas.height
+  ).data;
+  let differences = 0;
+
+  for (let offset = 3; offset < leftData.length; offset += 4) {
+    if (leftData[offset] !== rightData[offset]) differences += 1;
+  }
+  return differences;
+}
+
+function countChangedPixelsOutsideAlphaGeometry(light, dark, background) {
+  const lightData = light.getImageData(
+    0,
+    0,
+    light.canvas.width,
+    light.canvas.height
+  ).data;
+  const darkData = dark.getImageData(
+    0,
+    0,
+    dark.canvas.width,
+    dark.canvas.height
+  ).data;
+  let outside = 0;
+
+  for (let offset = 0; offset < lightData.length; offset += 4) {
+    const channelDelta = Math.max(
+      Math.abs(lightData[offset] - background[0]),
+      Math.abs(lightData[offset + 1] - background[1]),
+      Math.abs(lightData[offset + 2] - background[2])
+    );
+    if (
+      channelDelta > SURFACE_ANTIALIAS_CHANNEL_TOLERANCE &&
+      darkData[offset + 3] === 0
+    ) {
+      outside += 1;
+    }
+  }
+  return outside;
+}
+
+function findBounds(context, includesPixel) {
+  const { height, width } = context.canvas;
+  const { data } = context.getImageData(0, 0, width, height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = ((y * width) + x) * 4;
+      if (!includesPixel(data, offset)) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return { maxX, maxY, minX, minY };
+}
+
+function matchesRgba(data, offset, expected) {
+  return data[offset] === expected[0] &&
+    data[offset + 1] === expected[1] &&
+    data[offset + 2] === expected[2] &&
+    data[offset + 3] === expected[3];
+}
+
+function rgba(hex) {
+  return [
+    Number.parseInt(hex.slice(1, 3), 16),
+    Number.parseInt(hex.slice(3, 5), 16),
+    Number.parseInt(hex.slice(5, 7), 16),
+    255
+  ];
 }
 
 function escapeRegExp(value) {
