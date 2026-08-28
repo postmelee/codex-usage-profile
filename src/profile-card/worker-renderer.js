@@ -2,7 +2,8 @@ import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
 import {
   SOCIAL_OUTPUT_SCALE,
-  computeSocialCanvasLayout
+  computeSocialCanvasLayout,
+  getSocialCanvasSurface
 } from "./social-canvas.js";
 import { getCardThemePalette } from "./theme.js";
 
@@ -96,18 +97,36 @@ export function createWorkerProfileCardSvg(viewModel, options = {}) {
 
 export function createWorkerProfileSocialCardSvg(viewModel, options = {}) {
   assertViewModel(viewModel);
-  const palette = getCardThemePalette(options.theme ?? viewModel.theme);
+  const theme = options.theme ?? viewModel.theme;
+  const palette = getCardThemePalette(theme);
   const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface(theme, layout);
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.canvasWidth}"`,
     ` height="${layout.canvasHeight}" viewBox="0 0 ${layout.canvasWidth}`,
     ` ${layout.canvasHeight}">`,
+    surface
+      ? `<rect width="${layout.canvasWidth}" height="${layout.canvasHeight}"` +
+        ` fill="${surface.backgroundColor}"/>`
+      : "",
     `<g transform="translate(${layout.cardX} ${layout.cardY})`,
     ` scale(${layout.scale})">`,
     createWorkerProfileCardBody(viewModel, options, palette),
     "</g>",
+    surface ? createWorkerSocialCardOutline(surface) : "",
     "</svg>"
+  ].join("");
+}
+
+function createWorkerSocialCardOutline(surface) {
+  const { outline } = surface;
+
+  return [
+    `<rect x="${outline.x}" y="${outline.y}"`,
+    ` width="${outline.width}" height="${outline.height}"`,
+    ` rx="${outline.radius}" fill="none"`,
+    ` stroke="${surface.borderColor}" stroke-width="${surface.borderWidth}"/>`
   ].join("");
 }
 

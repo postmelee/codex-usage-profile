@@ -10,9 +10,14 @@ import {
   SOCIAL_CANVAS_MIN_HORIZONTAL_PADDING,
   SOCIAL_CANVAS_MIN_VERTICAL_PADDING,
   SOCIAL_CANVAS_WIDTH,
+  SOCIAL_CARD_LOGICAL_RADIUS,
   SOCIAL_CARD_LOGICAL_HEIGHT,
   SOCIAL_CARD_LOGICAL_WIDTH,
-  computeSocialCanvasLayout
+  SOCIAL_LIGHT_BORDER_COLOR,
+  SOCIAL_LIGHT_BORDER_WIDTH,
+  SOCIAL_LIGHT_CANVAS_COLOR,
+  computeSocialCanvasLayout,
+  getSocialCanvasSurface
 } from "../social-canvas.js";
 
 test("targets the 1.91:1 social preview canvas", () => {
@@ -53,6 +58,33 @@ test("preserves the card aspect ratio", () => {
 
   assert.ok(Math.abs((layout.cardWidth / layout.cardHeight) - expected) < 1e-9);
   assert.ok(Math.abs(layout.scale - (layout.cardWidth / CARD_LOGICAL_WIDTH)) < 1e-9);
+});
+
+test("derives the light-only surface without changing the card layout", () => {
+  const layout = computeSocialCanvasLayout();
+  const surface = getSocialCanvasSurface("light", layout);
+  const inset = SOCIAL_LIGHT_BORDER_WIDTH / 2;
+
+  assert.equal(surface.backgroundColor, SOCIAL_LIGHT_CANVAS_COLOR);
+  assert.equal(surface.borderColor, SOCIAL_LIGHT_BORDER_COLOR);
+  assert.equal(surface.borderWidth, SOCIAL_LIGHT_BORDER_WIDTH);
+  assert.equal(surface.outline.x, layout.cardX + inset);
+  assert.equal(surface.outline.y, layout.cardY + inset);
+  assert.equal(surface.outline.width, layout.cardWidth - (inset * 2));
+  assert.equal(surface.outline.height, layout.cardHeight - (inset * 2));
+  assert.equal(
+    surface.outline.radius,
+    (SOCIAL_CARD_LOGICAL_RADIUS * layout.scale) - inset
+  );
+  assert.equal(Object.isFrozen(surface), true);
+  assert.equal(Object.isFrozen(surface.outline), true);
+});
+
+test("leaves dark and invalid themes without a social surface", () => {
+  const layout = computeSocialCanvasLayout();
+
+  assert.equal(getSocialCanvasSurface("dark", layout), null);
+  assert.equal(getSocialCanvasSurface("unsupported", layout), null);
 });
 
 test("never overflows the canvas", () => {
