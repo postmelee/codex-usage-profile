@@ -373,6 +373,19 @@ Task #39 Stage 2: browser Worker 생성 pipeline
 - 기존 panel open 160ms ease-out, close 120ms ease-in 전환을 그대로 사용하며 format
   action row의 단일 180ms 전환과 child stagger 미재실행 계약은 변경하지 않는다.
 
+### Stage 3.4 보정 — compact viewport scrim·안내 layout
+
+- scroll owner 안의 viewport-fixed pseudo-element가 긴 modal 하단을 덮지 못하는 구조를
+  제거한다. backdrop 자체가 scrim background를 칠하고 기존 280ms enter·400ms exit,
+  reduced-motion 140ms·110ms는 background-color animation으로 유지한다.
+- 안내가 열린 상태를 `has-instructions`로 표시하고 viewport 높이 900px 이하에서는
+  preview를 최대 520px, 760px 이하에서는 최대 420px로만 축소한다. GIF export의
+  998×612 raster·20fps·96-frame 계약은 변경하지 않는다.
+- narrow viewport의 안내 row gap을 8px, 최소 높이를 28px로 정리하고 하단 safe
+  padding을 narrow 48px, short desktop 40px 이상으로 유지한다.
+- 실제 narrow desktop에서 안내를 연 뒤 backdrop을 끝까지 스크롤해 scrim background,
+  card width, panel spacing, bottom padding과 horizontal overflow를 검증한다.
+
 ### 검증
 
 ```bash
@@ -389,6 +402,8 @@ desktop E2E:
 - GIF 선택 시 X·Reddit만 남고 PNG 복귀 시 기존 5개 SNS가 모두 복원됨
 - GIF X·Reddit 클릭 시 저장·작성 창·첨부 안내, generating 저장 비활성, ready 저장 활성
 - PNG 대상은 안내 없이 기존 direct composer link를 유지하고 형식 변경 시 안내 닫힘
+- narrow scroll 하단에서도 scrim이 끊기지 않고 안내 내부 간격·하단 safe padding 유지
+- 안내가 열린 낮은 viewport에서만 preview가 520px/420px로 축소되며 GIF 파일 규격 유지
 - format 전환 row의 180ms 단일 모션과 child stagger 미재실행
 - 생성 중 skeleton, ready 뒤 GIF Blob, PNG 복귀와 reduced motion의 static PNG
 - download filename, MIME, 998×612/96-frame/size binary 확인

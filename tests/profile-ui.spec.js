@@ -3922,6 +3922,92 @@ test.describe("Home and share card flow", () => {
     await expect(page.locator('[data-card-source="true"]')).toHaveCSS("opacity", "1");
   });
 
+  test("GIF instructions keep the scrim and compact spacing through a narrow scroll", async ({
+    page
+  }, testInfo) => {
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: ownerProfile("public"),
+      ok: true
+    }));
+    await mockCardImages(page);
+
+    await page.setViewportSize({ width: 740, height: 620 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+
+    const backdrop = page.getByTestId("share-studio-backdrop");
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    const motionCard = page.getByTestId("share-studio-card-motion");
+    await expect(backdrop).toHaveClass(/\bis-open\b/);
+    const openCardWidth = (await motionCard.boundingBox()).width;
+
+    await dialog.getByRole("radio", { name: "GIF" }).click();
+    await dialog.getByRole("button", { name: "Share on X" }).click();
+    const instructions = dialog.locator(".share-studio-instructions");
+    await expect(instructions.getByRole("heading", { name: "Share to X" }))
+      .toBeVisible();
+    await expect(instructions).toHaveClass(/\bis-open\b/);
+    await expect(dialog).toHaveClass(/\bhas-instructions\b/);
+
+    await expect.poll(() => backdrop.evaluate((element) => {
+      const color = getComputedStyle(element).backgroundColor;
+      const channels = color.match(/[\d.]+/g)?.map(Number) ?? [];
+      return channels.length === 4 ? channels[3] : channels.length === 3 ? 1 : 0;
+    })).toBeGreaterThanOrEqual(0.9);
+
+    const compactLayout = await page.evaluate(() => {
+      const backdrop = document.querySelector(".share-studio-backdrop");
+      const card = document.querySelector(".share-studio-card-motion");
+      const instructions = document.querySelector(".share-studio-instructions");
+      const list = instructions.querySelector("ol");
+      const listItem = instructions.querySelector("li");
+      const backdropStyle = getComputedStyle(backdrop);
+      const cardRect = card.getBoundingClientRect();
+      return {
+        backgroundColor: backdropStyle.backgroundColor,
+        cardWidth: cardRect.width,
+        clientHeight: backdrop.clientHeight,
+        instructionGap: getComputedStyle(list).rowGap,
+        instructionRowMinHeight: getComputedStyle(listItem).minHeight,
+        paddingBottom: backdropStyle.paddingBottom,
+        pseudoContent: getComputedStyle(backdrop, "::before").content,
+        scrollHeight: backdrop.scrollHeight
+      };
+    });
+    expect(openCardWidth).toBeGreaterThan(compactLayout.cardWidth);
+    expect(compactLayout.cardWidth).toBeLessThanOrEqual(420);
+    expect(compactLayout.instructionGap).toBe("8px");
+    expect(compactLayout.instructionRowMinHeight).toBe("28px");
+    expect(compactLayout.paddingBottom).toBe("48px");
+    expect(compactLayout.pseudoContent).toBe("none");
+    expect(compactLayout.scrollHeight).toBeGreaterThan(compactLayout.clientHeight);
+
+    await backdrop.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect.poll(() => backdrop.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    const scrolledScrim = await page.evaluate(() => {
+      const backdrop = document.querySelector(".share-studio-backdrop");
+      const bottomElement = document.elementFromPoint(4, innerHeight - 4);
+      return {
+        backgroundColor: getComputedStyle(backdrop).backgroundColor,
+        bottomElementIsBackdrop: bottomElement === backdrop,
+        scrollTop: backdrop.scrollTop
+      };
+    });
+    expect(scrolledScrim.backgroundColor).toBe(compactLayout.backgroundColor);
+    expect(scrolledScrim.bottomElementIsBackdrop).toBe(true);
+    expect(scrolledScrim.scrollTop).toBeGreaterThan(0);
+    await page.screenshot({
+      path: testInfo.outputPath("share-studio-gif-narrow-scroll.png")
+    });
+
+    await page.getByRole("button", { name: "Close Share Studio" }).click();
+    await expect(dialog).toBeHidden();
+  });
+
   test("Share Studio removes spatial motion when reduced motion is requested", async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await mockAuthenticatedAccount(page);

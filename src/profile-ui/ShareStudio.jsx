@@ -472,7 +472,7 @@ export function ShareStudio({
       <section
         aria-labelledby="share-studio-title"
         aria-modal="true"
-        className="share-studio"
+        className={`share-studio${selectedShareTarget ? " has-instructions" : ""}`}
         ref={dialogRef}
         role="dialog"
       >

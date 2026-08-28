@@ -2125,8 +2125,9 @@ button {
   --share-ease-enter: cubic-bezier(0.2, 0, 0, 1);
   --share-motion-quick: 140ms;
   align-items: stretch;
+  animation: share-studio-scrim-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
   backdrop-filter: blur(16px);
-  background: transparent;
+  background-color: var(--overlay-scrim);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -2143,21 +2144,8 @@ button {
 
 .share-studio-backdrop.is-closing,
 .share-studio-backdrop.is-handoff {
-  backdrop-filter: none;
-}
-
-.share-studio-backdrop::before {
-  animation: share-studio-scrim-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
-  background: var(--overlay-scrim);
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: fixed;
-}
-
-.share-studio-backdrop.is-closing::before,
-.share-studio-backdrop.is-handoff::before {
   animation: share-studio-scrim-out 400ms cubic-bezier(0.3, 0, 1, 1) both;
+  backdrop-filter: none;
 }
 
 .share-studio {
@@ -2711,21 +2699,21 @@ button {
 
 @keyframes share-studio-scrim-in {
   from {
-    opacity: 0;
+    background-color: transparent;
   }
 
   to {
-    opacity: 1;
+    background-color: var(--overlay-scrim);
   }
 }
 
 @keyframes share-studio-scrim-out {
   from {
-    opacity: 1;
+    background-color: var(--overlay-scrim);
   }
 
   to {
-    opacity: 0;
+    background-color: transparent;
   }
 }
 
@@ -4201,16 +4189,13 @@ button {
   }
 
   .share-studio-backdrop {
+    animation: share-studio-scrim-in 140ms ease-out both;
     backdrop-filter: none;
   }
 
-  .share-studio-backdrop::before {
-    animation: share-studio-reduced-fade-in 140ms ease-out both;
-  }
-
-  .share-studio-backdrop.is-closing::before,
-  .share-studio-backdrop.is-handoff::before {
-    animation: share-studio-reduced-fade-out 110ms ease-in both;
+  .share-studio-backdrop.is-closing,
+  .share-studio-backdrop.is-handoff {
+    animation: share-studio-scrim-out 110ms ease-in both;
   }
 
   .share-studio-close,
@@ -4272,6 +4257,18 @@ button {
   }
 }
 
+@media (max-height: 900px) {
+  .share-studio.has-instructions .share-studio-card-motion {
+    width: min(520px, calc(100% - 24px));
+  }
+}
+
+@media (max-height: 760px) {
+  .share-studio.has-instructions .share-studio-card-motion {
+    width: min(420px, calc(100% - 24px));
+  }
+}
+
 @media (max-height: 700px) and (min-width: 761px) {
   .home-hero {
     padding-block: 22px 24px;
@@ -4310,7 +4307,7 @@ button {
     padding:
       max(64px, env(safe-area-inset-top))
       max(24px, env(safe-area-inset-right))
-      max(20px, env(safe-area-inset-bottom))
+      max(40px, env(safe-area-inset-bottom))
       max(24px, env(safe-area-inset-left));
   }
 
@@ -4545,7 +4542,7 @@ button {
     padding:
       max(64px, env(safe-area-inset-top))
       max(16px, env(safe-area-inset-right))
-      max(28px, env(safe-area-inset-bottom))
+      max(48px, env(safe-area-inset-bottom))
       max(16px, env(safe-area-inset-left));
   }
 
@@ -4607,12 +4604,12 @@ button {
   }
 
   .share-studio-instructions ol {
-    gap: 12px;
+    gap: 8px;
     margin-top: 6px;
   }
 
   .share-studio-instructions li {
-    min-height: 32px;
+    min-height: 28px;
   }
 
   .share-studio-step-action {
@@ -4623,14 +4620,14 @@ button {
 
   .share-studio-step-action::before {
     content: "";
-    inset: -8px -4px;
+    inset: -4px;
     position: absolute;
   }
 
   .share-studio-instructions .share-studio-step-copy {
     font-size: 13px;
     line-height: 18px;
-    min-height: 32px;
+    min-height: 28px;
   }
 
   .share-studio-step-number {
