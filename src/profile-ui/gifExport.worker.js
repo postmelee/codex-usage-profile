@@ -217,6 +217,10 @@ async function decodeSourcePng(blob, options) {
     if (!context) {
       throw createWorkerError(WORKER_ERROR_CODES.UNSUPPORTED);
     }
+    context.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in context) {
+      context.imageSmoothingQuality = "high";
+    }
     context.clearRect(0, 0, PROFILE_GIF_PRESET.width, PROFILE_GIF_PRESET.height);
     context.drawImage(
       bitmap,

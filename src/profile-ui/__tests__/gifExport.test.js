@@ -419,6 +419,35 @@ test("reports bounded progress and transfers one validated ArrayBuffer", async (
   });
 });
 
+test("uses high-quality smoothing when rasterizing the source PNG at 2x", async () => {
+  const bytes = getValidGifBytes();
+  const baseRgba = createTransparentBase();
+  let context;
+
+  class RecordingOffscreenCanvas {
+    getContext() {
+      context = {
+        clearRect() {},
+        drawImage() {},
+        getImageData() { return { data: baseRgba }; },
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: "low"
+      };
+      return context;
+    }
+  }
+
+  await runGifExportWorkerJob(createWorkerRequest(), createWorkerDependencies(async () => (
+    new Response("png", { headers: { "content-type": "image/png" } })
+  ), {
+    OffscreenCanvas: RecordingOffscreenCanvas,
+    encodeGif() { return bytes; }
+  }));
+
+  assert.equal(context.imageSmoothingEnabled, true);
+  assert.equal(context.imageSmoothingQuality, "high");
+});
+
 test("encodes representative dark/light and en/ko cards below 15MB", async () => {
   const avatar = await readFile(new URL(
     "../../../public/assets/postmelee-avatar.png",
@@ -475,7 +504,7 @@ test("encodes representative dark/light and en/ko cards below 15MB", async () =>
   }
 
   assert.equal(byteLengths.length, 4);
-  assert.ok(byteLengths.every((byteLength) => byteLength < 5_000_000));
+  assert.ok(byteLengths.every((byteLength) => byteLength < PROFILE_GIF_PRESET.maxBytes));
 });
 
 function createControllerHarness(options = {}) {

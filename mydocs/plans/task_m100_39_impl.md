@@ -88,13 +88,13 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   - 공식 문서: https://github.com/mattdesl/gifenc
 - lockfile에는 registry integrity를 고정하고 `package.json`은 caret 없이
   `"gifenc": "1.0.3"`으로 기록한다.
-- 첫 composite frame의 RGBA를 `rgba4444`, `oneBitAlpha: 127`, 최대 256색으로
-  quantize한다. static card와 beam의 색 집합은 모든 frame에서 동일하고 위치만
-  변하므로 한 global palette를 전체 animation에 재사용한다.
-- 투명 palette entry를 확인해 `transparentIndex`를 고정한다. 첫 frame만 palette를
-  기록하고 이후 frame에는 local palette를 쓰지 않는다.
-- 각 frame은 같은 palette에 `applyPalette(..., "rgba4444")`하고 다음 options로
-  full-frame write한다.
+- 첫 pass에서 static base 최빈 exact RGB 16색과 animation edge 최빈 exact RGB
+  48색을 보존하고, 96 frame을 frame별 offset과 128px stride로 균등 sampling한다.
+  보존색을 제외한 sample은 `rgb565`로 quantize해 나머지 palette를 채운다.
+- alpha는 threshold 127의 1-bit transparency로 분리하고 index 0에 투명색을 둔다.
+  최대 256색의 한 global palette만 기록하며 local palette는 쓰지 않는다.
+- 두 번째 pass에서 각 frame을 같은 global palette의 결정적 nearest-color index로
+  변환해 다음 options로 full-frame write한다.
   - `delay: 50`
   - `repeat: 0`
   - `transparent: true`
@@ -137,8 +137,9 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   `credentials: "same-origin"`, `cache: "no-cache"`로 fetch한다. response가 2xx,
   `image/png`, non-empty, 10MB 이하일 때만 decode한다.
 - PNG decode는 Worker의 `createImageBitmap` + `OffscreenCanvas` 2D context를 쓴다.
-  998×612로 한 번 rasterize한 base RGBA와 beam geometry mask를 재사용하고,
-  frame RGBA/index buffer는 한 장씩 덮어쓴다.
+  `imageSmoothingEnabled = true`, `imageSmoothingQuality = "high"`로 998×612 base
+  RGBA를 한 번 rasterize하고 beam geometry mask를 재사용한다. palette sampling과
+  encode는 두 pass로 처리하되 frame RGBA/index buffer는 한 장씩 덮어쓴다.
 - progress는 첫 frame, 매 4 frame과 완료 시점에만 post해 main-thread event 폭주를
   막고 항상 단조 증가하게 한다.
 - cancel/source change/dialog unmount/60초 timeout은 main이 Worker를 terminate한다.
@@ -469,17 +470,19 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
   수 없다. 공통 preset과 CSS의 center-angle conic stop·Ocean radial gradient·edge
   fade를 옮긴 deterministic renderer를 사용하고 5개 reference frame의 수치 golden
   signature를 회귀 gate로 둔다.
-- **avatar로 인한 palette 품질·용량 변화**: first composite global palette에 static
-  card와 beam을 모두 포함하고 4개 theme/locale 및 representative avatar를
-  검사한다. 15MB 초과 시 자동 품질 하향 없이 중단한다.
+- **avatar로 인한 palette 품질·용량 변화**: static base 최빈 16색과 animation edge
+  최빈 48색을 exact RGB로 보존하고 전체 균등 sample로 나머지 global palette를
+  구성한다. 승인 sample의 exact-pixel ratio와 RMSE, 4개 theme/locale 및
+  representative avatar를 검사한다. 15MB 초과 시 자동 품질 하향 없이 중단한다.
 - **gifenc 유지보수 주기**: exact version, integrity, source·license·export API와
   zero runtime dependencies를 검증한다. 계획과 다르면 대체 dependency를 임의로
   도입하지 않는다.
 - **Worker browser 차이**: module Worker·ImageBitmap·OffscreenCanvas capability를
   선확인하고 main-thread fallback 없이 unsupported를 표시한다. production 대상
   desktop browser의 실제 build/E2E에서 확인한다.
-- **CPU·memory pressure**: 한 Worker·한 job·한 RGBA/index frame 순차 처리,
-  10MB source, 15MB output, 60초 timeout으로 상한을 둔다.
+- **CPU·memory pressure**: 한 Worker·한 job, 재사용 RGBA/index frame과 bounded
+  animation palette sample을 사용한다. 10MB source, 15MB output, 60초 timeout으로
+  상한을 둔다.
 - **stale GIF 저장**: source key와 jobId를 revision/theme/locale/preset에 묶고
   source change에서 Worker·Blob URL을 폐기한다.
 - **Share Studio 회귀**: save slot만 format state에 따라 교체하고 social/copy/privacy,
@@ -491,8 +494,8 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 
 ## 승인 요청 사항
 
-- `gifenc@1.0.3` exact dependency와 `rgba4444` one-bit alpha, 단일 global 256색
-  palette, dithering 없음의 encoder 계약
+- `gifenc@1.0.3` exact dependency, static exact RGB + animation-wide `rgb565`
+  sampling, 1-bit alpha, 단일 global 256색 palette, dithering 없음의 encoder 계약
 - common Border Beam preset + deterministic conic renderer + 5개 reference frame
   golden signature 비교 방식
 - 단일 module Worker, sequential 96-frame 처리, 60초 timeout, no main-thread

@@ -4,10 +4,14 @@ import test from "node:test";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
-import { PROFILE_GIF_PRESET } from "../gif-animation.js";
+import {
+  PROFILE_GIF_PRESET,
+  createProfileGifFrameRenderer
+} from "../gif-animation.js";
 import { assertProfileGifContract } from "../gif-binary.js";
 import {
   createGifGlobalPaletteMapper,
+  createProfileGifGlobalPalette,
   encodeProfileCardGif
 } from "../gif-encoder.js";
 
@@ -63,7 +67,58 @@ test("maps identical card colors to one stable global palette index", () => {
   assert.notEqual(first[0], first[1]);
 });
 
+test("preserves approved-frame color fidelity with the animation-wide palette", async () => {
+  const base = await loadRepresentativePublicCard();
+  const palette = createProfileGifGlobalPalette(base);
+  const mapper = createGifGlobalPaletteMapper(palette, 0);
+  const renderer = createProfileGifFrameRenderer(base);
+  const frame = new Uint8ClampedArray(base.length);
+  let comparedPixels = 0;
+  let edgePixels = 0;
+  let edgeSquaredError = 0;
+  let exactPixels = 0;
+  let squaredError = 0;
+
+  assert.deepEqual(palette[0], [0, 0, 0, 0]);
+  assert.ok(palette.length <= PROFILE_GIF_PRESET.maxColors);
+
+  for (let frameIndex = 0; frameIndex < PROFILE_GIF_PRESET.frameCount; frameIndex += 1) {
+    renderer.renderFrame(frameIndex, frame);
+    const indexed = mapper.apply(frame);
+    for (let pixelIndex = frameIndex % 128; pixelIndex < indexed.length; pixelIndex += 128) {
+      const offset = pixelIndex * 4;
+      if (frame[offset + 3] <= 127) continue;
+      const color = palette[indexed[pixelIndex]];
+      let exact = true;
+      const isEdge = isNearApprovedCardEdge(pixelIndex);
+      for (let channel = 0; channel < 3; channel += 1) {
+        const delta = frame[offset + channel] - color[channel];
+        squaredError += delta * delta;
+        if (isEdge) {
+          edgeSquaredError += delta * delta;
+        }
+        exact &&= delta === 0;
+      }
+      edgePixels += isEdge ? 1 : 0;
+      comparedPixels += 1;
+      exactPixels += exact ? 1 : 0;
+    }
+  }
+
+  assert.ok(exactPixels / comparedPixels > 0.9);
+  assert.ok(Math.sqrt(squaredError / (comparedPixels * 3)) < 0.8);
+  assert.ok(Math.sqrt(edgeSquaredError / (edgePixels * 3)) < 0.75);
+});
+
 test("keeps the representative public card comfortably below 15MB", async () => {
+  const base = await loadRepresentativePublicCard();
+  const bytes = encodeProfileCardGif(base);
+  const metadata = assertProfileGifContract(bytes);
+
+  assert.ok(metadata.byteLength < PROFILE_GIF_PRESET.maxBytes);
+});
+
+async function loadRepresentativePublicCard() {
   const png = await readFile(new URL(
     "../../../public/assets/codex-card-sample.png",
     import.meta.url
@@ -78,19 +133,26 @@ test("keeps the representative public card comfortably below 15MB", async () => 
     PROFILE_GIF_PRESET.width,
     PROFILE_GIF_PRESET.height
   );
+  return context.getImageData(
+    0,
+    0,
+    PROFILE_GIF_PRESET.width,
+    PROFILE_GIF_PRESET.height
+  ).data;
+}
 
-  const bytes = encodeProfileCardGif(
-    context.getImageData(
-      0,
-      0,
-      PROFILE_GIF_PRESET.width,
-      PROFILE_GIF_PRESET.height
-    ).data
-  );
-  const metadata = assertProfileGifContract(bytes);
-
-  assert.ok(metadata.byteLength < 5_000_000);
-});
+function isNearApprovedCardEdge(pixelIndex) {
+  const { borderRadius, height, width } = PROFILE_GIF_PRESET;
+  const pointX = pixelIndex % width + 0.5;
+  const pointY = Math.floor(pixelIndex / width) + 0.5;
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const qx = Math.abs(pointX - halfWidth) - (halfWidth - borderRadius);
+  const qy = Math.abs(pointY - halfHeight) - (halfHeight - borderRadius);
+  const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
+  const inside = Math.min(Math.max(qx, qy), 0);
+  return -(outside + inside - borderRadius) <= borderRadius;
+}
 
 function createRepresentativeBase() {
   const { width, height, borderRadius } = PROFILE_GIF_PRESET;

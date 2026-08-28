@@ -22,12 +22,19 @@ rounded-perimeter Gaussian 번역이 웹 `BorderBeam`과 다른 폭·core·속�
 phase, dark/light stop profile, Ocean radial gradient와 rounded edge fade로 교정하고
 승인 시제품 5개 frame의 수치 signature를 회귀 테스트로 고정했다.
 
+후속 사용자 검수에서는 nominal 998×612·20fps 계약은 같지만 첫 frame `rgba4444`
+palette와 3배 PNG의 기본 품질 축소 때문에 승인 시제품보다 선명도가 낮아 보이는
+문제를 확인했다. Worker rasterize를 high-quality로 고정하고 static·edge exact RGB와
+animation-wide sample을 결합한 two-pass global palette로 교정했다.
+
 ## 산출물
 
 | 파일 | 변경 요약 |
 |---|---|
 | `src/profile-card/gif-animation.js` | constant perimeter Gaussian을 center-angle conic stop·Ocean radial gradient·rounded edge mask 합성으로 교체하고 dark/light stroke·inner·bloom profile과 seamless index phase 유지 |
-| `src/profile-card/__tests__/gif-animation.test.js` | 승인 시제품 frame 0/24/48/72/95의 footprint·p95 falloff·중심 golden signature, 위치별 footprint 변화와 frame 95→0 seam 자동 회귀 추가 |
+| `src/profile-card/gif-encoder.js` | static base 16색·animation edge 48색 exact RGB 보존, 96 frame 균등 sample `rgb565` quantize와 two-pass global palette 구현 |
+| `src/profile-card/__tests__/gif-animation.test.js`, `gif-encoder.test.js` | 승인 시제품 frame signature·seam과 exact pixel·전체/edge RMSE 품질 회귀 추가 |
+| `src/profile-ui/gifExport.worker.js`, `src/profile-ui/__tests__/gifExport.test.js` | 3배 PNG를 2배 GIF base로 줄일 때 high-quality smoothing 고정·검증 |
 | `src/profile-ui/ShareStudio.jsx` | desktop format radiogroup, GIF 선택 즉시 생성, 생성 중 skeleton·비활성 Save GIF, ready GIF preview·활성 저장, owner source 우선 fallback, reduced-motion static fallback, format-aware 공유 대상·row 전환, progress·error·retry, close/Escape/source cleanup과 React Strict Mode-safe controller 수명주기 연결 |
 | `src/profile-ui/shareStudio.js` | GIF 진행률 format, typed error copy mapping, owner/public/selected source 우선순위, ready preview 판정과 GIF 모드 X·Reddit allowlist 추가 |
 | `src/profile-ui/messages.js` | format·생성 진행률·저장·Retry·X·Reddit 첨부·6개 오류의 ko/en 제품 문구 추가 |
@@ -40,7 +47,8 @@ phase, dark/light stop profile, Ocean radial gradient와 rounded edge fade로 �
 | `mydocs/working/task_m100_39_stage1.md` | 초기 perimeter 번역의 Stage 3 교정 사실, 최종 renderer·golden seam·대표 용량 결과로 정정 |
 | `mydocs/working/task_m100_39_stage3.md` | Stage 3 산출물·검증·잔여 위험 기록 |
 
-제품 코드·단위 테스트·E2E·오늘할일에는 1,368줄을 추가하고 133줄을 교체·삭제했다.
+후속 품질 교정은 출력 dimension·fps·duration·palette 수·UI 계약을 변경하지 않고
+encoder·Worker rasterize·회귀 검증과 관련 계획·보고 문서에만 한정했다.
 
 ## 본문 변경 정도 / 본문 무손실 여부
 
@@ -69,6 +77,11 @@ mobile 환경에는 format selector와 GIF action을 렌더링하지 않고 cont
 Strict Mode의 effect 재실행과 실제 unmount를 구분해 controller가 조기 dispose되거나
 object URL이 남지 않도록 했다.
 
+품질 교정은 첫 pass에서 정적 카드 최빈 16색과 테두리 animation 최빈 48색을 exact
+RGB로 보존하고 frame별 offset·128px stride로 96 frame을 균등 sampling한다. 나머지
+색은 `rgb565`로 quantize하며 두 번째 pass의 모든 frame은 같은 global palette와
+결정적 nearest-color cache를 쓴다. no-dither·1-bit alpha·15MB hard cap은 유지한다.
+
 ## 검증 결과
 
 실행 명령:
@@ -83,18 +96,22 @@ git diff --check
 
 결과:
 
-- OK — GIF renderer·encoder·binary 단위 테스트 11개 통과, 실패·skip 없음.
+- OK — GIF renderer·encoder·binary 단위 테스트 12개 통과, 실패·skip 없음.
 - OK — 승인 시제품과 동일한 998×612 public sample로 frame 0/24/48/72/95를 비교해
   beam footprint·p95 falloff·중심이 golden 허용 범위 안이며, 95→0 변화량이 0→1
   변화량의 75~125% 안이다. 기존 일정 perimeter renderer는 이 gate를 통과하지 못한다.
-- OK — 교정 후보는 3,912,240 bytes로 15MB 미만이며, 승인 시제품과 위·아래 5-frame
+- OK — 최종 교정 후보는 5,766,830 bytes로 15MB 미만이며, 승인 시제품과 위·아래 5-frame
   contact sheet 및 전체 animated loop를 시각 비교해 카드 고정·tight bounds·좁은
   core·위치별 Ocean 색 분포를 확인했다.
-- OK — Share Studio/GIF controller 단위 테스트 26개 통과, 실패·skip 없음.
+- OK — exact RGB pixel은 초기 73.32%에서 93.20%로 개선됐고 전체 RMSE 0.667,
+  edge RMSE 0.587로 승인 시제품에 근접한 선명도를 회귀 기준으로 고정했다.
+- OK — Share Studio/GIF controller 단위 테스트 27개 통과, 실패·skip 없음.
 - OK — Share Studio·GIF Playwright E2E 20개 통과, 실패·skip 없음.
 - OK — 실제 Chromium module Worker가 생성한 download를 binary inspector로 다시
   읽어 998×612, 96 frame, 50ms delay, repeat 0, 투명 full-frame, global palette,
   15MB 미만 계약과 `codex-usage-profile.gif` 파일명을 확인했다.
+- OK — 최종 Chromium E2E의 실제 생성·download 시나리오는 29.2초로 60초 job
+  timeout 안에서 완료됐다.
 - OK — source fetch 실패가 사용자 오류로 표시되고 같은 카드 재시도가 실제
   Worker 생성 완료로 전환된다.
 - OK — PNG 모드에는 X·Threads·LinkedIn·Facebook·Reddit 5개가 보이고, GIF
@@ -122,7 +139,7 @@ git diff --check
   상단 tight-bound 카드 경계를 유지하고 X·Reddit·Save GIF가 한 행에 유지되는 화면도
   확인했다.
 - OK — production server 63 modules, client 1,837 modules build 통과. 별도 Worker
-  artifact는 24.59KB로 생성됐다.
+  artifact는 26.06KB로 생성됐다.
 - OK — `git diff --check` 출력 없음.
 
 ## 잔여 위험

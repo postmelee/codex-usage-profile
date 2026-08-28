@@ -17,10 +17,10 @@ invariant를 독립적으로 검증할 수 있는 기반을 마련했다.
 | 파일 | 변경 요약 |
 |---|---|
 | `src/profile-card/gif-animation.js` | preset version 1, 998×612·96 frame 출력 계약, 웹 공통 Border Beam preset, center-angle conic stop·Ocean radial gradient·rounded edge mask renderer 구현 |
-| `src/profile-card/gif-encoder.js` | `gifenc@1.0.3` quantizer, 1-bit alpha, 단일 global palette, full-frame encoder와 결정적 palette mapper 구현 |
+| `src/profile-card/gif-encoder.js` | static·edge exact RGB 보존, animation-wide `rgb565` sample, 1-bit alpha, 단일 global palette, full-frame encoder와 결정적 palette mapper 구현 |
 | `src/profile-card/gif-binary.js` | bounded cursor 기반 GIF89a·loop·frame·delay·transparency·palette·size inspector 구현 |
 | `src/profile-card/__tests__/gif-animation.test.js` | preset, 0/90/180/270/356.25° phase, 고정 카드와 beam 사분면, 승인 시제품 5-frame golden signature와 95→0 seam 검증 |
-| `src/profile-card/__tests__/gif-encoder.test.js` | 96 frame encoder, 전역 palette 안정성, 투명 source 거부, 대표 public card 15MB 상한 검증 |
+| `src/profile-card/__tests__/gif-encoder.test.js` | 96 frame encoder, 전역 palette 안정성·exact pixel·전체/edge RMSE, 투명 source 거부, 대표 public card 15MB 상한 검증 |
 | `src/profile-card/__tests__/gif-binary.test.js` | 정상 GIF metadata와 malformed/contract failure 검증 |
 | `src/profile-marketing/MarketingLanding.jsx` | 기존 `<BorderBeam>` 값을 공통 preset으로 교체 |
 | `package.json` | production dependency `gifenc: 1.0.3` exact version 추가 |
@@ -36,11 +36,12 @@ invariant를 독립적으로 검증할 수 있는 기반을 마련했다.
 동작 값(`ocean`, `4.8s`, `brightness 1.05`, `md`, `strength 0.82`)은 변경하지 않고
 공통 상수로 이동했다. 현재 사용자 UI와 PNG 생성·저장 동작도 변경하지 않았다.
 
-구현계획의 `gifenc.applyPalette(..., "rgba4444")`는 대표 GIF 시각 검증에서 같은
-정적 배경색이 beam 위치에 따라 다른 palette index로 선택되는 cache 충돌이
-확인되어 그대로 사용하지 않았다. `rgba4444` quantize와 단일 global palette는
-유지하되, exact RGB key를 animation 전체에서 재사용하는 결정적 nearest-color
-mapper로 교체해 카드 내용의 frame 간 색상 고정을 보장했다.
+초기 첫 composite frame `rgba4444` palette는 256색·no-dither 계약은 충족했지만,
+승인 시제품보다 exact pixel 비율이 낮고 카드 경계 오차가 큰 품질 회귀가 확인됐다.
+최종 encoder는 첫 pass에서 static base 최빈 16색과 animation edge 최빈 48색을 exact
+RGB로 보존하고 96 frame 균등 sample을 `rgb565`로 quantize한다. 두 번째 pass는 이
+global palette와 exact RGB cache 기반 nearest-color mapper를 재사용해 카드 내용의
+frame 간 색상 고정과 승인 시제품 수준의 선명도를 함께 보장한다.
 
 ## 검증 결과
 
@@ -54,12 +55,14 @@ git diff --check
 
 결과:
 
-- OK — GIF 관련 11개 단위 테스트 통과, 실패·skip 없음.
+- OK — GIF 관련 12개 단위 테스트 통과, 실패·skip 없음.
 - OK — server 63 modules, client 1,835 modules production build 통과.
 - OK — `git diff --check` 출력 없음.
-- OK — 대표 public card 출력은 3,912,240 bytes로 15,000,000 bytes 미만이다.
+- OK — 대표 public card 출력은 5,766,830 bytes로 15,000,000 bytes 미만이다.
 - OK — binary inspector 기준 998×612, 96 frames, frame delay 5cs, repeat 0,
   global palette 256색, local palette 0개, 모든 frame transparency/disposal 1이다.
+- OK — 대표 frame의 exact RGB pixel은 초기 73.32%에서 93.20%로 개선됐고 전체
+  RMSE 0.667, edge RMSE 0.587로 자동 회귀 상한 0.8/0.75를 통과했다.
 - OK — frame 95→0 변화량이 frame 0→1의 75~125% 안에 있어 loop seam이 인접
   frame과 같은 수준이다.
 - OK — Stage 3 통합 시각 QA에서 초기 rounded-perimeter 번역이 final prototype과

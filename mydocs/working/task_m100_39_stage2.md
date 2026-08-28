@@ -17,7 +17,7 @@ transfer하도록 했다. main thread에는 finite-state controller를 두어 �
 | 파일 | 변경 요약 |
 |---|---|
 | `src/profile-ui/gifExport.js` | `idle/generating/ready/error` controller, versioned source key, capability check, one-job lock, progress, retry·cancel·timeout, Blob URL 재사용·폐기 구현 |
-| `src/profile-ui/gifExport.worker.js` | same-origin PNG allowlist/fetch/decode, OffscreenCanvas rasterize, 순차 GIF encode, bounded progress와 transferable completion 구현 |
+| `src/profile-ui/gifExport.worker.js` | same-origin PNG allowlist/fetch/decode, high-quality OffscreenCanvas 2배 rasterize, 순차 GIF encode, bounded progress와 transferable completion 구현 |
 | `src/profile-ui/__tests__/gifExport.test.js` | capability·source·progress·stale job·cancel·timeout·error·Blob lifecycle와 4개 실제 카드 조합 검증 |
 | `src/profile-card/gif-binary.js` | 검증된 metadata에서 Worker transfer용 compact metadata 생성 함수 추가 |
 | `mydocs/orders/20260827.md` | Stage 2 완료와 Stage 3 승인 대기 상태 반영 |
@@ -63,7 +63,7 @@ git diff --check
 - OK — progress는 `1, 4, 8, …, 96` frame만 전송하고 complete bytes 하나를
   transfer list로 전달한다.
 - OK — dark/light × en/ko 대표 avatar 카드 네 조합이 모두 998×612·96 frame
-  binary invariant를 통과하고 각각 5MB 미만으로 생성됐다.
+  binary invariant와 15MB 상한을 통과했다.
 - OK — Worker entry를 browser ESM으로 독립 bundle했으며 결과는 54.7KB였다.
 
 ## 잔여 위험
