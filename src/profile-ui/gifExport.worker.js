@@ -6,6 +6,7 @@ import {
   assertProfileGifContract,
   createProfileGifTransferMetadata
 } from "../profile-card/gif-binary.js";
+import { loadProfileGifBeamFrames } from "../profile-card/gif-beam-frames.js";
 import { encodeProfileCardGif } from "../profile-card/gif-encoder.js";
 
 const WORKER_ERROR_CODES = Object.freeze({
@@ -24,6 +25,9 @@ export async function runGifExportWorkerJob(message, options = {}) {
   const OffscreenCanvasConstructor = options.OffscreenCanvas ?? scope.OffscreenCanvas;
   const encodeGif = options.encodeGif ?? encodeProfileCardGif;
   const inspectGif = options.inspectGif ?? assertProfileGifContract;
+  const loadBeamFrames = options.loadBeamFrames ?? (() => (
+    loadProfileGifBeamFrames({ environment: scope, fetchImpl })
+  ));
   const postMessage = options.postMessage ?? scope.postMessage?.bind(scope);
   const origin = options.origin ?? scope.location?.origin;
   const request = normalizeWorkerRequest(message);
@@ -43,11 +47,12 @@ export async function runGifExportWorkerJob(message, options = {}) {
     createImageBitmapImpl,
     OffscreenCanvasConstructor
   });
-  const theme = sourceUrl.searchParams.get("theme") === "light" ? "light" : "dark";
 
   let bytes;
   try {
-    bytes = encodeGif(baseRgba, {
+    const beamFrames = await loadBeamFrames();
+    bytes = await encodeGif(baseRgba, {
+      beamFrames,
       onProgress(progress) {
         if (shouldReportProgress(progress.completedFrames)) {
           postMessage({
@@ -58,8 +63,7 @@ export async function runGifExportWorkerJob(message, options = {}) {
             type: "progress"
           });
         }
-      },
-      theme
+      }
     });
   } catch (error) {
     throw error instanceof RangeError

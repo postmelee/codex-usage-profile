@@ -73,10 +73,11 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   356.25°이고 360° 중복 frame은 없다.
 - card radius는 PNG renderer의 logical `32`를 2배한 `64px`를 기준으로 한다.
   canvas는 998×612 자체가 card bounds이며, rounded corner 바깥 alpha는 0이다.
-- beam geometry·색·falloff는 final prototype의 0/24/48/72/95 frame에서 추출한
-  footprint·falloff·중심 signature로 고정한다. 카드 중심 기준 conic phase,
-  dark/light stop profile, Ocean radial gradient와 2배 edge fade를 사용하고 runtime
-  random, wall-clock time과 devicePixelRatio는 사용하지 않는다.
+- beam geometry·색·falloff는 final prototype을 만든 installed Chrome에서
+  `--beam-angle-id`를 0°부터 356.25°까지 3.75° 간격으로 고정해 캡처한 96개
+  투명 RGBA frame을 진실 원천으로 삼는다. frame은 visible row run만 담은 versioned
+  binary asset으로 gzip 압축하고 Worker에서 bounded 검증·해제한 뒤 source-over로
+  합성한다. runtime random, wall-clock time과 devicePixelRatio는 사용하지 않는다.
 
 ### encoder 선택과 palette
 
@@ -138,8 +139,10 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
   `image/png`, non-empty, 10MB 이하일 때만 decode한다.
 - PNG decode는 Worker의 `createImageBitmap` + `OffscreenCanvas` 2D context를 쓴다.
   `imageSmoothingEnabled = true`, `imageSmoothingQuality = "high"`로 998×612 base
-  RGBA를 한 번 rasterize하고 beam geometry mask를 재사용한다. palette sampling과
-  encode는 두 pass로 처리하되 frame RGBA/index buffer는 한 장씩 덮어쓴다.
+  RGBA를 한 번 rasterize한다. 승인 Chrome beam asset은 GIF 선택 시 Worker에서
+  한 번 fetch·gzip 해제·검증하고 96개 sparse frame run을 순서대로 재사용한다.
+  palette sampling과 encode는 두 pass로 처리하되 frame RGBA/index buffer는 한
+  장씩 덮어쓴다.
 - progress는 첫 frame, 매 4 frame과 완료 시점에만 post해 main-thread event 폭주를
   막고 항상 단조 증가하게 한다.
 - cancel/source change/dialog unmount/60초 timeout은 main이 Worker를 terminate한다.
@@ -214,8 +217,8 @@ GitHub Issue: [#39](https://github.com/postmelee/codex-usage-profile/issues/39)
 ### 변경 내용
 
 - 공통 GIF/export·Border Beam preset과 결정적 frame phase를 구현한다.
-- base RGBA를 고정한 채 center-angle conic phase와 rounded edge mask로 Ocean
-  beam만 합성하는 순수 renderer를 구현하고 card 외부 alpha를 0으로 유지한다.
+- base RGBA를 고정한 채 승인 Chrome beam frame만 source-over 합성하는 순수
+  renderer를 구현하고 card 외부 alpha를 0으로 유지한다.
 - `gifenc@1.0.3`을 exact dependency로 추가하고 global palette·transparency·loop
   options를 고정한 encoder를 구현한다.
 - bounded GIF inspector로 생성 결과의 binary invariant를 검증한다.
@@ -340,6 +343,22 @@ Task #39 Stage 2: browser Worker 생성 pipeline
   유지한다.
 - Playwright happy path는 실제 Worker/encoder로 생성·download하고 error branch는
   deterministic source/capability fixture로 검증한다.
+
+### Stage 3.2 보정 — 승인 Chrome frame pipeline
+
+- 초기 procedural conic 근사 renderer는 최종 시제품과 유사하지만 동일한 browser
+  rasterization·filter·edge alpha를 재현하지 못하므로 production Worker 경로에서는
+  사용하지 않는다.
+- 최종 시제품 생성에 사용한 installed Chrome에서 카드 본문을 숨기고 998×612,
+  DPR 2, 96개 phase의 Border Beam만 캡처한다. 투명 pixel은 버리고 visible row run만
+  저장한 version 1 asset을 gzip으로 압축한다.
+- asset은 `.bin`으로 배포해 Vite/static server가 HTTP `Content-Encoding: gzip`으로
+  오인하지 않게 한다. Worker의 `DecompressionStream("gzip")`이 raw compressed
+  bytes를 한 번 해제한다.
+- parser는 magic·version·frame count·run bounds·decoded/encoded size와 trailing
+  bytes를 검증한다. renderer는 검증된 run만 base PNG에 source-over로 합성한다.
+- compressed asset SHA-256과 대표 frame SHA-256을 테스트로 고정하고 실제 browser
+  Worker 생성·preview·download를 E2E로 검증한다.
 
 ### 검증
 
@@ -466,10 +485,10 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 
 ## 위험과 대응
 
-- **final prototype과 beam 차이**: library CSS를 browser Canvas가 그대로 capture할
-  수 없다. 공통 preset과 CSS의 center-angle conic stop·Ocean radial gradient·edge
-  fade를 옮긴 deterministic renderer를 사용하고 5개 reference frame의 수치 golden
-  signature를 회귀 gate로 둔다.
+- **final prototype과 beam 차이**: browser Canvas가 CSS filter rasterization을
+  근사하지 않도록 승인 시제품을 만든 Chrome의 96개 RGBA phase를 versioned sparse
+  asset으로 고정한다. compressed/decompressed size·SHA와 frame contract를 gate로
+  두며 asset load·decode가 실패하면 typed GIF generation error로 종료한다.
 - **avatar로 인한 palette 품질·용량 변화**: static base 최빈 16색과 animation edge
   최빈 48색을 exact RGB로 보존하고 전체 균등 sample로 나머지 global palette를
   구성한다. 승인 sample의 exact-pixel ratio와 RMSE, 4개 theme/locale 및
@@ -496,8 +515,8 @@ Task #39: 구현 계획서 작성과 오늘할일 갱신
 
 - `gifenc@1.0.3` exact dependency, static exact RGB + animation-wide `rgb565`
   sampling, 1-bit alpha, 단일 global 256색 palette, dithering 없음의 encoder 계약
-- common Border Beam preset + deterministic conic renderer + 5개 reference frame
-  golden signature 비교 방식
+- common Border Beam preset + 승인 Chrome 96-frame sparse asset + deterministic
+  source-over renderer와 asset/frame SHA 비교 방식
 - 단일 module Worker, sequential 96-frame 처리, 60초 timeout, no main-thread
   fallback과 source/output/resource 상한
 - output binary inspector와 15MB 초과 시 자동 품질 하향 없이 오류 처리하는 정책

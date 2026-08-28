@@ -1,3 +1,5 @@
+import { createProfileGifGoldenFrameRenderer } from "./gif-beam-frames.js";
+
 export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
   brightness: 1.05,
   colorVariant: "ocean",
@@ -97,6 +99,10 @@ export function getProfileGifFrameAngle(frameIndex) {
 
 export function createProfileGifFrameRenderer(baseRgba, options = {}) {
   assertBaseRgba(baseRgba);
+
+  if (options.beamFrames) {
+    return createProfileGifGoldenFrameRenderer(baseRgba, options.beamFrames);
+  }
 
   const base = new Uint8ClampedArray(baseRgba);
   const geometry = createBeamGeometry(base);

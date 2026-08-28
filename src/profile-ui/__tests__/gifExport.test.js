@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import test from "node:test";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
@@ -9,6 +10,10 @@ import {
   PROFILE_GIF_PRESET
 } from "../../profile-card/gif-animation.js";
 import { assertProfileGifContract } from "../../profile-card/gif-binary.js";
+import {
+  PROFILE_GIF_BEAM_ASSET_URL,
+  parseProfileGifBeamFrames
+} from "../../profile-card/gif-beam-frames.js";
 import { encodeProfileCardGif } from "../../profile-card/gif-encoder.js";
 import { renderProfileCardPng } from "../../profile-card/renderer.js";
 import { buildCardViewModel } from "../../profile-card/view-model.js";
@@ -30,6 +35,7 @@ import {
 } from "../gifExport.worker.js";
 
 let validGifBytes;
+let goldenBeamFrames;
 
 test("builds a canonical versioned source key and checks browser capabilities", () => {
   const sourceKey = buildGifExportSourceKey({
@@ -63,6 +69,7 @@ test("builds a canonical versioned source key and checks browser capabilities", 
 
   const supportedEnvironment = {
     Blob,
+    DecompressionStream,
     OffscreenCanvas: class {},
     URL: { createObjectURL() {}, revokeObjectURL() {} },
     Worker: class {},
@@ -72,6 +79,10 @@ test("builds a canonical versioned source key and checks browser capabilities", 
   assert.equal(isBrowserGifExportSupported({
     ...supportedEnvironment,
     OffscreenCanvas: undefined
+  }), false);
+  assert.equal(isBrowserGifExportSupported({
+    ...supportedEnvironment,
+    DecompressionStream: undefined
   }), false);
 
   const unsupportedHarness = createControllerHarness({
@@ -487,6 +498,7 @@ test("encodes representative dark/light and en/ko cards below 15MB", async () =>
           });
         },
         origin: "https://profiles.example.test",
+        loadBeamFrames: getGoldenBeamFrames,
         postMessage(message, transfer) {
           messages.push({ message, transfer });
         }
@@ -622,6 +634,7 @@ function createWorkerDependencies(fetchImpl, overrides = {}) {
       width: 1
     }),
     fetchImpl,
+    loadBeamFrames: () => null,
     origin: "https://profiles.example.test",
     postMessage() {},
     ...overrides
@@ -631,6 +644,13 @@ function createWorkerDependencies(fetchImpl, overrides = {}) {
 function getValidGifBytes() {
   validGifBytes ??= encodeProfileCardGif(createTransparentBase());
   return validGifBytes;
+}
+
+async function getGoldenBeamFrames() {
+  goldenBeamFrames ??= parseProfileGifBeamFrames(gunzipSync(
+    await readFile(PROFILE_GIF_BEAM_ASSET_URL)
+  ));
+  return goldenBeamFrames;
 }
 
 function createTransparentBase() {

@@ -47,6 +47,7 @@ export function isBrowserGifExportSupported(environment = globalThis) {
   return Boolean(
     typeof environment?.Worker === "function" &&
     typeof environment?.Blob === "function" &&
+    typeof environment?.DecompressionStream === "function" &&
     typeof environment?.createImageBitmap === "function" &&
     typeof environment?.OffscreenCanvas === "function" &&
     typeof environment?.URL?.createObjectURL === "function" &&

@@ -18,6 +18,7 @@ const quantize = gifencNamespace.quantize ?? gifencDefault.quantize;
 export function encodeProfileCardGif(baseRgba, options = {}) {
   throwIfAborted(options.signal);
   const renderer = createProfileGifFrameRenderer(baseRgba, {
+    beamFrames: options.beamFrames,
     theme: options.theme
   });
   const frame = new Uint8ClampedArray(baseRgba.length);
@@ -65,6 +66,7 @@ export function encodeProfileCardGif(baseRgba, options = {}) {
 export function createProfileGifGlobalPalette(baseRgba, options = {}) {
   throwIfAborted(options.signal);
   const renderer = createProfileGifFrameRenderer(baseRgba, {
+    beamFrames: options.beamFrames,
     theme: options.theme
   });
   const frame = new Uint8ClampedArray(baseRgba.length);
