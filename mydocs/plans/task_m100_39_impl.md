@@ -386,6 +386,18 @@ Task #39 Stage 2: browser Worker 생성 pipeline
 - 실제 narrow desktop에서 안내를 연 뒤 backdrop을 끝까지 스크롤해 scrim background,
   card width, panel spacing, bottom padding과 horizontal overflow를 검증한다.
 
+### Stage 3.5 보정 — narrow GIF action 정렬·secondary 밀도
+
+- 760px 이하의 primary action grid는 PNG의 기존 4열을 유지하고, X·Reddit·GIF 저장만
+  남는 GIF 모드에서는 60px 3열로 전환해 실제 action 묶음을 중앙에 정렬한다.
+- GIF 첨부 안내가 열린 좁은 desktop에서만 하단 secondary·privacy action을 글자 11px,
+  최소 높이 36px, padding 4px 6px로 줄인다. 안내가 없는 실제 mobile PNG 흐름은 기존
+  44px touch target을 유지한다.
+- 안내가 열린 narrow viewport의 하단 safe padding은 64px로 늘리고 PNG·wide desktop의
+  기존 padding 계약은 변경하지 않는다.
+- Playwright에서 PNG 4열과 GIF 3열, action 묶음의 중심 오차 1px 이하, secondary 밀도와
+  64px 하단 padding을 Chromium·Firefox에서 검증한다.
+
 ### 검증
 
 ```bash
@@ -403,6 +415,8 @@ desktop E2E:
 - GIF X·Reddit 클릭 시 저장·작성 창·첨부 안내, generating 저장 비활성, ready 저장 활성
 - PNG 대상은 안내 없이 기존 direct composer link를 유지하고 형식 변경 시 안내 닫힘
 - narrow scroll 하단에서도 scrim이 끊기지 않고 안내 내부 간격·하단 safe padding 유지
+- narrow desktop에서 PNG 4열·GIF 3열과 action 묶음 중앙 정렬, 안내 상태 secondary
+  36px 높이·11px 글자·4px 6px padding 및 64px 하단 safe padding 유지
 - 안내가 열린 낮은 viewport에서만 preview가 520px/420px로 축소되며 GIF 파일 규격 유지
 - format 전환 row의 180ms 단일 모션과 child stagger 미재실행
 - 생성 중 skeleton, ready 뒤 GIF Blob, PNG 복귀와 reduced motion의 static PNG

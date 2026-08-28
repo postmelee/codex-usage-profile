@@ -4546,6 +4546,10 @@ button {
       max(16px, env(safe-area-inset-left));
   }
 
+  .share-studio-backdrop.has-instructions {
+    padding-bottom: max(64px, env(safe-area-inset-bottom));
+  }
+
   .share-studio {
     align-content: start;
   }
@@ -4574,6 +4578,10 @@ button {
     width: auto;
   }
 
+  .share-studio-primary-actions[data-share-format="gif"] {
+    grid-template-columns: repeat(3, 60px);
+  }
+
   .share-studio-primary-action {
     font-size: 12px;
     min-width: 0;
@@ -4591,6 +4599,13 @@ button {
   .share-studio-secondary-action,
   .share-studio-privacy-action {
     min-height: 44px;
+  }
+
+  .share-studio.has-instructions .share-studio-secondary-action,
+  .share-studio.has-instructions .share-studio-privacy-action {
+    font-size: 11px;
+    min-height: 36px;
+    padding: 4px 6px;
   }
 
   .share-studio-instructions {

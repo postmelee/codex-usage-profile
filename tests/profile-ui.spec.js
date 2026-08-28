@@ -3942,6 +3942,10 @@ test.describe("Home and share card flow", () => {
     await expect(backdrop).toHaveClass(/\bis-open\b/);
     const openCardWidth = (await motionCard.boundingBox()).width;
 
+    const pngActionColumns = await dialog.locator(".share-studio-primary-actions")
+      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" "));
+    expect(pngActionColumns).toHaveLength(4);
+
     await dialog.getByRole("radio", { name: "GIF" }).click();
     await dialog.getByRole("button", { name: "Share on X" }).click();
     const instructions = dialog.locator(".share-studio-instructions");
@@ -3962,25 +3966,49 @@ test.describe("Home and share card flow", () => {
       const instructions = document.querySelector(".share-studio-instructions");
       const list = instructions.querySelector("ol");
       const listItem = instructions.querySelector("li");
+      const primaryActions = document.querySelector(".share-studio-primary-actions");
+      const primaryActionRects = [...primaryActions.children]
+        .map((element) => element.getBoundingClientRect());
+      const primaryActionsRect = primaryActions.getBoundingClientRect();
+      const secondaryAction = document.querySelector(".share-studio-secondary-action");
       const backdropStyle = getComputedStyle(backdrop);
       const cardRect = card.getBoundingClientRect();
+      const secondaryActionStyle = getComputedStyle(secondaryAction);
+      const primaryActionsCenter = (
+        Math.min(...primaryActionRects.map((rect) => rect.left))
+        + Math.max(...primaryActionRects.map((rect) => rect.right))
+      ) / 2;
       return {
         backgroundColor: backdropStyle.backgroundColor,
         cardWidth: cardRect.width,
         clientHeight: backdrop.clientHeight,
+        gifActionColumns: getComputedStyle(primaryActions).gridTemplateColumns.split(" "),
+        gifActionFormat: primaryActions.dataset.shareFormat,
+        gifActionCenterDelta: Math.abs(
+          primaryActionsCenter - (primaryActionsRect.left + primaryActionsRect.width / 2)
+        ),
         instructionGap: getComputedStyle(list).rowGap,
         instructionRowMinHeight: getComputedStyle(listItem).minHeight,
         paddingBottom: backdropStyle.paddingBottom,
         pseudoContent: getComputedStyle(backdrop, "::before").content,
+        secondaryActionFontSize: secondaryActionStyle.fontSize,
+        secondaryActionMinHeight: secondaryActionStyle.minHeight,
+        secondaryActionPadding: secondaryActionStyle.padding,
         scrollHeight: backdrop.scrollHeight
       };
     });
     expect(openCardWidth).toBeGreaterThan(compactLayout.cardWidth);
     expect(compactLayout.cardWidth).toBeLessThanOrEqual(420);
+    expect(compactLayout.gifActionColumns).toHaveLength(3);
+    expect(compactLayout.gifActionFormat).toBe("gif");
+    expect(compactLayout.gifActionCenterDelta).toBeLessThanOrEqual(1);
     expect(compactLayout.instructionGap).toBe("8px");
     expect(compactLayout.instructionRowMinHeight).toBe("28px");
-    expect(compactLayout.paddingBottom).toBe("48px");
+    expect(compactLayout.paddingBottom).toBe("64px");
     expect(compactLayout.pseudoContent).toBe("none");
+    expect(compactLayout.secondaryActionFontSize).toBe("11px");
+    expect(compactLayout.secondaryActionMinHeight).toBe("36px");
+    expect(compactLayout.secondaryActionPadding).toBe("4px 6px");
     expect(compactLayout.scrollHeight).toBeGreaterThan(compactLayout.clientHeight);
 
     await backdrop.evaluate((element) => {

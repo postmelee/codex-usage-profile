@@ -457,7 +457,7 @@ export function ShareStudio({
 
   return createPortal(
     <div
-      className={`share-studio-backdrop is-${transitionPhase}`}
+      className={`share-studio-backdrop is-${transitionPhase}${selectedShareTarget ? " has-instructions" : ""}`}
       data-testid="share-studio-backdrop"
     >
       {toast ? (
@@ -584,6 +584,7 @@ export function ShareStudio({
           aria-label={copy.destinations}
           className={`share-studio-primary-actions${hasChangedDownloadFormat ? " is-format-transition" : ""}`}
           data-share-action-transition={hasChangedDownloadFormat ? "format" : "initial"}
+          data-share-format={downloadFormat}
           key={downloadFormat}
         >
           {shareTargets.map((target, index) => (
