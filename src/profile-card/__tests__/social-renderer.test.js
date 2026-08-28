@@ -8,11 +8,11 @@ import { renderProfileSocialCardPng } from "../renderer.js";
 import {
   SOCIAL_CANVAS_HEIGHT,
   SOCIAL_CANVAS_WIDTH,
+  SOCIAL_LIGHT_BORDER_COLOR,
+  SOCIAL_LIGHT_CANVAS_COLOR,
   SOCIAL_OUTPUT_HEIGHT,
   SOCIAL_OUTPUT_SCALE,
   SOCIAL_OUTPUT_WIDTH,
-  SOCIAL_LIGHT_BORDER_COLOR,
-  SOCIAL_LIGHT_CANVAS_COLOR,
   computeSocialCanvasLayout,
   getSocialCanvasSurface
 } from "../social-canvas.js";
@@ -29,6 +29,8 @@ import {
 } from "../worker-renderer.js";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+// Transformed body and direct outline rasterization can differ by two RGB steps.
+const SURFACE_ANTIALIAS_CHANNEL_TOLERANCE = 2;
 const AVATAR_SOURCE = readFileSync(
   new URL("../../../public/assets/postmelee-avatar.png", import.meta.url)
 );
@@ -128,7 +130,7 @@ test("keeps dark social padding and rounded corners transparent", async () => {
   );
 });
 
-test("keeps native light and dark social card placement identical", async () => {
+test("keeps native light outline inside the shared dark card geometry", async () => {
   const [lightPng, darkPng] = await Promise.all([
     renderProfileSocialCardPng(createViewModel(), {
       avatarSource: AVATAR_SOURCE,
@@ -153,6 +155,14 @@ test("keeps native light and dark social card placement identical", async () => 
   assert.deepEqual(
     lightBounds,
     { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+  assert.equal(
+    countChangedPixelsOutsideAlphaGeometry(
+      lightContext,
+      darkContext,
+      rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+    ),
+    0
   );
 });
 
@@ -312,6 +322,37 @@ function findAlphaCoverageBounds(context, minimumAlpha) {
   return findBounds(context, (data, offset) => (
     data[offset + 3] >= minimumAlpha
   ));
+}
+
+function countChangedPixelsOutsideAlphaGeometry(light, dark, background) {
+  const lightData = light.getImageData(
+    0,
+    0,
+    light.canvas.width,
+    light.canvas.height
+  ).data;
+  const darkData = dark.getImageData(
+    0,
+    0,
+    dark.canvas.width,
+    dark.canvas.height
+  ).data;
+  let outside = 0;
+
+  for (let offset = 0; offset < lightData.length; offset += 4) {
+    const channelDelta = Math.max(
+      Math.abs(lightData[offset] - background[0]),
+      Math.abs(lightData[offset + 1] - background[1]),
+      Math.abs(lightData[offset + 2] - background[2])
+    );
+    if (
+      channelDelta > SURFACE_ANTIALIAS_CHANNEL_TOLERANCE &&
+      darkData[offset + 3] === 0
+    ) {
+      outside += 1;
+    }
+  }
+  return outside;
 }
 
 function findBounds(context, includesPixel) {

@@ -20,11 +20,11 @@ import {
   createProfileCardSourceDigest
 } from "../service-core.js";
 import {
+  SOCIAL_LIGHT_BORDER_COLOR,
+  SOCIAL_LIGHT_CANVAS_COLOR,
   SOCIAL_OUTPUT_HEIGHT,
   SOCIAL_OUTPUT_SCALE,
   SOCIAL_OUTPUT_WIDTH,
-  SOCIAL_LIGHT_BORDER_COLOR,
-  SOCIAL_LIGHT_CANVAS_COLOR,
   computeSocialCanvasLayout
 } from "../social-canvas.js";
 import { CARD_THEME_PALETTES } from "../theme.js";
@@ -36,6 +36,8 @@ import {
 } from "../fixtures/sample-account-usage.js";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+// Keep the same visible-overhang threshold as the native renderer regression.
+const SURFACE_ANTIALIAS_CHANNEL_TOLERANCE = 2;
 const avatar = readFileSync(new URL(
   "../../../public/assets/postmelee-avatar.png",
   import.meta.url
@@ -165,7 +167,7 @@ test("uses the same semantic light palette in Worker SVG", () => {
   assert.doesNotMatch(svg, /#181818|#2f2f2f/);
 });
 
-test("renders the Worker light social surface without changing dark padding", async () => {
+test("renders the Worker light surface inside shared dark card geometry", async () => {
   const viewModel = createViewModel("en");
   const [lightPng, darkPng] = await Promise.all([
     renderWorkerPng.renderSocial(viewModel, {
@@ -210,6 +212,14 @@ test("renders the Worker light social surface without changing dark padding", as
   assert.deepEqual(
     lightBounds,
     { maxX: 2159, maxY: 1218, minX: 240, minY: 41 }
+  );
+  assert.equal(
+    countChangedPixelsOutsideAlphaGeometry(
+      lightContext,
+      darkContext,
+      rgba(SOCIAL_LIGHT_CANVAS_COLOR)
+    ),
+    0
   );
 });
 
@@ -288,6 +298,37 @@ function countAlphaDifferences(left, right) {
     if (leftData[offset] !== rightData[offset]) differences += 1;
   }
   return differences;
+}
+
+function countChangedPixelsOutsideAlphaGeometry(light, dark, background) {
+  const lightData = light.getImageData(
+    0,
+    0,
+    light.canvas.width,
+    light.canvas.height
+  ).data;
+  const darkData = dark.getImageData(
+    0,
+    0,
+    dark.canvas.width,
+    dark.canvas.height
+  ).data;
+  let outside = 0;
+
+  for (let offset = 0; offset < lightData.length; offset += 4) {
+    const channelDelta = Math.max(
+      Math.abs(lightData[offset] - background[0]),
+      Math.abs(lightData[offset + 1] - background[1]),
+      Math.abs(lightData[offset + 2] - background[2])
+    );
+    if (
+      channelDelta > SURFACE_ANTIALIAS_CHANNEL_TOLERANCE &&
+      darkData[offset + 3] === 0
+    ) {
+      outside += 1;
+    }
+  }
+  return outside;
 }
 
 function findBounds(context, includesPixel) {

@@ -1,6 +1,7 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
 import {
+  SOCIAL_CARD_LOGICAL_RADIUS,
   SOCIAL_OUTPUT_SCALE,
   computeSocialCanvasLayout,
   getSocialCanvasSurface
@@ -144,7 +145,7 @@ function createWorkerProfileCardBody(viewModel, options, palette) {
     '<clipPath id="avatar-clip"><circle cx="58" cy="58" r="22"/></clipPath>',
     "</defs>",
     `<rect width="${CARD_LOGICAL_WIDTH}" height="${CARD_LOGICAL_HEIGHT}"`,
-    ` rx="32" fill="${palette.background}"/>`,
+    ` rx="${SOCIAL_CARD_LOGICAL_RADIUS}" fill="${palette.background}"/>`,
     avatar,
     createFittedText(viewModel.header.displayName, {
       color: palette.primary,

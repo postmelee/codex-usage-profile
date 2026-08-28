@@ -9,6 +9,7 @@ import {
 } from "@napi-rs/canvas";
 
 import {
+  SOCIAL_CARD_LOGICAL_RADIUS,
   computeSocialCanvasLayout,
   getSocialCanvasSurface
 } from "./social-canvas.js";
@@ -154,7 +155,13 @@ export function registerCardFonts() {
 function drawCardBackground(context, palette) {
   context.fillStyle = palette.background;
   context.beginPath();
-  context.roundRect(0, 0, CARD_LOGICAL_WIDTH, CARD_LOGICAL_HEIGHT, 32);
+  context.roundRect(
+    0,
+    0,
+    CARD_LOGICAL_WIDTH,
+    CARD_LOGICAL_HEIGHT,
+    SOCIAL_CARD_LOGICAL_RADIUS
+  );
   context.fill();
 }
 

@@ -33,13 +33,14 @@ GitHub Issue: [#141](https://github.com/postmelee/codex-usage-profile/issues/141
 | 1 | 소셜 surface 계약과 renderer parity | `social-canvas.js`, native/Worker renderer, renderer tests | light surface·border·geometry, dark/README 무회귀 |
 | 2 | renderer version·publication refresh와 공식 문서 | renderer/service version, publication tests, `docs/readme-card.md` | source digest·stable social refresh·문서 정합성 |
 | 3 | 통합 회귀와 시각 QA | 대표 dark/light 출력, 전체 test/build/verifier, Stage 보고 | bounds·alpha·색상 대조와 전체 회귀 |
+| 3.2 | PR 리뷰 radius 결합 보강 | native/Worker 공통 radius 소비, corner overhang 회귀, import 정렬 | light outline이 dark card geometry 밖으로 돌출하지 않음 |
 
 ## 문서 위치 확인
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
 | 수행·구현계획서 | `mydocs/plans/` | `mydocs/plans/task_m100_141*.md` | OK | 승인 범위와 Stage 경계 |
-| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_141_stage{1..3}.md` | OK | 각 Stage source와 같은 commit |
+| 단계 보고서 | `mydocs/working/` | `mydocs/working/task_m100_141_stage*.md` | OK | 각 Stage source와 같은 commit |
 | 최종 보고서 | `mydocs/report/` | `mydocs/report/task_m100_141_report.md` | OK | 모든 Stage 승인 뒤 작성 |
 | 소셜 이미지 사용자 안내 | `docs/` | `docs/readme-card.md` | OK | 기존 공식 card/share 문서의 light social 표현만 최소 갱신 |
 
@@ -263,6 +264,71 @@ git status --short
 Task #141 Stage 3: 소셜 썸네일 통합 회귀와 시각 QA 완료
 ```
 
+## Stage 3.2 — PR 리뷰 radius 결합 보강
+
+### 진입 조건
+
+- PR #142의 리뷰 기준 commit은 `5c32a876cddb047931f65591278c5ffaf83b7d6b`이며 현재
+  light/dark 출력, 전체 test와 CI는 통과 상태다.
+- 작업지시자가 같은 스레드에서 권장 처리안인 공통 radius 상수화, 모서리 불일치 회귀와
+  import 정렬 진행을 승인했다.
+
+### 산출물
+
+수정:
+
+- `src/profile-card/renderer.js`
+- `src/profile-card/worker-renderer.js`
+- `src/profile-card/__tests__/social-canvas.test.js`
+- `src/profile-card/__tests__/social-renderer.test.js`
+- `src/profile-card/__tests__/worker-renderer.test.js`
+- `mydocs/plans/task_m100_141_impl.md`
+- `mydocs/report/task_m100_141_report.md`
+- `mydocs/orders/20260828.md`
+
+신규:
+
+- `mydocs/working/task_m100_141_stage3_2.md`
+
+라이트 golden PNG와 새 public asset은 추가하지 않는다. golden은 현재 correctness를 막는 결함이
+아니고 바이너리 byte baseline 유지 정책을 별도로 결정해야 하므로 후속 후보로 남긴다.
+
+### 실행 순서
+
+1. `social-canvas.js`가 이미 export하는 `SOCIAL_CARD_LOGICAL_RADIUS`를 native와 Worker renderer가
+   직접 import해 card body radius에도 사용한다.
+2. native `roundRect(..., 32)`와 Worker `rx="32"` 리터럴을 공통 상수로 교체한다. surface outline
+   계산도 같은 상수를 계속 사용하므로 단일 변경으로 body와 outline이 함께 움직이게 한다.
+3. native/Worker 실제 light social에서 neutral canvas와 다른 모든 픽셀이 동일 renderer의 dark
+   card alpha geometry 안에 포함되는지 전수 검사해 corner outline 돌출을 차단한다.
+4. 리뷰에서 지적된 named import 순서를 정렬한다.
+5. targeted renderer test, 전체 Node test, production build와 Sites verifier를 재실행한다.
+6. Stage 3.2 보고서, 최종 보고서와 오늘할일을 갱신하고 source와 한 commit으로 묶는다.
+7. `publish/task141`을 갱신하고 PR #142 본문·리뷰 대응 근거를 새 HEAD와 검증 결과에 맞춘다.
+
+### 검증
+
+```bash
+node --test src/profile-card/__tests__/renderer.test.js src/profile-card/__tests__/social-canvas.test.js src/profile-card/__tests__/social-renderer.test.js src/profile-card/__tests__/worker-renderer.test.js
+npm test -- --test-concurrency=1
+npm run build:production
+npm run verify:sites-fullstack
+git diff --check
+```
+
+### 완료·중단 조건
+
+- 완료: native/Worker card body와 social outline이 하나의 radius 상수를 소비하고, light shape의
+  dark alpha geometry 밖 돌출 픽셀이 0이며 전체 검증이 통과한다.
+- 중단: 공통 상수화로 PNG bounds·bytes 외 공개 계약이 바뀌거나 golden/public asset 추가가
+  필수라면 범위를 확장하지 않고 다시 승인 요청한다.
+
+### 커밋
+
+```text
+Task #141 [Stage 3.2]: 카드 radius 결합과 모서리 회귀 보강
+```
+
 ## 검증
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행하고 실패한 Stage는 완료 처리하지 않는다.
@@ -285,12 +351,14 @@ Task #141 Stage 3: 소셜 썸네일 통합 회귀와 시각 QA 완료
   - `Task #141 Stage 1: 라이트 소셜 surface와 renderer parity 보정`
   - `Task #141 Stage 2: renderer 갱신과 라이트 social publication 정합화`
   - `Task #141 Stage 3: 소셜 썸네일 통합 회귀와 시각 QA 완료`
+  - `Task #141 [Stage 3.2]: 카드 radius 결합과 모서리 회귀 보강`
 
 ## 단계 의존성
 
 - Stage 1은 shared surface/frame과 renderer geometry의 유일한 구현 Stage다.
 - Stage 2는 Stage 1의 pixel contract 승인 뒤 renderer version·publication·공식 문서를 정합화한다.
 - Stage 3은 Stage 2 승인 뒤 source 수정 없이 전체 회귀와 시각 QA를 수행한다.
+- Stage 3.2는 PR 리뷰 승인 뒤 card body/outline radius 결합과 corner overhang 회귀만 보강한다.
 - 각 Stage는 `task-stage-report` 커밋과 작업지시자 승인 없이는 다음 Stage로 넘어가지 않는다.
 
 ## 위험과 대응
@@ -306,6 +374,7 @@ Task #141 Stage 3: 소셜 썸네일 통합 회귀와 시각 QA 완료
 
 - 공통 픽셀 계약과 light-only surface/outline의 concrete 구현 순서
 - Stage 1 renderer/test, Stage 2 version/publication/docs, Stage 3 통합 QA의 산출물·검증·커밋 경계
+- PR #142 리뷰 후 Stage 3.2의 공통 radius, corner overhang 회귀와 import 정렬 범위
 - renderer version을 `codex-share-card-3` / `codex-share-card-3-resvg-wasm-1`로 올리는 결정
 - stable social key와 media schema를 유지하고 다음 기존 refresh에서 새 bytes를 반영하는 경계
 - `docs/readme-card.md`의 light social 사용자 안내만 최소 갱신하는 문서 위치
