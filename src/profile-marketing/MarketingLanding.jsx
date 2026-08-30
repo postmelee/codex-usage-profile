@@ -114,6 +114,7 @@ export function MarketingCardPreview({
   const supportsCardTilt = useMediaQuery(
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
   );
+  const resolvedCardTheme = normalizeCardTheme(cardTheme);
   const setCardElement = useCallback((element) => {
     setRadiusElement(element);
     if (element && measuredRadius !== null) {
@@ -141,6 +142,7 @@ export function MarketingCardPreview({
         duration={PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds}
         size={PROFILE_CARD_BORDER_BEAM_PRESET.size}
         strength={PROFILE_CARD_BORDER_BEAM_PRESET.strength}
+        theme={resolvedCardTheme}
       >
         <CardImageFrame
           alt={alt}
@@ -153,7 +155,7 @@ export function MarketingCardPreview({
           sourceUrl={sourceUrl}
           src={src}
           status={status}
-          cardTheme={cardTheme}
+          cardTheme={resolvedCardTheme}
         />
       </BorderBeam>
     </MarketingCardTilt>

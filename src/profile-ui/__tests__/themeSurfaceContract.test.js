@@ -84,6 +84,23 @@ test("Task #96 every shared card frame receives an explicit card theme", async (
   assert.match(sources.loading, /cardTheme="dark"/);
 });
 
+test("Task #146 BorderBeam and card frame share one normalized card theme", async () => {
+  const marketing = await readFile(SOURCE_PATHS.marketing, "utf8");
+
+  assert.match(
+    marketing,
+    /const resolvedCardTheme = normalizeCardTheme\(cardTheme\);/
+  );
+  assert.match(
+    marketing,
+    /<BorderBeam[\s\S]*?theme=\{resolvedCardTheme\}[\s\S]*?<CardImageFrame[\s\S]*?cardTheme=\{resolvedCardTheme\}/
+  );
+  assert.match(
+    marketing,
+    /brightness=\{PROFILE_CARD_BORDER_BEAM_PRESET\.brightness\}[\s\S]*?colorVariant=\{PROFILE_CARD_BORDER_BEAM_PRESET\.colorVariant\}[\s\S]*?duration=\{PROFILE_CARD_BORDER_BEAM_PRESET\.durationSeconds\}[\s\S]*?size=\{PROFILE_CARD_BORDER_BEAM_PRESET\.size\}[\s\S]*?strength=\{PROFILE_CARD_BORDER_BEAM_PRESET\.strength\}/
+  );
+});
+
 test("Task #96 theme transitions stay scoped away from dense content", async () => {
   const stylesheet = await readFile(STYLESHEET_PATH, "utf8");
   const surfaceAllowlist = findThemeSurfaceAllowlist(stylesheet);
