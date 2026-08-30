@@ -8,7 +8,7 @@ import { BorderBeam } from "border-beam";
 import { Icon } from "../profile-ui/Icons.jsx";
 import { useLocale } from "../profile-ui/LocaleProvider.jsx";
 import { useCardFrameRadius } from "../profile-ui/useCardFrameRadius.js";
-import { PROFILE_CARD_BORDER_BEAM_PRESET } from "../profile-card/gif-animation.js";
+import { getProfileCardBorderBeamPreset } from "../profile-card/gif-animation.js";
 import { normalizeCardTheme } from "../profile-card/theme.js";
 import {
   createMarketingConfig,
@@ -115,6 +115,7 @@ export function MarketingCardPreview({
     "(min-width: 761px) and (hover: hover) and (pointer: fine)"
   );
   const resolvedCardTheme = normalizeCardTheme(cardTheme);
+  const borderBeamPreset = getProfileCardBorderBeamPreset(resolvedCardTheme);
   const setCardElement = useCallback((element) => {
     setRadiusElement(element);
     if (element && measuredRadius !== null) {
@@ -136,12 +137,14 @@ export function MarketingCardPreview({
       <BorderBeam
         active={!busy && !prefersReducedMotion}
         borderRadius={measuredRadius ?? undefined}
-        brightness={PROFILE_CARD_BORDER_BEAM_PRESET.brightness}
+        brightness={borderBeamPreset.brightness}
         className="home-card-beam"
-        colorVariant={PROFILE_CARD_BORDER_BEAM_PRESET.colorVariant}
-        duration={PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds}
-        size={PROFILE_CARD_BORDER_BEAM_PRESET.size}
-        strength={PROFILE_CARD_BORDER_BEAM_PRESET.strength}
+        colorVariant={borderBeamPreset.colorVariant}
+        data-card-beam-preset={borderBeamPreset.size}
+        duration={borderBeamPreset.durationSeconds}
+        size={borderBeamPreset.size}
+        strength={borderBeamPreset.strength}
+        style={borderBeamPreset.style}
         theme={resolvedCardTheme}
       >
         <CardImageFrame

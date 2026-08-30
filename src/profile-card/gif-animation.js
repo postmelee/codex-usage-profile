@@ -13,7 +13,26 @@ export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
   strength: 0.82
 });
 
-export const GIF_EXPORT_PRESET_VERSION = 1;
+export const PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET = Object.freeze({
+  brightness: PROFILE_CARD_BORDER_BEAM_PRESET.brightness,
+  colorVariant: PROFILE_CARD_BORDER_BEAM_PRESET.colorVariant,
+  durationSeconds: PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds,
+  size: PROFILE_CARD_BORDER_BEAM_PRESET.size,
+  strength: PROFILE_CARD_BORDER_BEAM_PRESET.strength,
+  style: Object.freeze({
+    "--beam-bloom-opacity": 1.25,
+    "--beam-inner-opacity": 2.5,
+    "--beam-stroke-opacity": 5
+  })
+});
+
+export function getProfileCardBorderBeamPreset(theme) {
+  return theme === "light"
+    ? PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET
+    : PROFILE_CARD_BORDER_BEAM_PRESET;
+}
+
+export const GIF_EXPORT_PRESET_VERSION = 2;
 const PROFILE_GIF_SCALE = 2;
 
 export const PROFILE_GIF_PRESET = Object.freeze({

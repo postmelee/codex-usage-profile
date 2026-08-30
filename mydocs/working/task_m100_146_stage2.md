@@ -1,79 +1,99 @@
-# Task #146 Stage 2 재개 보고서 — 라이트 전용 라이브·GIF keyline 재작업
+# Task #146 Stage 2 보고서 — 라이트 동일 모션 라이브·GIF 대비 보정
 
 GitHub Issue: [#146](https://github.com/postmelee/codex-usage-profile/issues/146)
 구현계획서: [`task_m100_146_impl.md`](../plans/task_m100_146_impl.md)
-Stage: 2 (재개)
-
-> **2026-08-30 판정 정정:** 계산 스타일과 서로 다른 frame hash만으로 라이트 Beam의 시각 수용성을 통과 처리한 아래 최초 완료 판단은 작업지시자 실제 검수와 일치하지 않았다. 첨부 GIF와 사분면 이미지에서 효과를 식별할 수 없다는 피드백을 수용해 완료 상태를 철회하고 Stage 2를 재개한다. 아래 최초 검증 기록은 거짓 양성의 원인 추적을 위해 보존하며, 최종 Stage 2 결과로 사용하지 않는다.
+Stage: 2 (2차 재작업)
 
 ## 단계 목적
 
-Stage 1에서 연결한 카드 테마가 실제 브라우저에서 라이트 Beam의 대비를 높이는지 확인하고, 다크 표현과 카드 기하·handoff·reduced-motion 계약이 그대로 유지되는지 자동·시각 검증으로 고정한다. 최초 판단 실패 후에는 승인된 범위 확장에 따라 다크 발광형 프리셋을 보존하면서 라이트 keyline 중심 라이브·GIF 합성을 별도로 구현하고 전체 loop의 육안 식별성을 검증한다.
+Stage 1에서 연결한 정규화 카드 테마를 실제 시각 합성까지 확장한다. 다크 라이브의 기존 `md` Ocean 효과와 기존 Chrome golden bytes는 그대로 고정한다. 라이트도 다크와 같은 `md` conic mask, 둘레 회전, 위상, 폭, 4.8초 타이밍과 stroke·inner·bloom 레이어 구조를 사용하되, 흰 카드에서 보이도록 graphite/blue 색상과 레이어 opacity만 라이트 전용으로 조정한다.
+
+Share Studio GIF 요청에도 canonical `cardTheme`을 전달해 라이브와 저장 GIF가 같은 테마별 색상·대비 계약을 사용하게 한다. 카드 본문과 geometry는 변경하지 않는다. 양 테마 모두 원본 `1497×918`, 표시 비율 `499:306`, 동일 bounds·반경을 유지하고 GIF는 `998×612`, 20fps, 4.8초, 96프레임 계약을 유지한다.
+
+최초 Stage 2의 계산 스타일만으로 시각 수용성을 판단한 결과와 이후 라이트를 하단 좌→우 `line` 모션으로 분리한 결과는 작업지시자 검수로 모두 철회했다. 이 보고서는 다크와 완전히 같은 움직임·효과 구조에서 라이트 색상·대비만 변경한 최종 재작업 결과다.
 
 ## 산출물
 
 | 파일 | 변경 요약 |
 |---|---|
-| `tests/profile-ui.spec.js` | 실제 렌더러 다크·라이트 카드를 사용한 Beam 대비·동일 기하·노드 안정성 회귀 테스트 추가 |
-| `mydocs/orders/20260830.md` | Task #146 상태를 Stage 2 완료·승인 대기로 갱신 |
-| `mydocs/working/task_m100_146_stage2.md` | Stage 2 자동·시각 검증과 다음 단계 인계 기록 |
+| `src/profile-card/assets/ocean-light-keyline-golden-v1.rgba-runs.bin` | installed Chrome에서 DPR 2로 캡처한 라이트 `md` 동일 모션 96 phase sparse golden |
+| `src/profile-card/gif-animation.js` | 기존 다크 preset을 유지하고 같은 `md` 기반 라이트 전용 opacity scale 추가, GIF preset version 2 유지 |
+| `src/profile-card/gif-beam-frames.js` | 정규화 theme에 따른 dark/light golden URL 선택 |
+| `src/profile-marketing/MarketingLanding.jsx` | 같은 정규화 card theme로 theme별 live 색상·대비 preset을 선택하되 카드 bounds 유지 |
+| `src/profile-ui/ShareStudio.jsx`, `gifExport.js`, `gifExport.worker.js` | `cardTheme`을 controller → Worker → asset loader·encoder까지 전달하고 Worker enum 검증 |
+| `src/profile-card/__tests__/gif-animation.test.js`, `gif-beam-frames.test.js` | 동일 `md` preset, asset SHA·bounds·사분면 phase·대표 frame·seam·dark 무변경 회귀 |
+| `src/profile-ui/__tests__/gifExport.test.js`, `themeSurfaceContract.test.js` | theme request·asset 선택·실제 dark/light encode·유효 enum·live 연결 회귀 |
+| `tests/profile-ui.spec.js` | 양 테마 `md`, 동일 타이밍·geometry, 라이트 색상·opacity와 노드 유지 브라우저 회귀 |
+| `mydocs/plans/task_m100_146.md`, `task_m100_146_impl.md` | 거절된 `line` 결과와 최종 동일 모션·테마별 대비 요구사항 반영 |
+| `mydocs/orders/20260830.md` | Stage 2 재작업 상태 반영 |
 
-Playwright 계약은 실제 `1497×918` 다크·라이트 PNG를 테스트 안에서 생성하고, 같은 카드 source와 Beam 노드에서 테마를 전환해 측정한다. 테스트 파일 변경량은 156줄 추가다.
+신규 light asset은 compressed 2,980,721 bytes, decoded 12,998,178 bytes이며 SHA-256은 `1a1368c9b9c36e234fea3da7305da62565594c824c2261e9feb1aab988b76d1c`다. 실제 표시와 GIF 양자화에 영향을 주지 않는 alpha `1–2/255` 픽셀만 sparse asset에서 제외해 기존 compressed 3,000,000 bytes 계약을 유지했다.
+
+기존 dark asset은 compressed 2,450,742 bytes, decoded 19,767,832 bytes와 SHA-256 `aacd0c7bebf857152ec3984160d1212dd10bbc9ae941d16deaba8f986ae8a680`을 그대로 유지했다.
 
 ## 본문 변경 정도 / 본문 무손실 여부
 
-제품 소스와 공개 문서는 Stage 2에서 변경하지 않았다. 테스트는 카드 테마 전환 시 아래 계약을 관찰할 뿐 렌더러, GIF golden, 공유 애니메이션 프리셋이나 카드 레이아웃을 수정하지 않는다.
+코드 작업이므로 문서 본문 무손실 여부는 해당 없다. 제품 동작은 다음 경계 안에서 변경했다.
 
-- 다크: 흰색 계열 Beam stroke `rgba(255, 255, 255, 0.75)`, inner shadow `rgba(255, 255, 255, 0.27)`, saturation `1.2`
-- 라이트: 검정색 계열 Beam stroke `rgba(0, 0, 0, 0.55)`, inner shadow `rgba(0, 0, 0, 0.14)`, saturation `1.5`
-- 공통: brightness `1.05`, 안정 상태 animation duration `4.8s, 0.6s`, strength `0.82`
-
-`motion-design` 관점에서 모션 속도·궤적·강도를 추가하지 않고 배경에 맞는 색상 대비만 전환했다. 라이트 캡처에서 흰 카드 가장자리 위 어두운 Beam 대비가 확인되어 별도 강도 튜닝 결정 게이트에는 진입하지 않았다.
+- 다크 live는 기존 `md / ocean / brightness 1.05 / strength 0.82 / duration 4.8s` 입력, opacity override 없음, 기존 golden을 그대로 사용한다.
+- 라이트 live도 `md / ocean / brightness 1.05 / strength 0.82 / duration 4.8s`를 사용한다. theme의 graphite/blue 합성 위에 CSS scale `stroke 5 / inner 2.5 / bloom 1.25`만 적용한다.
+- 두 테마는 같은 conic mask와 stroke·inner·bloom 레이어, 같은 linear perimeter rotation과 fade timing을 사용한다. 라이트에 `line` 또는 다른 이동 경로를 사용하지 않는다.
+- GIF source key와 Worker request가 모두 canonical theme를 포함한다. preset version 2로 테마를 무시하던 이전 결과를 재사용하지 않는다.
+- 카드 PNG·소셜 PNG renderer, publication/cache, persistent card style schema, 원격 배포 환경은 변경하지 않았다.
 
 ## 검증 결과
 
 실행 명령:
 
 ```bash
-npx playwright test tests/profile-ui.spec.js --grep "Task #146|Share handoff|loading and unavailable account states|card appearance"
+node --test src/profile-card/__tests__/gif-animation.test.js src/profile-card/__tests__/gif-beam-frames.test.js src/profile-card/__tests__/gif-encoder.test.js src/profile-ui/__tests__/gifExport.test.js src/profile-ui/__tests__/themeSurfaceContract.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Task #146|Share Studio|Share handoff|loading and unavailable account states|card appearance"
+npx playwright test tests/profile-ui.spec.js --grep "GIF"
 npm run build:production
 npm run verify:sites-production
-git diff -- src/profile-card/gif-animation.js
+ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=width,height,nb_read_frames,duration,r_frame_rate -of json /private/tmp/task146-dark-same-motion-preview.gif
+ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=width,height,nb_read_frames,duration,r_frame_rate -of json /private/tmp/task146-light-same-motion-preview.gif
+shasum -a 256 src/profile-card/assets/ocean-beam-golden-v1.rgba-runs.bin src/profile-card/assets/ocean-light-keyline-golden-v1.rgba-runs.bin
 git diff --check
-git status --short
-git diff --stat
 ```
 
 결과:
 
-- OK — Playwright 대상 회귀군 6/6 통과, 실패 0개
-- OK — Task #146 신규 시나리오가 다크 흰색 계열과 라이트 검정색 계열 Beam 계산 스타일을 구분
-- OK — 테마 전환 전후 같은 `data-beam` 식별자와 같은 Beam DOM 노드를 유지
-- OK — 다크·라이트 모두 이미지 원본 `1497×918`, CSS `aspect-ratio: 499 / 306`
-- OK — 다크·라이트 캡처 모두 `600×369`; 프레임 폭·높이·곡률은 소수 둘째 자리 허용 오차 안에서 동일
-- OK — 기존 4.8초 회전, 0.82 strength, brightness 1.05 유지
-- OK — 최신 draft decoded-preview handoff, Share handoff, reduced-motion 포함 대상 회귀 통과
-- OK — production server/client build 완료, client 1,839 modules 변환
-- OK — Sites production artifact verifier `ok: true`; artifact 7,919,206 bytes, client 14 files, worker 2 files, migration 6 files, binding 3개
-- OK — 로컬 브라우저 다크 Hero의 Beam 동작과 카드 표시 확인, 콘솔 warning/error 0개
-- OK — `src/profile-card/gif-animation.js` diff 없음, `git diff --check` 경고 없음
+- OK — 계획된 Node 검증 36/36 통과, 실패·skip 없음.
+- OK — 계획된 Playwright 회귀 27/27 통과. Share Studio, handoff, reduced-motion, loading, card appearance를 포함한다.
+- OK — GIF 집중 Playwright 5/5 통과. 실제 Worker 생성·preview·download와 error·cancel·mobile 경계를 확인했다.
+- OK — 실제 encoder의 dark/en GIF는 5,969,872 bytes, light/en GIF는 5,703,295 bytes로 모두 15MB 미만이다.
+- OK — `ffprobe`에서 두 GIF 모두 `998×612`, 20fps, 4.8초, 96프레임으로 확인됐다.
+- OK — 양 테마의 alpha 중심이 frame `0 / 24 / 48 / 72`에서 같은 `좌하단 → 좌상단 → 우상단 → 우하단` 순서를 지난다. dark 중심은 `(230.4,467.6) → (209.8,169.6) → (876.9,191.3) → (736.1,511.9)`, light 중심은 `(232.8,477.2) → (181.9,181.6) → (900.2,189.1) → (735.9,519.8)`이다.
+- OK — 라이트 golden 96프레임 모두 효과 픽셀이 존재하며 최소 23,280개, 최대 39,577개다. frame 95→0 delta와 frame 0→1 delta의 비율은 `0.9904`로 loop seam이 인접 프레임 수준이다.
+- OK — 실제 카드 위 라이트 대표 frame의 RGB 최대 채널 차이 p95는 `45 / 28 / 38 / 42`, max는 `130 / 105 / 139 / 131`이다. dark의 p95 `27 / 17 / 27 / 34`보다 흰 카드에서 국소 대비가 분명하다.
+- OK — 실제 브라우저에서 dark와 light 모두 `data-card-beam-preset=md`, animation duration `4.8s, 0.6s`, strength `0.82`를 사용한다. dark는 white 계열 conic과 saturation `1.2`, light는 graphite 계열 conic과 saturation `1.5`, `stroke=5 / inner=2.5 / bloom=1.25`를 사용한다.
+- OK — 테마 전환 전후 같은 Beam DOM·`data-beam` 식별자를 유지하고 이미지 원본 `1497×918`, CSS `aspect-ratio: 499 / 306`, 프레임 폭·높이·곡률이 허용 오차 안에서 동일하다.
+- OK — production build server 63 modules, client 1,839 modules 통과. client에는 light asset 2,980.72KB와 기존 dark asset 2,450.74KB가 Worker lazy 경로로 포함된다.
+- OK — Sites production artifact verifier `ok: true`; artifact 10,900,957 bytes, client 15 files, worker 2 files, migrations 6개, bindings 3개다.
+- OK — GitHub Issue #146 본문을 동일 `md` 모션과 라이트 전용 색상·대비 수용 기준으로 정정했다.
 
-초기 신규 테스트는 라이트 이미지 준비 직후 handoff의 정상적인 0.5초 fade-out 상태를 측정해 1회 실패했다. 제품 코드는 변경하지 않고 Beam이 다시 `data-active`가 되어 0.6초 fade-in을 마친 안정 상태를 기다리도록 테스트 측정 시점을 보정한 뒤 통과했다. 첫 라이트 캡처에서 sticky header가 카드 상단을 가린 것도 카드 자체 문제와 분리해 같은 화면 중앙 위치에서 다시 캡처했다.
+## 시각 검수 자료
+
+- 동기화 비교 GIF: `/private/tmp/task146-dark-light-same-motion-comparison.gif`
+- 다크 실제 출력 GIF: `/private/tmp/task146-dark-same-motion-preview.gif`
+- 라이트 실제 출력 GIF: `/private/tmp/task146-light-same-motion-preview.gif`
+- 대표 phase contact sheet: `/private/tmp/task146-same-motion-contact.png`
+
+동기화 비교 GIF는 왼쪽 다크와 오른쪽 라이트를 같은 96 phase에 맞춰 배치했다. 두 Beam의 위치가 같은 둘레 순서를 지나고, 라이트는 색상·대비만 더 선명하게 보인다. 비교용 배경과 축소 배치만 추가했으며 개별 실제 출력 GIF의 카드 canvas와 frame 계약은 변경하지 않았다.
 
 ## 잔여 위험
 
-- 자동 캡처는 정지 프레임이므로 전체 회전 주기의 모든 각도를 이미지 하나로 표현하지는 않는다. 계산 스타일, 4.8초 animation duration, 실제 로컬 동작 확인으로 보완했다.
-- 원격 Stage5는 Task #146 브랜치에서 변경하지 않았다. 병합 후 Task #144가 새 exact-main을 승격·배포한 환경에서 최종 원격 동작을 다시 확인해야 한다.
-- 라이브러리 내부 CSS 생성 구조가 향후 변경되면 핵심 계산 색상 계약 테스트를 새 공개 계약에 맞춰 갱신할 수 있다.
+- GIF의 256색·1-bit alpha 양자화 때문에 CSS의 연속 alpha와 픽셀 단위로 완전히 같지는 않다. installed Chrome에서 동일 preset 96 phase를 캡처하고 실제 encoder 전체 loop를 별도로 확인해 차이를 제한했다.
+- 라이트 golden은 기존 compressed size 상한에 근접한다. SHA, compressed/decompressed 상한, 96프레임 effect count를 테스트로 고정해 비정상 재생성을 즉시 실패시킨다.
+- 원격 Stage5와 production은 Task #146 브랜치에서 변경하지 않았다. 병합 후 Task #144가 새 exact-main 후보를 고정해 다시 배포·스모크해야 한다.
 
 ## 다음 단계 영향
 
-- Stage 3에서는 전체 `npm test`, 전체 Playwright, production build·artifact verifier를 다시 실행한다.
-- 최종 변경 목록에서 GIF 프리셋·golden asset, 카드·소셜 렌더러와 카드 기하가 변경되지 않았음을 확인한다.
-- #146 병합 뒤 #144가 기존 exact-main 후보를 폐기하고 새 `devel` 병합 커밋부터 main 승격·Stage5 배포·원격 스모크를 다시 수행한다는 인계 내용을 확정한다.
+- 작업지시자가 이 Stage 2 시각 결과를 승인한 뒤에만 Stage 3 전체 `npm test`, 전체 Playwright, production build·artifact verifier로 진행한다.
+- 최종 변경 목록에서 기존 dark golden SHA, 카드·소셜 PNG renderer와 geometry 무변경을 다시 확인한다.
+- #146 병합 뒤 #144는 이전 exact-main 후보를 재사용하지 않고 새 `devel` 병합 커밋부터 main 승격·Stage5·production 검증을 이어간다.
 
-## 재개 상태
+## 승인 요청
 
-- 최초 Stage 2 완료·Stage 3 진입 요청은 철회했다.
-- 작업지시자가 2026-08-30 다크와 라이트의 효과 합성 로직을 분리하는 권장안을 승인했다.
-- 개정 구현계획에 따라 라이트 live keyline, light GIF golden, Worker theme 전달과 실제 픽셀/전체 loop 검증을 같은 Stage 2에서 수행한다.
+- 라이트·다크가 같은 `md` 둘레 회전과 4.8초 타이밍을 사용하고 라이트만 graphite/blue 색상·opacity 대비가 강화된 Stage 2 결과를 승인하면 Stage 3 전체 회귀와 릴리스 인계 확정으로 진행한다.

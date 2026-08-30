@@ -7,7 +7,9 @@ import test from "node:test";
 import {
   PROFILE_GIF_BEAM_ASSET_CONTRACT,
   PROFILE_GIF_BEAM_ASSET_URL,
+  PROFILE_GIF_LIGHT_BEAM_ASSET_URL,
   createProfileGifGoldenFrameRenderer,
+  getProfileGifBeamAssetUrl,
   loadProfileGifBeamFrames,
   parseProfileGifBeamFrames
 } from "../gif-beam-frames.js";
@@ -15,6 +17,8 @@ import { PROFILE_GIF_PRESET } from "../gif-animation.js";
 
 const COMPRESSED_ASSET_SHA256 =
   "aacd0c7bebf857152ec3984160d1212dd10bbc9ae941d16deaba8f986ae8a680";
+const LIGHT_COMPRESSED_ASSET_SHA256 =
+  "1a1368c9b9c36e234fea3da7305da62565594c824c2261e9feb1aab988b76d1c";
 
 test("loads the approved Chrome beam capture as one bounded gzip asset", async () => {
   const compressed = await readFile(PROFILE_GIF_BEAM_ASSET_URL);
@@ -44,6 +48,84 @@ test("loads the approved Chrome beam capture as one bounded gzip asset", async (
   assert.ok(compressed.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes);
   assert.ok(frames.bytes.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes);
   assert.ok(frames.effectPixelCounts.every((count) => count > 40_000));
+});
+
+test("selects the dark golden unchanged and loads the light keyline capture", async () => {
+  const compressed = await readFile(PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
+  let requestedUrl;
+  const frames = await loadProfileGifBeamFrames({
+    async fetchImpl(assetUrl) {
+      requestedUrl = assetUrl;
+      return new Response(compressed, {
+        headers: { "content-length": String(compressed.byteLength) }
+      });
+    },
+    theme: "light"
+  });
+
+  assert.equal(getProfileGifBeamAssetUrl("dark"), PROFILE_GIF_BEAM_ASSET_URL);
+  assert.equal(getProfileGifBeamAssetUrl("light"), PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
+  assert.equal(requestedUrl, PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
+  assert.equal(
+    createHash("sha256").update(compressed).digest("hex"),
+    LIGHT_COMPRESSED_ASSET_SHA256
+  );
+  assert.ok(compressed.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes);
+  assert.ok(frames.bytes.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes);
+  assert.ok(frames.effectPixelCounts.every((count) => count > 20_000));
+});
+
+test("keeps light and dark on the same perimeter motion while changing contrast", async () => {
+  const [darkCompressed, lightCompressed] = await Promise.all([
+    readFile(PROFILE_GIF_BEAM_ASSET_URL),
+    readFile(PROFILE_GIF_LIGHT_BEAM_ASSET_URL)
+  ]);
+  const darkFrames = parseProfileGifBeamFrames(gunzipSync(darkCompressed));
+  const lightFrames = parseProfileGifBeamFrames(gunzipSync(lightCompressed));
+  const base = createBase([255, 255, 255, 255]);
+  const renderer = createProfileGifGoldenFrameRenderer(base, lightFrames);
+  const first = renderer.renderFrame(0);
+  const quarter = renderer.renderFrame(24);
+  const middle = renderer.renderFrame(48);
+  const thirdQuarter = renderer.renderFrame(72);
+  const last = renderer.renderFrame(95);
+  const center = (306 * PROFILE_GIF_PRESET.width + 499) * 4;
+
+  assert.notDeepEqual(first, last);
+  assert.notDeepEqual(quarter, middle);
+  assert.notDeepEqual(middle, thirdQuarter);
+  assert.deepEqual(
+    Array.from(middle.subarray(center, center + 4)),
+    Array.from(base.subarray(center, center + 4))
+  );
+  const expectedQuadrants = [
+    "bottom-left",
+    "top-left",
+    "top-right",
+    "bottom-right"
+  ];
+  assert.deepEqual(
+    [0, 24, 48, 72].map((frameIndex) => (
+      getBeamAlphaQuadrant(darkFrames, frameIndex)
+    )),
+    expectedQuadrants
+  );
+  assert.deepEqual(
+    [0, 24, 48, 72].map((frameIndex) => (
+      getBeamAlphaQuadrant(lightFrames, frameIndex)
+    )),
+    expectedQuadrants
+  );
+  assert.equal(
+    createHash("sha256").update(middle).digest("hex"),
+    "468bd14180806f3920ab0b3cb2cb7692df901ec9d9076671c815197ad3865a57"
+  );
+  assert.equal(renderer.effectPixelCount, 39_577);
+
+  const seamDelta = frameRgbaDelta(last, first);
+  const adjacentDelta = frameRgbaDelta(first, renderer.renderFrame(1));
+  assert.ok(seamDelta / adjacentDelta > 0.95);
+  assert.ok(seamDelta / adjacentDelta < 1.05);
 });
 
 test("renders a deterministic source-over frame while preserving the card center", async () => {
@@ -109,12 +191,12 @@ test("rejects truncated, trailing, and unsupported beam assets", () => {
   assert.throws(() => parseProfileGifBeamFrames(unsupported), /unsupported/);
 });
 
-function createBase() {
+function createBase(color = [24, 24, 24, 255]) {
   const rgba = new Uint8ClampedArray(
     PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height * 4
   );
   for (let offset = 0; offset < rgba.length; offset += 4) {
-    rgba.set([24, 24, 24, 255], offset);
+    rgba.set(color, offset);
   }
   return rgba;
 }
@@ -144,4 +226,40 @@ function frameRgbaDelta(left, right) {
     total += Math.abs(left[offset] - right[offset]);
   }
   return total;
+}
+
+function getBeamAlphaQuadrant(frames, frameIndex) {
+  const view = new DataView(
+    frames.bytes.buffer,
+    frames.bytes.byteOffset,
+    frames.bytes.byteLength
+  );
+  let offset = frames.frameOffsets[frameIndex];
+  const runCount = view.getUint16(offset, true);
+  let alphaTotal = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+  offset += 2;
+
+  for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
+    const y = view.getUint16(offset, true);
+    const x = view.getUint16(offset + 2, true);
+    const length = view.getUint16(offset + 4, true);
+    offset += 6;
+    for (let pixel = 0; pixel < length; pixel += 1) {
+      const alpha = frames.bytes[offset + pixel * 4 + 3];
+      alphaTotal += alpha;
+      weightedX += (x + pixel) * alpha;
+      weightedY += y * alpha;
+    }
+    offset += length * 4;
+  }
+
+  const horizontal = weightedX / alphaTotal < PROFILE_GIF_PRESET.width / 2
+    ? "left"
+    : "right";
+  const vertical = weightedY / alphaTotal < PROFILE_GIF_PRESET.height / 2
+    ? "top"
+    : "bottom";
+  return `${vertical}-${horizontal}`;
 }

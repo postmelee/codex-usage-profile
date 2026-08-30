@@ -81,6 +81,10 @@ test("Task #96 every shared card frame receives an explicit card theme", async (
   assert.match(sources.publicProfile, /cardTheme=\{profile\.cardStyle\?\.theme/);
   assert.match(sources.publicIntro, /cardTheme=\{cardTheme\}/);
   assert.match(sources.shareStudio, /cardTheme=\{cardTheme\}/);
+  assert.match(
+    sources.shareStudio,
+    /gifExportController\.generate\(\{\s*cardTheme,\s*sourceKey: gifSourceKey,\s*sourceUrl: gifSourceUrl\s*\}\)/
+  );
   assert.match(sources.loading, /cardTheme="dark"/);
 });
 
@@ -97,7 +101,7 @@ test("Task #146 BorderBeam and card frame share one normalized card theme", asyn
   );
   assert.match(
     marketing,
-    /brightness=\{PROFILE_CARD_BORDER_BEAM_PRESET\.brightness\}[\s\S]*?colorVariant=\{PROFILE_CARD_BORDER_BEAM_PRESET\.colorVariant\}[\s\S]*?duration=\{PROFILE_CARD_BORDER_BEAM_PRESET\.durationSeconds\}[\s\S]*?size=\{PROFILE_CARD_BORDER_BEAM_PRESET\.size\}[\s\S]*?strength=\{PROFILE_CARD_BORDER_BEAM_PRESET\.strength\}/
+    /const borderBeamPreset = getProfileCardBorderBeamPreset\(resolvedCardTheme\);[\s\S]*?brightness=\{borderBeamPreset\.brightness\}[\s\S]*?colorVariant=\{borderBeamPreset\.colorVariant\}[\s\S]*?duration=\{borderBeamPreset\.durationSeconds\}[\s\S]*?size=\{borderBeamPreset\.size\}[\s\S]*?strength=\{borderBeamPreset\.strength\}[\s\S]*?style=\{borderBeamPreset\.style\}/
   );
 });
 

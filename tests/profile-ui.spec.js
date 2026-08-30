@@ -210,6 +210,7 @@ test.describe("theme surfaces", () => {
     const initialBeamNode = await beam.elementHandle();
     const initialBeamId = await beam.getAttribute("data-beam");
     const darkSnapshot = await readCardBeamSnapshot(beam);
+    await expect(beam).toHaveAttribute("data-card-beam-preset", "md");
     await sourceCard.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await sourceCard.screenshot({ path: testInfo.outputPath("task-146-dark.png") });
 
@@ -224,6 +225,7 @@ test.describe("theme surfaces", () => {
       (image) => [image.naturalWidth, image.naturalHeight]
     )).toEqual([1497, 918]);
     await expect(beam).toHaveAttribute("data-active", "");
+    await expect(beam).toHaveAttribute("data-card-beam-preset", "md");
     await expect.poll(() => beam.evaluate((element) => (
       element.getAnimations().find((animation) => (
         animation.animationName.includes("beam-fade-in")
@@ -260,6 +262,12 @@ test.describe("theme surfaces", () => {
     expect(lightSnapshot.animationDuration).toBe(darkSnapshot.animationDuration);
     expect(darkSnapshot.strength).toBe("0.82");
     expect(lightSnapshot.strength).toBe(darkSnapshot.strength);
+    expect(darkSnapshot.opacityScales).toEqual({ bloom: "", inner: "", stroke: "" });
+    expect(lightSnapshot.opacityScales).toEqual({
+      bloom: "1.25",
+      inner: "2.5",
+      stroke: "5"
+    });
     expect(darkSnapshot.image).toEqual({
       aspectRatio: "499 / 306",
       naturalHeight: 918,
@@ -6293,6 +6301,11 @@ async function readCardBeamSnapshot(beam) {
         aspectRatio: getComputedStyle(image).aspectRatio,
         naturalHeight: image.naturalHeight,
         naturalWidth: image.naturalWidth
+      },
+      opacityScales: {
+        bloom: style.getPropertyValue("--beam-bloom-opacity").trim(),
+        inner: style.getPropertyValue("--beam-inner-opacity").trim(),
+        stroke: style.getPropertyValue("--beam-stroke-opacity").trim()
       },
       strength: style.getPropertyValue("--beam-strength").trim()
     };

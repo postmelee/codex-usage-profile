@@ -9,7 +9,7 @@ GitHub Issue: [#146](https://github.com/postmelee/codex-usage-profile/issues/146
 | Stage | 제목 | 주요 산출 | 검증 |
 |---|---|---|---|
 | 1 | Beam 테마 소유권 연결과 계약 고정 | `MarketingLanding.jsx`, `themeSurfaceContract.test.js` | 명시적 동일 테마 전달, 공유 프리셋 비변경 |
-| 2 | 라이트 전용 라이브·GIF keyline과 동등성 검증 | 테마별 live config, light golden, Worker theme 전달, 회귀 테스트 | 실제 픽셀 대비, dark golden 보존, 동일 기하·출력 계약 |
+| 2 | 라이트 동일 모션 라이브·GIF 대비와 동등성 검증 | 테마별 색상·opacity config, light golden, Worker theme 전달, 회귀 테스트 | 동일 `md` phase, 실제 픽셀 대비, dark golden 보존, 동일 기하·출력 계약 |
 | 3 | 전체 회귀 검증과 릴리스 인계 | 전체 검증 결과와 인계 기록 | 단위·E2E·production build·artifact verifier |
 
 ## 문서 위치 확인
@@ -60,7 +60,7 @@ git diff --check
 Task #146 Stage 1: Border Beam 카드 테마 소유권 연결
 ```
 
-## Stage 2 — 라이트 전용 라이브·GIF keyline과 동등성 검증
+## Stage 2 — 라이트 동일 모션 라이브·GIF 대비와 동등성 검증
 
 ### 산출물
 
@@ -88,14 +88,14 @@ Task #146 Stage 1: Border Beam 카드 테마 소유권 연결
 
 - 기존 Stage 2의 “계산 스타일 문자열이 다르므로 시각 수용 가능” 결론을 철회하고 작업지시자 검수 실패를 보고서에 정정한다.
 - 다크 라이브는 기존 `md / ocean / brightness 1.05 / strength 0.82` 입력을 그대로 유지한다.
-- 라이트 라이브는 같은 4.8초 궤도와 Ocean 계열을 유지하면서 `line` 기반 어두운 keyline을 주 효과로 쓰고 bloom 의존도를 낮추는 전용 layer config를 적용한다.
+- 라이트 라이브도 다크와 같은 `md` conic mask·둘레 회전·위상·폭·4.8초 주기를 사용하고, graphite/blue 색상과 stroke·inner·bloom opacity만 라이트 전용으로 조정한다. 하단 좌→우 `line` 모션은 사용하지 않는다.
 - Share Studio와 GIF controller가 canonical `cardTheme`을 Worker request에 포함하고, Worker는 다크 기존 golden 또는 라이트 신규 golden을 선택해 encoder에 전달한다.
 - GIF export preset version을 올려 기존 테마 미반영 cache key와 결과를 재사용하지 않는다.
-- installed Chrome에서 승인된 라이트 live config의 96 phase를 `998×612` transparent sparse asset으로 캡처하고 binary parser·SHA·대표 frame·95→0 seam 계약을 고정한다.
+- installed Chrome에서 승인된 라이트 `md` live config의 96 phase를 다크와 같은 0°~356.25° 사분면 각도로 `998×612` transparent sparse asset에 캡처하고 binary parser·SHA·대표 frame·95→0 seam 계약을 고정한다.
 - 다크 golden binary SHA와 대표 렌더 bytes가 변경되지 않음을 회귀 검증한다.
 - 라이트·다크 모두 이미지 원본 `1497×918`, CSS `aspect-ratio: 499 / 306`, 프레임 폭·높이·곡률이 허용 오차 안에서 같음을 확인한다.
 - 기존 preview 노드·Beam 노드를 유지하는 decoded-preview handoff와 `prefers-reduced-motion: reduce` 시 비활성화 계약을 함께 회귀 검증한다.
-- 로컬 production build와 실제 Share Studio Save GIF를 열어 라이트·다크 각각 같은 카드 geometry와 사분면 phase로 캡처한다. 라이트 keyline의 실제 perimeter 픽셀 대비와 전체 loop 식별성을 확인하고 캡처는 검증 산출물로만 사용한다.
+- 로컬 production build와 실제 Share Studio Save GIF를 열어 라이트·다크 각각 같은 카드 geometry와 0°·90°·180°·270° phase로 캡처한다. 두 테마의 Beam 중심이 같은 사분면 순서를 통과하는지, 라이트의 실제 perimeter 픽셀 대비와 전체 loop 식별성을 확인한다.
 
 ### 검증
 
@@ -109,16 +109,16 @@ git diff --check
 
 수동/브라우저 확인:
 
-- production build의 `/profile`에서 다크·라이트 카드 전환 후 한 주기 keyline 위치와 대비를 같은 뷰포트로 비교한다.
+- production build의 `/profile`에서 다크·라이트 카드 전환 후 동일 각도의 둘레 Beam 위치·폭과 대비를 같은 뷰포트로 비교한다.
 - 양쪽 프레임의 표시 크기와 상하좌우 여백이 동일한지 캡처 및 브라우저 측정값으로 확인한다.
 - Share Studio에서 light GIF를 실제 생성·저장해 `998×612 / 96프레임 / 50ms / 무한 반복 / 15MB 미만`과 눈에 보이는 전체 loop를 확인한다.
 - 다크 golden SHA·대표 frame과 dark GIF byte baseline이 유지되는지 확인한다.
-- 라이트 keyline이 충분히 구분되지 않으면 Stage 2를 완료 처리하지 않는다.
+- 라이트 Beam이 충분히 구분되지 않거나 다크와 사분면 이동 순서·위상이 다르면 Stage 2를 완료 처리하지 않는다.
 
 ### 커밋
 
 ```text
-Task #146 Stage 2: 라이트 전용 라이브 GIF keyline 보정
+Task #146 Stage 2: 라이트 동일 모션 라이브 GIF 대비 보정
 ```
 
 ## Stage 3 — 전체 회귀 검증과 릴리스 인계
@@ -177,7 +177,7 @@ Task #146 Stage 3: 전체 회귀 검증과 릴리스 인계 확정
 - 각 단계 소스·테스트는 `mydocs/working/task_m100_146_stage{N}.md`와 함께 하나의 단계 커밋으로 묶는다.
 - 단계 커밋은 다음 메시지를 사용한다.
   - `Task #146 Stage 1: Border Beam 카드 테마 소유권 연결`
-  - `Task #146 Stage 2: 라이트 전용 라이브 GIF keyline 보정`
+  - `Task #146 Stage 2: 라이트 동일 모션 라이브 GIF 대비 보정`
   - `Task #146 Stage 3: 전체 회귀 검증과 릴리스 인계 확정`
 
 ## 단계 의존성
@@ -202,8 +202,8 @@ Task #146 Stage 3: 전체 회귀 검증과 릴리스 인계 확정
 
 - Stage 1의 단일 정규화 테마 전달과 소스 계약 테스트 범위
 - Stage 2의 라이트·다크 계산 스타일, 동일 `1497×918`·`499:306`·프레임 기하, handoff·reduced-motion 검증 범위
-- 작업지시자 시각 검수 실패에 따라 Stage 2를 재개하고 라이트 전용 live·GIF keyline을 구현하는 범위
+- 작업지시자 시각 검수 실패에 따라 Stage 2를 재개하고 다크와 같은 모션의 라이트 전용 live·GIF 색상·대비 합성을 구현하는 범위
 - Stage 3의 전체 회귀 검증과 #144 exact-main 재고정 인계 방식
 - 위 단계별 산출물, 검증 명령, 커밋 메시지
 
-2026-08-30 작업지시자가 다크와 라이트의 시각 합성 프리셋을 분리하고 Stage 2를 재개하는 위 변경을 승인했다.
+2026-08-30 작업지시자가 다크와 라이트의 시각 합성 프리셋을 분리하고 Stage 2를 재개하는 위 변경을 승인했다. 이어 `line` 모션 결과를 거절하고 두 테마의 움직임·효과 구조는 완전히 같게 유지하며 색상·대비만 라이트에 맞게 바꾸도록 요구사항을 정정했다.
