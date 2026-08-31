@@ -11,6 +11,7 @@ GitHub Issue: [#146](https://github.com/postmelee/codex-usage-profile/issues/146
 | 1 | Beam 테마 소유권 연결과 계약 고정 | `MarketingLanding.jsx`, `themeSurfaceContract.test.js` | 명시적 동일 테마 전달, 공유 프리셋 비변경 |
 | 2 | 라이트 동일 모션 라이브·GIF 대비와 동등성 검증 | 테마별 색상·opacity config, light golden, Worker theme 전달, 회귀 테스트 | 동일 `md` phase, 실제 픽셀 대비, dark golden 보존, 동일 기하·출력 계약 |
 | 3 | 전체 회귀 검증과 릴리스 인계 | 전체 검증 결과와 인계 기록 | 단위·E2E·production build·artifact verifier |
+| 4 | PR 리뷰 보완과 재검증 | bounded golden loader, preset 정규화, procedural 경계·회귀, PR 인계 | 실제 body 상한·헤더 누락·golden 실패·전체 회귀 |
 
 ## 문서 위치 확인
 
@@ -207,3 +208,40 @@ Task #146 Stage 3: 전체 회귀 검증과 릴리스 인계 확정
 - 위 단계별 산출물, 검증 명령, 커밋 메시지
 
 2026-08-30 작업지시자가 다크와 라이트의 시각 합성 프리셋을 분리하고 Stage 2를 재개하는 위 변경을 승인했다. 이어 `line` 모션 결과를 거절하고 두 테마의 움직임·효과 구조는 완전히 같게 유지하며 색상·대비만 라이트에 맞게 바꾸도록 요구사항을 정정했다.
+
+## Stage 4 — PR 리뷰 보완과 재검증
+
+2026-08-31 작업지시자의 “PR 갱신까지 진행해줘” 지시로 수행계획서의 리뷰 보완 범위와 본 단계의 구현·검증·보고 및 기존 PR 갱신을 승인받았다. 기존 Stage 1–3 결과와 시각 승인은 유지한다.
+
+### 산출물과 변경 내용
+
+- `src/profile-card/gif-beam-frames.js`: `Content-Length` 의존 제거, gzip body 3MB·해제 데이터 25MB를 읽는 도중 검사하고 초과 시 stream 취소. 기존 RangeError와 gzip 실패 오류 분류 유지.
+- `src/profile-card/__tests__/gif-beam-frames.test.js`: 양쪽 실제 golden의 헤더 누락/부정확한 헤더 허용, 실제 압축·해제 상한, 초과 stream 취소, gzip 오류 회귀. 기존 SHA·frame·seam 검증 유지.
+- `src/profile-card/gif-animation.js`, `__tests__/gif-animation.test.js`: 공통 테마 정규화와 대소문자·공백·잘못된 값 회귀. procedural 경로의 근사 용도를 주석에 기록하되 preset·합성값은 변경하지 않음.
+- `src/profile-ui/__tests__/gifExport.test.js`: 양쪽 테마의 golden 로드 오류가 기존 typed error로 끝나고 encoder/progress/complete 호출이 없음을 검증.
+- `mydocs/working/task_m100_146_stage4.md`: 구현·검증·리뷰 처리 판단 기록.
+- 기존 최종 보고와 `mydocs/orders/20260831.md`: 완료 상태, CLI 전용 CI 한계, artifact 예산, #144 배포 스모크 인계와 재생성 자동화 후속 후보 기록.
+
+### 검증
+
+```bash
+node --test src/profile-card/__tests__/gif-animation.test.js src/profile-card/__tests__/gif-beam-frames.test.js src/profile-card/__tests__/gif-encoder.test.js src/profile-ui/__tests__/gifExport.test.js src/profile-ui/__tests__/themeSurfaceContract.test.js
+npm test
+npm run test:e2e
+npm run build:production
+npm run verify:sites-production
+git diff --check
+git diff bcc8d3c62b41cbfb47b9091d3c642fe661dc1b1c -- src/profile-card/assets src/profile-marketing/MarketingLanding.jsx src/profile-card/social-canvas.js src/profile-card/render-card.js src/profile-card/render-card-worker.js
+```
+
+- Miniflare·Playwright의 로컬 포트가 필요한 명령은 허용된 실행 환경을 사용한다. 원격 Stage5·production은 변경하지 않는다.
+- golden 해시와 preset 값·카드 renderer 파일 대조로 승인된 양쪽 효과 bytes·geometry·타이밍 무변경을 확인한다.
+- 전체 검증 후 `task-stage-report`로 소스·테스트·Stage 4 보고서를 묶고 `task-final-report`로 기존 최종 보고와 PR 본문을 갱신한다.
+- 기존 `publish/task146`로 fast-forward push하고 PR #147의 고정 SHA 링크·검증 결과·리뷰 대응·CI 범위를 갱신한다. 새 PR 생성·merge·배포는 하지 않는다.
+
+### 커밋
+
+```text
+Task #146 Stage 4: GIF golden 로더 경계와 리뷰 회귀 보완
+Task #146: 리뷰 보완 최종 보고와 PR 갱신
+```
