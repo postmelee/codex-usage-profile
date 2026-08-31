@@ -392,6 +392,34 @@ test("maps Worker encode, output, and transfer failures to typed errors", async 
   );
 });
 
+test("never falls back to procedural encoding when either golden asset fails", async () => {
+  for (const cardTheme of ["dark", "light"]) {
+    for (const [failure, errorCode] of [
+      [new Error("golden load failed"), GIF_EXPORT_ERROR_CODES.ENCODE_FAILED],
+      [new RangeError("golden too large"), GIF_EXPORT_ERROR_CODES.TOO_LARGE]
+    ]) {
+      let encodeCalls = 0;
+      const messages = [];
+      const dependencies = createWorkerDependencies(async () => (
+        new Response("png", { headers: { "content-type": "image/png" } })
+      ), {
+        loadBeamFrames(theme) {
+          assert.equal(theme, cardTheme);
+          throw failure;
+        },
+        encodeGif() { encodeCalls += 1; },
+        postMessage(message) { messages.push(message); }
+      });
+      await assert.rejects(
+        runGifExportWorkerJob({ ...createWorkerRequest(), cardTheme }, dependencies),
+        (error) => error.gifExportCode === errorCode
+      );
+      assert.equal(encodeCalls, 0);
+      assert.deepEqual(messages, []);
+    }
+  }
+});
+
 test("rejects missing or unsupported Worker card themes", async () => {
   for (const cardTheme of [undefined, "sepia", "LIGHT"]) {
     await assert.rejects(

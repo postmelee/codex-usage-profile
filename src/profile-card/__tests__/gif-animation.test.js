@@ -62,6 +62,15 @@ test("fixes the approved browser GIF and web border beam contract", () => {
   );
 });
 
+test("normalizes exported beam presets like the card and golden asset selectors", () => {
+  for (const theme of ["light", "LIGHT", " Light "]) {
+    assert.equal(getProfileCardBorderBeamPreset(theme), PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET);
+  }
+  for (const theme of ["dark", " DARK ", undefined, null, "", "sepia"]) {
+    assert.equal(getProfileCardBorderBeamPreset(theme), PROFILE_CARD_BORDER_BEAM_PRESET);
+  }
+});
+
 test("uses 96 unique phases without duplicating the 360 degree endpoint", () => {
   assert.equal(getProfileGifFramePhase(0), 0);
   assert.equal(getProfileGifFrameAngle(0), 0);

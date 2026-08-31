@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import test from "node:test";
 
 import {
@@ -73,6 +73,124 @@ test("selects the dark golden unchanged and loads the light keyline capture", as
   assert.ok(compressed.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes);
   assert.ok(frames.bytes.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes);
   assert.ok(frames.effectPixelCounts.every((count) => count > 20_000));
+});
+
+test("loads both golden bodies independently of HTTP length and content encoding headers", async () => {
+  for (const theme of ["dark", "light"]) {
+    const compressed = await readFile(getProfileGifBeamAssetUrl(theme));
+    for (const headers of [
+      {},
+      { "content-length": "0" },
+      { "content-length": "1" },
+      { "content-length": "unknown" },
+      {
+        "content-encoding": "gzip",
+        "content-length": String(PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes + 1)
+      }
+    ]) {
+      // Fetch has already decoded HTTP Content-Encoding. The body still contains
+      // the application's gzip asset, regardless of its wire-length header.
+      const frames = await loadProfileGifBeamFrames({
+        fetchImpl: async () => new Response(compressed, { headers }),
+        theme
+      });
+      assert.equal(frames.frameCount, 96);
+      assert.deepEqual(frames.bytes, new Uint8Array(gunzipSync(compressed)));
+    }
+  }
+  assert.equal(getProfileGifBeamAssetUrl(" LIGHT "), PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
+});
+
+test("accepts a valid gzip body exactly at the compressed byte limit", async () => {
+  const compressed = await readFile(PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
+  assert.equal(compressed[3], 0, "fixture has no optional gzip header fields");
+  // Add a legal zero-terminated FCOMMENT without changing the decoded frames.
+  const commentLength = PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes - compressed.length;
+  const padded = Buffer.concat([
+    compressed.subarray(0, 3), Buffer.from([0x10]), compressed.subarray(4, 10),
+    Buffer.alloc(commentLength - 1, 0x61), Buffer.from([0]), compressed.subarray(10)
+  ]);
+  const frames = await loadProfileGifBeamFrames({
+    fetchImpl: async () => new Response(padded)
+  });
+  assert.equal(padded.length, PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes);
+  assert.deepEqual(frames.bytes, new Uint8Array(gunzipSync(compressed)));
+});
+
+test("cancels oversized compressed bodies even without an accurate length header", async () => {
+  for (const headers of [{}, { "content-length": "1" }]) {
+    let cancelled = false;
+    let pulled = 0;
+    let decompressionStarted = false;
+    const body = new ReadableStream({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(pulled === 1
+          ? PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes : 1));
+        if (pulled === 3) controller.close();
+      },
+      cancel() { cancelled = true; }
+    }, { highWaterMark: 0 });
+    await assert.rejects(loadProfileGifBeamFrames({
+      fetchImpl: async () => new Response(body, { headers }),
+      DecompressionStream: class {
+        constructor() {
+          decompressionStarted = true;
+          return new DecompressionStream("gzip");
+        }
+      }
+    }), { name: "RangeError", message: "GIF beam asset exceeds its compressed size contract" });
+    assert.equal(cancelled, true);
+    assert.equal(pulled, 2);
+    assert.equal(decompressionStarted, false);
+    assert.equal(body.locked, false);
+  }
+});
+
+test("rejects gzip data expanding beyond the decoded byte limit", async () => {
+  const compressed = gzipSync(new Uint8Array(
+    PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes + 1
+  ));
+  await assert.rejects(loadProfileGifBeamFrames({
+    fetchImpl: async () => new Response(compressed)
+  }), { name: "RangeError", message: "GIF beam asset exceeds its decoded size contract" });
+});
+
+test("stops reading and cancels as soon as decoded bytes exceed the limit", async () => {
+  let cancelled = false;
+  let pulled = 0;
+  const readable = new ReadableStream({
+    pull(controller) {
+      pulled += 1;
+      controller.enqueue(new Uint8Array(pulled === 1
+        ? PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes : 1));
+      if (pulled === 3) controller.close();
+    },
+    cancel() {
+      cancelled = true;
+      throw new Error("cancellation failure must not hide the size error");
+    }
+  }, { highWaterMark: 0 });
+  await assert.rejects(loadProfileGifBeamFrames({
+    fetchImpl: async () => new Response(new Uint8Array([1])),
+    DecompressionStream: class {
+      constructor(format) {
+        assert.equal(format, "gzip");
+        return { readable, writable: new WritableStream() };
+      }
+    }
+  }), { name: "RangeError", message: "GIF beam asset exceeds its decoded size contract" });
+  assert.equal(cancelled, true);
+  assert.equal(pulled, 2);
+  assert.equal(readable.locked, false);
+});
+
+test("keeps malformed and empty gzip bodies as decompression errors", async () => {
+  for (const bytes of [new Uint8Array(), new Uint8Array([1, 2, 3])]) {
+    await assert.rejects(loadProfileGifBeamFrames({
+      fetchImpl: async () => new Response(bytes)
+    }), { name: "Error", message: "GIF beam asset could not be decompressed" });
+  }
 });
 
 test("keeps light and dark on the same perimeter motion while changing contrast", async () => {

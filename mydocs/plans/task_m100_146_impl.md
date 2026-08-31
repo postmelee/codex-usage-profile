@@ -231,7 +231,7 @@ npm run test:e2e
 npm run build:production
 npm run verify:sites-production
 git diff --check
-git diff bcc8d3c62b41cbfb47b9091d3c642fe661dc1b1c -- src/profile-card/assets src/profile-marketing/MarketingLanding.jsx src/profile-card/social-canvas.js src/profile-card/render-card.js src/profile-card/render-card-worker.js
+git diff bcc8d3c62b41cbfb47b9091d3c642fe661dc1b1c -- src/profile-card/assets src/profile-marketing/MarketingLanding.jsx src/profile-card/social-canvas.js src/profile-card/renderer.js src/profile-card/worker-renderer.js
 ```
 
 - Miniflare·Playwright의 로컬 포트가 필요한 명령은 허용된 실행 환경을 사용한다. 원격 Stage5·production은 변경하지 않는다.
