@@ -1,3 +1,5 @@
+import { normalizeCardTheme } from "./theme.js";
+
 const ASSET_MAGIC = Object.freeze([0x42, 0x45, 0x41, 0x4d]);
 const ASSET_VERSION = 1;
 const FRAME_COUNT = 96;
@@ -20,12 +22,23 @@ export const PROFILE_GIF_BEAM_ASSET_URL = new URL(
   import.meta.url
 );
 
+export const PROFILE_GIF_LIGHT_BEAM_ASSET_URL = new URL(
+  "./assets/ocean-light-keyline-golden-v1.rgba-runs.bin",
+  import.meta.url
+);
+
+export function getProfileGifBeamAssetUrl(theme) {
+  return normalizeCardTheme(theme) === "light"
+    ? PROFILE_GIF_LIGHT_BEAM_ASSET_URL
+    : PROFILE_GIF_BEAM_ASSET_URL;
+}
+
 export async function loadProfileGifBeamFrames(options = {}) {
   const environment = options.environment ?? globalThis;
   const fetchImpl = options.fetchImpl ?? environment.fetch?.bind(environment);
   const DecompressionStreamConstructor = options.DecompressionStream ??
     environment.DecompressionStream;
-  const assetUrl = options.assetUrl ?? PROFILE_GIF_BEAM_ASSET_URL;
+  const assetUrl = options.assetUrl ?? getProfileGifBeamAssetUrl(options.theme);
 
   if (
     typeof fetchImpl !== "function" ||
@@ -44,27 +57,57 @@ export async function loadProfileGifBeamFrames(options = {}) {
     throw new Error("GIF beam asset could not be loaded");
   }
 
-  const contentLength = Number(response.headers?.get?.("content-length"));
-  if (
-    Number.isFinite(contentLength) &&
-    (contentLength <= 0 || contentLength > MAX_COMPRESSED_BYTES)
-  ) {
-    throw new RangeError("GIF beam asset exceeds its compressed size contract");
-  }
-
   let bytes;
   try {
-    const decompressed = response.body.pipeThrough(
+    // Fetch decodes HTTP Content-Encoding before exposing the body, so its
+    // Content-Length can be absent or describe different bytes. Bound the
+    // actual gzip asset instead, before starting application-level decoding.
+    const compressed = await readBoundedBytes(
+      response.body,
+      MAX_COMPRESSED_BYTES,
+      "GIF beam asset exceeds its compressed size contract"
+    );
+    const decompressed = new Response(compressed).body.pipeThrough(
       new DecompressionStreamConstructor("gzip")
     );
-    bytes = new Uint8Array(await new Response(decompressed).arrayBuffer());
-  } catch {
+    bytes = await readBoundedBytes(
+      decompressed,
+      MAX_DECOMPRESSED_BYTES,
+      "GIF beam asset exceeds its decoded size contract"
+    );
+  } catch (error) {
+    if (error instanceof RangeError) throw error;
     throw new Error("GIF beam asset could not be decompressed");
   }
-  if (bytes.byteLength > MAX_DECOMPRESSED_BYTES) {
-    throw new RangeError("GIF beam asset exceeds its decoded size contract");
-  }
   return parseProfileGifBeamFrames(bytes);
+}
+
+async function readBoundedBytes(stream, maxBytes, sizeErrorMessage) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new RangeError(sizeErrorMessage);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 export function parseProfileGifBeamFrames(input) {

@@ -8,6 +8,7 @@ import {
 } from "../profile-card/gif-binary.js";
 import { loadProfileGifBeamFrames } from "../profile-card/gif-beam-frames.js";
 import { encodeProfileCardGif } from "../profile-card/gif-encoder.js";
+import { CARD_THEMES } from "../profile-card/theme.js";
 
 const WORKER_ERROR_CODES = Object.freeze({
   ENCODE_FAILED: "encode_failed",
@@ -25,8 +26,8 @@ export async function runGifExportWorkerJob(message, options = {}) {
   const OffscreenCanvasConstructor = options.OffscreenCanvas ?? scope.OffscreenCanvas;
   const encodeGif = options.encodeGif ?? encodeProfileCardGif;
   const inspectGif = options.inspectGif ?? assertProfileGifContract;
-  const loadBeamFrames = options.loadBeamFrames ?? (() => (
-    loadProfileGifBeamFrames({ environment: scope, fetchImpl })
+  const loadBeamFrames = options.loadBeamFrames ?? ((theme) => (
+    loadProfileGifBeamFrames({ environment: scope, fetchImpl, theme })
   ));
   const postMessage = options.postMessage ?? scope.postMessage?.bind(scope);
   const origin = options.origin ?? scope.location?.origin;
@@ -50,9 +51,10 @@ export async function runGifExportWorkerJob(message, options = {}) {
 
   let bytes;
   try {
-    const beamFrames = await loadBeamFrames();
+    const beamFrames = await loadBeamFrames(request.cardTheme);
     bytes = await encodeGif(baseRgba, {
       beamFrames,
+      theme: request.cardTheme,
       onProgress(progress) {
         if (shouldReportProgress(progress.completedFrames)) {
           postMessage({
@@ -258,6 +260,7 @@ async function decodeSourcePng(blob, options) {
 function normalizeWorkerRequest(message) {
   if (
     message?.type !== "generate" ||
+    !CARD_THEMES.includes(message.cardTheme) ||
     typeof message.jobId !== "string" ||
     message.jobId === "" ||
     typeof message.sourceKey !== "string" ||
@@ -267,6 +270,7 @@ function normalizeWorkerRequest(message) {
     throw createWorkerError(WORKER_ERROR_CODES.INVALID_OUTPUT);
   }
   return Object.freeze({
+    cardTheme: message.cardTheme,
     jobId: message.jobId,
     sourceKey: message.sourceKey,
     sourceUrl: message.sourceUrl

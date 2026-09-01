@@ -3,6 +3,7 @@ import {
   PROFILE_GIF_PRESET
 } from "../profile-card/gif-animation.js";
 import { assertProfileGifContract } from "../profile-card/gif-binary.js";
+import { normalizeCardTheme } from "../profile-card/theme.js";
 import { parsePublicShareRevision } from "../profile-shared/public-share-url.js";
 
 export const GIF_EXPORT_STATUSES = Object.freeze({
@@ -29,8 +30,7 @@ export function buildGifExportSourceKey(options = {}) {
     options.selectedImageUrl,
     "selectedImageUrl"
   );
-  const cardTheme = normalizeKeyPart(options.cardTheme ?? "dark", "cardTheme")
-    .toLowerCase();
+  const cardTheme = normalizeCardTheme(options.cardTheme);
   const cardLocale = normalizeKeyPart(options.cardLocale ?? "en", "cardLocale")
     .toLowerCase();
   const shareRevision = normalizeRevision(options.shareRevision);
@@ -111,6 +111,7 @@ export function createGifExportController(options = {}) {
   function generate(request = {}) {
     assertUsable();
     const sourceUrl = normalizeKeyPart(request.sourceUrl, "sourceUrl");
+    const cardTheme = normalizeCardTheme(request.cardTheme);
     const sourceKey = normalizeKeyPart(
       request.sourceKey ?? buildGifExportSourceKey({
         cardLocale: request.cardLocale,
@@ -197,6 +198,7 @@ export function createGifExportController(options = {}) {
 
     try {
       worker.postMessage({
+        cardTheme,
         jobId,
         presetVersion: GIF_EXPORT_PRESET_VERSION,
         sourceKey,

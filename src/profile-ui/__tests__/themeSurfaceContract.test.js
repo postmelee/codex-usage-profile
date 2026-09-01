@@ -81,7 +81,28 @@ test("Task #96 every shared card frame receives an explicit card theme", async (
   assert.match(sources.publicProfile, /cardTheme=\{profile\.cardStyle\?\.theme/);
   assert.match(sources.publicIntro, /cardTheme=\{cardTheme\}/);
   assert.match(sources.shareStudio, /cardTheme=\{cardTheme\}/);
+  assert.match(
+    sources.shareStudio,
+    /gifExportController\.generate\(\{\s*cardTheme,\s*sourceKey: gifSourceKey,\s*sourceUrl: gifSourceUrl\s*\}\)/
+  );
   assert.match(sources.loading, /cardTheme="dark"/);
+});
+
+test("Task #146 BorderBeam and card frame share one normalized card theme", async () => {
+  const marketing = await readFile(SOURCE_PATHS.marketing, "utf8");
+
+  assert.match(
+    marketing,
+    /const resolvedCardTheme = normalizeCardTheme\(cardTheme\);/
+  );
+  assert.match(
+    marketing,
+    /<BorderBeam[\s\S]*?theme=\{resolvedCardTheme\}[\s\S]*?<CardImageFrame[\s\S]*?cardTheme=\{resolvedCardTheme\}/
+  );
+  assert.match(
+    marketing,
+    /const borderBeamPreset = getProfileCardBorderBeamPreset\(resolvedCardTheme\);[\s\S]*?brightness=\{borderBeamPreset\.brightness\}[\s\S]*?colorVariant=\{borderBeamPreset\.colorVariant\}[\s\S]*?duration=\{borderBeamPreset\.durationSeconds\}[\s\S]*?size=\{borderBeamPreset\.size\}[\s\S]*?strength=\{borderBeamPreset\.strength\}[\s\S]*?style=\{borderBeamPreset\.style\}/
+  );
 });
 
 test("Task #96 theme transitions stay scoped away from dense content", async () => {

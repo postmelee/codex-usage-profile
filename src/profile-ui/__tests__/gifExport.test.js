@@ -12,6 +12,7 @@ import {
 import { assertProfileGifContract } from "../../profile-card/gif-binary.js";
 import {
   PROFILE_GIF_BEAM_ASSET_URL,
+  PROFILE_GIF_LIGHT_BEAM_ASSET_URL,
   parseProfileGifBeamFrames
 } from "../../profile-card/gif-beam-frames.js";
 import { encodeProfileCardGif } from "../../profile-card/gif-encoder.js";
@@ -35,7 +36,7 @@ import {
 } from "../gifExport.worker.js";
 
 let validGifBytes;
-let goldenBeamFrames;
+const goldenBeamFrames = new Map();
 
 test("builds a canonical versioned source key and checks browser capabilities", () => {
   const sourceKey = buildGifExportSourceKey({
@@ -47,7 +48,7 @@ test("builds a canonical versioned source key and checks browser capabilities", 
   assert.deepEqual(JSON.parse(sourceKey), {
     cardLocale: "ko",
     cardTheme: "light",
-    presetVersion: 1,
+    presetVersion: 2,
     selectedImageUrl: "/u/postmelee/card.png?theme=light&locale=ko",
     shareRevision: 42
   });
@@ -118,6 +119,7 @@ test("locks duplicate generation and reuses one validated ready Blob URL", () =>
   });
   assert.equal(harness.workers.length, 1);
   assert.deepEqual(harness.workers[0].posted[0], {
+    cardTheme: "dark",
     jobId: "gif-1",
     presetVersion: GIF_EXPORT_PRESET_VERSION,
     sourceKey: "source-a",
@@ -390,19 +392,66 @@ test("maps Worker encode, output, and transfer failures to typed errors", async 
   );
 });
 
+test("never falls back to procedural encoding when either golden asset fails", async () => {
+  for (const cardTheme of ["dark", "light"]) {
+    for (const [failure, errorCode] of [
+      [new Error("golden load failed"), GIF_EXPORT_ERROR_CODES.ENCODE_FAILED],
+      [new RangeError("golden too large"), GIF_EXPORT_ERROR_CODES.TOO_LARGE]
+    ]) {
+      let encodeCalls = 0;
+      const messages = [];
+      const dependencies = createWorkerDependencies(async () => (
+        new Response("png", { headers: { "content-type": "image/png" } })
+      ), {
+        loadBeamFrames(theme) {
+          assert.equal(theme, cardTheme);
+          throw failure;
+        },
+        encodeGif() { encodeCalls += 1; },
+        postMessage(message) { messages.push(message); }
+      });
+      await assert.rejects(
+        runGifExportWorkerJob({ ...createWorkerRequest(), cardTheme }, dependencies),
+        (error) => error.gifExportCode === errorCode
+      );
+      assert.equal(encodeCalls, 0);
+      assert.deepEqual(messages, []);
+    }
+  }
+});
+
+test("rejects missing or unsupported Worker card themes", async () => {
+  for (const cardTheme of [undefined, "sepia", "LIGHT"]) {
+    await assert.rejects(
+      runGifExportWorkerJob({
+        ...createWorkerRequest(),
+        cardTheme
+      }),
+      (error) => error.gifExportCode === GIF_EXPORT_ERROR_CODES.INVALID_OUTPUT
+    );
+  }
+});
+
 test("reports bounded progress and transfers one validated ArrayBuffer", async () => {
   const bytes = getValidGifBytes();
   const messages = [];
   const fetchCalls = [];
+  let encodedTheme;
+  let loadedTheme;
   const dependencies = createWorkerDependencies(async (url, options) => {
     fetchCalls.push([url, options]);
     return new Response("png", { headers: { "content-type": "image/png" } });
   }, {
     encodeGif(_rgba, options) {
+      encodedTheme = options.theme;
       for (let completedFrames = 1; completedFrames <= 96; completedFrames += 1) {
         options.onProgress({ completedFrames, totalFrames: 96 });
       }
       return bytes;
+    },
+    loadBeamFrames(theme) {
+      loadedTheme = theme;
+      return null;
     },
     postMessage(message, transfer) {
       messages.push({ message, transfer });
@@ -410,6 +459,8 @@ test("reports bounded progress and transfers one validated ArrayBuffer", async (
   });
 
   await runGifExportWorkerJob(createWorkerRequest(), dependencies);
+  assert.equal(loadedTheme, "dark");
+  assert.equal(encodedTheme, "dark");
   assert.deepEqual(fetchCalls, [[
     "https://profiles.example.test/u/postmelee/card.png?theme=dark",
     { cache: "no-cache", credentials: "same-origin" }
@@ -488,6 +539,7 @@ test("encodes representative dark/light and en/ko cards below 15MB", async () =>
 
       await runGifExportWorkerJob({
         ...createWorkerRequest(),
+        cardTheme: theme,
         sourceKey: `${theme}-${locale}`,
         sourceUrl: `https://profiles.example.test/u/postmelee/card.png?theme=${theme}&locale=${locale}`
       }, {
@@ -613,6 +665,7 @@ class NapiOffscreenCanvas {
 
 function createWorkerRequest() {
   return {
+    cardTheme: "dark",
     jobId: "gif-1",
     presetVersion: GIF_EXPORT_PRESET_VERSION,
     sourceKey: "source-a",
@@ -652,11 +705,16 @@ function getValidGifBytes() {
   return validGifBytes;
 }
 
-async function getGoldenBeamFrames() {
-  goldenBeamFrames ??= parseProfileGifBeamFrames(gunzipSync(
-    await readFile(PROFILE_GIF_BEAM_ASSET_URL)
-  ));
-  return goldenBeamFrames;
+async function getGoldenBeamFrames(theme) {
+  if (!goldenBeamFrames.has(theme)) {
+    const assetUrl = theme === "light"
+      ? PROFILE_GIF_LIGHT_BEAM_ASSET_URL
+      : PROFILE_GIF_BEAM_ASSET_URL;
+    goldenBeamFrames.set(theme, parseProfileGifBeamFrames(gunzipSync(
+      await readFile(assetUrl)
+    )));
+  }
+  return goldenBeamFrames.get(theme);
 }
 
 function createTransparentBase() {
