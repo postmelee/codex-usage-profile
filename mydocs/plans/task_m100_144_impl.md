@@ -73,10 +73,12 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 - replacement candidate SHA: `7fd130c7ceac92b0cfa6b58178422ba51d75943c`
 - replacement first-parent merge:
   - `7fd130c7ceac92b0cfa6b58178422ba51d75943c` — PR #147 / Task #146
+- replacement release main: `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` / PR #148
 - Stage 1·2는 initial candidate와 PR #145의 완료 이력이다. Stage 2.1은 replacement candidate detached
   worktree에서 clean install/build와 전체 검증을 반복한다. Stage 2.2 release merge 뒤 replacement tree와
   `origin/main` tree의 exact equality를 확인하되 merge commit SHA 차이는 허용한다.
-- Stage 3~5 archive는 Stage 2.2에서 확정한 새 exact main detached worktree에서 기존 `dist`를 제거하고 다시 build한다.
+- Stage 3~5 archive는 Stage 2.2에서 확정한 새 exact main `6d3e600d2d33bb7a50147075d013ddd9b945d0b1`
+  detached worktree에서 기존 `dist`를 제거하고 다시 build한다.
   Sites plugin의 `scripts/package-site.sh`로 `dist/`, hosting metadata, migration을 package하며 source
   commit, saved version `source.commit_sha`, archive digest와 deployment `version_id`를 교차 대조한다.
 - provider source credential은 필요 시 target별로 한 번 발급하고 만료 전까지 재사용한다. per-command
