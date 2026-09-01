@@ -7,14 +7,16 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   GIF_EXPORT_PRESET_VERSION,
   PROFILE_CARD_BORDER_BEAM_PRESET,
+  PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET,
   PROFILE_GIF_PRESET,
   createProfileGifFrameRenderer,
+  getProfileCardBorderBeamPreset,
   getProfileGifFrameAngle,
   getProfileGifFramePhase
 } from "../gif-animation.js";
 
 test("fixes the approved browser GIF and web border beam contract", () => {
-  assert.equal(GIF_EXPORT_PRESET_VERSION, 1);
+  assert.equal(GIF_EXPORT_PRESET_VERSION, 2);
   assert.deepEqual(PROFILE_GIF_PRESET, {
     borderRadius: 64,
     durationMs: 4_800,
@@ -31,7 +33,7 @@ test("fixes the approved browser GIF and web border beam contract", () => {
     maxColors: 256,
     scale: 2,
     sourceMaxBytes: 10_000_000,
-    version: 1,
+    version: 2,
     width: 998
   });
   assert.deepEqual(PROFILE_CARD_BORDER_BEAM_PRESET, {
@@ -41,6 +43,32 @@ test("fixes the approved browser GIF and web border beam contract", () => {
     size: "md",
     strength: 0.82
   });
+  assert.deepEqual(PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET, {
+    brightness: 1.05,
+    colorVariant: "ocean",
+    durationSeconds: 4.8,
+    size: "md",
+    strength: 0.82,
+    style: {
+      "--beam-bloom-opacity": 1.25,
+      "--beam-inner-opacity": 2.5,
+      "--beam-stroke-opacity": 5
+    }
+  });
+  assert.equal(getProfileCardBorderBeamPreset("dark"), PROFILE_CARD_BORDER_BEAM_PRESET);
+  assert.equal(
+    getProfileCardBorderBeamPreset("light"),
+    PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET
+  );
+});
+
+test("normalizes exported beam presets like the card and golden asset selectors", () => {
+  for (const theme of ["light", "LIGHT", " Light "]) {
+    assert.equal(getProfileCardBorderBeamPreset(theme), PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET);
+  }
+  for (const theme of ["dark", " DARK ", undefined, null, "", "sepia"]) {
+    assert.equal(getProfileCardBorderBeamPreset(theme), PROFILE_CARD_BORDER_BEAM_PRESET);
+  }
 });
 
 test("uses 96 unique phases without duplicating the 360 degree endpoint", () => {

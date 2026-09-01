@@ -1,4 +1,5 @@
 import { createProfileGifGoldenFrameRenderer } from "./gif-beam-frames.js";
+import { normalizeCardTheme } from "./theme.js";
 import {
   SOCIAL_CARD_LOGICAL_HEIGHT,
   SOCIAL_CARD_LOGICAL_RADIUS,
@@ -13,7 +14,26 @@ export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
   strength: 0.82
 });
 
-export const GIF_EXPORT_PRESET_VERSION = 1;
+export const PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET = Object.freeze({
+  brightness: PROFILE_CARD_BORDER_BEAM_PRESET.brightness,
+  colorVariant: PROFILE_CARD_BORDER_BEAM_PRESET.colorVariant,
+  durationSeconds: PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds,
+  size: PROFILE_CARD_BORDER_BEAM_PRESET.size,
+  strength: PROFILE_CARD_BORDER_BEAM_PRESET.strength,
+  style: Object.freeze({
+    "--beam-bloom-opacity": 1.25,
+    "--beam-inner-opacity": 2.5,
+    "--beam-stroke-opacity": 5
+  })
+});
+
+export function getProfileCardBorderBeamPreset(theme) {
+  return normalizeCardTheme(theme) === "light"
+    ? PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET
+    : PROFILE_CARD_BORDER_BEAM_PRESET;
+}
+
+export const GIF_EXPORT_PRESET_VERSION = 2;
 const PROFILE_GIF_SCALE = 2;
 
 export const PROFILE_GIF_PRESET = Object.freeze({
@@ -110,6 +130,10 @@ export function createProfileGifFrameRenderer(baseRgba, options = {}) {
     return createProfileGifGoldenFrameRenderer(baseRgba, options.beamFrames);
   }
 
+  // The procedural path is a test/approximation renderer, not the approved
+  // live CSS contrast (including light opacity multipliers). Production GIF
+  // export requires captured golden frames and fails if they cannot be loaded;
+  // it must not silently fall back to this path.
   const base = new Uint8ClampedArray(baseRgba);
   const geometry = createBeamGeometry(base);
   const theme = options.theme === "light" ? LIGHT_BEAM_THEME : DARK_BEAM_THEME;

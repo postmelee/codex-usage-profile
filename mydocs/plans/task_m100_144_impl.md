@@ -9,6 +9,12 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 - 승인된 배포 후보는 PR #140, #142, #143을 포함하는 `devel`
   `aaf997720f296265c8b306840f0eb8af67b08dfb`다. Stage 1 진입 시
   `origin/devel`이 달라졌으면 새 merge를 자동 포함하지 않고 작업지시자에게 재승인받는다.
+- 위 후보는 Stage 1 인증과 PR #145를 거쳐 main `0af8439bfa9f97e1eb199a94d0930c1e9b47a7d5`로
+  승격됐지만 Stage5 시각 검증에서 라이트 GIF/Beam 대비 blocker가 발견됐다. Task #146/PR #147을
+  선행 완료한 뒤 #144를 재개한다는 작업지시자 승인과 #146 인계에 따라 replacement candidate는
+  `devel` `7fd130c7ceac92b0cfa6b58178422ba51d75943c`로 고정한다.
+- replacement candidate는 기존 main 대비 PR #147만 포함해야 한다. Stage 2.1에서 전체 local
+  certification을 반복하고 Stage 2.2의 새 release PR로 main에 재승격한 뒤에만 Stage 3을 재개한다.
 - 제품 source는 이미 `devel`에 병합됐다. Task #144 branch는 계획·단계·최종 보고만 추적하며,
   별도 product checkpoint 없이 검증된 `devel → main` release PR로 승격한다.
 - exact `main` merge commit을 Sites source repository에 push하고 같은 commit에서 만든 archive만
@@ -34,6 +40,8 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 |---|---|---|---|---|
 | 1 | exact candidate 고정과 Local certification | candidate inventory, 전체·focused 검증 | 없음 | Node/E2E/build/artifact/pixel·GIF 계약 |
 | 2 | devel에서 main으로 exact release 승격 | release PR, merged main SHA/tree | GitHub PR·merge만 | CI·candidate/main tree equality |
+| 2.1 | #146 replacement candidate 재인증 | replacement inventory, 전체·focused 재검증 | 없음 | PR #147 단일 범위·Node/E2E/build/artifact |
+| 2.2 | replacement candidate의 main 재승격 | 두 번째 release PR, 새 exact main SHA/tree | GitHub PR·merge만 | CI·replacement/main tree equality |
 | 3 | Stage5 owner-only candidate 검증 | saved version, private deployment, readiness, synthetic smoke | Stage5 source/save/env/deploy | owner-only·migration 1–6·기능 smoke |
 | 4 | Production baseline과 saved version 준비 | baseline, rollback, production saved version | production source/save만 | live 미변경·archive/source equality |
 | 5 | Production public deployment와 비파괴 smoke | public deployment, readiness, hosted smoke | production env/deploy | health·operator·Task #141/#39·data 보존 |
@@ -56,14 +64,19 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 
 ### Candidate와 provenance
 
-- candidate SHA: `aaf997720f296265c8b306840f0eb8af67b08dfb`
-- candidate first-parent merge:
+- initial candidate SHA: `aaf997720f296265c8b306840f0eb8af67b08dfb`
+- initial candidate first-parent merge:
   - `f6d8fd38c1d2e3edb3ddb91f4ebd4f9e3e878972` — PR #140 / Task #137
   - `72db02ca8933668d9e800af737e03b6ced4e0493` — PR #142 / Task #141
   - `aaf997720f296265c8b306840f0eb8af67b08dfb` — PR #143 / Task #39
-- Stage 1은 candidate detached worktree에서 clean install/build를 수행한다. Stage 2 release merge 뒤에는
-  candidate tree와 `origin/main` tree의 exact equality를 확인하되 merge commit SHA 차이는 허용한다.
-- Stage 3~5 archive는 exact main detached worktree에서 기존 `dist`를 제거하고 다시 build한다.
+- initial release main: `0af8439bfa9f97e1eb199a94d0930c1e9b47a7d5` / PR #145
+- replacement candidate SHA: `7fd130c7ceac92b0cfa6b58178422ba51d75943c`
+- replacement first-parent merge:
+  - `7fd130c7ceac92b0cfa6b58178422ba51d75943c` — PR #147 / Task #146
+- Stage 1·2는 initial candidate와 PR #145의 완료 이력이다. Stage 2.1은 replacement candidate detached
+  worktree에서 clean install/build와 전체 검증을 반복한다. Stage 2.2 release merge 뒤 replacement tree와
+  `origin/main` tree의 exact equality를 확인하되 merge commit SHA 차이는 허용한다.
+- Stage 3~5 archive는 Stage 2.2에서 확정한 새 exact main detached worktree에서 기존 `dist`를 제거하고 다시 build한다.
   Sites plugin의 `scripts/package-site.sh`로 `dist/`, hosting metadata, migration을 package하며 source
   commit, saved version `source.commit_sha`, archive digest와 deployment `version_id`를 교차 대조한다.
 - provider source credential은 필요 시 target별로 한 번 발급하고 만료 전까지 재사용한다. per-command
@@ -108,6 +121,10 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
   - browser-only GIF animation/frame/binary/encoder unit contract 통과
   - Share Studio Worker 생성 완료, `image/gif` blob, GIF signature/frame contract와 download/save UI 동작
   - error/cancel/retry와 기존 PNG download·card/social path 무회귀
+- Task #146:
+  - dark/light 모두 `md` 둘레 회전·phase·폭·4.8초와 카드 `1497×918 / 499:306` 공유
+  - light graphite/blue 대비와 전용 golden, dark live preset과 dark golden SHA 무변경
+  - GIF `998×612 / 20fps / 96프레임`, 15MB 미만과 golden 실제 gzip body 상한 검증
 - Hosted smoke는 실제 SNS 게시나 cache purge 없이 application metadata/image response와 작성 화면 직전까지만
   확인한다. production data 삭제 없이 기존 owner의 publish/unpublish는 원래 visibility로 복원한다.
 
@@ -125,6 +142,8 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 |---|---|---|---|---|
 | 1 | read-only PR/branch inventory | read-only baseline 가능 | read-only baseline 가능 | 구현계획·Stage 1 승인 |
 | 2 | `devel → main` release PR·merge | 없음 | 없음 | Stage 1 보고 승인 뒤 PR 생성·merge |
+| 2.1 | PR #147·branch read-only inventory | 없음 | 없음 | #146 merge와 replacement candidate 승인 뒤 전체 재인증 |
+| 2.2 | 두 번째 `devel → main` release PR·merge | 없음 | 없음 | Stage 2.1 보고 승인 뒤 PR 생성·merge |
 | 3 | exact main source push credential | source push, save, env, owner-only deploy, migration/readiness | 없음 | source/save, maintenance/deploy, synthetic smoke 하위 Gate |
 | 4 | exact main source push credential | read-only audit | source push와 save만 | production baseline·archive 제시 후 save 승인 |
 | 5 | 없음 | read-only continuity | env, existing-public deploy, migration/readiness | exact public access를 제시한 live deploy 명시 승인 |
@@ -250,11 +269,121 @@ git diff --check
 Task #144 Stage 2: exact main release 승격 완료
 ```
 
+## Stage 2.1 — #146 replacement candidate 재인증
+
+### 진입 조건
+
+- Task #146 PR #147이 `devel`에 merge되고 Issue #146이 완료됐다.
+- 작업지시자가 #146 선행 완료 뒤 #144를 권장 순서로 재개하는 방식을 승인했다.
+- `origin/devel`은 replacement candidate `7fd130c7ceac92b0cfa6b58178422ba51d75943c`와 같고,
+  `origin/main..origin/devel`은 PR #147 merge commit 하나뿐이다.
+
+### 산출물
+
+- `mydocs/working/task_m100_144_stage2_1.md`
+- `mydocs/orders/20260901.md`
+- replacement candidate provenance, 전체 local 재인증과 Task #146 focused 검증
+
+제품 source, Sites, npm과 GitHub branch/PR 상태는 변경하지 않는다. Task #144 추적 branch는 최신
+`devel`을 병합해 #146 인계 문서를 보존하지만 production artifact는 exact detached candidate만 사용한다.
+
+### 실행 순서
+
+1. `git fetch origin` 뒤 main/devel SHA·tree, first-parent merge, PR #147 상태와 Issue #146 인계를 고정한다.
+2. main 대비 변경이 PR #147뿐이고 migration, hosting target, package version/lockfile drift가 없는지 확인한다.
+3. exact replacement candidate detached worktree에서 clean install을 수행한다.
+4. Task #146 focused Node와 Playwright를 실행해 light/dark 동일 모션·geometry·GIF 규격, light 대비와
+   dark golden SHA를 검증한다.
+5. 전체 Node, Playwright E2E, production build, Sites full-stack/production, npm compatibility와 public
+   release scan을 재실행한다. E2E와 build는 같은 checkout에서 병렬 실행하지 않는다.
+6. production/stage5 target archive를 repository 밖에서 dry-run하고 source, project/origin/binding,
+   migration 1..6과 artifact budget을 확인한다. remote save/deploy는 하지 않는다.
+7. `task-stage-report`로 계획 개정, Stage 2.1 보고와 오늘할일을 한 merge commit에 묶고 Stage 2.2 승인을 요청한다.
+
+### 검증
+
+```bash
+git rev-parse origin/main origin/devel
+git log --first-parent --reverse --oneline origin/main..origin/devel
+git diff --check origin/main...origin/devel
+git diff --name-status origin/main...origin/devel -- db/migrations .openai/hosting.json .openai/hosting-targets.json packages/codex-usage-profile-cli/package.json package-lock.json
+npm ci --ignore-scripts --no-audit --no-fund
+node --test src/profile-card/__tests__/gif-animation.test.js src/profile-card/__tests__/gif-beam-frames.test.js src/profile-card/__tests__/gif-encoder.test.js src/profile-ui/__tests__/gifExport.test.js src/profile-ui/__tests__/themeSurfaceContract.test.js
+npx playwright test tests/profile-ui.spec.js --grep "Task #146|Share Studio|Share handoff|GIF|card appearance"
+npm test -- --test-concurrency=1
+npm run test:e2e
+npm run build:production
+npm run verify:sites-fullstack
+npm run verify:sites-production
+npm run verify:npm-release
+npm run scan:public-release
+git status --short
+```
+
+### 완료·중단 조건
+
+- 완료: replacement candidate와 PR #147 단일 범위가 고정되고 focused·전체 local/artifact 검증이 통과하며
+  Sites/npm/GitHub release 원격 mutation이 0건이다.
+- 중단: candidate drift, unrelated merge, migration/target/package drift, 테스트·artifact 실패, dark golden 변경,
+  light/dark 모션·geometry 불일치 또는 remote mutation 발생.
+
+### 커밋
+
+```text
+Task #144 [Stage 2.1]: #146 반영 배포 후보 재인증
+```
+
+## Stage 2.2 — replacement candidate의 main 재승격
+
+### 진입 조건
+
+- Stage 2.1 replacement candidate provenance와 전체 검증 보고서가 승인됐다.
+- `origin/devel`은 여전히 `7fd130c7ceac92b0cfa6b58178422ba51d75943c`이며 `origin/main`은 그 ancestor다.
+- 두 번째 `devel → main` release PR 생성·review·merge Gate가 승인됐다.
+
+### 산출물
+
+- replacement release PR과 merged exact main SHA/tree
+- `mydocs/working/task_m100_144_stage2_2.md`
+- 오늘할일 상태 갱신
+
+### 실행 순서
+
+1. base `main`, head `devel`, replacement candidate와 diff가 PR #147 범위인지 재확인한다.
+2. release PR에 Issue #144, PR #147/#146, Stage 2.1 검증, npm 재게시·Sites mutation 없음과 rollback 경계를 기록한다.
+3. required checks를 terminal 상태까지 확인한 뒤 merge commit 방식으로 병합하고 `devel`은 삭제하지 않는다.
+4. 새 `origin/main` tree와 replacement candidate tree의 exact equality와 ancestry를 확인한다.
+5. Sites version/deployment와 npm `latest=0.1.4`가 변하지 않았음을 읽기 전용으로 확인한다.
+6. `task-stage-report`로 release provenance를 commit하고 Stage 3 승인을 요청한다.
+
+### 검증
+
+```bash
+gh pr view {replacement_release_pr} --json state,baseRefName,headRefName,mergeCommit,statusCheckRollup,url
+git fetch origin
+git rev-parse origin/devel origin/main
+git diff --exit-code 7fd130c7ceac92b0cfa6b58178422ba51d75943c^{tree} origin/main^{tree}
+git merge-base --is-ancestor 7fd130c7ceac92b0cfa6b58178422ba51d75943c origin/main
+npm view codex-usage-profile dist-tags version
+git diff --check
+```
+
+### 완료·중단 조건
+
+- 완료: replacement release PR checks·review·merge와 exact tree equality가 통과하고 Sites/npm mutation이 없다.
+- 중단: unrelated merge, CI failure, base/head mismatch, tree mismatch 또는 npm/Sites drift.
+
+### 커밋
+
+```text
+Task #144 [Stage 2.2]: #146 포함 exact main 재승격
+```
+
 ## Stage 3 — Stage5 owner-only candidate 검증
 
 ### 진입 조건
 
-- Stage 2 exact main SHA와 tree equality가 승인됐다.
+- Stage 2.2의 새 exact main SHA와 replacement tree equality가 승인됐다.
 - Stage5 live target이 expected project/origin이며 access가 exact owner-only로 확인됐다.
 - Stage5 source/save, maintenance/deploy/migration, synthetic smoke의 하위 Gate를 순서대로 승인받는다.
 
@@ -530,6 +659,8 @@ Task #144 Stage 6: Release provenance와 운영 handoff 완료
 
 - `Task #144 Stage 1: 통합 배포 후보와 Local 검증 고정`
 - `Task #144 Stage 2: exact main release 승격 완료`
+- `Task #144 [Stage 2.1]: #146 반영 배포 후보 재인증`
+- `Task #144 [Stage 2.2]: #146 포함 exact main 재승격`
 - `Task #144 Stage 3: Stage5 owner-only 통합 후보 검증`
 - `Task #144 Stage 4: Production saved version과 rollback 준비`
 - `Task #144 Stage 5: Production 통합 배포와 공개 smoke 완료`
@@ -541,7 +672,9 @@ Task #144 Stage 6: Release provenance와 운영 handoff 완료
 ## 단계 의존성
 
 - Stage 2는 Stage 1 Local certification과 candidate SHA 승인 뒤에만 시작한다.
-- Stage 3은 Stage 2 exact main merge와 tree equality 승인 뒤에만 시작한다.
+- Stage 2.1은 #146/PR #147 병합과 replacement candidate 승인 뒤에만 시작한다.
+- Stage 2.2는 Stage 2.1 전체 재인증 승인 뒤에만 시작한다.
+- Stage 3은 Stage 2.2의 새 exact main merge와 tree equality 승인 뒤에만 시작한다.
 - Stage 4는 Stage 3 Stage5 owner-only migration·smoke 승인 뒤에만 시작한다.
 - Stage 5는 Stage 4 production saved version·rollback 승인과 별도 public deploy 승인 뒤에만 시작한다.
 - Stage 6은 Stage 5 production safe baseline·hosted smoke 승인 뒤에만 시작한다.
@@ -564,13 +697,13 @@ Task #144 Stage 6: Release provenance와 운영 handoff 완료
 ## 승인 요청 사항
 
 - 6 Stage의 산출물, 검증 명령과 Stage별 commit 경계
-- approved candidate `aaf9977...` → `devel → main` release PR → exact-main Stage5 → production save →
-  명시 public deploy → handoff 순서
+- initial candidate/PR #145 이력 보존 → replacement candidate `7fd130c...` 재인증 → 두 번째
+  `devel → main` release PR → 새 exact-main Stage5 → production save → 명시 public deploy → handoff 순서
 - Stage5 source/save, maintenance/deploy/migration, synthetic smoke와 production save/public deploy를 분리한 하위 Gate
 - npm `0.1.4`와 tag를 변경하지 않고 compatibility만 검증하는 방향
 - production public access·durable data를 보존하고 temporary application maintenance만 사용하는 방향
 - `docs/production-hosting.md`의 live baseline만 갱신하고 Sites runbook은 실제 contract drift가 있을 때만
   수정하는 문서 위치와 변경 경계
 
-승인되면 Stage 1 exact candidate Local certification을 시작하고, 완료 후 `task-stage-report`로 검증·보고·
-커밋한 뒤 Stage 2 진행 승인을 요청한다.
+2026-09-01 작업지시자의 #144 재개 지시에 따라 Stage 2.1 replacement candidate Local certification을
+시작한다. 완료 후 `task-stage-report`로 검증·보고·커밋한 뒤 Stage 2.2 진행 승인을 요청한다.

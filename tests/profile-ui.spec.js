@@ -4,12 +4,23 @@ import { devices, expect, test } from "@playwright/test";
 
 import { resolveE2eOrigin } from "./e2eOrigin.js";
 import { assertProfileGifContract } from "../src/profile-card/gif-binary.js";
+import { renderProfileCardPng } from "../src/profile-card/renderer.js";
+import { buildCardViewModel } from "../src/profile-card/view-model.js";
+import {
+  SAMPLE_CARD_TODAY_ISO,
+  sampleAccountUsageReadResult,
+  sampleCardOwner
+} from "../src/profile-card/fixtures/sample-account-usage.js";
 
 const PROFILE_ROUTE = "/u/postmelee";
 const SITES_PROFILE_ROUTE = "/api/share/postmelee";
 const OWNER_PROFILE_ROUTE = "/?view=profile";
 const CARD_PNG = readFileSync(new URL(
   "../public/assets/codex-card-sample.png",
+  import.meta.url
+));
+const CARD_AVATAR_PNG = readFileSync(new URL(
+  "../public/assets/postmelee-avatar.png",
   import.meta.url
 ));
 const STYLESHEET = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
@@ -158,6 +169,114 @@ test.describe("theme surfaces", () => {
     await expect(ownerCard).toHaveAttribute("data-card-theme", "light");
     await expect(ownerCard.locator(".home-card-skeleton"))
       .toHaveCSS("background-color", "rgb(255, 255, 255)");
+  });
+
+  test("Task #146 light and dark card beams keep contrast with identical geometry", async ({ page }, testInfo) => {
+    const [darkCardPng, lightCardPng] = await Promise.all([
+      renderE2eCardPng("dark"),
+      renderE2eCardPng("light")
+    ]);
+    await useThemePreference(page, "dark");
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile/card.png*", (route) => {
+      const theme = new URL(route.request().url()).searchParams.get("theme");
+      return route.fulfill({
+        body: theme === "light" ? lightCardPng : darkCardPng,
+        contentType: "image/png",
+        status: 200
+      });
+    });
+    await page.setViewportSize({ width: 1280, height: 1100 });
+    await page.goto(OWNER_PROFILE_ROUTE);
+
+    const sourceCard = page.locator(
+      '.profile-card-section [data-card-source="true"]'
+    );
+    const beam = sourceCard.locator(".home-card-beam");
+    const media = beam.locator(".home-card-media");
+    const preview = media.locator("img");
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("data-card-theme", "dark");
+    await expect.poll(() => preview.evaluate(
+      (image) => [image.naturalWidth, image.naturalHeight]
+    )).toEqual([1497, 918]);
+    await expect(beam).toHaveAttribute("data-active", "");
+    await expect.poll(() => beam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
+
+    const initialBeamNode = await beam.elementHandle();
+    const initialBeamId = await beam.getAttribute("data-beam");
+    const darkSnapshot = await readCardBeamSnapshot(beam);
+    await expect(beam).toHaveAttribute("data-card-beam-preset", "md");
+    await sourceCard.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await sourceCard.screenshot({ path: testInfo.outputPath("task-146-dark.png") });
+
+    await page.locator('input[name="card-theme"][value="light"]').check();
+    await expect(media).toHaveAttribute("data-card-status", "ready");
+    await expect(media).toHaveAttribute("data-card-theme", "light");
+    await expect(media).toHaveAttribute(
+      "data-card-source-url",
+      /\/api\/profile\/card\.png\?locale=en&theme=light/
+    );
+    await expect.poll(() => preview.evaluate(
+      (image) => [image.naturalWidth, image.naturalHeight]
+    )).toEqual([1497, 918]);
+    await expect(beam).toHaveAttribute("data-active", "");
+    await expect(beam).toHaveAttribute("data-card-beam-preset", "md");
+    await expect.poll(() => beam.evaluate((element) => (
+      element.getAnimations().find((animation) => (
+        animation.animationName.includes("beam-fade-in")
+      ))?.playState ?? null
+    ))).toBe("finished");
+    await expect.poll(() => beam.evaluate(
+      (element) => getComputedStyle(element, "::after").backgroundImage
+    )).toContain("rgba(0, 0, 0, 0.55)");
+
+    const lightSnapshot = await readCardBeamSnapshot(beam);
+    await sourceCard.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await sourceCard.screenshot({ path: testInfo.outputPath("task-146-light.png") });
+
+    expect(await beam.evaluate(
+      (element, original) => element === original,
+      initialBeamNode
+    )).toBe(true);
+    expect(await beam.getAttribute("data-beam")).toBe(initialBeamId);
+    expect(darkSnapshot.cardTheme).toBe("dark");
+    expect(lightSnapshot.cardTheme).toBe("light");
+    expect(darkSnapshot.afterBackground)
+      .toContain("rgba(255, 255, 255, 0.75)");
+    expect(lightSnapshot.afterBackground)
+      .toContain("rgba(0, 0, 0, 0.55)");
+    expect(darkSnapshot.beforeShadow)
+      .toContain("rgba(255, 255, 255, 0.27)");
+    expect(lightSnapshot.beforeShadow)
+      .toContain("rgba(0, 0, 0, 0.14)");
+    expect(darkSnapshot.bloomFilter).toContain("brightness(1.05)");
+    expect(lightSnapshot.bloomFilter).toContain("brightness(1.05)");
+    expect(darkSnapshot.bloomFilter).toContain("saturate(1.2)");
+    expect(lightSnapshot.bloomFilter).toContain("saturate(1.5)");
+    expect(darkSnapshot.animationDuration).toBe("4.8s, 0.6s");
+    expect(lightSnapshot.animationDuration).toBe(darkSnapshot.animationDuration);
+    expect(darkSnapshot.strength).toBe("0.82");
+    expect(lightSnapshot.strength).toBe(darkSnapshot.strength);
+    expect(darkSnapshot.opacityScales).toEqual({ bloom: "", inner: "", stroke: "" });
+    expect(lightSnapshot.opacityScales).toEqual({
+      bloom: "1.25",
+      inner: "2.5",
+      stroke: "5"
+    });
+    expect(darkSnapshot.image).toEqual({
+      aspectRatio: "499 / 306",
+      naturalHeight: 918,
+      naturalWidth: 1497
+    });
+    expect(lightSnapshot.image).toEqual(darkSnapshot.image);
+    expect(lightSnapshot.frame.width).toBeCloseTo(darkSnapshot.frame.width, 2);
+    expect(lightSnapshot.frame.height).toBeCloseTo(darkSnapshot.frame.height, 2);
+    expect(lightSnapshot.frame.radius).toBeCloseTo(darkSnapshot.frame.radius, 2);
   });
 
   test("Task #96 semantic primary text stays inside one theme transition window", async ({ page }) => {
@@ -6140,6 +6259,56 @@ async function mockCardImages(page, options = {}) {
   await page.route("**/u/postmelee/card.png*", (route) => {
     options.onPublicCardRequest?.(route.request());
     return fulfillPng(route);
+  });
+}
+
+async function renderE2eCardPng(theme) {
+  const viewModel = buildCardViewModel({
+    locale: "en",
+    owner: sampleCardOwner,
+    theme,
+    todayIso: SAMPLE_CARD_TODAY_ISO,
+    usage: sampleAccountUsageReadResult
+  });
+
+  return renderProfileCardPng(viewModel, {
+    avatarSource: CARD_AVATAR_PNG,
+    theme
+  });
+}
+
+async function readCardBeamSnapshot(beam) {
+  return beam.evaluate((element) => {
+    const frame = element.getBoundingClientRect();
+    const image = element.querySelector("img");
+    const media = element.querySelector(".home-card-media");
+    const bloom = element.querySelector("[data-beam-bloom]");
+    const style = getComputedStyle(element);
+    const round = (value) => Math.round(value * 100) / 100;
+
+    return {
+      afterBackground: getComputedStyle(element, "::after").backgroundImage,
+      animationDuration: style.animationDuration,
+      beforeShadow: getComputedStyle(element, "::before").boxShadow,
+      bloomFilter: getComputedStyle(bloom).filter,
+      cardTheme: media.dataset.cardTheme,
+      frame: {
+        height: round(frame.height),
+        radius: round(Number.parseFloat(style.borderTopLeftRadius)),
+        width: round(frame.width)
+      },
+      image: {
+        aspectRatio: getComputedStyle(image).aspectRatio,
+        naturalHeight: image.naturalHeight,
+        naturalWidth: image.naturalWidth
+      },
+      opacityScales: {
+        bloom: style.getPropertyValue("--beam-bloom-opacity").trim(),
+        inner: style.getPropertyValue("--beam-inner-opacity").trim(),
+        stroke: style.getPropertyValue("--beam-stroke-opacity").trim()
+      },
+      strength: style.getPropertyValue("--beam-strength").trim()
+    };
   });
 }
 

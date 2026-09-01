@@ -246,10 +246,11 @@ export function ShareStudio({
     ) return;
 
     gifExportController.generate({
+      cardTheme,
       sourceKey: gifSourceKey,
       sourceUrl: gifSourceUrl
     });
-  }, [downloadFormat, gifExportController, gifSourceKey, gifSourceUrl]);
+  }, [cardTheme, downloadFormat, gifExportController, gifSourceKey, gifSourceUrl]);
 
   useEffect(() => {
     if (!canRender || !cardImage.failed) return;
@@ -455,6 +456,7 @@ export function ShareStudio({
   function generateGif() {
     if (!gifExportController || !gifSourceKey || !gifSourceUrl) return;
     gifExportController.generate({
+      cardTheme,
       sourceKey: gifSourceKey,
       sourceUrl: gifSourceUrl
     });
