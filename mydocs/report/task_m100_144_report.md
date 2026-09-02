@@ -7,7 +7,7 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 
 - 대상 이슈: #144
 - 마일스톤: M100
-- 단계 수: 6개 Stage와 replacement 보정 게이트 2개(Stage 2.1, 2.2)
+- 단계 수: 7개 Stage와 replacement 보정 게이트 2개(Stage 2.1, 2.2)
 - 작업 목적: #137·#141·#39와 후속 #146을 exact main으로 재승격하고, owner-only Stage5 검증 뒤
   canonical production에 안전하게 배포해 라이트 social 경계와 브라우저 GIF 기능을 공개한다.
 
@@ -15,17 +15,18 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 라이트 카드 Border Beam 가독성 문제를 발견해 배포를 중단하고, Task #146/PR #147 보정만 추가한
 replacement candidate를 전체 재인증했다. release PR #148로 새 exact main을 확정한 뒤 Stage5 version 40,
 production version 6 순으로 같은 source를 배포했다. npm `0.1.4`는 기존 immutable release를 유지하고
-재게시하지 않았다.
+재게시하지 않았다. 배포 뒤 PR #149 리뷰에서 지적된 공식 문서 3건은 Stage 7에서 보완했고, 원격
+Sites·npm 상태와 실측 수치는 그대로 유지했다.
 
 ## 변경 파일 목록과 영향 범위
 
 | 경로 | 변경 요약 | 영향 범위 |
 |---|---|---|
 | `mydocs/plans/task_m100_144.md` | exact source, 승인 Gate, target 분리와 rollback을 정의한 수행계획 | Task #144 작업 범위와 승인 기준 |
-| `mydocs/plans/task_m100_144_impl.md` | Stage 1~6 및 replacement 2.1·2.2 실행·검증 절차 | 릴리스 실행과 검증 재현성 |
+| `mydocs/plans/task_m100_144_impl.md` | Stage 1~7 및 replacement 2.1·2.2 실행·검증 절차 | 릴리스 실행과 검증 재현성 |
 | `mydocs/working/task_m100_144_stage*.md` | 각 Stage의 source, 원격 상태, 검증, 안전 복원 결과 | 단계별 감사·인계 기록 |
-| `docs/production-hosting.md` | production version 6/source/environment와 hosted smoke·rollback 기준 반영 | 공식 production architecture·live baseline |
-| `docs/sites-operations.md` | current production/stage5 이력과 edge convergence Gate 보강 | 후속 Sites 배포 runbook |
+| `docs/production-hosting.md` | production version 6/source/environment와 hosted smoke·rollback 기준 반영, Stage 7에서 edge convergence 재시도 계약 정정 | 공식 production architecture·live baseline |
+| `docs/sites-operations.md` | current production/stage5 이력과 edge convergence Gate 보강, Stage 7에서 rollback 기준 시점 분리와 문장 정정 | 후속 Sites 배포 runbook |
 | `mydocs/orders/20260828.md`, `mydocs/orders/20260901.md`, `mydocs/orders/20260902.md` | 날짜별 Stage 진행과 완료 상태 | 하이퍼-워터폴 오늘할일 보드 |
 | `mydocs/report/task_m100_144_report.md` | 전체 결과, 수용 기준과 후속 위험 정리 | 최종 검토와 PR 인계 |
 
@@ -72,6 +73,7 @@ Task #144 branch에서 제품 source, migration, package version, lockfile, host
 | 전체 자동 회귀 | OK — focused renderer 34/34, GIF·Share Studio 54/54, Node 923 pass·6 skip, Playwright 110/110, production build와 Sites/npm verifier 통과다. |
 | 릴리스·운영 보안 | OK — npm 재게시 0건, public scan blocker 0, 최근 production/stage5 실패 outcome·error-level·5xx 0이며 secret 값·개인 data·임시 경로를 문서에 기록하지 않았다. |
 | rollback·운영 인계 | OK — production version 5, Stage5 version 39를 application rollback 후보로 기록하고 edge convergence Gate를 공식 runbook에 반영했다. |
+| PR 리뷰 보완 | OK — 승인된 리뷰 1·3·4를 공식 문서에서 정정하고 이력 표 정합, 두 문서의 재시도 계약 일치와 public surface scan(blocker 0, review 73)을 재확인했다. 리뷰 2는 승인 범위 밖으로 미해결 기록했다. |
 
 ### 단계별 검증 결과
 
@@ -83,6 +85,7 @@ Task #144 branch에서 제품 source, migration, package version, lockfile, host
 - [Stage 4](../working/task_m100_144_stage4.md): production version 6을 저장하고 version 5 rollback과 live 미변경을 확인했다.
 - [Stage 5](../working/task_m100_144_stage5.md): public production 배포, safe environment 복원과 비파괴 hosted smoke를 완료했다.
 - [Stage 6](../working/task_m100_144_stage6.md): GitHub/Sites/npm provenance, 전체 exact-main 회귀와 공식 운영 인계를 완료했다.
+- [Stage 7](../working/task_m100_144_stage7.md): PR #149 리뷰 1·3·4를 공식 문서에서 보완하고 표 정합·상호 계약·public surface scan을 재확인했다.
 
 ## 잔여 위험과 후속 작업
 
@@ -96,13 +99,19 @@ Task #144 branch에서 제품 source, migration, package version, lockfile, host
   compatibility와 exact saved version을 다시 읽고 별도 승인을 받아야 한다.
 - 외부 SNS 게시와 crawler cache purge는 범위 밖이다. application metadata·media와 provider 작성 화면
   직전까지만 검증했으며 외부 preview 반영 시간은 보장하지 않는다.
+- PR #149 리뷰 2의 production environment 8 → 12 드리프트는 원인이 확인되지 않았다. #137 종료와 #144
+  Stage 3 preflight 사이에 production 배포는 없었고 저장소에도 변경 기록이 없다. 이력 표가 두 시점을
+  모두 기록하므로 문서 값은 어긋나지 않지만, 원인 확인은 별도 지시가 필요하다.
 
 ### 후속 작업 후보
 
 - [Issue #125](https://github.com/postmelee/codex-usage-profile/issues/125)에서 Stage5 테스트 operation 복구·정리를 별도 승인으로 완료한다.
 - [Issue #135](https://github.com/postmelee/codex-usage-profile/issues/135)에서 Node 24 real-workerd runner 정지 원인을 해결한다.
+- production environment revision 8 → 12 구간의 변경 주체와 시점을 Sites 원격 audit으로 확인하고 이력에 기록한다.
 
 ## 작업지시자 승인 요청
 
-- 작업지시자의 2026-09-02 동일 스레드 `진행해줘` 지시에 따라 최종 보고서 커밋과 PR 게시까지 진행한다.
-- PR의 리뷰 결과 확인과 merge는 별도 작업지시자 승인 뒤 진행한다.
+- 작업지시자의 2026-09-02 동일 스레드 `진행해줘` 지시에 따라 최종 보고서 커밋과 PR 게시까지 진행했다.
+- 이어 같은 날 `1, 3, 4번 보완해줘` 지시로 PR #149 리뷰 보완 범위를 승인받아 Stage 7을 수행했다.
+  리뷰 2는 승인 범위에서 제외해 미해결 사실만 기록했다.
+- `publish/task144` push와 PR #149 본문 갱신, merge와 이슈 close는 별도 작업지시자 승인 뒤 진행한다.
