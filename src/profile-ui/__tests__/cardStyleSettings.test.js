@@ -68,7 +68,9 @@ test("share studio separates fixed README, revision share, and saved card URLs",
   );
   assert.match(source, /buildReadmeCardSnippet\(copyImageUrl, readmeProfileUrl\)/u);
   assert.match(source, /profileUrl: shareProfileUrl/u);
-  assert.match(source, /href=\{selectedImageUrl\}/u);
+  assert.match(source, /createProfileAttachmentPngBlob\(\{/u);
+  assert.match(source, /sourceUrl: gifSourceUrl/u);
+  assert.doesNotMatch(source, /href=\{selectedImageUrl\}/u);
   assert.match(source, /fetch\(previewImageUrl \?\? selectedImageUrl/u);
   const renderGate = /const canRender = Boolean\(([\s\S]*?)\n  \);/u.exec(source);
   assert.notEqual(renderGate, null);

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { devices, expect, test } from "@playwright/test";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 import { resolveE2eOrigin } from "./e2eOrigin.js";
 import { assertProfileGifContract } from "../src/profile-card/gif-binary.js";
@@ -2459,7 +2460,7 @@ test.describe("Home and share card flow", () => {
     expect(requestedCodes).toEqual(["ABCD-1234", "ABCD-1234", "WXYZ-9876"]);
   });
 
-  test("card owner can publish and use every Share action", async ({ context, page }, testInfo) => {
+  test("Task #150 card owner can publish and use every Share action with an opaque PNG", async ({ context, page }, testInfo) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     let visibility = "private";
     let publicPreviewFetches = 0;
@@ -2617,14 +2618,16 @@ test.describe("Home and share card flow", () => {
     await expect(page.getByText("Copied image", { exact: true })).toBeVisible();
     expect(publicPreviewFetches).toBe(2);
 
-    await expect(page.getByRole("link", { name: "Save PNG" })).toHaveAttribute(
-      "href",
-      `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
-    );
+    await expect(page.getByRole("button", { name: "Save PNG" })).toBeEnabled();
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("link", { name: "Save PNG" }).click();
+    await page.getByRole("button", { name: "Save PNG" }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
+    const downloadedPng = readFileSync(await download.path());
+    expect([...downloadedPng.subarray(0, 8)]).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
+    ]);
+    await expectOpaqueAttachmentPng(downloadedPng, [24, 24, 24, 255]);
     await expect(page.getByText("Image saved", { exact: true })).toBeVisible();
     const successIcon = page.locator("[data-codex-check-circle]");
     await expect(successIcon).toHaveAttribute("viewBox", "0 0 20 21");
@@ -2733,7 +2736,7 @@ test.describe("Home and share card flow", () => {
     await expect(format).toBeVisible();
     await expect(format.getByRole("radio", { name: "PNG" }))
       .toHaveAttribute("aria-checked", "true");
-    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Save PNG" })).toBeVisible();
 
     const pngOption = format.getByRole("radio", { name: "PNG" });
     await pngOption.focus();
@@ -2926,7 +2929,7 @@ test.describe("Home and share card flow", () => {
     await page.getByRole("button", { name: "Share", exact: true }).click();
     await expect(format.getByRole("radio", { name: "PNG" }))
       .toHaveAttribute("aria-checked", "true");
-    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Save PNG" })).toBeVisible();
   });
 
   test("Share Studio surfaces a GIF source error and retries the same card", async ({
@@ -3035,7 +3038,7 @@ test.describe("Home and share card flow", () => {
     await shareButton.click();
     await expect(dialog.getByRole("radio", { name: "PNG" }))
       .toHaveAttribute("aria-checked", "true");
-    await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Save PNG" })).toBeVisible();
     expect(workerCount).toBe(1);
   });
 
@@ -3066,7 +3069,7 @@ test.describe("Home and share card flow", () => {
       await expect(dialog.getByRole("radiogroup", { name: "Download format" }))
         .toHaveCount(0);
       await expect(dialog.getByText("GIF", { exact: true })).toHaveCount(0);
-      await expect(dialog.getByRole("link", { name: "Save PNG" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Save PNG" })).toBeVisible();
       expect(workerCount).toBe(0);
     } finally {
       await context.close();
@@ -3969,7 +3972,7 @@ test.describe("Home and share card flow", () => {
         await expect(page.getByRole("link", { name: "Share on X" })).toBeVisible();
         await expect(page.getByRole("link", { name: "Share on Threads" })).toBeVisible();
         await expect(page.getByRole("link", { name: "Share on Reddit" })).toBeVisible();
-        await expect(page.getByRole("link", { name: "Save PNG" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Save PNG" })).toBeVisible();
         await expect(page.getByRole("link", { name: "Share on LinkedIn" }))
           .toHaveCount(0);
         await expect(page.getByRole("link", { name: "Share on Facebook" }))
@@ -4307,7 +4310,7 @@ test.describe("Home and share card flow", () => {
       .toBeVisible();
 
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("link", { name: "Save PNG" }).click();
+    await page.getByRole("button", { name: "Save PNG" }).click();
     expect((await downloadPromise).suggestedFilename()).toBe(
       "codex-usage-profile.png"
     );
@@ -5144,11 +5147,8 @@ test.describe("Settings appearance control", () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       PROFILE_README_MARKDOWN
     );
-    await expect(shareStudio.getByRole("link", { name: "Save PNG" }))
-      .toHaveAttribute(
-        "href",
-        `${E2E_ORIGIN}/u/postmelee/card.png?theme=dark`
-      );
+    await expect(shareStudio.getByRole("button", { name: "Save PNG" }))
+      .toBeEnabled();
   });
 
   test("card appearance keeps the last decoded preview until the latest draft is ready", async ({ page }) => {
@@ -6454,6 +6454,40 @@ async function fulfillJson(route, body, status = 200) {
     contentType: "application/json",
     status
   });
+}
+
+async function expectOpaqueAttachmentPng(png, expectedCorner) {
+  const image = await loadImage(png);
+  expect({ height: image.height, width: image.width }).toEqual({
+    height: 612,
+    width: 998
+  });
+
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, image.width, image.height).data;
+  let minimumAlpha = 255;
+  let maximumAlpha = 0;
+  for (let offset = 3; offset < pixels.length; offset += 4) {
+    minimumAlpha = Math.min(minimumAlpha, pixels[offset]);
+    maximumAlpha = Math.max(maximumAlpha, pixels[offset]);
+  }
+  expect({ maximumAlpha, minimumAlpha }).toEqual({
+    maximumAlpha: 255,
+    minimumAlpha: 255
+  });
+
+  for (const [x, y] of [
+    [0, 0],
+    [image.width - 1, 0],
+    [0, image.height - 1],
+    [image.width - 1, image.height - 1]
+  ]) {
+    expect(Array.from(context.getImageData(x, y, 1, 1).data)).toEqual(
+      expectedCorner
+    );
+  }
 }
 
 async function getLandingScrollMetrics(page) {
