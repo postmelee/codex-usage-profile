@@ -2913,6 +2913,9 @@ test.describe("Home and share card flow", () => {
       loopCount: 0,
       width: 998
     });
+    expect(metadata.frames.every((frame) => (
+      !frame.transparent && frame.transparentIndex === null
+    ))).toBe(true);
     await expect(page.getByText("GIF saved", { exact: true })).toBeVisible();
 
     await page.keyboard.press("Escape");

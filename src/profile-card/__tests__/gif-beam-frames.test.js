@@ -267,10 +267,10 @@ test("renders a deterministic source-over frame while preserving the card center
   assert.equal(renderer.effectPixelCount, 59_392);
 });
 
-test("keeps the approved Chrome beam seamless on a transparent fixed card", async () => {
+test("keeps the approved Chrome beam seamless on an opaque fixed card", async () => {
   const compressed = await readFile(PROFILE_GIF_BEAM_ASSET_URL);
   const frames = parseProfileGifBeamFrames(gunzipSync(compressed));
-  const base = createRoundedBase();
+  const base = createOpaqueRoundedBase();
   const renderer = createProfileGifGoldenFrameRenderer(base, frames);
   const last = new Uint8ClampedArray(renderer.renderFrame(95));
   const first = new Uint8ClampedArray(renderer.renderFrame(0));
@@ -293,7 +293,7 @@ test("keeps the approved Chrome beam seamless on a transparent fixed card", asyn
       (PROFILE_GIF_PRESET.height - 1) * PROFILE_GIF_PRESET.width,
       PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height - 1
     ]) {
-      assert.equal(frame[pixelIndex * 4 + 3], 0);
+      assert.equal(frame[pixelIndex * 4 + 3], 255);
     }
   }
 });
@@ -319,9 +319,12 @@ function createBase(color = [24, 24, 24, 255]) {
   return rgba;
 }
 
-function createRoundedBase() {
+function createOpaqueRoundedBase() {
   const { borderRadius, height, width } = PROFILE_GIF_PRESET;
   const rgba = new Uint8ClampedArray(width * height * 4);
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    rgba.set([24, 24, 24, 255], offset);
+  }
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {

@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+import { drawProfileAttachmentCanvas } from "../attachment-canvas.js";
 import {
   PROFILE_GIF_PRESET,
   createProfileGifFrameRenderer
@@ -15,7 +16,7 @@ import {
   encodeProfileCardGif
 } from "../gif-encoder.js";
 
-test("encodes the complete transparent 20fps loop with one global palette", () => {
+test("encodes the complete opaque 20fps loop with one global palette", () => {
   const progress = [];
   const bytes = encodeProfileCardGif(createRepresentativeBase(), {
     onProgress: ({ completedFrames }) => progress.push(completedFrames)
@@ -26,51 +27,51 @@ test("encodes the complete transparent 20fps loop with one global palette", () =
   assert.equal(metadata.loopCount, 0);
   assert.ok(metadata.globalColorTableSize <= 256);
   assert.equal(metadata.localColorTableCount, 0);
+  assert.ok(metadata.frames.every((frame) => (
+    !frame.transparent && frame.transparentIndex === null
+  )));
   assert.ok(bytes.length < PROFILE_GIF_PRESET.maxBytes);
   assert.equal(progress.length, 96);
   assert.deepEqual(progress.slice(0, 2), [1, 2]);
   assert.deepEqual(progress.slice(-2), [95, 96]);
 });
 
-test("rejects an opaque base that cannot provide a transparent GIF index", () => {
-  const base = new Uint8ClampedArray(
-    PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height * 4
-  );
-  for (let offset = 0; offset < base.length; offset += 4) {
-    base.set([20, 24, 36, 255], offset);
-  }
+test("rejects any base frame containing transparent pixels", () => {
+  const base = createRepresentativeBase();
+  base[3] = 0;
 
   assert.throws(
     () => encodeProfileCardGif(base),
-    /transparent background pixels/
+    /only opaque pixels/
   );
 });
 
 test("maps identical card colors to one stable global palette index", () => {
   const palette = [
-    [0, 0, 0, 0],
     [24, 24, 24, 255],
     [27, 28, 36, 255]
   ];
-  const mapper = createGifGlobalPaletteMapper(palette, 0);
-  const first = mapper.apply(Uint8ClampedArray.from([
-    24, 24, 24, 255,
-    25, 27, 31, 255
-  ]));
-  const second = mapper.apply(Uint8ClampedArray.from([
-    25, 27, 31, 255,
-    24, 24, 24, 255
-  ]));
+  const mapper = createGifGlobalPaletteMapper(palette);
+  const firstFrame = createRepresentativeBase();
+  firstFrame.set([24, 24, 24, 255, 25, 27, 31, 255], 0);
+  const secondFrame = new Uint8ClampedArray(firstFrame);
+  secondFrame.set([25, 27, 31, 255, 24, 24, 24, 255], 0);
+  const first = mapper.apply(firstFrame);
+  const second = mapper.apply(secondFrame);
 
   assert.equal(first[0], second[1]);
   assert.equal(first[1], second[0]);
   assert.notEqual(first[0], first[1]);
+  assert.throws(
+    () => createGifGlobalPaletteMapper([[0, 0, 0, 0]]),
+    /all be opaque/
+  );
 });
 
 test("preserves approved-frame color fidelity with the animation-wide palette", async () => {
   const base = await loadRepresentativePublicCard();
   const palette = createProfileGifGlobalPalette(base);
-  const mapper = createGifGlobalPaletteMapper(palette, 0);
+  const mapper = createGifGlobalPaletteMapper(palette);
   const renderer = createProfileGifFrameRenderer(base);
   const frame = new Uint8ClampedArray(base.length);
   let comparedPixels = 0;
@@ -79,15 +80,18 @@ test("preserves approved-frame color fidelity with the animation-wide palette", 
   let exactPixels = 0;
   let squaredError = 0;
 
-  assert.deepEqual(palette[0], [0, 0, 0, 0]);
   assert.ok(palette.length <= PROFILE_GIF_PRESET.maxColors);
+  assert.ok(palette.every((color) => color[3] === 255));
+  assert.ok(palette.some((color) => (
+    color[0] === 24 && color[1] === 24 && color[2] === 24
+  )));
 
   for (let frameIndex = 0; frameIndex < PROFILE_GIF_PRESET.frameCount; frameIndex += 1) {
     renderer.renderFrame(frameIndex, frame);
     const indexed = mapper.apply(frame);
     for (let pixelIndex = frameIndex % 128; pixelIndex < indexed.length; pixelIndex += 128) {
       const offset = pixelIndex * 4;
-      if (frame[offset + 3] <= 127) continue;
+      assert.equal(frame[offset + 3], 255);
       const color = palette[indexed[pixelIndex]];
       let exact = true;
       const isEdge = isNearApprovedCardEdge(pixelIndex);
@@ -126,13 +130,7 @@ async function loadRepresentativePublicCard() {
   const image = await loadImage(png);
   const canvas = createCanvas(PROFILE_GIF_PRESET.width, PROFILE_GIF_PRESET.height);
   const context = canvas.getContext("2d");
-  context.drawImage(
-    image,
-    0,
-    0,
-    PROFILE_GIF_PRESET.width,
-    PROFILE_GIF_PRESET.height
-  );
+  drawProfileAttachmentCanvas(context, image, { theme: "dark" });
   return context.getImageData(
     0,
     0,
@@ -157,6 +155,9 @@ function isNearApprovedCardEdge(pixelIndex) {
 function createRepresentativeBase() {
   const { width, height, borderRadius } = PROFILE_GIF_PRESET;
   const rgba = new Uint8ClampedArray(width * height * 4);
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    rgba.set([24, 24, 24, 255], offset);
+  }
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {

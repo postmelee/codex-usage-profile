@@ -130,8 +130,6 @@ export function assertProfileGifContract(input) {
   );
   check(metadata.byteLength > 0, "GIF must not be empty", failures);
 
-  const expectedTransparentIndex = metadata.frames[0]?.transparentIndex;
-
   for (const [index, frame] of metadata.frames.entries()) {
     check(frame.left === 0 && frame.top === 0, `frame ${index} must start at 0,0`, failures);
     check(
@@ -142,12 +140,10 @@ export function assertProfileGifContract(input) {
     );
     check(frame.delayCentiseconds === expectedDelay, `frame ${index} delay must be 50ms`, failures);
     check(frame.disposal === 1, `frame ${index} disposal must be 1`, failures);
-    check(frame.transparent, `frame ${index} must enable transparency`, failures);
+    check(!frame.transparent, `frame ${index} must disable transparency`, failures);
     check(
-      Number.isInteger(frame.transparentIndex) &&
-        frame.transparentIndex === expectedTransparentIndex &&
-        frame.transparentIndex < metadata.globalColorTableSize,
-      `frame ${index} must reuse the global transparent index`,
+      frame.transparentIndex === null,
+      `frame ${index} must not expose a transparent index`,
       failures
     );
   }
@@ -180,15 +176,16 @@ function readGraphicControl(reader) {
   }
   const packed = reader.readByte();
   const delayCentiseconds = reader.readUint16();
-  const transparentIndex = reader.readByte();
+  const rawTransparentIndex = reader.readByte();
   if (reader.readByte() !== 0) {
     throw new TypeError("Invalid GIF graphic control terminator");
   }
+  const transparent = Boolean(packed & 0x01);
   return Object.freeze({
     delayCentiseconds,
     disposal: (packed >> 2) & 0x07,
-    transparent: Boolean(packed & 0x01),
-    transparentIndex
+    transparent,
+    transparentIndex: transparent ? rawTransparentIndex : null
   });
 }
 

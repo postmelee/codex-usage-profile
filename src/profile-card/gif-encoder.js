@@ -6,36 +6,30 @@ import {
 } from "./gif-animation.js";
 
 const ANIMATION_PALETTE_SAMPLE_STRIDE = 128;
-const ALPHA_THRESHOLD = 127;
 const OPAQUE_PALETTE_FORMAT = "rgb565";
 const RESERVED_BASE_COLOR_COUNT = 16;
 const RESERVED_EDGE_COLOR_COUNT = 48;
-const TRANSPARENT_COLOR = Object.freeze([0, 0, 0, 0]);
 const GIFEncoder = gifencNamespace.GIFEncoder ??
   gifencDefault.GIFEncoder ?? gifencDefault;
 const quantize = gifencNamespace.quantize ?? gifencDefault.quantize;
 
 export function encodeProfileCardGif(baseRgba, options = {}) {
   throwIfAborted(options.signal);
+  assertOpaqueRgba(baseRgba, "GIF base frame");
   const renderer = createProfileGifFrameRenderer(baseRgba, {
     beamFrames: options.beamFrames,
     theme: options.theme
   });
   const frame = new Uint8ClampedArray(baseRgba.length);
-  if (!hasTransparentPixels(baseRgba)) {
-    throw new Error("GIF base frame must include transparent background pixels");
-  }
   const palette = createAnimationPalette(baseRgba, renderer, frame, options.signal);
-  const transparentIndex = 0;
 
   const encoder = GIFEncoder({ initialCapacity: 8 * 1024 * 1024 });
-  const paletteMapper = createGifGlobalPaletteMapper(palette, transparentIndex);
+  const paletteMapper = createGifGlobalPaletteMapper(palette);
   const firstFrame = renderer.renderFrame(0, frame);
   writeFrame(
     encoder,
     paletteMapper.apply(firstFrame),
     palette,
-    transparentIndex,
     true
   );
   reportProgress(options.onProgress, 1);
@@ -47,7 +41,6 @@ export function encodeProfileCardGif(baseRgba, options = {}) {
       encoder,
       paletteMapper.apply(frame),
       palette,
-      transparentIndex,
       false
     );
     reportProgress(options.onProgress, frameIndex + 1);
@@ -65,6 +58,7 @@ export function encodeProfileCardGif(baseRgba, options = {}) {
 
 export function createProfileGifGlobalPalette(baseRgba, options = {}) {
   throwIfAborted(options.signal);
+  assertOpaqueRgba(baseRgba, "GIF base frame");
   const renderer = createProfileGifFrameRenderer(baseRgba, {
     beamFrames: options.beamFrames,
     theme: options.theme
@@ -73,41 +67,34 @@ export function createProfileGifGlobalPalette(baseRgba, options = {}) {
   return createAnimationPalette(baseRgba, renderer, frame, options.signal);
 }
 
-export function createGifGlobalPaletteMapper(palette, transparentIndex) {
+export function createGifGlobalPaletteMapper(palette) {
   if (!Array.isArray(palette) || palette.length === 0 || palette.length > 256) {
     throw new TypeError("GIF palette must contain between 1 and 256 colors");
   }
-  if (
-    !Number.isInteger(transparentIndex) ||
-    transparentIndex < 0 ||
-    transparentIndex >= palette.length ||
-    palette[transparentIndex]?.[3] !== 0
-  ) {
-    throw new TypeError("GIF palette must identify a transparent color index");
+  if (palette.some((color) => (
+    !Array.isArray(color) ||
+    color.length < 4 ||
+    color[3] !== 255
+  ))) {
+    throw new TypeError("GIF palette colors must all be opaque");
   }
 
   const cache = new Map();
-  const opaquePalette = palette
-    .map((color, index) => ({ color, index }))
-    .filter(({ color }) => color[3] !== 0);
+  const paletteEntries = palette.map((color, index) => ({ color, index }));
 
   return Object.freeze({
     apply(rgba) {
+      assertOpaqueRgba(rgba, "GIF frame");
       const indexed = new Uint8Array(rgba.length / 4);
       for (let offset = 0, pixel = 0; offset < rgba.length; offset += 4, pixel += 1) {
-        if (rgba[offset + 3] <= ALPHA_THRESHOLD) {
-          indexed[pixel] = transparentIndex;
-          continue;
-        }
-
         const key = rgba[offset] | (rgba[offset + 1] << 8) | (rgba[offset + 2] << 16);
         let paletteIndex = cache.get(key);
         if (paletteIndex === undefined) {
-          paletteIndex = findNearestOpaqueColor(
+          paletteIndex = findNearestColor(
             rgba[offset],
             rgba[offset + 1],
             rgba[offset + 2],
-            opaquePalette
+            paletteEntries
           );
           cache.set(key, paletteIndex);
         }
@@ -118,7 +105,7 @@ export function createGifGlobalPaletteMapper(palette, transparentIndex) {
   });
 }
 
-function writeFrame(encoder, indexed, palette, transparentIndex, first) {
+function writeFrame(encoder, indexed, palette, first) {
   encoder.writeFrame(
     indexed,
     PROFILE_GIF_PRESET.width,
@@ -128,8 +115,7 @@ function writeFrame(encoder, indexed, palette, transparentIndex, first) {
       dispose: 1,
       palette: first ? palette : undefined,
       repeat: PROFILE_GIF_PRESET.loopCount,
-      transparent: true,
-      transparentIndex
+      transparent: false
     }
   );
 }
@@ -154,8 +140,8 @@ function createAnimationPalette(baseRgba, renderer, frame, signal) {
       pixelIndex += ANIMATION_PALETTE_SAMPLE_STRIDE
     ) {
       const offset = pixelIndex * 4;
-      if (frame[offset + 3] <= ALPHA_THRESHOLD) {
-        continue;
+      if (frame[offset + 3] !== 255) {
+        throw new TypeError("GIF renderer must return opaque frames");
       }
       const key = packRgb(frame[offset], frame[offset + 1], frame[offset + 2]);
       if (baseKeys.has(key)) {
@@ -183,7 +169,7 @@ function createAnimationPalette(baseRgba, renderer, frame, signal) {
 
   const reservedColors = [...baseColors, ...edgeColors];
   const remainingColorCount = PROFILE_GIF_PRESET.maxColors -
-    reservedColors.length - 1;
+    reservedColors.length;
   const quantizedColors = filteredSampleLength === 0 || remainingColorCount <= 0
     ? []
     : quantize(sample.subarray(0, filteredSampleLength), remainingColorCount, {
@@ -196,9 +182,6 @@ function createAnimationPalette(baseRgba, renderer, frame, signal) {
 function selectFrequentColors(rgba, maximumColorCount) {
   const histogram = new Map();
   for (let offset = 0; offset < rgba.length; offset += 4) {
-    if (rgba[offset + 3] <= ALPHA_THRESHOLD) {
-      continue;
-    }
     const key = packRgb(rgba[offset], rgba[offset + 1], rgba[offset + 2]);
     histogram.set(key, (histogram.get(key) ?? 0) + 1);
   }
@@ -228,7 +211,7 @@ function isNearCardEdge(pixelIndex) {
 }
 
 function mergePaletteColors(reservedColors, quantizedColors) {
-  const colors = [TRANSPARENT_COLOR];
+  const colors = [];
   const seen = new Set();
 
   for (const color of [...reservedColors, ...quantizedColors]) {
@@ -245,15 +228,6 @@ function mergePaletteColors(reservedColors, quantizedColors) {
   return colors;
 }
 
-function hasTransparentPixels(rgba) {
-  for (let offset = 3; offset < rgba.length; offset += 4) {
-    if (rgba[offset] <= ALPHA_THRESHOLD) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function packColor(color) {
   return packRgb(color[0], color[1], color[2]);
 }
@@ -266,7 +240,7 @@ function unpackColor(key) {
   return [key & 255, (key >>> 8) & 255, (key >>> 16) & 255, 255];
 }
 
-function findNearestOpaqueColor(red, green, blue, palette) {
+function findNearestColor(red, green, blue, palette) {
   let nearestIndex = -1;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
@@ -284,9 +258,24 @@ function findNearestOpaqueColor(red, green, blue, palette) {
   }
 
   if (nearestIndex < 0) {
-    throw new TypeError("GIF palette must include at least one opaque color");
+    throw new TypeError("GIF palette must include at least one color");
   }
   return nearestIndex;
+}
+
+function assertOpaqueRgba(rgba, label) {
+  if (
+    (!(rgba instanceof Uint8Array) &&
+      !(rgba instanceof Uint8ClampedArray)) ||
+    rgba.length !== PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height * 4
+  ) {
+    throw new TypeError(`${label} must be a 998 by 612 RGBA buffer`);
+  }
+  for (let offset = 3; offset < rgba.length; offset += 4) {
+    if (rgba[offset] !== 255) {
+      throw new TypeError(`${label} must contain only opaque pixels`);
+    }
+  }
 }
 
 function reportProgress(onProgress, completedFrames) {

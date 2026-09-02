@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+import { drawProfileAttachmentCanvas } from "../attachment-canvas.js";
 import {
   GIF_EXPORT_PRESET_VERSION,
   PROFILE_CARD_BORDER_BEAM_PRESET,
@@ -16,7 +17,7 @@ import {
 } from "../gif-animation.js";
 
 test("fixes the approved browser GIF and web border beam contract", () => {
-  assert.equal(GIF_EXPORT_PRESET_VERSION, 2);
+  assert.equal(GIF_EXPORT_PRESET_VERSION, 3);
   assert.deepEqual(PROFILE_GIF_PRESET, {
     borderRadius: 64,
     durationMs: 4_800,
@@ -33,7 +34,7 @@ test("fixes the approved browser GIF and web border beam contract", () => {
     maxColors: 256,
     scale: 2,
     sourceMaxBytes: 10_000_000,
-    version: 2,
+    version: 3,
     width: 998
   });
   assert.deepEqual(PROFILE_CARD_BORDER_BEAM_PRESET, {
@@ -112,7 +113,7 @@ test("keeps the card fixed while the beam visits each perimeter quadrant", () =>
       readPixel(base, 499, 306),
       `frame ${frameIndex} must not transform card content`
     );
-    assert.equal(readPixel(frame, 0, 0)[3], 0);
+    assert.deepEqual(readPixel(frame, 0, 0), [24, 24, 24, 255]);
   }
 });
 
@@ -124,13 +125,7 @@ test("matches the approved conic beam golden signature and loop seam", async () 
   const image = await loadImage(png);
   const canvas = createCanvas(PROFILE_GIF_PRESET.width, PROFILE_GIF_PRESET.height);
   const context = canvas.getContext("2d");
-  context.drawImage(
-    image,
-    0,
-    0,
-    PROFILE_GIF_PRESET.width,
-    PROFILE_GIF_PRESET.height
-  );
+  drawProfileAttachmentCanvas(context, image, { theme: "dark" });
   const base = context.getImageData(
     0,
     0,
@@ -180,33 +175,16 @@ test("reuses a caller-provided frame buffer", () => {
 });
 
 function createBaseFrame() {
-  const { width, height, borderRadius } = PROFILE_GIF_PRESET;
+  const { width, height } = PROFILE_GIF_PRESET;
   const rgba = new Uint8ClampedArray(width * height * 4);
 
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (!insideRoundedRect(x + 0.5, y + 0.5, width, height, borderRadius)) {
-        continue;
-      }
-      const offset = (y * width + x) * 4;
-      rgba[offset] = 13;
-      rgba[offset + 1] = 20;
-      rgba[offset + 2] = 36;
-      rgba[offset + 3] = 255;
-    }
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    rgba.set([24, 24, 24, 255], offset);
   }
 
   const markerOffset = (306 * width + 499) * 4;
   rgba.set([222, 38, 92, 255], markerOffset);
   return rgba;
-}
-
-function insideRoundedRect(x, y, width, height, radius) {
-  const nearestX = Math.max(radius, Math.min(width - radius, x));
-  const nearestY = Math.max(radius, Math.min(height - radius, y));
-  const dx = x - nearestX;
-  const dy = y - nearestY;
-  return dx * dx + dy * dy <= radius * radius;
 }
 
 function changedPixelCentroid(base, frame) {
