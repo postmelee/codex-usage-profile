@@ -340,8 +340,11 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
    deployment가 terminal `succeeded`여도 public edge가 즉시 새 Worker route와 client asset으로
    수렴했다고 가정하지 않는다. candidate root asset identity와 해당 asset `200`, `/healthz`를 bounded
-   polling으로 확인한 뒤에만 migration 같은 protected mutation을 보낸다. stale asset 또는 generic
-   `404`가 계속되면 mutation을 재전송하지 않고 중단한다.
+   polling으로 확인한 뒤에만 migration 같은 protected mutation을 보낸다. polling 동안 stale asset
+   또는 candidate asset `404`가 계속되면 protected mutation을 보내지 않고 중단한다. Gate 통과 뒤 첫
+   migration 요청이 generic `404`이면 applied migration 불변과 candidate route 수렴을 read-only로
+   확인한 경우에만 같은 요청을 정확히 한 번 재시도하고, 그 밖에는 중단한다. 재시도 판정 절차는
+   [`sites-operations.md`](sites-operations.md)의 승격 Gate를 따른다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
 3. release candidate readiness는 D1 migration `1..6`이 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column이며, `0006_account_deletion_operations`는 owner cascade를 가진 additive operation table로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.

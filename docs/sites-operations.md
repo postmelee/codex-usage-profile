@@ -55,7 +55,8 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | Task #101 validation | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` | public revision 59 | revision 89 | revision share provider 검증 기준 |
 | Task #84 Stage 5 | version 33 유지 | revision 59 유지 | revision 89 유지 | read-only 종료 audit, remote mutation 0건 |
 | Task #108 Stage 5 | 36 / `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd` | custom owner-only revision 62 | revision 119 | 테스트 전용 exact-main 기준 |
-| Task #137 production | 5 / `27e8705fdc152534a4e4b726cac32f625a3c7763` | public revision 10 | revision 8 | Task #144 직전 application rollback 기준 |
+| Task #137 production | 5 / `27e8705fdc152534a4e4b726cac32f625a3c7763` | public revision 10 | revision 8 | #137 release 종료 시점 기준 |
+| Task #144 직전 production | version 5 유지 | public revision 10 유지 | revision 12 | Stage 3·4가 remote mutation 전에 관찰한 application rollback 기준 |
 | Task #144 Stage 3 | 40 / `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` | custom owner-only revision 62 | revision 131 | 현재 테스트 전용 exact-main 기준 |
 | Task #144 Stage 5 | 6 / `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` | public revision 10 | revision 14 | 현재 canonical production 기준 |
 
@@ -68,10 +69,10 @@ stage5의 현재 application rollback 후보는 version 39/source
 `0af8439bfa9f97e1eb199a94d0930c1e9b47a7d5`이며, 실제 재배포·access 변경과
 data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
 owner-only nonproduction 문구는 역사적 metadata이며 live access 판정에는 사용하지
-않는다. stage5 D1에는 Task #122에서 `structured` phase까지 진행한 테스트 operation이
-하나가 `structured` phase·lease expired 상태로 남아 있으며 production blocker가 아니다. credential 전달과 live recovery는
-[#125](https://github.com/postmelee/codex-usage-profile/issues/125)에서만 진행하고,
-release 승격이나 일반 retention으로 삭제하지 않는다.
+않는다. stage5 D1에는 Task #122에서 진행한 테스트 operation 하나가 `structured`
+phase·lease expired 상태로 남아 있으며 production blocker가 아니다. credential 전달과
+live recovery는 [#125](https://github.com/postmelee/codex-usage-profile/issues/125)에서만
+진행하고, release 승격이나 일반 retention으로 삭제하지 않는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
