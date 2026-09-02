@@ -46,6 +46,7 @@ GitHub Issue: [#144](https://github.com/postmelee/codex-usage-profile/issues/144
 | 4 | Production baseline과 saved version 준비 | baseline, rollback, production saved version | production source/save만 | live 미변경·archive/source equality |
 | 5 | Production public deployment와 비파괴 smoke | public deployment, readiness, hosted smoke | production env/deploy | health·operator·Task #141/#39·data 보존 |
 | 6 | Release provenance와 운영 handoff | official baseline, 단계 보고, final 준비 | 없음 | source/version/state 교차 대조·전체 회귀 |
+| 7 | PR #149 리뷰 보완 | 공식 문서 이력·재시도 계약·문장 정정 | 없음 | 표 정합·문서 상호 계약·public surface scan |
 
 ## 문서 위치 확인
 
@@ -709,3 +710,42 @@ Task #144 Stage 6: Release provenance와 운영 handoff 완료
 
 2026-09-01 작업지시자의 #144 재개 지시에 따라 Stage 2.1 replacement candidate Local certification을
 시작한다. 완료 후 `task-stage-report`로 검증·보고·커밋한 뒤 Stage 2.2 진행 승인을 요청한다.
+
+## Stage 7 — PR #149 리뷰 보완
+
+2026-09-02 작업지시자의 "1, 3, 4번 보완해줘" 지시로 수행계획서의 리뷰 보완 범위와 본 단계의 문서
+수정·검증·보고를 승인받았다. 기존 Stage 1–6 결과와 배포된 production/stage5 상태는 변경하지 않는다.
+
+### 산출물과 변경 내용
+
+- `docs/sites-operations.md`: 이력 표의 `Task #137 production` 행 의미를 "#137 release 종료 시점 기준"
+  으로 정정하고, `Task #144 직전 production` 행에 Stage 3·4가 mutation 전에 관찰한 environment
+  revision 12를 rollback 기준으로 추가한다. version/access 값은 이미 기록된 값을 그대로 인용한다.
+- `docs/sites-operations.md`: stage5 테스트 operation 문장의 주격 조사 중복과 `structured` 중복을
+  제거하고 lease expired 정보를 유지한 채 문단을 파일 관행대로 재래핑한다.
+- `docs/production-hosting.md`: startup 절차 1항에서 convergence polling 중단 조건과 Gate 통과 뒤
+  generic `404` 단일 재시도 조건을 분리하고, 판정 절차를 `sites-operations.md` 승격 Gate로 연결한다.
+- `mydocs/working/task_m100_144_stage7.md`: 리뷰 항목별 처리 판단과 검증 결과를 기록한다.
+- 기존 최종 보고와 `mydocs/orders/20260902.md`: 보완 범위, 미해결 리뷰 2와 완료 상태를 갱신한다.
+
+### 검증
+
+```bash
+npm run scan:public-release
+git diff --check
+```
+
+- 두 공식 문서의 이력 표 열 수, 상호 참조 링크 대상과 공유 수치(saved version 6, 30 files,
+  10,926,080 bytes, content hash, access revision 10, environment revision 14, migration `[1,2,3,4,5,6]`,
+  npm `0.1.4`)를 편집 전후로 대조한다.
+- Stage 3·4 보고서의 실측 environment revision 12와 새 이력 행을 대조한다.
+- 문서 전용 변경이므로 Node·E2E·build 회귀는 Stage 6 결과를 그대로 인계하고 다시 실행하지 않는다.
+- 원격 Sites, D1/R2, npm과 GitHub release 상태에는 mutation을 수행하지 않는다.
+
+### 커밋
+
+```text
+Task #144: PR 리뷰 보완 계획과 진행 승인 기록
+Task #144 Stage 7: 공식 문서 이력·재시도 계약 보완
+Task #144: 리뷰 보완 최종 보고 갱신
+```
