@@ -6,18 +6,19 @@ native R2 `PROFILE_MEDIA`가 기본 경로이며 Cloud Run/Postgres/S3-compatibl
 fallback이다. remote 변경은 해당 작업의 수행계획과 Gate 승인을 각각 받은 범위에서만
 수행한다.
 
-2026-08-24 최종 audit 기준 canonical production은 public saved version 3/source
-`dfc80d0b867bdb6a9afc002439d478ffb0aa38dd`, access revision 10, environment revision
-4다. stage5는 같은 exact source의 saved version 36, custom owner-only access revision
-62, environment revision 119인 테스트 전용 Site다. 두 Site 모두 D1 migration
+2026-09-02 최종 audit 기준 canonical production은 public saved version 6/source
+`6d3e600d2d33bb7a50147075d013ddd9b945d0b1`, access revision 10, environment revision
+14다. stage5는 같은 exact source의 saved version 40, custom owner-only access revision
+62, environment revision 131인 테스트 전용 Site다. 두 Site 모두 D1 migration
 `[1,2,3,4,5,6]`을 사용하지만 project·D1·R2·OAuth·secret·session/token state는
 공유하지 않는다.
 
 Task #84 Gate C는 기존 stage5의 exact-main saved version 24를 public으로 전환했고,
 이후 #101이 revision share 계약을 saved version 33에서 검증했다. Task #108은 새
 canonical production을 별도 project와 durable resource로 공개하고, stage5를
-owner-only saved version 36으로 전환했다. version 24와 33은 과거 release·validation
-증적이며 현재 live 기준은 아래 표다.
+owner-only saved version 36으로 전환했다. Task #144는 #137·#141·#39·#146을 포함한
+exact main을 stage5 version 40에서 검증한 뒤 production version 6으로 공개했다. version 24와
+33은 과거 release·validation 증적이며 현재 live 기준은 아래 표다.
 
 owner-only version 15에서 root query는 Worker 전에 정적 `index.html`로 처리됐고,
 extension 없는 `/u/{handle}`은 public Gate에서도 `/`로 `307` 전환됐다. 따라서
@@ -31,19 +32,19 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | Site | `Codex Usage Profile` production |
 | live origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | 역할 | canonical public production |
-| saved version/source | 3 / `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd` |
-| artifact | 27 files, 5,437,440 bytes, `sha256:fb262880766b9543f39c97be44909f2dc1b94a5ce024783afe360cc282740f47` |
+| saved version/source | 6 / `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` |
+| artifact | 30 files, 10,926,080 bytes, `sha256:6f905edbff7b7b5ea49a84c5f05bd6843319a59bda4fd47b44d0cabfdbfa53f4` |
 | access | public revision 10 |
-| environment | revision 4, production 전용 OAuth/secret과 D1/R2 binding |
+| environment | revision 14, production 전용 OAuth/secret과 D1/R2 binding |
 | service | `normal` |
 | maintenance | `disabled` |
 | maintenance operator secret | absent |
 | health/operator | `/healthz` `200`, 닫힌 operator route `404` |
 | D1 readiness | migration `[1,2,3,4,5,6]` exact |
-| CLI | public `latest=0.1.3`, production default origin |
+| CLI | public `latest=0.1.4`, production default origin |
 | production data | 실제 운영 계정·session·token·media로 취급; stage5와 공유하지 않음 |
 
-위 표는 desired state가 아니라 Task #108 Stage 5 종료 뒤 원격에서 다시 관찰한 live
+위 표는 desired state가 아니라 Task #144 Stage 5 종료 뒤 원격에서 다시 관찰한 live
 상태다. production의 maintenance operator secret은 제거됐으므로 protected readiness는
 배포 창에서만 임시 자격 증명으로 실행한다. 안전 종료 상태는 Sites의 read-only D1 audit,
 `/healthz` `200`, 닫힌 operator route `404`로 확인한다.
@@ -54,20 +55,24 @@ smoke가 확인된 `/api/share/{handle}`만 사용한다.
 | Task #101 validation | 33 / `53a7132630dcb6f43459880d79730e10e2b59d6e` | public revision 59 | revision 89 | revision share provider 검증 기준 |
 | Task #84 Stage 5 | version 33 유지 | revision 59 유지 | revision 89 유지 | read-only 종료 audit, remote mutation 0건 |
 | Task #108 Stage 5 | 36 / `dfc80d0b867bdb6a9afc002439d478ffb0aa38dd` | custom owner-only revision 62 | revision 119 | 테스트 전용 exact-main 기준 |
+| Task #137 production | 5 / `27e8705fdc152534a4e4b726cac32f625a3c7763` | public revision 10 | revision 8 | #137 release 종료 시점 기준 |
+| Task #144 직전 production | version 5 유지 | public revision 10 유지 | revision 12 | Stage 3·4가 remote mutation 전에 관찰한 application rollback 기준 |
+| Task #144 Stage 3 | 40 / `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` | custom owner-only revision 62 | revision 131 | 현재 테스트 전용 exact-main 기준 |
+| Task #144 Stage 5 | 6 / `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` | public revision 10 | revision 14 | 현재 canonical production 기준 |
 
-| Task #108 target | origin | access/version | 역할 |
+| 현재 target | origin | access/version | 역할 |
 |---|---|---|---|
-| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | public revision 10 / version 3 | canonical production |
-| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | custom owner-only revision 62 / version 36 | synthetic fixture 전용 test |
+| production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | public revision 10 / version 6 | canonical production |
+| stage5 | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | custom owner-only revision 62 / version 40 | synthetic fixture 전용 test |
 
-stage5의 역사적 application rollback 후보는 version 32/source
-`6cf2bab664e5a1f0b1e6051cc35887721c307e99`이며, 실제 재배포·access 변경과
+stage5의 현재 application rollback 후보는 version 39/source
+`0af8439bfa9f97e1eb199a94d0930c1e9b47a7d5`이며, 실제 재배포·access 변경과
 data/schema rollback은 별도 승인 없이 수행하지 않는다. Site description에 남은
 owner-only nonproduction 문구는 역사적 metadata이며 live access 판정에는 사용하지
-않는다. stage5 D1에는 Task #122에서 `structured` phase까지 진행한 테스트 operation이
-하나 남아 있으며 production blocker가 아니다. credential 전달과 live recovery는
-[#125](https://github.com/postmelee/codex-usage-profile/issues/125)에서만 진행하고,
-release 승격이나 일반 retention으로 삭제하지 않는다.
+않는다. stage5 D1에는 Task #122에서 진행한 테스트 operation 하나가 `structured`
+phase·lease expired 상태로 남아 있으며 production blocker가 아니다. credential 전달과
+live recovery는 [#125](https://github.com/postmelee/codex-usage-profile/issues/125)에서만
+진행하고, release 승격이나 일반 retention으로 삭제하지 않는다.
 
 Sites는 현재 public beta이며 eligible ChatGPT plan에 포함된다. plan별 usage
 limit은 모든 Site에 적용되고 ChatGPT가 한도 접근을 알린다. 한도 도달 시 새
@@ -195,7 +200,8 @@ access policy, environment, migration과 data disposal은 서로 다른 원격 �
    migration manifest로 production archive와 saved version을 만든다. 신규 production
    cutover는 owner-only에서 검증한다. 이미 public인 production의 patch release는 access를
    임의 변경하지 않고 temporary application maintenance로 mutation을 닫은 뒤 배포·migration을
-   완료한다.
+   완료한다. maintenance-on deployment가 terminal success여도 아래 owner-only 절차와 같은
+   asset/route convergence Gate를 통과하기 전에는 migration을 보내지 않는다.
 5. **Production public Gate** — maintenance disabled, operator secret absent,
    `/healthz` `200`, operator route `404`, exact migration과 error event를 확인한다. 별도
    public 승인 뒤에만 access를 열거나 유지하고, default-origin `@latest` CLI와 canonical
@@ -237,6 +243,10 @@ artifact contract, migration, logical binding 이름과 검증 절차만 승격�
    environment에 설정하고, saved version을 한 번 만들어 private deployment
    operation으로 배포한다. non-terminal 상태는 같은 version/deployment id를
    끝까지 조회한다.
+   terminal `succeeded`는 public edge의 새 Worker/client 수렴 완료를 뜻하지 않는다.
+   최대 60초 동안 5초 간격으로 root HTML이 candidate client asset을 참조하고 해당 asset과
+   `/healthz`가 `200`인지 확인한다. 이전 asset 또는 candidate asset `404`가 계속되면 protected
+   mutation을 보내지 않고 중단한다.
 5. owner-only access가 유지된 상태에서 protected migration을 실행한 뒤
    read-only readiness로 exact 결과를 확인한다. `migrate`는 manifest에 포함된
    pending migration만 적용하며 owner selector나 SQL을 입력으로 받지 않는다.
@@ -263,6 +273,9 @@ artifact contract, migration, logical binding 이름과 검증 절차만 승격�
    `migration_not_ready`로 중단한다. 실제 D1/provider 장애는 inspection,
    reconciliation, apply, verification 또는 exact manifest version의 bounded
    code만 반환하고 SQL/provider 원문을 노출하지 않는다.
+   위 convergence Gate 뒤 첫 migration 요청이 generic `404`를 반환하면 migration table과
+   candidate asset identity를 read-only로 다시 확인한다. applied version이 불변이고 candidate
+   route가 수렴한 경우에만 같은 요청을 정확히 한 번 재시도하며, 그 외에는 즉시 중단한다.
 6. readiness 성공 직후 `PROFILE_MAINTENANCE_MODE=disabled`로 바꾸고 operator
    secret을 제거한 environment를 같은 source saved version에 적용한다.
    owner-only access를 유지하면서 operator route가 generic `404`, `/healthz`가
