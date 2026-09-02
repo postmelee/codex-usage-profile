@@ -2,7 +2,6 @@ import { createProfileGifGoldenFrameRenderer } from "./gif-beam-frames.js";
 import {
   PROFILE_ATTACHMENT_HEIGHT,
   PROFILE_ATTACHMENT_PRESET,
-  PROFILE_ATTACHMENT_RADIUS,
   PROFILE_ATTACHMENT_SCALE,
   PROFILE_ATTACHMENT_SOURCE_MAX_BYTES,
   PROFILE_ATTACHMENT_WIDTH
@@ -36,10 +35,13 @@ export function getProfileCardBorderBeamPreset(theme) {
     : PROFILE_CARD_BORDER_BEAM_PRESET;
 }
 
-export const GIF_EXPORT_PRESET_VERSION = 3;
+export const PROFILE_GIF_X_LOGICAL_BORDER_RADIUS = 16;
+export const PROFILE_GIF_X_BORDER_RADIUS =
+  PROFILE_GIF_X_LOGICAL_BORDER_RADIUS * PROFILE_ATTACHMENT_SCALE;
+export const GIF_EXPORT_PRESET_VERSION = 4;
 
 export const PROFILE_GIF_PRESET = Object.freeze({
-  borderRadius: PROFILE_ATTACHMENT_RADIUS,
+  borderRadius: PROFILE_GIF_X_BORDER_RADIUS,
   durationMs: 4_800,
   durationSeconds: PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds,
   fps: 20,
@@ -48,6 +50,7 @@ export const PROFILE_GIF_PRESET = Object.freeze({
   height: PROFILE_ATTACHMENT_HEIGHT,
   jobTimeoutMs: 60_000,
   logicalHeight: PROFILE_ATTACHMENT_PRESET.logicalHeight,
+  logicalBorderRadius: PROFILE_GIF_X_LOGICAL_BORDER_RADIUS,
   logicalWidth: PROFILE_ATTACHMENT_PRESET.logicalWidth,
   loopCount: 0,
   maxBytes: 15_000_000,

@@ -78,7 +78,7 @@ test("Task #150 creates opaque 998x612 dark and light PNG blobs", async () => {
       readPixel(context, 0, 0),
       theme === "dark"
         ? [24, 24, 24, 255]
-        : [243, 245, 247, 255]
+        : [255, 255, 255, 255]
     );
   }
 });

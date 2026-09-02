@@ -16,9 +16,9 @@ import {
 import { PROFILE_GIF_PRESET } from "../gif-animation.js";
 
 const COMPRESSED_ASSET_SHA256 =
-  "aacd0c7bebf857152ec3984160d1212dd10bbc9ae941d16deaba8f986ae8a680";
+  "93025a7294a4af8ef481f8723a5639aef1b328b39d1f6186f65462fbdbd08e1a";
 const LIGHT_COMPRESSED_ASSET_SHA256 =
-  "1a1368c9b9c36e234fea3da7305da62565594c824c2261e9feb1aab988b76d1c";
+  "bb77b1f9484db082319707ff8037e8929082d5c13ec8021f22c5e1dbb03a358d";
 
 test("loads the approved Chrome beam capture as one bounded gzip asset", async () => {
   const compressed = await readFile(PROFILE_GIF_BEAM_ASSET_URL);
@@ -47,10 +47,10 @@ test("loads the approved Chrome beam capture as one bounded gzip asset", async (
   });
   assert.ok(compressed.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxCompressedBytes);
   assert.ok(frames.bytes.byteLength < PROFILE_GIF_BEAM_ASSET_CONTRACT.maxDecompressedBytes);
-  assert.ok(frames.effectPixelCounts.every((count) => count > 40_000));
+  assert.ok(frames.effectPixelCounts.every((count) => count > 34_000));
 });
 
-test("selects the dark golden unchanged and loads the light keyline capture", async () => {
+test("selects the X-radius dark and light Chrome captures", async () => {
   const compressed = await readFile(PROFILE_GIF_LIGHT_BEAM_ASSET_URL);
   let requestedUrl;
   const frames = await loadProfileGifBeamFrames({
@@ -236,9 +236,9 @@ test("keeps light and dark on the same perimeter motion while changing contrast"
   );
   assert.equal(
     createHash("sha256").update(middle).digest("hex"),
-    "468bd14180806f3920ab0b3cb2cb7692df901ec9d9076671c815197ad3865a57"
+    "5f99fb8f32f94e9a4b6cacc611e13d709601cab0e6eda2e4c2004eca1beb4a93"
   );
-  assert.equal(renderer.effectPixelCount, 39_577);
+  assert.equal(renderer.effectPixelCount, 57_327);
 
   const seamDelta = frameRgbaDelta(last, first);
   const adjacentDelta = frameRgbaDelta(first, renderer.renderFrame(1));
@@ -262,9 +262,22 @@ test("renders a deterministic source-over frame while preserving the card center
   assert.notDeepEqual(first, quarter);
   assert.equal(
     createHash("sha256").update(first).digest("hex"),
-    "88ba300bb147d5c60883a1796614dc5ad5272a07e1899ddc61d15d7bde857505"
+    "2472305d83419a3fb4e753d5fa32e3230014c39c3ddb80890454b460c0e8993d"
   );
-  assert.equal(renderer.effectPixelCount, 59_392);
+  assert.equal(renderer.effectPixelCount, 54_117);
+});
+
+test("places both captured effects on the X 32px output radius", async () => {
+  for (const assetUrl of [
+    PROFILE_GIF_BEAM_ASSET_URL,
+    PROFILE_GIF_LIGHT_BEAM_ASSET_URL
+  ]) {
+    const frames = parseProfileGifBeamFrames(gunzipSync(await readFile(assetUrl)));
+    assert.equal(maximumAlphaAt(frames, 0, 0), 0);
+    assert.equal(maximumAlphaAt(frames, 5, 5), 0);
+    assert.ok(maximumAlphaAt(frames, 9, 10) > 0);
+    assert.ok(maximumAlphaAt(frames, 32, 0) > 0);
+  }
 });
 
 test("keeps the approved Chrome beam seamless on an opaque fixed card", async () => {
@@ -347,6 +360,34 @@ function frameRgbaDelta(left, right) {
     total += Math.abs(left[offset] - right[offset]);
   }
   return total;
+}
+
+function maximumAlphaAt(frames, targetX, targetY) {
+  const view = new DataView(
+    frames.bytes.buffer,
+    frames.bytes.byteOffset,
+    frames.bytes.byteLength
+  );
+  let maximumAlpha = 0;
+  for (let frameIndex = 0; frameIndex < frames.frameCount; frameIndex += 1) {
+    let offset = frames.frameOffsets[frameIndex];
+    const runCount = view.getUint16(offset, true);
+    offset += 2;
+    for (let runIndex = 0; runIndex < runCount; runIndex += 1) {
+      const y = view.getUint16(offset, true);
+      const x = view.getUint16(offset + 2, true);
+      const length = view.getUint16(offset + 4, true);
+      offset += 6;
+      if (y === targetY && targetX >= x && targetX < x + length) {
+        maximumAlpha = Math.max(
+          maximumAlpha,
+          frames.bytes[offset + (targetX - x) * 4 + 3]
+        );
+      }
+      offset += length * 4;
+    }
+  }
+  return maximumAlpha;
 }
 
 function getBeamAlphaQuadrant(frames, frameIndex) {

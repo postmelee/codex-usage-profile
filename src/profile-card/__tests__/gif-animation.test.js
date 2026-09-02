@@ -9,6 +9,8 @@ import {
   GIF_EXPORT_PRESET_VERSION,
   PROFILE_CARD_BORDER_BEAM_PRESET,
   PROFILE_CARD_LIGHT_BORDER_BEAM_PRESET,
+  PROFILE_GIF_X_BORDER_RADIUS,
+  PROFILE_GIF_X_LOGICAL_BORDER_RADIUS,
   PROFILE_GIF_PRESET,
   createProfileGifFrameRenderer,
   getProfileCardBorderBeamPreset,
@@ -17,9 +19,11 @@ import {
 } from "../gif-animation.js";
 
 test("fixes the approved browser GIF and web border beam contract", () => {
-  assert.equal(GIF_EXPORT_PRESET_VERSION, 3);
+  assert.equal(GIF_EXPORT_PRESET_VERSION, 4);
+  assert.equal(PROFILE_GIF_X_LOGICAL_BORDER_RADIUS, 16);
+  assert.equal(PROFILE_GIF_X_BORDER_RADIUS, 32);
   assert.deepEqual(PROFILE_GIF_PRESET, {
-    borderRadius: 64,
+    borderRadius: 32,
     durationMs: 4_800,
     durationSeconds: 4.8,
     fps: 20,
@@ -28,13 +32,14 @@ test("fixes the approved browser GIF and web border beam contract", () => {
     height: 612,
     jobTimeoutMs: 60_000,
     logicalHeight: 306,
+    logicalBorderRadius: 16,
     logicalWidth: 499,
     loopCount: 0,
     maxBytes: 15_000_000,
     maxColors: 256,
     scale: 2,
     sourceMaxBytes: 10_000_000,
-    version: 3,
+    version: 4,
     width: 998
   });
   assert.deepEqual(PROFILE_CARD_BORDER_BEAM_PRESET, {
@@ -117,7 +122,7 @@ test("keeps the card fixed while the beam visits each perimeter quadrant", () =>
   }
 });
 
-test("matches the approved conic beam golden signature and loop seam", async () => {
+test("matches the X-radius procedural beam signature and loop seam", async () => {
   const png = await readFile(new URL(
     "../../../public/assets/codex-card-sample.png",
     import.meta.url
@@ -134,11 +139,11 @@ test("matches the approved conic beam golden signature and loop seam", async () 
   ).data;
   const renderer = createProfileGifFrameRenderer(base);
   const reference = [
-    { changed: 52_892, frameIndex: 0, p95: 54, x: 222.4, y: 469.3 },
-    { changed: 43_635, frameIndex: 24, p95: 39, x: 233, y: 137.5 },
-    { changed: 51_550, frameIndex: 48, p95: 56, x: 870, y: 180.8 },
-    { changed: 53_470, frameIndex: 72, p95: 64, x: 737.8, y: 512.5 },
-    { changed: 53_128, frameIndex: 95, p95: 56, x: 241.6, y: 483.4 }
+    { changed: 51_052, frameIndex: 0, p95: 72, x: 187.1, y: 480.6 },
+    { changed: 38_576, frameIndex: 24, p95: 45, x: 255.9, y: 121.5 },
+    { changed: 49_400, frameIndex: 48, p95: 70, x: 915.7, y: 169.7 },
+    { changed: 48_557, frameIndex: 72, p95: 74, x: 728.3, y: 523.7 },
+    { changed: 51_392, frameIndex: 95, p95: 72, x: 204.3, y: 497.9 }
   ];
   const { frames, signatures } = measureGoldenSignatures(renderer, reference);
 

@@ -2706,7 +2706,7 @@ test.describe("Home and share card flow", () => {
       .toHaveCount(0);
   });
 
-  test("Task #150 light PNG keeps stable URLs separate from its opaque attachment surface", async ({
+  test("Task #150 light PNG keeps stable URLs separate from its platform-native surface", async ({
     context,
     page
   }) => {
@@ -2753,8 +2753,7 @@ test.describe("Home and share card flow", () => {
     expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
     await expectOpaqueAttachmentPng(
       readFileSync(await download.path()),
-      [243, 245, 247, 255],
-      [208, 215, 222, 255]
+      [255, 255, 255, 255]
     );
   });
 
@@ -6522,8 +6521,7 @@ async function fulfillJson(route, body, status = 200) {
 
 async function expectOpaqueAttachmentPng(
   png,
-  expectedCorner,
-  expectedTopOutline = null
+  expectedCorner
 ) {
   const image = await loadImage(png);
   expect({ height: image.height, width: image.width }).toEqual({
@@ -6555,11 +6553,6 @@ async function expectOpaqueAttachmentPng(
     expect(Array.from(context.getImageData(x, y, 1, 1).data)).toEqual(
       expectedCorner
     );
-  }
-  if (expectedTopOutline) {
-    expect(Array.from(
-      context.getImageData(image.width / 2, 1, 1, 1).data
-    )).toEqual(expectedTopOutline);
   }
 }
 

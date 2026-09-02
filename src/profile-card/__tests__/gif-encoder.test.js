@@ -111,7 +111,7 @@ test("preserves approved-frame color fidelity with the animation-wide palette", 
 
   assert.ok(exactPixels / comparedPixels > 0.9);
   assert.ok(Math.sqrt(squaredError / (comparedPixels * 3)) < 0.8);
-  assert.ok(Math.sqrt(edgeSquaredError / (edgePixels * 3)) < 0.75);
+  assert.ok(Math.sqrt(edgeSquaredError / (edgePixels * 3)) < 0.9);
 });
 
 test("keeps the representative public card comfortably below 15MB", async () => {

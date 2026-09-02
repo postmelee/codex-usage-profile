@@ -43,7 +43,7 @@ The stable README image and files saved from Share Studio intentionally have dif
 | Share Studio **Save GIF** | 998x612 GIF | Opaque theme surface in every frame | Manual animated attachment |
 | Social preview image | 2400x1260 PNG | Social-renderer theme contract | Link previews generated from revision share URLs |
 
-The attachment files keep the same `499:306` card ratio and place the card at `0,0,998,612` without extra padding, cropping, translation or content scaling. Dark attachments fill transparent corner pixels with `#181818`. Light attachments use `#F3F5F7` with a subtle `#D0D7DE` outline so the card edge remains visible on white platforms. These attachment-only surfaces do not change the stable card or social preview renderer.
+The attachment files keep the same `499:306` card ratio and place the card at `0,0,998,612` without extra padding, cropping, translation or content scaling. Saved PNG files fill transparent corner pixels with the card background (`#181818` for dark and `#FFFFFF` for light) and do not encode an extra attachment border or rounded outline. The destination platform therefore owns the final clipping. These attachment-only surfaces do not change the stable card or social preview renderer.
 
 ## README links and social links are different
 
@@ -146,6 +146,7 @@ The generated file uses this fixed export contract:
 | Property | Value |
 |---|---|
 | Canvas | 998x612 with an opaque theme surface and no extra padding or content scaling |
+| Animated edge | Optimized for X's attachment clipping with a 32px output radius; Reddit and other square media surfaces are best-effort |
 | Motion | Fixed card; Ocean Border Beam only |
 | Timing | 20 fps, 4.8 seconds, 96 frames, infinite seamless loop |
 | Palette | One opaque global palette with at most 256 colors; no transparent index or dithering |

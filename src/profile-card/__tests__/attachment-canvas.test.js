@@ -83,7 +83,7 @@ test("Task #150 uses opaque theme surfaces without changing source geometry", as
       readPixel(outputContext, 0, 0),
       theme === "dark"
         ? [24, 24, 24, 255]
-        : [243, 245, 247, 255]
+        : [255, 255, 255, 255]
     );
     assertPixelsClose(
       getInteriorPixels(outputContext),
@@ -91,27 +91,18 @@ test("Task #150 uses opaque theme surfaces without changing source geometry", as
       `${theme} content geometry`
     );
 
-    if (theme === "light") {
-      assert.deepEqual(surface, {
-        backgroundColor: "#F3F5F7",
-        outline: {
-          color: "#D0D7DE",
-          height: 610,
-          radius: 63,
-          width: 996,
-          x: 1,
-          y: 1
-        },
-        outlineWidth: 2,
-        theme: "light"
-      });
-      assert.deepEqual(
-        readPixel(outputContext, PROFILE_ATTACHMENT_WIDTH / 2, 1),
-        [208, 215, 222, 255]
-      );
-    } else {
-      assert.equal(surface.outline, null);
-    }
+    assert.deepEqual(surface, {
+      backgroundColor: theme === "light" ? "#ffffff" : "#181818",
+      outline: null,
+      outlineWidth: 0,
+      theme
+    });
+    assert.deepEqual(
+      readPixel(outputContext, PROFILE_ATTACHMENT_WIDTH / 2, 1),
+      theme === "light"
+        ? [255, 255, 255, 255]
+        : [24, 24, 24, 255]
+    );
 
     outputs.push([`attachment-${theme}.png`, await output.encode("png")]);
   }

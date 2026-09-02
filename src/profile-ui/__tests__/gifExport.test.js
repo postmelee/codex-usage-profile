@@ -50,7 +50,7 @@ test("builds a canonical versioned source key and checks browser capabilities", 
   assert.deepEqual(JSON.parse(sourceKey), {
     cardLocale: "ko",
     cardTheme: "light",
-    presetVersion: 3,
+    presetVersion: 4,
     selectedImageUrl: "/u/postmelee/card.png?theme=light&locale=ko",
     shareRevision: 42
   });
@@ -789,7 +789,7 @@ async function assertFirstGifFrameMatchesAttachment(gif, theme, base) {
   }
   assert.equal(minimumAlpha, 255, `${theme} first frame minimum alpha`);
   const expectedCorner = theme === "light"
-    ? [243, 245, 247, 255]
+    ? [255, 255, 255, 255]
     : [24, 24, 24, 255];
   for (const [x, y] of [
     [0, 0],
@@ -803,14 +803,6 @@ async function assertFirstGifFrameMatchesAttachment(gif, theme, base) {
       `${theme} first frame corner ${x},${y}`
     );
   }
-  if (theme === "light") {
-    assert.deepEqual(
-      Array.from(context.getImageData(image.width / 2, 1, 1, 1).data),
-      [208, 215, 222, 255],
-      "light first frame outline"
-    );
-  }
-
   let comparedChannels = 0;
   let maximumDelta = 0;
   let squaredError = 0;
