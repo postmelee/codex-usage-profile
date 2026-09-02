@@ -1,10 +1,12 @@
 import { createProfileGifGoldenFrameRenderer } from "./gif-beam-frames.js";
-import { normalizeCardTheme } from "./theme.js";
 import {
-  SOCIAL_CARD_LOGICAL_HEIGHT,
-  SOCIAL_CARD_LOGICAL_RADIUS,
-  SOCIAL_CARD_LOGICAL_WIDTH
-} from "./social-canvas.js";
+  PROFILE_ATTACHMENT_HEIGHT,
+  PROFILE_ATTACHMENT_PRESET,
+  PROFILE_ATTACHMENT_SCALE,
+  PROFILE_ATTACHMENT_SOURCE_MAX_BYTES,
+  PROFILE_ATTACHMENT_WIDTH
+} from "./attachment-canvas.js";
+import { normalizeCardTheme } from "./theme.js";
 
 export const PROFILE_CARD_BORDER_BEAM_PRESET = Object.freeze({
   brightness: 1.05,
@@ -33,27 +35,30 @@ export function getProfileCardBorderBeamPreset(theme) {
     : PROFILE_CARD_BORDER_BEAM_PRESET;
 }
 
-export const GIF_EXPORT_PRESET_VERSION = 2;
-const PROFILE_GIF_SCALE = 2;
+export const PROFILE_GIF_X_LOGICAL_BORDER_RADIUS = 16;
+export const PROFILE_GIF_X_BORDER_RADIUS =
+  PROFILE_GIF_X_LOGICAL_BORDER_RADIUS * PROFILE_ATTACHMENT_SCALE;
+export const GIF_EXPORT_PRESET_VERSION = 4;
 
 export const PROFILE_GIF_PRESET = Object.freeze({
-  borderRadius: SOCIAL_CARD_LOGICAL_RADIUS * PROFILE_GIF_SCALE,
+  borderRadius: PROFILE_GIF_X_BORDER_RADIUS,
   durationMs: 4_800,
   durationSeconds: PROFILE_CARD_BORDER_BEAM_PRESET.durationSeconds,
   fps: 20,
   frameCount: 96,
   frameDelayMs: 50,
-  height: SOCIAL_CARD_LOGICAL_HEIGHT * PROFILE_GIF_SCALE,
+  height: PROFILE_ATTACHMENT_HEIGHT,
   jobTimeoutMs: 60_000,
-  logicalHeight: SOCIAL_CARD_LOGICAL_HEIGHT,
-  logicalWidth: SOCIAL_CARD_LOGICAL_WIDTH,
+  logicalHeight: PROFILE_ATTACHMENT_PRESET.logicalHeight,
+  logicalBorderRadius: PROFILE_GIF_X_LOGICAL_BORDER_RADIUS,
+  logicalWidth: PROFILE_ATTACHMENT_PRESET.logicalWidth,
   loopCount: 0,
   maxBytes: 15_000_000,
   maxColors: 256,
-  scale: PROFILE_GIF_SCALE,
-  sourceMaxBytes: 10_000_000,
+  scale: PROFILE_ATTACHMENT_SCALE,
+  sourceMaxBytes: PROFILE_ATTACHMENT_SOURCE_MAX_BYTES,
   version: GIF_EXPORT_PRESET_VERSION,
-  width: SOCIAL_CARD_LOGICAL_WIDTH * PROFILE_GIF_SCALE
+  width: PROFILE_ATTACHMENT_WIDTH
 });
 
 const BEAM_EDGE_FADE_DEPTH = 56;

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import test from "node:test";
 
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+import { drawProfileAttachmentCanvas } from "../../profile-card/attachment-canvas.js";
 import {
   GIF_EXPORT_PRESET_VERSION,
   PROFILE_GIF_PRESET
@@ -48,7 +50,7 @@ test("builds a canonical versioned source key and checks browser capabilities", 
   assert.deepEqual(JSON.parse(sourceKey), {
     cardLocale: "ko",
     cardTheme: "light",
-    presetVersion: 2,
+    presetVersion: 4,
     selectedImageUrl: "/u/postmelee/card.png?theme=light&locale=ko",
     shareRevision: 42
   });
@@ -487,19 +489,24 @@ test("reports bounded progress and transfers one validated ArrayBuffer", async (
   });
 });
 
-test("uses high-quality smoothing when rasterizing the source PNG at 2x", async () => {
+test("uses the attachment surface with high-quality source rasterization", async () => {
   const bytes = getValidGifBytes();
-  const baseRgba = createTransparentBase();
+  const baseRgba = createOpaqueBase();
   let context;
 
   class RecordingOffscreenCanvas {
     getContext() {
       context = {
-        clearRect() {},
+        beginPath() {},
         drawImage() {},
+        fillRect() {},
         getImageData() { return { data: baseRgba }; },
         imageSmoothingEnabled: false,
-        imageSmoothingQuality: "low"
+        imageSmoothingQuality: "low",
+        restore() {},
+        roundRect() {},
+        save() {},
+        stroke() {}
       };
       return context;
     }
@@ -535,6 +542,7 @@ test("encodes representative dark/light and en/ko cards below 15MB", async () =>
         usage: sampleAccountUsageReadResult
       });
       const png = await renderProfileCardPng(viewModel, { avatarSource: avatar });
+      const attachmentBase = await renderAttachmentBase(png, theme);
       const messages = [];
 
       await runGifExportWorkerJob({
@@ -568,7 +576,27 @@ test("encodes representative dark/light and en/ko cards below 15MB", async () =>
         new Uint8Array(completion.message.bytes)
       );
       assert.ok(metadata.byteLength < PROFILE_GIF_PRESET.maxBytes);
+      assert.ok(metadata.frames.every((frame) => (
+        !frame.transparent && frame.transparentIndex === null
+      )));
       assert.deepEqual(completion.transfer, [completion.message.bytes]);
+      const gif = new Uint8Array(completion.message.bytes);
+      await assertFirstGifFrameMatchesAttachment(gif, theme, attachmentBase);
+      if (
+        locale === "en" &&
+        process.env.PROFILE_GIF_VISUAL_OUTPUT_DIR
+      ) {
+        await mkdir(resolve(process.env.PROFILE_GIF_VISUAL_OUTPUT_DIR), {
+          recursive: true
+        });
+        await writeFile(
+          resolve(
+            process.env.PROFILE_GIF_VISUAL_OUTPUT_DIR,
+            `attachment-${theme}.gif`
+          ),
+          gif
+        );
+      }
       byteLengths.push(metadata.byteLength);
     }
   }
@@ -675,13 +703,18 @@ function createWorkerRequest() {
 }
 
 function createWorkerDependencies(fetchImpl, overrides = {}) {
-  const baseRgba = createTransparentBase();
+  const baseRgba = createOpaqueBase();
   class FakeOffscreenCanvas {
     getContext() {
       return {
-        clearRect() {},
+        beginPath() {},
         drawImage() {},
-        getImageData() { return { data: baseRgba }; }
+        fillRect() {},
+        getImageData() { return { data: baseRgba }; },
+        restore() {},
+        roundRect() {},
+        save() {},
+        stroke() {}
       };
     }
   }
@@ -701,7 +734,7 @@ function createWorkerDependencies(fetchImpl, overrides = {}) {
 }
 
 function getValidGifBytes() {
-  validGifBytes ??= encodeProfileCardGif(createTransparentBase());
+  validGifBytes ??= encodeProfileCardGif(createOpaqueBase());
   return validGifBytes;
 }
 
@@ -717,21 +750,78 @@ async function getGoldenBeamFrames(theme) {
   return goldenBeamFrames.get(theme);
 }
 
-function createTransparentBase() {
-  const { width, height, borderRadius } = PROFILE_GIF_PRESET;
+function createOpaqueBase() {
+  const { width, height } = PROFILE_GIF_PRESET;
   const rgba = new Uint8ClampedArray(width * height * 4);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const nearestX = Math.max(borderRadius, Math.min(width - borderRadius, x + 0.5));
-      const nearestY = Math.max(borderRadius, Math.min(height - borderRadius, y + 0.5));
-      const dx = x + 0.5 - nearestX;
-      const dy = y + 0.5 - nearestY;
-      if (dx * dx + dy * dy > borderRadius * borderRadius) continue;
-      const offset = (y * width + x) * 4;
-      rgba.set([18, 24, 38, 255], offset);
-    }
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    rgba.set([24, 24, 24, 255], offset);
   }
   return rgba;
+}
+
+async function renderAttachmentBase(png, theme) {
+  const image = await loadImage(png);
+  const canvas = createCanvas(
+    PROFILE_GIF_PRESET.width,
+    PROFILE_GIF_PRESET.height
+  );
+  const context = canvas.getContext("2d");
+  drawProfileAttachmentCanvas(context, image, { theme });
+  return context.getImageData(
+    0,
+    0,
+    PROFILE_GIF_PRESET.width,
+    PROFILE_GIF_PRESET.height
+  ).data;
+}
+
+async function assertFirstGifFrameMatchesAttachment(gif, theme, base) {
+  const image = await loadImage(gif);
+  assert.equal(image.width, PROFILE_GIF_PRESET.width);
+  assert.equal(image.height, PROFILE_GIF_PRESET.height);
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, image.width, image.height).data;
+  let minimumAlpha = 255;
+  for (let offset = 3; offset < pixels.length; offset += 4) {
+    minimumAlpha = Math.min(minimumAlpha, pixels[offset]);
+  }
+  assert.equal(minimumAlpha, 255, `${theme} first frame minimum alpha`);
+  const expectedCorner = theme === "light"
+    ? [255, 255, 255, 255]
+    : [24, 24, 24, 255];
+  for (const [x, y] of [
+    [0, 0],
+    [image.width - 1, 0],
+    [0, image.height - 1],
+    [image.width - 1, image.height - 1]
+  ]) {
+    assert.deepEqual(
+      Array.from(context.getImageData(x, y, 1, 1).data),
+      expectedCorner,
+      `${theme} first frame corner ${x},${y}`
+    );
+  }
+  let comparedChannels = 0;
+  let maximumDelta = 0;
+  let squaredError = 0;
+  for (let y = 72; y < image.height - 72; y += 1) {
+    for (let x = 72; x < image.width - 72; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const delta = Math.abs(pixels[offset + channel] - base[offset + channel]);
+        maximumDelta = Math.max(maximumDelta, delta);
+        squaredError += delta * delta;
+        comparedChannels += 1;
+      }
+    }
+  }
+  assert.ok(maximumDelta <= 32, `${theme} first frame maximum RGB delta`);
+  assert.ok(
+    Math.sqrt(squaredError / comparedChannels) < 1,
+    `${theme} first frame interior RGB RMSE`
+  );
 }
 
 function toArrayBuffer(bytes) {

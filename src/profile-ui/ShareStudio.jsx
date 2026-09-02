@@ -33,6 +33,10 @@ import {
   createGifExportController,
   GIF_EXPORT_STATUSES
 } from "./gifExport.js";
+import {
+  buildPngExportSourceKey,
+  createProfileAttachmentPngBlob
+} from "./pngExport.js";
 import { useCardImageReadiness } from "./cardImageReadiness.js";
 import {
   CARD_HANDOFF_PHASES,
@@ -62,6 +66,9 @@ export function ShareStudio({
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousFocusRef = useRef(null);
+  const pngExportAbortRef = useRef(null);
+  const pngExportCacheRef = useRef(null);
+  const pngExportJobIdRef = useRef(0);
   const toastTimerRef = useRef(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState(DOWNLOAD_FORMATS.PNG);
@@ -69,6 +76,7 @@ export function ShareStudio({
     false
   );
   const [gifExportState, setGifExportState] = useState(INITIAL_GIF_EXPORT_STATE);
+  const [pngExporting, setPngExporting] = useState(false);
   const [selectedSocialPlatform, setSelectedSocialPlatform] = useState(null);
   const [toast, setToast] = useState(null);
   const mobileShareEnvironment = isMobileShareEnvironment(globalThis.navigator);
@@ -106,6 +114,16 @@ export function ShareStudio({
   const gifSourceKey = useMemo(() => (
     selectedImageUrl
       ? buildGifExportSourceKey({
+        cardLocale,
+        cardTheme,
+        selectedImageUrl,
+        shareRevision
+      })
+      : null
+  ), [cardLocale, cardTheme, selectedImageUrl, shareRevision]);
+  const pngSourceKey = useMemo(() => (
+    selectedImageUrl
+      ? buildPngExportSourceKey({
         cardLocale,
         cardTheme,
         selectedImageUrl,
@@ -186,13 +204,23 @@ export function ShareStudio({
   const gifExportControllerRef = useRef(gifExportController);
   const gifExportLifetimeRef = useRef(0);
   gifExportControllerRef.current = gifExportController;
+  const resetPngExport = useCallback((updateState = true) => {
+    pngExportJobIdRef.current += 1;
+    pngExportAbortRef.current?.abort();
+    pngExportAbortRef.current = null;
+    const cached = pngExportCacheRef.current;
+    pngExportCacheRef.current = null;
+    if (cached?.blobUrl) globalThis.URL?.revokeObjectURL?.(cached.blobUrl);
+    if (updateState) setPngExporting(false);
+  }, []);
   const requestStudioClose = useCallback(() => {
+    resetPngExport();
     gifExportControllerRef.current?.reset();
     setDownloadFormat(DOWNLOAD_FORMATS.PNG);
     setHasChangedDownloadFormat(false);
     setSelectedSocialPlatform(null);
     requestClose();
-  }, [requestClose]);
+  }, [requestClose, resetPngExport]);
   const {
     radius: measuredRadius,
     setElement: setRadiusElement
@@ -236,6 +264,10 @@ export function ShareStudio({
     if (!gifExportController || !gifSourceKey) return;
     gifExportController.synchronizeSource(gifSourceKey);
   }, [gifExportController, gifSourceKey]);
+
+  useEffect(() => {
+    resetPngExport();
+  }, [pngSourceKey, resetPngExport]);
 
   useEffect(() => {
     if (
@@ -288,6 +320,7 @@ export function ShareStudio({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        resetPngExport();
         gifExportControllerRef.current?.reset();
         setDownloadFormat(DOWNLOAD_FORMATS.PNG);
         setHasChangedDownloadFormat(false);
@@ -315,6 +348,7 @@ export function ShareStudio({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       globalThis.clearTimeout(toastTimerRef.current);
+      resetPngExport(false);
       gifExportControllerRef.current?.reset();
       body.style.overflow = previousBodyOverflow;
       if (scrollContainer) scrollContainer.style.overflow = previousScrollOverflow;
@@ -330,7 +364,7 @@ export function ShareStudio({
         previousFocusRef.current.focus?.();
       }
     };
-  }, [canRender]);
+  }, [canRender, resetPngExport]);
 
   if (!canRender) return null;
 
@@ -411,6 +445,54 @@ export function ShareStudio({
     }
   }
 
+  async function savePng() {
+    if (
+      !pngSourceKey ||
+      !gifSourceUrl ||
+      pngExporting ||
+      pngExportAbortRef.current
+    ) return;
+
+    const cached = pngExportCacheRef.current;
+    if (cached?.sourceKey === pngSourceKey && cached.blobUrl) {
+      triggerPngDownload(cached.blobUrl);
+      showToast(copy.imageSaved);
+      return;
+    }
+
+    resetPngExport();
+    const controller = new AbortController();
+    const jobId = ++pngExportJobIdRef.current;
+    pngExportAbortRef.current = controller;
+    setPngExporting(true);
+
+    try {
+      const blob = await createProfileAttachmentPngBlob({
+        cardTheme,
+        signal: controller.signal,
+        sourceUrl: gifSourceUrl
+      }, { origin: locationOrigin });
+      if (controller.signal.aborted || pngExportJobIdRef.current !== jobId) {
+        return;
+      }
+
+      const blobUrl = globalThis.URL.createObjectURL(blob);
+      pngExportCacheRef.current = { blobUrl, sourceKey: pngSourceKey };
+      pngExportAbortRef.current = null;
+      triggerPngDownload(blobUrl);
+      showToast(copy.imageSaved);
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        showToast(copy.imageSaveFailed, "error");
+      }
+    } finally {
+      if (pngExportJobIdRef.current === jobId) {
+        pngExportAbortRef.current = null;
+        setPngExporting(false);
+      }
+    }
+  }
+
   function showToast(message, kind = "success") {
     globalThis.clearTimeout(toastTimerRef.current);
     setToast({ kind, message });
@@ -436,6 +518,7 @@ export function ShareStudio({
       setDownloadFormat(DOWNLOAD_FORMATS.PNG);
       return;
     }
+    resetPngExport();
     setDownloadFormat(DOWNLOAD_FORMATS.GIF);
   }
 
@@ -618,19 +701,20 @@ export function ShareStudio({
               style={{ "--share-action-index": shareTargets.length }}
             />
           ) : (
-            <a
+            <button
               aria-label={copy.saveAriaLabel}
+              aria-busy={pngExporting}
               className="share-studio-primary-action"
-              download="codex-usage-profile.png"
-              href={selectedImageUrl}
-              onClick={() => showToast(copy.imageSaved)}
+              disabled={pngExporting}
+              onClick={savePng}
               style={{ "--share-action-index": shareTargets.length }}
+              type="button"
             >
               <span className="share-studio-action-icon">
                 <Icon name="download" size={24} />
               </span>
               <span>{copy.save}</span>
-            </a>
+            </button>
           )}
         </div>
 
@@ -700,6 +784,16 @@ export function ShareStudio({
     </div>,
     document.body
   );
+}
+
+function triggerPngDownload(blobUrl) {
+  const anchor = document.createElement("a");
+  anchor.download = "codex-usage-profile.png";
+  anchor.href = blobUrl;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 function ShareDestination({ active, guided, index, onSelect, target }) {

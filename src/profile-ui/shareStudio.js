@@ -34,6 +34,7 @@ const SHARE_MESSAGE_IDS = Object.freeze({
   imageCopied: "share.imageCopied",
   imageCopyFailed: "share.imageCopyFailed",
   imageSaved: "share.imageSaved",
+  imageSaveFailed: "share.imageSaveFailed",
   imageUrl: "share.imageUrl",
   imageUrlCopied: "share.imageUrlCopied",
   imageUrlCopyFailed: "share.imageUrlCopyFailed",

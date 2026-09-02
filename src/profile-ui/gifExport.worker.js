@@ -2,6 +2,7 @@ import {
   GIF_EXPORT_PRESET_VERSION,
   PROFILE_GIF_PRESET
 } from "../profile-card/gif-animation.js";
+import { drawProfileAttachmentCanvas } from "../profile-card/attachment-canvas.js";
 import {
   assertProfileGifContract,
   createProfileGifTransferMetadata
@@ -46,7 +47,8 @@ export async function runGifExportWorkerJob(message, options = {}) {
   const blob = await fetchSourcePng(sourceUrl, fetchImpl);
   const baseRgba = await decodeSourcePng(blob, {
     createImageBitmapImpl,
-    OffscreenCanvasConstructor
+    OffscreenCanvasConstructor,
+    theme: request.cardTheme
   });
 
   let bytes;
@@ -223,18 +225,7 @@ async function decodeSourcePng(blob, options) {
     if (!context) {
       throw createWorkerError(WORKER_ERROR_CODES.UNSUPPORTED);
     }
-    context.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in context) {
-      context.imageSmoothingQuality = "high";
-    }
-    context.clearRect(0, 0, PROFILE_GIF_PRESET.width, PROFILE_GIF_PRESET.height);
-    context.drawImage(
-      bitmap,
-      0,
-      0,
-      PROFILE_GIF_PRESET.width,
-      PROFILE_GIF_PRESET.height
-    );
+    drawProfileAttachmentCanvas(context, bitmap, { theme: options.theme });
     const rgba = context.getImageData(
       0,
       0,
@@ -246,6 +237,11 @@ async function decodeSourcePng(blob, options) {
       rgba.length !== PROFILE_GIF_PRESET.width * PROFILE_GIF_PRESET.height * 4
     ) {
       throw new Error("OffscreenCanvas returned invalid RGBA data");
+    }
+    for (let offset = 3; offset < rgba.length; offset += 4) {
+      if (rgba[offset] !== 255) {
+        throw new Error("OffscreenCanvas returned a transparent GIF base");
+      }
     }
     return rgba;
   } catch (error) {

@@ -14,7 +14,7 @@ const GIFEncoder = gifencNamespace.GIFEncoder ??
 test("inspects dimensions, loop metadata, controls, and palette use", () => {
   const encoder = GIFEncoder();
   const palette = [
-    [0, 0, 0, 0],
+    [24, 24, 24, 255],
     [255, 255, 255, 255]
   ];
   const pixels = Uint8Array.from([0, 1, 1, 0]);
@@ -23,14 +23,12 @@ test("inspects dimensions, loop metadata, controls, and palette use", () => {
     dispose: 1,
     palette,
     repeat: 0,
-    transparent: true,
-    transparentIndex: 0
+    transparent: false
   });
   encoder.writeFrame(pixels, 2, 2, {
     delay: 50,
     dispose: 1,
-    transparent: true,
-    transparentIndex: 0
+    transparent: false
   });
   encoder.finish();
 
@@ -48,7 +46,8 @@ test("inspects dimensions, loop metadata, controls, and palette use", () => {
     [5, 5]
   );
   assert.deepEqual(metadata.frames.map((frame) => frame.disposal), [1, 1]);
-  assert.deepEqual(metadata.frames.map((frame) => frame.transparent), [true, true]);
+  assert.deepEqual(metadata.frames.map((frame) => frame.transparent), [false, false]);
+  assert.deepEqual(metadata.frames.map((frame) => frame.transparentIndex), [null, null]);
 });
 
 test("rejects malformed data and reports contract failures", () => {

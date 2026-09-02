@@ -32,6 +32,14 @@ test("resolves Korean and English Share Studio copy", () => {
   assert.equal(getShareStudioCopy("en-US").retryGif, "Retry");
   assert.equal(getShareStudioCopy("ko-KR").saveGif, "GIF 저장");
   assert.equal(
+    getShareStudioCopy("en-US").imageSaveFailed,
+    "Failed to save image. Try again."
+  );
+  assert.equal(
+    getShareStudioCopy("ko-KR").imageSaveFailed,
+    "이미지를 저장하지 못했습니다. 다시 시도해 주세요."
+  );
+  assert.equal(
     getShareStudioCopy("en-US").attachGif,
     "Attach the saved GIF to the post"
   );

@@ -18,12 +18,12 @@ export const PROFILE_GIF_BEAM_ASSET_CONTRACT = Object.freeze({
 });
 
 export const PROFILE_GIF_BEAM_ASSET_URL = new URL(
-  "./assets/ocean-beam-golden-v1.rgba-runs.bin",
+  "./assets/ocean-beam-x-radius-v2.rgba-runs.bin",
   import.meta.url
 );
 
 export const PROFILE_GIF_LIGHT_BEAM_ASSET_URL = new URL(
-  "./assets/ocean-light-keyline-golden-v1.rgba-runs.bin",
+  "./assets/ocean-light-keyline-x-radius-v2.rgba-runs.bin",
   import.meta.url
 );
 
