@@ -13,9 +13,10 @@ M100 MVP의 canonical target architecture는 **ChatGPT Sites + D1 + native R2**�
 migration 결과에 따른 **MVP production PASS**다. Task #108은
 `https://codex-usage-profile.meleeisdeveloping.chatgpt.site`를 별도 GitHub OAuth
 app, D1/R2와 environment를 가진 canonical production으로 공개했다. production은
-2026-08-26 Task #137 release 기준 public saved version 5이고 migration
-`[1,2,3,4,5,6]`이 적용돼 있다. 기존 stage5는 별도 durable resource와 identity
-state를 사용하는 custom owner-only 테스트 환경이다.
+2026-09-02 Task #144 release 기준 exact main
+`6d3e600d2d33bb7a50147075d013ddd9b945d0b1`의 public saved version 6이고 migration
+`[1,2,3,4,5,6]`이 적용돼 있다. 기존 stage5는 같은 source의 saved version 40을
+사용하되 별도 durable resource와 identity state를 유지하는 custom owner-only 테스트 환경이다.
 
 기존 **Cloud Run + Neon + S3-compatible R2** 구현과 deployment artifact는 tested fallback으로 유지한다. Sites beta 정책·한도 변경, 추가 과금 요구, hosted runtime blocker 또는 장기 장애가 발생하면 이 fallback으로 전환한다. fallback 삭제는 별도 architecture 결정 없이는 허용하지 않는다.
 
@@ -25,15 +26,15 @@ state를 사용하는 custom owner-only 테스트 환경이다.
 |---|---|
 | canonical origin | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` |
 | Site title | `Codex Usage Profile` |
-| saved version | 5 |
-| deployed source | `27e8705fdc152534a4e4b726cac32f625a3c7763` |
-| artifact | 27 files, 5,437,440 bytes, `sha256:86b9960123ceb46975b0681212efcc2a7a8fe8fc302f7f4eee2ca0705e1db5d2` |
+| saved version | 6 |
+| deployed source | `6d3e600d2d33bb7a50147075d013ddd9b945d0b1` |
+| artifact | 30 files, 10,926,080 bytes, `sha256:6f905edbff7b7b5ea49a84c5f05bd6843319a59bda4fd47b44d0cabfdbfa53f4` |
 | access | public revision 10 |
-| environment | revision 8, production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
+| environment | revision 14, production 전용 OAuth/secret, maintenance disabled, service normal, operator secret absent |
 | live readiness | health `200`, operator `404`, D1 migration exact `[1,2,3,4,5,6]` |
 | CLI | public `latest=0.1.4`, production default origin |
 
-이 표는 desired state가 아니라 Task #137 Stage 5 종료 뒤 원격에서 다시 관찰한 live
+이 표는 desired state가 아니라 Task #144 Stage 5 종료 뒤 원격에서 다시 관찰한 live
 상태다. operator secret이 없는 안전 종료 상태에서는 protected readiness를 호출하지
 않고 Sites read-only D1 audit, health와 닫힌 operator route로 확인한다.
 
@@ -41,8 +42,8 @@ state를 사용하는 custom owner-only 테스트 환경이다.
 
 | 역할 | origin | manifest·resource 상태 |
 |---|---|---|
-| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 5, access revision 10, environment revision 8 |
-| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 38, access revision 62, environment revision 121 |
+| canonical production | `https://codex-usage-profile.meleeisdeveloping.chatgpt.site` | `.openai/hosting.json`; public version 6, access revision 10, environment revision 14 |
+| stage5 validation/test | `https://codex-usage-profile-stage5.meleeisdeveloping.chatgpt.site` | `.openai/hosting-targets.json`에서만 선택; owner-only version 40, access revision 62, environment revision 131 |
 
 두 target은 source, migration, logical binding 이름과 test contract만 공유한다. Site project,
 D1/R2 state, GitHub OAuth application/secret, browser session, CLI token, rate-limit state와 access
@@ -198,8 +199,8 @@ object를 제공한다. `If-None-Match`가 application ETag와 일치하면 obje
 장애이면 generic `503 media_unavailable`을 반환한다. API share metadata는 이 route가
 실제로 제공 가능한 경우만 개인화 URL을 사용한다. 그렇지 않으면 packaged sample을
 사용하되 social route 자체의 404/503 계약은 바꾸지 않는다. 정합 publication과 legacy
-missing social의 local real-Worker 회귀 검증은 완료됐지만 보정 source의 production
-R2/HTTP smoke는 아직 수행하지 않았다.
+missing social의 local real-Worker 회귀와 Task #144 production의 dark/light
+R2/HTTP GET·HEAD·304, 2400x1260 geometry·surface smoke를 완료했다.
 
 Share Studio는 owner `updatedAt`과 usage `uploadedAt` 중 최신 값을 공통 builder로
 계산해 링크 복사와 X·Threads·LinkedIn·Facebook·Reddit에 동일한 revision 문서 URL을
@@ -337,6 +338,10 @@ R2 credential은 `PROFILE_MEDIA_MODE=external` adapter 생성 시점에만 읽�
 ## Startup, Health, Cache, Rollback
 
 1. Sites는 exact pushed commit으로 saved version을 만들고, 저장된 version만 production deployment한다.
+   deployment가 terminal `succeeded`여도 public edge가 즉시 새 Worker route와 client asset으로
+   수렴했다고 가정하지 않는다. candidate root asset identity와 해당 asset `200`, `/healthz`를 bounded
+   polling으로 확인한 뒤에만 migration 같은 protected mutation을 보낸다. stale asset 또는 generic
+   `404`가 계속되면 mutation을 재전송하지 않고 중단한다.
 2. D1 migration은 deployment package에 포함하며 schema 변경은 최소 한 saved-version rollback 구간 동안 backward compatible해야 한다.
 3. release candidate readiness는 D1 migration `1..6`이 순서까지 정확히 일치해야 한다. `0004_card_style`, `0005_card_locale`은 이전 saved version이 무시할 수 있는 additive column이며, `0006_account_deletion_operations`는 owner cascade를 가진 additive operation table로 유지한다.
 4. `/healthz`는 Worker와 required binding existence를 generic 상태로 검증하되 credential, binding metadata와 payload를 노출하지 않는다. API/R2 route는 dependency 오류를 generic 503으로 닫는다.
@@ -417,6 +422,21 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 ## 검증 상태
 
 ### 실제 Sites에서 검증됨
+
+- Task #144 Stage 5에서 canonical production saved version 6/source
+  `6d3e600d2d33bb7a50147075d013ddd9b945d0b1`, 30 files/10,926,080-byte artifact,
+  public access revision 10, final environment revision 14와 migration exact
+  `[1,2,3,4,5,6]`을 확인했다. version 5/source
+  `27e8705fdc152534a4e4b726cac32f625a3c7763`는 application rollback 후보로 보존한다.
+- maintenance-on environment revision 13과 maintenance-off revision 14에서 같은 saved version 6을
+  public deploy했다. 첫 migration 요청은 terminal deployment 뒤 edge가 이전 route를 잠시 제공해
+  mutation 없는 generic `404`를 반환했으며, 새 client asset 제공과 migration 불변을 확인한 뒤 한 번만
+  재시도해 `newlyApplied=[]`, readiness exact 1–6을 확인했다. final 상태는 maintenance disabled,
+  service normal, operator secret absent, `/healthz` `200`, operator route `404`다.
+- public `latest=0.1.4`의 기존 credential로 집계 사용량 submit `accepted`를 확인했고 raw credential·usage는
+  기록하지 않았다. Profile의 public/private 복구, dark/light × en/ko card `1497×918`, social
+  `2400×1260`, fixed/revision share와 light GIF/PNG Share Studio를 비파괴 smoke한 뒤 원래
+  `public + dark/en`, API token `1/3`으로 복원했다. 최근 Worker 표본의 5xx는 0건이다.
 
 - Task #137 Stage 5에서 canonical production saved version 5/source
   `27e8705fdc152534a4e4b726cac32f625a3c7763`, public access revision 10,
@@ -514,8 +534,8 @@ MVP migration task는 비용·quota 표시를 배포 전 확인하고, 사용자
 
 ### 공개 뒤 후속 운영 항목
 
-- public npm `codex-usage-profile@0.1.3` provenance/integrity와 production 기본 origin을
-  유지한다. npm package 내용 보정은 immutable `0.1.3`을 덮어쓰지 않고 새 patch로 처리한다.
+- public npm `codex-usage-profile@0.1.4` provenance/integrity와 production 기본 origin을
+  유지한다. npm package 내용 보정은 immutable `0.1.4`를 덮어쓰지 않고 새 patch로 처리한다.
 - Task #45 clean production OAuth/CLI/D1/R2/card 전체 흐름 및 보안 QA
   완료 상태 유지
 - 월별 90일 retention dry-run과 owner 요청 기반 account deletion
