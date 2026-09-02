@@ -34,6 +34,17 @@ Submitting new usage or saving card settings does not change either URL. The REA
 
 Do not add a timestamp or random query to the README image. The queryless URL follows the theme and language saved for the profile.
 
+The stable README image and files saved from Share Studio intentionally have different contracts:
+
+| Output | Dimensions | Outer pixels | Intended use |
+|---|---|---|---|
+| Stable README/image URL and **Copy image** | 1497x918 PNG | Transparent outside the rounded card | README embeds, image URL and clipboard copy |
+| Share Studio **Save PNG** | 998x612 PNG | Opaque theme surface | Manual image attachment |
+| Share Studio **Save GIF** | 998x612 GIF | Opaque theme surface in every frame | Manual animated attachment |
+| Social preview image | 2400x1260 PNG | Social-renderer theme contract | Link previews generated from revision share URLs |
+
+The attachment files keep the same `499:306` card ratio and place the card at `0,0,998,612` without extra padding, cropping, translation or content scaling. Dark attachments fill transparent corner pixels with `#181818`. Light attachments use `#F3F5F7` with a subtle `#D0D7DE` outline so the card edge remains visible on white platforms. These attachment-only surfaces do not change the stable card or social preview renderer.
+
 ## README links and social links are different
 
 The website intentionally uses a separate URL for newly shared social posts:
@@ -134,10 +145,10 @@ The generated file uses this fixed export contract:
 
 | Property | Value |
 |---|---|
-| Canvas | 998x612 with a transparent background outside the rounded card |
+| Canvas | 998x612 with an opaque theme surface and no extra padding or content scaling |
 | Motion | Fixed card; Ocean Border Beam only |
 | Timing | 20 fps, 4.8 seconds, 96 frames, infinite seamless loop |
-| Palette | One global palette with at most 256 colors; no dithering |
+| Palette | One opaque global palette with at most 256 colors; no transparent index or dithering |
 | Size | Less than 15,000,000 bytes |
 
 [X accepts animated GIFs up to 15MB on the web and 5MB on mobile](https://help.x.com/en/using-x/posting-gifs-and-pictures). Use the desktop X composer for this export. X requires a looping GIF; the generated file loops indefinitely. Reddit availability can depend on whether the destination community allows image or media posts in its [community settings](https://support.reddithelp.com/hc/en-us/articles/15484546290068-Community-settings).

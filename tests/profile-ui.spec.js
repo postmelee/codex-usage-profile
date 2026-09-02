@@ -2706,6 +2706,58 @@ test.describe("Home and share card flow", () => {
       .toHaveCount(0);
   });
 
+  test("Task #150 light PNG keeps stable URLs separate from its opaque attachment surface", async ({
+    context,
+    page
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const lightCardPng = await renderE2eCardPng("light");
+    const profile = ownerProfile("public");
+    profile.cardLocale = "ko";
+    profile.cardStyle = {
+      ...profile.cardStyle,
+      theme: "light"
+    };
+    profile.selectedPublicCardUrl =
+      `${E2E_ORIGIN}/u/postmelee/card.png?locale=ko&theme=light`;
+
+    await mockAuthenticatedAccount(page);
+    await page.route("**/api/profile", (route) => fulfillJson(route, {
+      data: profile,
+      ok: true
+    }));
+    await mockCardImages(page, { cardPng: lightCardPng });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share activity" });
+    const preview = dialog.getByRole("img", {
+      name: "Codex usage card preview"
+    });
+    await expect.poll(() => preview.evaluate(
+      (image) => [image.naturalWidth, image.naturalHeight]
+    )).toEqual([1497, 918]);
+
+    await dialog.getByRole("button", { name: "Copy Image URL" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      `${E2E_ORIGIN}/u/postmelee/card.png`
+    );
+    await dialog.getByRole("button", { name: "Copy README Markdown" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      PROFILE_README_MARKDOWN
+    );
+
+    const downloadPromise = page.waitForEvent("download");
+    await dialog.getByRole("button", { name: "Save PNG" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
+    await expectOpaqueAttachmentPng(
+      readFileSync(await download.path()),
+      [243, 245, 247, 255],
+      [208, 215, 222, 255]
+    );
+  });
+
   test("Share Studio generates and downloads one contract-valid GIF", async ({
     page
   }, testInfo) => {
@@ -3072,7 +3124,16 @@ test.describe("Home and share card flow", () => {
       await expect(dialog.getByRole("radiogroup", { name: "Download format" }))
         .toHaveCount(0);
       await expect(dialog.getByText("GIF", { exact: true })).toHaveCount(0);
-      await expect(dialog.getByRole("button", { name: "Save PNG" })).toBeVisible();
+      const savePng = dialog.getByRole("button", { name: "Save PNG" });
+      await expect(savePng).toBeVisible();
+      const downloadPromise = page.waitForEvent("download");
+      await savePng.tap();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe("codex-usage-profile.png");
+      await expectOpaqueAttachmentPng(
+        readFileSync(await download.path()),
+        [24, 24, 24, 255]
+      );
       expect(workerCount).toBe(0);
     } finally {
       await context.close();
@@ -6254,7 +6315,7 @@ async function getMarketingMetrics(page) {
 
 async function mockCardImages(page, options = {}) {
   const fulfillPng = (route) => route.fulfill({
-    body: CARD_PNG,
+    body: options.cardPng ?? CARD_PNG,
     contentType: "image/png",
     status: 200
   });
@@ -6459,7 +6520,11 @@ async function fulfillJson(route, body, status = 200) {
   });
 }
 
-async function expectOpaqueAttachmentPng(png, expectedCorner) {
+async function expectOpaqueAttachmentPng(
+  png,
+  expectedCorner,
+  expectedTopOutline = null
+) {
   const image = await loadImage(png);
   expect({ height: image.height, width: image.width }).toEqual({
     height: 612,
@@ -6490,6 +6555,11 @@ async function expectOpaqueAttachmentPng(png, expectedCorner) {
     expect(Array.from(context.getImageData(x, y, 1, 1).data)).toEqual(
       expectedCorner
     );
+  }
+  if (expectedTopOutline) {
+    expect(Array.from(
+      context.getImageData(image.width / 2, 1, 1, 1).data
+    )).toEqual(expectedTopOutline);
   }
 }
 
